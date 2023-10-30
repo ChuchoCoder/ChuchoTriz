@@ -1,0 +1,23 @@
+{
+  "name": "Chuchotriz",
+  "short_name": "Chuchotriz",
+  "description": "Agrega funcionalidad en Matriz",
+  "version": "0.0.1",
+  "author": "Chucho Trader",
+  "homepage_url": "https://x.com/chuchotrader",
+  "manifest_version": 3,
+  "action": {
+    "default_title": "Popup",
+    "default_popup": "index.html",
+    "default_icon": "logo192.png"
+  },
+  "icons": {},
+  "content_scripts": [
+    {
+      "matches": ["https://*.xoms.com.ar/*"],
+      "js": ["src/main.tsx"],
+      "media": [],
+      "run_at": "document_end"
+    }
+  ]
+}
