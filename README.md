@@ -1,4 +1,21 @@
-# Chuchotriz - Extension de Chrome para Matriz
+# ChuchoTriz - Extension de Chrome para Matriz
+
+ChuchoTriz es una extensión de Chrome para Matriz que agrega funcionalidad para permitir operar de forma más ágil.
+
+## Features
+
+### Presets de Cantidad/Cantidad a mostrar por Instrumento
+
+Permite tener predefinidos diferentes cantidades y cantidades a mostrar por instrumento. Haciendo click en los botones, completa automáticamente la Cantidad y  
+Cantidad a mostrar en el panel inferior.
+
+![Mini Order Form](docs/images/MiniOrderForm.png)
+
+### Configurar Presets por Instrumento
+
+En las opciones de la extensión de Chrome se pueden definir los diferentes instrumentos y las `cantidades/cantidades a mostrar` deseadas.
+
+![Opciones](docs/images/Opciones.png)
 
 ## Setup
 
