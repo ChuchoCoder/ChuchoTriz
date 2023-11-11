@@ -1,11 +1,16 @@
 {
   "name": "Chuchotriz",
-  "short_name": "Chuchotriz",
+  "short_name": "ChuchoTriz",
   "description": "Agrega funcionalidad en Matriz",
   "version": "0.0.1",
   "author": "Chucho Trader",
   "homepage_url": "https://x.com/chuchotrader",
   "manifest_version": 3,
+  "options_page": "index.html",
+  "options_ui": {
+    "page": "index.html",
+    "open_in_tab": false
+  },
   "action": {
     "default_title": "Popup",
     "default_popup": "index.html",
@@ -19,5 +24,8 @@
       "media": [],
       "run_at": "document_end"
     }
+  ],
+  "permissions": [
+    "storage"
   ]
 }
