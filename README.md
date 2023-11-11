@@ -13,7 +13,7 @@ Cantidad a mostrar en el panel inferior.
 
 ### Configurar Presets por Instrumento
 
-En las opciones de la extensión de Chrome se pueden definir los diferentes instrumentos y las `cantidades/cantidades a mostrar` deseadas.
+En las opciones de la extensión de Chrome se pueden definir los diferentes instrumentos y las cantidades/cantidades a mostrar deseadas.
 
 ![Opciones](docs/images/Opciones.png)
 
