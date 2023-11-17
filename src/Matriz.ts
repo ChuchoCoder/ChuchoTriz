@@ -50,14 +50,16 @@ function setSize(cantidad: number, cantidadMostrar: number) {
 
     if (instrumentAndPriceHasValues()) {
         setInputValue(getCantidadInput(), cantidad.toString());
-        const cantidadMostrarInput = getCantidadAMostrarInput();
-        setInputValue(cantidadMostrarInput, cantidadMostrar.toString());
+        if (Number.isInteger(cantidadMostrar) && cantidadMostrar > 0){
+            const cantidadMostrarInput = getCantidadAMostrarInput();
+            setInputValue(cantidadMostrarInput, cantidadMostrar.toString());
+        }
     }
 }
 
 function getTicker(): string {
     var ticker = getInstrumentoInput().value;
-    ticker = ticker.replace(" (CI)", "").replace(" (24hs)", "").toUpperCase();
+    ticker = ticker.replace(" (CI)", "").replace(" (24hs)", "").split(" ")[0].toUpperCase();
     return ticker;
 }
 

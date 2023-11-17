@@ -15,7 +15,7 @@ function App() {
   const showHidePresets = async () => {
     const instrumentoText = matriz.getInstrumentoText();
     if (instrumento !== instrumentoText) {
-      console.log("Instrument changed previous: '" + instrumento + "' new:'" + instrumentoText + "'");            
+      console.log("Instrument changed previous: '" + instrumento + "' new: '" + instrumentoText + "'");
       if (matriz.instrumentAndPriceHasValues()) {
         console.log("Show Presets for " + instrumentoText);
         const ticker = matriz.getTicker();
