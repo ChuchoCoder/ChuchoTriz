@@ -21,7 +21,11 @@ function InstrumentPresets() {
       var instrumentPresets = presets[key];
       presetsText += key;
       for (let preset of instrumentPresets) {
-        presetsText += " " + preset.cantidad + "/" + preset.mostrar;
+        presetsText += " " + preset.cantidad;
+        if (preset.mostrar > 0)
+        {
+          presetsText += "/" + preset.mostrar;
+        }
       }
       presetsText += "\n";
     }
@@ -31,32 +35,42 @@ function InstrumentPresets() {
   function SavePresets() {
     var presets: IInstrumentPresets = {};
 
-    var lines = instrumentPresets.split("\n");
-    for (let line of lines) {
-      if (line.trim() !== "") {
-        console.log("Line: " + line);
-        var tickerSepIndex = line.indexOf(" ");
-        var ticker = line.substring(0, tickerSepIndex);
-        if (ticker.trim() !== "") {
-          console.log("Ticker: " + ticker);
-          var presetValues: IInstrumentPreset[] = [];
-          var valuesText = line.substring(tickerSepIndex + 1);
-          var values = valuesText.split(" ");
-          for (let value of values) {
-            const cantidades = value.split("/");
-            const cantidad = Number.parseInt(cantidades[0]);
-            const mostrar = Number.parseInt(cantidades[1]);
-            if (cantidad && mostrar) {
-              presetValues.push({ cantidad: cantidad, mostrar: mostrar });
+    try{
+      var lines = instrumentPresets.split("\n");
+      for (let line of lines) {
+        if (line.trim() !== "") {
+          console.log("Line: " + line);
+          var tickerSepIndex = line.indexOf(" ");
+          var ticker = line.substring(0, tickerSepIndex);
+          if (ticker.trim() !== "") {
+            console.log("Ticker: " + ticker);
+            var presetValues: IInstrumentPreset[] = [];
+            var valuesText = line.substring(tickerSepIndex + 1);
+            var values = valuesText.split(" ");
+            for (let value of values) {
+              const cantidades = value.split("/");
+              const cantidad = Number.parseInt(cantidades[0]);
+              if (Number.isNaN(cantidad) == false) {
+                let mostrar = Number.parseInt(cantidades[1]);
+                if (Number.isNaN(mostrar))
+                {
+                  mostrar = 0;
+                }
+                presetValues.push({ cantidad: cantidad, mostrar: mostrar });
+              }
             }
+            presets[ticker] = presetValues;
           }
-          presets[ticker] = presetValues;
         }
       }
+      console.log("Presets: " + JSON.stringify(presets));
+      instrumentPresetsRepository.save(presets);
+      window.close();
     }
-    console.log("Presets: " + JSON.stringify(presets));
-    instrumentPresetsRepository.save(presets);
-    window.close();
+    catch (error){
+      console.error(error);
+      alert(error);
+    }
   }
 
   function LoadDefaults() {
@@ -71,14 +85,13 @@ function InstrumentPresets() {
         <strong>Sintaxis:</strong>
       </div>
       <pre>
-        Instrumento Cantidad/Cantidad_A_Mostrar Cantidad/Cantidad_A_Mostrar
-        Cantidad/Cantidad_A_Mostrar
+        Instrumento Cantidad/Cantidad_A_Mostrar Cantidad
       </pre>
       Ejemplos:
       <pre>
-        <pre>AL30 200000/25000 100000/10000 50000/5000</pre>
-        <pre>GGAL 5000/500 1000/100</pre>
-        <pre>SPY 100/25</pre>
+        <pre>AL30 200000/25000 100000/10000 50000</pre>
+        <pre>GGAL 5000/500 1000/100 100</pre>
+        <pre>SPY 100/25 50</pre>
       </pre>
       <label>
         Valores

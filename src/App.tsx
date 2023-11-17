@@ -55,7 +55,7 @@ function App() {
           className="ant-btn ant-btn-primary ant-btn-sm OrderButton ButtonLimpiar ButtonPreset"
         >
           <span>
-            {getCantidadText(item.cantidad)}/{getCantidadText(item.mostrar)}
+            {getCantidadText(item.cantidad)}{item.mostrar > 0 && "/" + getCantidadText(item.mostrar)}
           </span>
         </button>
       ))}
