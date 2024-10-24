@@ -5,14 +5,15 @@ ChuchoTriz es una extensión de Chrome para Matriz que agrega funcionalidad para
 ## Agregar extension a Chrome
 
 1. Ir a la sección [Releases](https://github.com/ChuchoCoder/chuchotriz/releases)
-2. Descargar el archivo zip (Ejemplo: `2023-11-17.zip`)
+2. Descargar el archivo zip (Ejemplo: [2024-10-23.zip](https://github.com/ChuchoCoder/ChuchoTriz/releases/download/2024-10-23/2024-10-23.zip))
 3. Descomprimir zip en una carpeta (Ejemplo: `chuchotriz`)
 4. Ir a [chrome://extensiones/](chrome://extensiones/)
 5. Activar "Modo de desarrollador" en la parte superior derecha de la ventana.
 6. Haga clic en el botón "Cargar extensión sin empaquetar" en la parte superior izquierda de la ventana.
 7. Seleccionar el directorio donde se descomprimió la extensión (Ejemplo: `chuchotriz`) para cargar la extensión.
-8. Navegar a Matriz de su broker (Ejemplo: https://matriz.cocos.xoms.com.ar/) y hacer Login
-9. Seleccionar un instrumento y agregar el precio para ver que se agreguen los botones de Cantidad/Cantidad a Mostrar
+8. Navegar a Matriz de su broker (Ejemplo: https://matriz.cocos.xoms.com.ar/) y hacer Login.
+9. Seleccionar un instrumento o hacer click en el precio para ver que se agreguen los botones de Cantidad/Cantidad a Mostrar.
+10. En la parte superior de Chrome es posible acceder a las opciones de la extensión.
 
 ## Funcionalidades
 
