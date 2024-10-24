@@ -14,14 +14,23 @@ ChuchoTriz es una extensión de Chrome para Matriz que agrega funcionalidad para
 8. Navegar a Matriz de su broker (Ejemplo: https://matriz.cocos.xoms.com.ar/) y hacer Login
 9. Seleccionar un instrumento y agregar el precio para ver que se agreguen los botones de Cantidad/Cantidad a Mostrar
 
-## Features
+## Funcionalidades
 
-### Presets de Cantidad/Cantidad a mostrar por Instrumento
+### Presets de Cantidad y Cantidad a mostrar por Instrumento
 
-Permite tener predefinidos diferentes cantidades y cantidades a mostrar por instrumento. Haciendo click en los botones, completa automáticamente la Cantidad y  
-Cantidad a mostrar en el panel inferior.
+Permite tener predefinidos diferentes cantidades y cantidades a mostrar por instrumento. Haciendo click en los botones, completa automáticamente la `Cantidad` y  
+`Cantidad a mostrar` en el panel inferior.
 
 ![Mini Order Form](docs/images/MiniOrderForm.png)
+
+### Autocompletado de Cantidad y Cantidad a mostrar
+
+Al hacer click en un instrumento o precio, la la `Cantidad` y `Cantidad a mostrar` se completan automáticamente según el siguiente criterio:
+
+1. Con el último Preset utilizado del instrumento seleccionado. Es decir, una vez que se haga click en cualquier de los botones de `Cantidad/Cantidad_A_Mostrar` estos valores se completarán automáticamente.
+2. Si no se hizo click en los botones de `Cantidad/Cantidad_A_Mostrar`, se utilizará el primer preset del instrumento seleccionado
+
+> Nota: Esta functionalidad puede deshabilitarse desde las opciones
 
 ### Configurar Presets por Instrumento
 

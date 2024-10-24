@@ -15,6 +15,8 @@ const instrumentoSelector = "#rc_select_2";
 const precioSelector =
     "#MiniOrderForm > form > div.MiniOrderForm_FormMiniOrdenPanel_row-top__div > span > div.ant-form-item.PriceInputFormItem.MiniOrderFormQuantity-price-input > div > div.ant-col.ant-form-item-control > div > div > div > div.ant-input-number-input-wrap > input";
 
+const botonLimpiarSelector = "#MiniOrderForm > div.MiniOrderForm_buttonsBlock > button.ant-btn.ant-btn-primary.ant-btn-sm.OrderButton.ButtonLimpiar"
+
 function setInputValue(input: HTMLInputElement, value: string) {
     Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype,
@@ -45,14 +47,31 @@ function instrumentAndPriceHasValues(): boolean {
     return getInstrumentoInput().value !== "" && getPrecioInput().value !== "";
 }
 
+function getSize(): string {
+    const cantidadInput = getCantidadInput();
+    return cantidadInput.value;
+}
+
+function hasSize(): boolean {
+    const cantidadInput = getCantidadInput();
+    if (cantidadInput.value){
+        return true;
+    }
+    return false;
+}
+
 function setSize(cantidad: number, cantidadMostrar: number) {
-    console.log(`SetSize ${cantidad}/${cantidadMostrar}`);
+    //console.log(`SetSize ${cantidad}/${cantidadMostrar}`);
 
     if (instrumentAndPriceHasValues()) {
         setInputValue(getCantidadInput(), cantidad.toString());
+        const cantidadMostrarInput = getCantidadAMostrarInput();
         if (Number.isInteger(cantidadMostrar) && cantidadMostrar > 0){
-            const cantidadMostrarInput = getCantidadAMostrarInput();
             setInputValue(cantidadMostrarInput, cantidadMostrar.toString());
+        }
+        else
+        {
+            setInputValue(cantidadMostrarInput, ""); // Limpio la cantidad a mostrar
         }
     }
 }
@@ -97,6 +116,11 @@ function getPrecioInput(): HTMLInputElement {
     return precioInput;
 }
 
+function getPrecio(): string {
+    const precioInput = getPrecioInput();
+    return precioInput.value;
+}
+
 var cantidadInput: HTMLInputElement | undefined = undefined;
 function getCantidadInput(): HTMLInputElement {
     if (!cantidadInput) {
@@ -107,13 +131,27 @@ function getCantidadInput(): HTMLInputElement {
     return cantidadInput;
 }
 
+var limpiarButton: HTMLButtonElement | undefined = undefined;
+function getLimpiarButton(): HTMLButtonElement {
+    if (!limpiarButton) {
+        limpiarButton = document.querySelector(
+            botonLimpiarSelector
+        ) as HTMLButtonElement;
+    }
+    return limpiarButton;
+}
+
 export default {
     getTicker,
     getCantidadAMostrarInput,
     getInstrumentoText,
+    getSize,
     setSize,
+    hasSize,
     instrumentAndPriceHasValues,
     getInstrumentoInput,
     getPrecioInput,
+    getPrecio,
     getCantidadInput,
+    getLimpiarButton,
 };

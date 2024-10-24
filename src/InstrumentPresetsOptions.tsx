@@ -4,6 +4,7 @@ import instrumentPresetsRepository from "./InstrumentPresetsRepository";
 
 function InstrumentPresets() {
   const [instrumentPresets, setInstrumentPresets] = useState("");
+  const [autocompleteWithFirstPreset, setAutocompleteWithFirstPreset] = useState(true);
 
   useEffect(() => {
     LoadPresets();
@@ -12,6 +13,10 @@ function InstrumentPresets() {
   function LoadPresets() {
     instrumentPresetsRepository.read().then((presets) => {
       renderPresets(presets);
+    });
+    instrumentPresetsRepository.readAutocomplete().then((autocomplete) => {
+      //console.log("LoadPresets() => setAutocompleteWithFirstPreset " + autocomplete);
+      setAutocompleteWithFirstPreset(autocomplete);
     });
   }
 
@@ -39,11 +44,11 @@ function InstrumentPresets() {
       var lines = instrumentPresets.split("\n");
       for (let line of lines) {
         if (line.trim() !== "") {
-          console.log("Line: " + line);
+          //console.log("Line: " + line);
           var tickerSepIndex = line.indexOf(" ");
           var ticker = line.substring(0, tickerSepIndex);
           if (ticker.trim() !== "") {
-            console.log("Ticker: " + ticker);
+            //console.log("Ticker: " + ticker);
             var presetValues: IInstrumentPreset[] = [];
             var valuesText = line.substring(tickerSepIndex + 1);
             var values = valuesText.split(" ");
@@ -63,8 +68,10 @@ function InstrumentPresets() {
           }
         }
       }
-      console.log("Presets: " + JSON.stringify(presets));
+      //console.log("Presets: " + JSON.stringify(presets));
       instrumentPresetsRepository.save(presets);
+      //console.log("Autocomplete Presets: " + autocompleteWithFirstPreset);
+      instrumentPresetsRepository.saveAutocomplete(autocompleteWithFirstPreset);
       window.close();
     }
     catch (error){
@@ -75,6 +82,7 @@ function InstrumentPresets() {
 
   function LoadDefaults() {
     renderPresets(instrumentPresetsRepository.DefaultPresets);
+    setAutocompleteWithFirstPreset(instrumentPresetsRepository.DefaultAutocomplete);
   }
 
   return (
@@ -85,24 +93,36 @@ function InstrumentPresets() {
         <strong>Sintaxis:</strong>
       </div>
       <pre>
-        Instrumento Cantidad/Cantidad_A_Mostrar Cantidad
+        Instrumento Cantidad/Cantidad_A_Mostrar Cantidad ...
       </pre>
       Ejemplos:
       <pre>
         <pre>AL30 200000/25000 100000/10000 50000</pre>
-        <pre>GGAL 5000/500 1000/100 100</pre>
-        <pre>SPY 100/25 50</pre>
+        <pre>GGAL 5000/500 1000/100 100 50</pre>
+        <pre>SPY 100/25 50 20</pre>
       </pre>
-      <label>
-        Valores
-        <textarea
-          name="instrumentPresets"
-          rows={20}
-          cols={100}
-          value={instrumentPresets}
-          onChange={(e) => setInstrumentPresets(e.target.value)}
-        />
-      </label>
+      <div>
+        <label>
+          Valores
+          <textarea
+            name="instrumentPresets"
+            rows={18}
+            cols={100}
+            value={instrumentPresets}
+            onChange={(e) => setInstrumentPresets(e.target.value)}
+          />
+        </label>
+      </div>
+      <div>
+        <label>
+          <input type="checkbox"
+            name="autocompleteWithFirstPreset"
+            checked={autocompleteWithFirstPreset}
+            onChange={() => { setAutocompleteWithFirstPreset(!autocompleteWithFirstPreset) }}          
+          />
+          Autocompletar cantidad y cantidad a mostrar al seleccionar el instrumento
+        </label>
+      </div>
       <button name="saveInstrumentPresets" onClick={SavePresets}>
         Guardar
       </button>

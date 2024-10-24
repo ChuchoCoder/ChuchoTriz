@@ -24,7 +24,7 @@ function waitForElement(selector: string) : Promise<Element | null> {
 }
 
 waitForElement("#MiniOrderForm > div.MiniOrderForm_buttonsBlock").then((element) => {
-  console.log('Element is ready');
+  //console.log('Element is ready');
   
   const app = document.createElement("div");
 
