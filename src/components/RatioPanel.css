@@ -1,0 +1,70 @@
+.ratio-container {
+  position: relative;
+}
+
+.ratio-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ratio-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  transition: all 0.3s ease;
+}
+
+.ratio-button.selected {
+  background-color: var(--ant-modal-header-background, #1a1a1a);
+  border-radius: 4px;
+}
+
+.ratio-button:hover {
+  opacity: 0.8;
+}
+
+.SettingsPanelSvg {
+  width: 24px;
+  height: 24px;
+}
+
+.ToolContent {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 400px;
+  height: 100vh;
+  background-color: var(--layout-header-background, #262626);
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
+  transition: right 0.3s ease-in-out, visibility 0.3s ease-in-out;
+  z-index: 1000;
+  visibility: hidden;
+}
+
+.ToolContent.slideIn {
+  right: 0;
+  visibility: visible;
+}
+
+.tool-panel-content {
+  padding: 20px;
+  color: white;
+}
+
+.tool-panel-content h3 {
+  margin: 0 0 20px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Divider styles */
+.Divider {
+  border: 0;
+  border-top: 1px solid var(--base-icon, #4a4a4a);
+  margin: 16px 0;
+}

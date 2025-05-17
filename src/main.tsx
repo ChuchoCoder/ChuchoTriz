@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./main.css";
 import App from "./App";
+import { RatioPanel } from "./components/RatioPanel";
 
 function waitForElement(selector: string) : Promise<Element | null> {
   return new Promise(resolve => {
@@ -43,6 +44,31 @@ waitForElement("#MiniOrderForm > div.MiniOrderForm_buttonsBlock").then((element)
   root.render(
     <React.StrictMode>
       <App />
+    </React.StrictMode>
+  );
+  
+});
+
+waitForElement("#ToolPanel > div.ToolPanelButtons").then((element) => {
+  //console.log('Element is ready');
+  
+  const app = document.createElement("div");
+
+  app.id = "root-chuchotriz-toolpanel";
+
+  if (element) {
+    element.append(app);
+  }
+  else{
+    console.log("No body found");
+  }
+
+  const container = document.getElementById("root-chuchotriz-toolpanel");
+  const root = createRoot(container!);
+
+  root.render(
+    <React.StrictMode>
+      <RatioPanel />
     </React.StrictMode>
   );
   
