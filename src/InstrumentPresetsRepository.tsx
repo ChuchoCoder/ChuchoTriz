@@ -27,8 +27,28 @@ const getInstrumentPresets = async (instrument: string): Promise<IInstrumentPres
     var preset = instrumentPresets[instrument];
     return preset;
   }
+
+  var wildcardInstrument = searchInstrument(instrument, instrumentPresets);
+
+  if (wildcardInstrument) {
+    return instrumentPresets[wildcardInstrument];
+  }
+
   return defaultInstrumentPresets;
 };
+
+// Implement a search using wildcard in instrumentPresets
+// Search to obtain instrument from instrumentPresets using wildcard like *. 
+// For example: argument instrument with text 'GFGC7400DI' should obtain 'GFGC*' item in instrumentPresets
+const searchInstrument = (instrument: string, presets: IInstrumentPresets): string | null => {
+  for (let key in presets) {
+    let regex = new RegExp('^' + key.replace('*', '.*') + '$');
+    if (regex.test(instrument)) {
+      return key;
+    }
+  }
+  return null;
+}
 
 const read = async (): Promise<IInstrumentPresets> => {
   var storageValue = await chrome.storage.local.get(Key);

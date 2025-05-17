@@ -40,6 +40,7 @@ function App() {
                 //console.log("Autocomplete presets using first item");
                 matriz.setSize(instrumentPresets[0].cantidad, instrumentPresets[0].mostrar);
               }
+              matriz.editSize();
             }
           }
 
@@ -80,6 +81,7 @@ function App() {
 
   function instrumentOnClick(preset: IInstrumentPreset) {
     matriz.setSize(preset.cantidad, preset.mostrar);
+    matriz.editSize();
     lastPresetsClicked[lastInstrumento] = preset;
     //console.log("Set last preset clicked for " + lastInstrumento + " preset " + JSON.stringify(preset));
   }

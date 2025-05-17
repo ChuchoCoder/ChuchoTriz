@@ -71,10 +71,23 @@ function setSize(cantidad: number, cantidadMostrar: number) {
         }
         else
         {
-            setInputValue(cantidadMostrarInput, ""); // Limpio la cantidad a mostrar
+            // Hack: Matriz tira error al limpiar la cantidad a mostrar
+            // setInputValue(cantidadMostrarInput, cantidad.toString());>
+            setInputValue(cantidadMostrarInput, "");
         }
     }
 }
+
+function editSize() {
+    //console.log(`editSize`);
+
+    var inputSizeElement = getCantidadInput();
+    // select all text in the input and focus
+    inputSizeElement.focus();
+    inputSizeElement.select();
+    inputSizeElement.setSelectionRange(0, inputSizeElement.value.length);
+}
+
 
 function getTicker(): string {
     var ticker = getInstrumentoInput().value;
@@ -154,4 +167,5 @@ export default {
     getPrecio,
     getCantidadInput,
     getLimpiarButton,
+    editSize,
 };
