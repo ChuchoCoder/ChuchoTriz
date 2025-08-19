@@ -1,3 +1,33 @@
-.MiniOrderForm_buttonsBlock .MiniOrderForm_buttonsBlock {
+#root-chuchotriz {
+  margin: 0 0 0 0;
+}
+
+#root-chuchotriz .DefaultSizeShowButtons {
   margin: 0 0 0 8px;
+  position: inherit;
+}
+
+.NotExpandedForm #root-chuchotriz .DefaultSizeShowButtons {
+    max-width: 50px;
+}
+
+/* Tablets and small desktops */
+@media (min-width: 1400px) {
+  .NotExpandedForm #root-chuchotriz .DefaultSizeShowButtons {
+    max-width: 50px;
+  }
+}
+
+/* Large desktops */
+@media (min-width: 1600px) {
+  .NotExpandedForm #root-chuchotriz .DefaultSizeShowButtons {
+    max-width: 200px;
+  }
+}
+
+/* Extra large screens */
+@media (min-width: 1800px) {
+  .NotExpandedForm #root-chuchotriz .DefaultSizeShowButtons {
+    max-width: none;
+  }
 }

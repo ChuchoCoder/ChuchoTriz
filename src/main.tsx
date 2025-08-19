@@ -48,7 +48,7 @@ waitForElement("#MiniOrderForm > div.MiniOrderForm_buttonsBlock").then((element)
   );
   
 });
-
+/*
 waitForElement("#ToolPanel > div.ToolPanelButtons").then((element) => {
   //console.log('Element is ready');
   
@@ -72,4 +72,4 @@ waitForElement("#ToolPanel > div.ToolPanelButtons").then((element) => {
     </React.StrictMode>
   );
   
-});
+});*/

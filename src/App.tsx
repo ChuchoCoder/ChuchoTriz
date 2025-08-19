@@ -89,7 +89,7 @@ function App() {
   return presets.length == 0 ? (
     <div></div>
   ) : (
-    <div className="MiniOrderForm_buttonsBlock">
+    <div className="MiniOrderForm_buttonsBlock DefaultSizeShowButtons">
       {presets.map((item) => (
         <button
           type="button"
