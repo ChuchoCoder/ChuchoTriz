@@ -1,63 +1,152 @@
-# ChuchoTriz - Extension de Chrome para Matriz
+# ChuchoTriz - Extensión de Chrome para Matriz
 
-ChuchoTriz es una extensión de Chrome para Matriz que agrega funcionalidad para permitir operar de forma más ágil.
+ChuchoTriz es una extensión de Chrome para Matriz que agrega funcionalidad para permitir operar de forma más ágil y eficiente en el trading.
 
-## Agregar extension a Chrome
+## Instalación de la Extensión
 
 1. Ir a la sección [Releases](https://github.com/ChuchoCoder/chuchotriz/releases)
-2. Descargar el archivo zip (Ejemplo: [2024-10-23.zip](https://github.com/ChuchoCoder/ChuchoTriz/releases/download/2024-10-23/2024-10-23.zip))
-3. Descomprimir zip en una carpeta (Ejemplo: `chuchotriz`)
-4. Ir a [chrome://extensiones/](chrome://extensiones/)
-5. Activar "Modo de desarrollador" en la parte superior derecha de la ventana.
-6. Haga clic en el botón "Cargar extensión sin empaquetar" en la parte superior izquierda de la ventana.
-7. Seleccionar el directorio donde se descomprimió la extensión (Ejemplo: `chuchotriz`) para cargar la extensión.
-8. Navegar a Matriz de su broker (Ejemplo: https://matriz.cocos.xoms.com.ar/) y hacer Login.
-9. Seleccionar un instrumento o hacer click en el precio para ver que se agreguen los botones de Cantidad/Cantidad a Mostrar.
-10. En la parte superior de Chrome es posible acceder a las opciones de la extensión.
+2. Descargar el archivo zip más reciente (Ejemplo: [2025-08-23.zip](https://github.com/ChuchoCoder/ChuchoTriz/releases/download/2025-08-23/2025-08-23.zip))
+3. Descomprimir el archivo zip en una carpeta local (Ejemplo: `chuchotriz`)
+4. Abrir Chrome y navegar a [chrome://extensions/](chrome://extensions/)
+5. Activar el "Modo de desarrollador" en la parte superior derecha de la ventana
+6. Hacer clic en el botón "Cargar extensión sin empaquetar" en la parte superior izquierda
+7. Seleccionar el directorio donde se descomprimió la extensión para cargarla
+8. Navegar a la plataforma Matriz de su broker (Ejemplo: <https://matriz.cocos.xoms.com.ar/>) e iniciar sesión
+9. Seleccionar un instrumento o hacer clic en el precio para ver los botones de presets automáticamente
+10. Acceder a las opciones de la extensión desde el ícono de la extensión en la barra de herramientas de Chrome
 
-## Funcionalidades
+## Funcionalidades Principales
 
-### Presets de Cantidad y Cantidad a mostrar por Instrumento
+### 1. Presets de Cantidad y Cantidad a Mostrar por Instrumento
 
-Permite tener predefinidos diferentes cantidades y cantidades a mostrar por instrumento. Haciendo click en los botones, completa automáticamente la `Cantidad` y  
-`Cantidad a mostrar` en el panel inferior.
+La extensión permite configurar presets personalizados de cantidades para cada instrumento, facilitando el trading rápido con valores predefinidos.
 
-![Mini Order Form](docs/images/MiniOrderForm.png)
+**Características:**
 
-### Autocompletado de Cantidad y Cantidad a mostrar
+- Botones dinámicos que aparecen automáticamente al seleccionar un instrumento
+- Formato inteligente de números (muestra "k" para miles y "m" para millones)
+- Configuración personalizable por cada ticker/instrumento
+- Un clic completa automáticamente tanto la `Cantidad` como la `Cantidad a mostrar`
 
-Al hacer click en un instrumento o precio, la la `Cantidad` y `Cantidad a mostrar` se completan automáticamente según el siguiente criterio:
+![Mini Order Form 1](docs/images/MiniOrderForm.png)
 
-1. Con el último Preset utilizado del instrumento seleccionado. Es decir, una vez que se haga click en cualquier de los botones de `Cantidad/Cantidad_A_Mostrar` estos valores se completarán automáticamente.
-2. Si no se hizo click en los botones de `Cantidad/Cantidad_A_Mostrar`, se utilizará el primer preset del instrumento seleccionado
+![Mini Order Form 2](docs/images/MiniOrderForm2.png)
 
-> Nota: Esta functionalidad puede deshabilitarse desde las opciones
+### 2. Autocompletado Inteligente
 
-### Configurar Presets por Instrumento
+El sistema de autocompletado funciona con lógica para optimizar la velocidad de trading:
 
-En las opciones de la extensión de Chrome se pueden definir los diferentes instrumentos y las cantidades/cantidades a mostrar deseadas.
+**Orden de prioridad:**
+
+1. **Último preset utilizado**: Si ya se usó un preset para ese instrumento, utiliza ese valor automáticamente
+2. **Primer preset configurado**: Si no hay historial, usa el primer preset definido para el instrumento
+3. **Valores por defecto**: Si no hay presets específicos, usa valores predeterminados genéricos
+
+**Activación automática:**
+
+- Al hacer clic en un instrumento
+- Al hacer clic en el campo de precio
+- Al hacer clic en el campo de cantidad
+- Se limpia automáticamente al presionar el botón "Limpiar"
+
+> **Nota**: Esta funcionalidad puede deshabilitarse completamente desde las opciones de la extensión
+
+### 3. Búsqueda Inteligente de Instrumentos
+
+La extensión incluye un algoritmo de búsqueda que permite:
+
+- **Coincidencia exacta**: Busca primero el ticker exacto
+- **Coincidencia por prefijo**: Si el instrumento empieza con un ticker configurado
+- **Coincidencia parcial**: Si un ticker configurado empieza con el instrumento buscado
+- **Fallback a defaults**: Valores por defecto si no encuentra coincidencias
+
+### 4. Configuración Avanzada de Presets
+
+Panel de opciones completo para personalizar la experiencia:
+
+**Sintaxis de configuración:**
+
+```text
+Instrumento Cantidad/Cantidad_A_Mostrar Cantidad ...
+```
+
+**Ejemplos prácticos:**
+
+```text
+AL30 200000/25000 100000/10000 50000
+DLR 5000/500 1000/100 100 50
+GFG 100/25 50 20
+PESOS 100000000 10000000 1000000 100000
+```
+
+**Características del panel de opciones:**
+
+- Editor de texto con sintaxis simple
+- Checkbox para habilitar/deshabilitar autocompletado
+- Botón "Valores por defecto" para restaurar configuración inicial
+- Validación de sintaxis con manejo de errores
+- Guardado automático en Chrome Storage
 
 ![Opciones](docs/images/Opciones.png)
 
-## Development Setup
+### 5. Presets por Defecto Incluidos
 
-### Install dependencies
+La extensión viene con presets preconfigurados para instrumentos populares:
+
+- **AL30, GD30**: Bonos del tesoro con cantidades típicas
+- **GGAL, YPFD**: Acciones argentinas
+- **SPY, QQQ**: ETFs internacionales  
+- **DLR, GFG**: Futuros de dólar y opciones call/put
+- **PESOS**: Cauciones
+
+### 6. Panel de Herramientas de Ratios (En Desarrollo)
+
+La extensión incluye la base para un panel lateral de análisis con:
+
+- Filtros por instrumento
+- Categorización por tipo (Bonos, Dólar, etc.)
+- Interface expandible para futuras funcionalidades de análisis
+
+## Características Técnicas
+
+### Tecnología
+
+- **Frontend**: React 18 con TypeScript
+- **Build System**: Vite con plugins específicos para Chrome Extensions
+- **Almacenamiento**: Chrome Storage API para persistencia de configuraciones
+- **Arquitectura**: Content Script que se inyecta en la página de Matriz
+
+### Compatibilidad
+
+- **Chrome**: Manifest V3
+- **Plataforma**: Funciona específicamente con plataformas Matriz (*.xoms.com.ar)
+- **Responsive**: Se adapta al diseño existente de Matriz sin interferir
+
+### Rendimiento
+
+- **Carga diferida**: Los elementos se crean solo cuando son necesarios
+- **Optimización de DOM**: Uso de selectores específicos para evitar conflictos
+- **Eficiencia de memoria**: Limpieza automática de event listeners
+
+## Configuración para Desarrollo
+
+### Instalar dependencias
 
 ```sh
 npm install
 ```
 
-### Build extension
+### Compilar extensión
 
 ```sh
 npm run build
 ```
 
-### Load extension
+### Cargar extensión en modo desarrollo
 
-1. Navigate to [chrome://extensions/](chrome://extensions/)
-1. Turn on the "Developer mode" toggle switch in the top right of the window
-1. Click the "Load unpacked" button in top left of the window
-1. Select the `dist` directory to load the extension
-1. Navigate to https://matriz.cocos.xoms.com.ar/ to see the Content Script React app
-1. Go to extensions and click "React TypeScript Chrome Extension" to see the Popup React app
+1. Navegar a [chrome://extensions/](chrome://extensions/)
+2. Activar el interruptor "Modo de desarrollador" en la parte superior derecha de la ventana
+3. Hacer clic en el botón "Cargar extensión sin empaquetar" en la parte superior izquierda
+4. Seleccionar el directorio `dist` para cargar la extensión
+5. Navegar a <https://matriz.cocos.xoms.com.ar/> para ver la aplicación React del Content Script
+6. Ir a extensiones y hacer clic en "React TypeScript Chrome Extension" para ver la aplicación React del Popup

@@ -98,8 +98,8 @@ function InstrumentPresets() {
       Ejemplos:
       <pre>
         <pre>AL30 200000/25000 100000/10000 50000</pre>
-        <pre>GGAL 5000/500 1000/100 100 50</pre>
-        <pre>SPY 100/25 50 20</pre>
+        <pre>DLR 5000/500 1000/100 100 50</pre>
+        <pre>GFG 100/25 50 20</pre>
       </pre>
       <div>
         <label>

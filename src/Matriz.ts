@@ -1,5 +1,5 @@
 const miniOrderFormExpandSelector =
-    "#MiniOrderForm > span.fa-chevron-circle-up";
+    "#MiniOrderForm > span.ExpandButton";
 
 
 const cantidadSelector =

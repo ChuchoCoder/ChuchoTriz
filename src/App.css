@@ -1,3 +1,14 @@
-.MiniOrderForm_buttonsBlock .MiniOrderForm_buttonsBlock {
+#root-chuchotriz {
+  margin: 0 0 0 0;
+}
+
+#MiniOrderForm {
+  flex-wrap: nowrap !important;
+}
+
+#root-chuchotriz .DefaultSizeShowButtons {
   margin: 0 0 0 8px;
+  position: inherit;
+  display: flex;
+  flex-wrap: nowrap;
 }
