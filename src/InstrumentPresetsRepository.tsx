@@ -16,7 +16,8 @@ const DefaultPresets: IInstrumentPresets = {
   YPFD: [{ cantidad: 2000, mostrar: 500 }],
   SPY: [{ cantidad: 100, mostrar: 10 }],
   QQQ: [{ cantidad: 100, mostrar: 10 }],
-  "DLR/MAR25": [{ cantidad: 100, mostrar: 10 }],
+  DLR: [{ cantidad: 100, mostrar: 10 }],
+  GFG: [{ cantidad: 100, mostrar: 10 }],
   PESOS: [{ cantidad: 100000000, mostrar: 0 }, { cantidad: 10000000, mostrar: 0 }, { cantidad: 1000000, mostrar: 0 }, { cantidad: 100000, mostrar: 0 }],
 };
 
@@ -37,17 +38,39 @@ const getInstrumentPresets = async (instrument: string): Promise<IInstrumentPres
   return defaultInstrumentPresets;
 };
 
-// Implement a search using wildcard in instrumentPresets
-// Search to obtain instrument from instrumentPresets using wildcard like *. 
-// For example: argument instrument with text 'GFGC7400DI' should obtain 'GFGC*' item in instrumentPresets
+// Implement a search in instrumentPresets
+// Search to obtain instrument from instrumentPresets 
+// First tries exact match, then finds closest match with longest prefix
 const searchInstrument = (instrument: string, presets: IInstrumentPresets): string | null => {
+  // First try exact match
   for (let key in presets) {
-    let regex = new RegExp('^' + key.replace('*', '.*') + '$');
-    if (regex.test(instrument)) {
+    if (instrument === key) {
       return key;
     }
   }
-  return null;
+  
+  // If no exact match, find the closest match with longest prefix
+  let bestMatch: string | null = null;
+  let longestPrefixLength = 0;
+  
+  for (let key in presets) {
+    // Check if the key is a prefix of the instrument
+    if (instrument.startsWith(key)) {
+      if (key.length > longestPrefixLength) {
+        longestPrefixLength = key.length;
+        bestMatch = key;
+      }
+    }
+    // Also check if the instrument is a prefix of the key
+    else if (key.startsWith(instrument)) {
+      if (instrument.length > longestPrefixLength) {
+        longestPrefixLength = instrument.length;
+        bestMatch = key;
+      }
+    }
+  }
+  
+  return bestMatch;
 }
 
 const read = async (): Promise<IInstrumentPresets> => {
