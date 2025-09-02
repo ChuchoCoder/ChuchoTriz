@@ -1,0 +1,44 @@
+#MiniOrderForm > div.MiniOrderForm_checkBoxesBlock
+{
+    display: table-column;
+    flex-direction: column;
+}
+
+:root {
+    --mini-form-input-width-collapsed:162px !important;
+    --mini-form-input-width-expanded: 162px !important;
+}
+
+@media (min-width: 1450px) {
+    form.MiniOrderForm_FormMiniOrdenPanel
+    {
+        max-width: 1100px;
+    }
+
+    .DesktopUltrawideExpanded form.MiniOrderForm_FormMiniOrdenPanel
+    {
+        max-width: 950px;
+    }
+
+    #MiniOrderForm {
+        flex-wrap: nowrap !important;
+    }
+
+    #MiniOrderForm > div.MiniOrderForm_buttonsBlock
+    {
+        width: auto;
+        top: 40px;
+        left: 1150px;
+    }
+}
+
+#root-chuchotriz {
+  margin: 0 0 0 0;
+}
+
+#root-chuchotriz .DefaultSizeShowButtons {
+  margin: 0 0 0 8px;
+  position: inherit;
+  display: flex;
+  flex-wrap: nowrap;
+}

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./main.css";
 import App from "./App";
 import { RatioPanel } from "./components/RatioPanel";
+import matriz from "./Matriz";
 
 function waitForElement(selector: string) : Promise<Element | null> {
   return new Promise(resolve => {
@@ -27,6 +28,10 @@ function waitForElement(selector: string) : Promise<Element | null> {
 waitForElement("#MiniOrderForm > div.MiniOrderForm_buttonsBlock").then((element) => {
   //console.log('Element is ready');
   
+  matriz.expandMiniOrderForm();
+
+  //const expandedForm = matriz.getMiniOrderFormExpand();
+
   const app = document.createElement("div");
 
   app.id = "root-chuchotriz";
