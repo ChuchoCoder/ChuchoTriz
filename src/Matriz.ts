@@ -34,13 +34,18 @@ function getCantidadAMostrarInput(): HTMLInputElement {
 
     if (!cantidadMostrarInput) {
         // Si no está creado hacer click para expandir el Mini Order Form
-        getMiniOrderFormExpand().click();
+        expandMiniOrderForm();
         cantidadMostrarInput = document.querySelector(
             cantidadMostrarSelector
         ) as HTMLInputElement;
     }
 
     return cantidadMostrarInput;
+}
+
+function expandMiniOrderForm() {
+    // Si no está creado hacer click para expandir el Mini Order Form
+    getMiniOrderFormExpand().click();
 }
 
 function instrumentAndPriceHasValues(): boolean {
@@ -109,6 +114,12 @@ function getMiniOrderFormExpand() : HTMLSpanElement {
     return miniOrderFormExpandSpan;
 }
 
+function getMiniOrderFormExpanded() : HTMLDivElement {
+    return document.querySelector(
+        '#MiniOrderForm.ExpandedForm'
+    ) as HTMLDivElement;
+}
+
 var instrumentoInput: HTMLInputElement | undefined = undefined;
 function getInstrumentoInput(): HTMLInputElement {
     if (!instrumentoInput) {
@@ -168,4 +179,6 @@ export default {
     getCantidadInput,
     getLimpiarButton,
     editSize,
+    expandMiniOrderForm,
+    getMiniOrderFormExpanded
 };
