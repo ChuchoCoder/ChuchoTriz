@@ -20,6 +20,11 @@ anteriores. Una instalación nueva activa Autocompletar de forma predeterminada;
 podés desactivarlo desde Configuración. Limpiar olvida el último preset elegido
 para ese instrumento durante la sesión.
 
+La extensión conserva el formulario contraído al iniciar. Sólo lo expande al
+aplicar un preset con Cantidad a mostrar mayor que cero, también mediante
+Autocompletar. Si ya está expandido, un preset sin cantidad parcial limpia
+Cantidad a mostrar y conserva el formulario abierto.
+
 ## Instalar
 
 Mientras se prepara la publicación en Chrome Web Store:
@@ -34,7 +39,7 @@ Mientras se prepara la publicación en Chrome Web Store:
    agrega un popup de configuración a la barra superior de Chrome.
 
 Las releases anteriores pueden contener una versión anterior de la interfaz.
-Compilar esta rama genera la versión 0.0.10. Para actualizar una instalación de
+Compilar esta rama genera la versión 0.0.13. Para actualizar una instalación de
 desarrollo, reemplazar el contenido de su carpeta y pulsar Recargar en Chrome.
 Conservar la misma carpeta mantiene su identidad y configuración de desarrollo.
 
@@ -48,7 +53,7 @@ npm test
 npm run package:free
 ```
 
-El paquete se genera en `releases/chuchotriz-free-0.0.10.zip`. También se puede
+El paquete se genera en `releases/chuchotriz-free-0.0.13.zip`. También se puede
 cargar `dist` directamente desde Chrome. `npm run build` ejecuta TypeScript,
 compila y comprueba el alcance de los archivos fuente y del paquete resultante.
 `npm run watch` recompila durante el desarrollo; validar con `package:free`

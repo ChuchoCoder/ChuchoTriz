@@ -28,7 +28,7 @@ const cantidadAMostrarRow = `
 // Mini Order Form de Matriz, con la misma estructura que esperan los selectores.
 // Como en Matriz, Cantidad a mostrar solo existe con el formulario expandido.
 function renderMiniOrderForm(
-  { instrumento = "AL30 (CI)", precio = "70000", cantidad = "", expanded = true } = {}) {
+  { instrumento = "AL30 (CI)", precio = "70000", cantidad = "", expanded = true, deferExpansion = false } = {}) {
   document.body.innerHTML = `
     <div id="MiniOrderForm">
       <span class="ExpandButton"></span>
@@ -59,7 +59,11 @@ function renderMiniOrderForm(
   };
   showCantidadAMostrar(expanded);
   const expandButton = form.querySelector(".ExpandButton")!;
-  expandButton.addEventListener("click", () => showCantidadAMostrar(!form.classList.contains("ExpandedForm")));
+  expandButton.addEventListener("click", () => {
+    const expand = () => showCantidadAMostrar(!form.classList.contains("ExpandedForm"));
+    if (deferExpansion) queueMicrotask(expand);
+    else expand();
+  });
 
   return {
     input: (id: string) => document.getElementById(id) as HTMLInputElement,
@@ -123,6 +127,7 @@ describe("Matriz Mini Order Form", () => {
       miniOrderForm.fill({ cantidad: 100000, mostrar: 0 });
 
       expect(page.input("cantidadMostrar").value).toBe("");
+      expect(page.isExpanded()).toBe(true);
     });
 
     it("does nothing until Instrumento and Precio have values", () => {
@@ -140,6 +145,99 @@ describe("Matriz Mini Order Form", () => {
 
       expect(page.isExpanded()).toBe(true);
       expect(page.input("cantidadMostrar").value).toBe("20000");
+    });
+
+    it("keeps a collapsed form collapsed when a preset shows the whole quantity", () => {
+      const page = renderMiniOrderForm({ expanded: false });
+
+      miniOrderForm.fill({ cantidad: 100000, mostrar: 0 });
+
+      expect(page.input("cantidad").value).toBe("100000");
+      expect(page.isExpanded()).toBe(false);
+      expect(page.input("cantidadMostrar")).toBeNull();
+    });
+
+    it("fills Cantidad a mostrar when Matriz renders the expanded fields later", async () => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+
+      await vi.waitFor(() => expect(page.input("cantidadMostrar")?.value).toBe("20000"));
+      expect(page.input("cantidad").value).toBe("200000");
+    });
+
+    it.each(["instrumento", "precio", "cantidad", "limpiar"])("discards pending shown quantity after %s changes", async change => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      if (change === "limpiar") page.limpiarButton.click();
+      else {
+        const input = page.input(change === "instrumento" ? "rc_select_2" : change);
+        input.value = change === "instrumento" ? "GD30 (CI)" : "1";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      await vi.waitFor(() => expect(page.isExpanded()).toBe(true));
+      expect(page.input("cantidadMostrar").value).toBe("");
+    });
+
+    it.each([0, 15000])("uses the latest preset while expansion is pending (mostrar: %s)", async mostrar => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      miniOrderForm.fill({ cantidad: 100000, mostrar });
+
+      await vi.waitFor(() => expect(page.isExpanded()).toBe(true));
+      expect(page.input("cantidad").value).toBe("100000");
+      expect(page.input("cantidadMostrar").value).toBe(mostrar ? mostrar.toString() : "");
+    });
+
+    it.each(["input", "limpiar"])("does not toggle twice when %s cancels a write before another partial preset", async cancel => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      if (cancel === "limpiar") page.limpiarButton.click();
+      else {
+        page.input("cantidad").value = "50";
+        page.input("cantidad").dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      miniOrderForm.fill({ cantidad: 100000, mostrar: 10000 });
+
+      await vi.waitFor(() => expect(page.isExpanded()).toBe(true));
+      expect(page.input("cantidad").value).toBe("100000");
+      expect(page.input("cantidadMostrar").value).toBe("10000");
+    });
+
+    it("rechecks ticket identity when Matriz replaces an input without an input event", async () => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      replaceInput(page.input("rc_select_2"), "GD30 (CI)");
+
+      await vi.waitFor(() => expect(page.isExpanded()).toBe(true));
+      expect(page.input("cantidadMostrar").value).toBe("");
+    });
+
+    it("can expand a replacement form while the previous form is still rendering", async () => {
+      renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      const replacement = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 100000, mostrar: 10000 });
+
+      await vi.waitFor(() => expect(replacement.isExpanded()).toBe(true));
+      expect(replacement.input("cantidadMostrar").value).toBe("10000");
+    });
+
+    it("stops waiting and cannot write into a field that appears after the timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        const page = renderMiniOrderForm({ expanded: false });
+        const button = document.querySelector(".ExpandButton")!;
+        button.replaceWith(button.cloneNode(true));
+        miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+        await vi.advanceTimersByTimeAsync(3000);
+        document.querySelector("#MiniOrderForm form")!.insertAdjacentHTML("beforeend", cantidadAMostrarRow);
+        await Promise.resolve();
+
+        expect(page.input("cantidadMostrar").value).toBe("");
+        expect(vi.getTimerCount()).toBe(0);
+      } finally { vi.useRealTimers(); }
     });
 
     it("does not throw when the Mini Order Form is not on the page", () => {

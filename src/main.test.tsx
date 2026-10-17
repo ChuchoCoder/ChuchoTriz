@@ -34,4 +34,13 @@ it("mounts Configuración in the left menu even before the order form exists", a
   });
   expect(document.querySelectorAll('.DirectAccessBar [aria-label="Configuración (ChuchoTriz)"]')).toHaveLength(1);
   expect(document.querySelectorAll('.ct-free-settings-slot a')).toHaveLength(1);
+
+  const form = document.createElement("div");
+  form.id = "MiniOrderForm";
+  form.innerHTML = '<span class="ExpandButton"></span><div class="MiniOrderForm_buttonsBlock"></div>';
+  const expand = vi.fn();
+  form.querySelector(".ExpandButton")!.addEventListener("click", expand);
+  await act(async () => { document.body.append(form); });
+  expect(form.querySelector("#root-chuchotriz")).not.toBeNull();
+  expect(expand, "Mounting the extension must preserve the collapsed order form").not.toHaveBeenCalled();
 });

@@ -55,7 +55,7 @@
 .options-window button.text-button { border-color: transparent; color: var(--options-muted); padding-left: 0; padding-right: 0; font-size: 12px; }
 .options-window button.text-button:hover:not(:disabled) { color: var(--options-accent); background: transparent; border-color: transparent; }
 .options-window .preset-hint { font-size: 12px; margin: 3px 0 18px; }
-.options-window .preset-columns, .options-window .preset-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 98px; align-items: center; gap: 10px; }
+.options-window .preset-columns, .options-window .preset-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 98px; align-items: center; gap: 10px; max-width: 520px; }
 .options-window .preset-columns { font-size: 12px; color: var(--options-muted); margin-bottom: 9px; }
 .options-window .preset-row { margin-bottom: 10px; }
 .options-window .preset-row input { font-variant-numeric: tabular-nums; font-size: 13px; }
