@@ -34,7 +34,7 @@ Mientras se prepara la publicación en Chrome Web Store:
    agrega un popup de configuración a la barra superior de Chrome.
 
 Las releases anteriores pueden contener una versión anterior de la interfaz.
-Compilar esta rama genera la versión 0.0.10. Para actualizar una instalación de
+Compilar esta rama genera la versión 0.0.11. Para actualizar una instalación de
 desarrollo, reemplazar el contenido de su carpeta y pulsar Recargar en Chrome.
 Conservar la misma carpeta mantiene su identidad y configuración de desarrollo.
 
@@ -48,7 +48,7 @@ npm test
 npm run package:free
 ```
 
-El paquete se genera en `releases/chuchotriz-free-0.0.10.zip`. También se puede
+El paquete se genera en `releases/chuchotriz-free-0.0.11.zip`. También se puede
 cargar `dist` directamente desde Chrome. `npm run build` ejecuta TypeScript,
 compila y comprueba el alcance de los archivos fuente y del paquete resultante.
 `npm run watch` recompila durante el desarrollo; validar con `package:free`
