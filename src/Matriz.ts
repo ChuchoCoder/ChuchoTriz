@@ -42,25 +42,53 @@ function toTicker(instrumento: string): string {
     return instrumento.replace(" (CI)", "").replace(" (24hs)", "").split(" ")[0].toUpperCase();
 }
 
+let cancelPendingShownQuantity: (() => void) | undefined;
+
 function fill(cantidad: number, cantidadAMostrar: number) {
+    const wasExpanding = cancelPendingShownQuantity !== undefined;
+    cancelPendingShownQuantity?.();
     const cantidadInput = find<HTMLInputElement>(cantidadSelector);
-    if (!cantidadInput || valueOf(instrumentoSelector) === "" || valueOf(precioSelector) === "") {
+    const instrumento = valueOf(instrumentoSelector);
+    const precio = valueOf(precioSelector);
+    if (!cantidadInput || instrumento === "" || precio === "") {
         return;
     }
 
     setInputValue(cantidadInput, cantidad.toString());
-    expandMiniOrderForm();
-    const cantidadAMostrarInput = find<HTMLInputElement>(cantidadAMostrarSelector);
-    if (!cantidadAMostrarInput) {
-        return;
-    }
-    if (Number.isInteger(cantidadAMostrar) && cantidadAMostrar > 0) {
-        setInputValue(cantidadAMostrarInput, cantidadAMostrar.toString());
-    }
-    else {
-        // Hack: Matriz tira error al limpiar la cantidad a mostrar
-        setInputValue(cantidadAMostrarInput, "");
-    }
+    const showPartial = Number.isInteger(cantidadAMostrar) && cantidadAMostrar > 0;
+    if (showPartial && !wasExpanding) expandMiniOrderForm();
+    const current = () => valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio &&
+        valueOf(cantidadSelector) === cantidad.toString();
+    const apply = () => {
+        if (!current()) return true;
+        const input = find<HTMLInputElement>(cantidadAMostrarSelector);
+        if (!input) return false;
+        // Matriz represents showing the whole quantity with an empty field.
+        setInputValue(input, showPartial ? cantidadAMostrar.toString() : "");
+        return true;
+    };
+    if (apply() || (!showPartial && !wasExpanding)) return;
+
+    // Expansion can render on a later turn. Only the latest untouched ticket may receive this write.
+    const observer = new MutationObserver(() => { if (apply()) stop(); });
+    const edited = (event: Event) => {
+        if (isTicketInput(event.target) && (event.type === "input" || !current())) stop();
+    };
+    const collapsed = (event: Event) => {
+        if (event.target instanceof Element && event.target.closest(expandButtonSelector)) stop();
+    };
+    const stop = () => {
+        observer.disconnect(); clearTimeout(timeout); unsubscribeLimpiar();
+        for (const type of ["input", "change", "focusin"]) document.removeEventListener(type, edited);
+        document.removeEventListener("click", collapsed);
+        if (cancelPendingShownQuantity === stop) cancelPendingShownQuantity = undefined;
+    };
+    const timeout = setTimeout(stop, 2000);
+    const unsubscribeLimpiar = onLimpiar(stop);
+    cancelPendingShownQuantity = stop;
+    for (const type of ["input", "change", "focusin"]) document.addEventListener(type, edited);
+    document.addEventListener("click", collapsed);
+    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function editCantidad() {

@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./main.css";
 import App from "./App";
-import { expandMiniOrderForm, miniOrderForm } from "./Matriz";
+import { miniOrderForm } from "./Matriz";
 import { createPresetSession } from "./PresetSession";
 import instrumentPresetsRepository from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
@@ -24,7 +24,6 @@ function mountPresets() {
   const buttons = document.querySelector("#MiniOrderForm > div.MiniOrderForm_buttonsBlock");
   if (!buttons) return false;
 
-  expandMiniOrderForm();
   const container = document.createElement("div");
   container.id = "root-chuchotriz";
   buttons.append(container);
