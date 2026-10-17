@@ -2,7 +2,8 @@
 .DirectAccessBar .ct-free-settings-item { display: flex; align-items: center; justify-content: center; width: 40px; min-height: 40px; color: #fff; }
 .DirectAccessBar .ct-free-settings-item:hover, .DirectAccessBar .ct-free-settings-item.selected { background: var(--base-icon, #267bb5); }
 .DirectAccessBar .ct-free-settings-item:focus-visible { outline: 2px solid #4bb9ec; outline-offset: -2px; }
-.ct-free-settings-panel { position: fixed; z-index: 1000; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel-body-background, #212936); color: var(--text-color, #fff); font: 13px/1.4 var(--app-font-family, "Lato", sans-serif); container-type: inline-size; }
+/* Matriz's fixed toolbars and order form use layers 98–100. */
+.ct-free-settings-panel { position: fixed; z-index: 97; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel-body-background, #212936); color: var(--text-color, #fff); font: 13px/1.4 var(--app-font-family, "Lato", sans-serif); container-type: inline-size; }
 .ct-free-settings-panel[hidden] { display: none; }
 .ct-free-settings-header { box-sizing: border-box; display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; min-height: 34px; padding: 0 10px; border-bottom: 1px solid var(--modal-border-color, #414d5f); gap: 10px; background: var(--direct-access-bar-background, #2b3648); color: var(--header-letter-color, #fff); font: 400 16px/1.5 var(--app-font-family, "Lato", sans-serif); }
 .ct-free-settings-header h1 { margin: 0; color: inherit; font: inherit; }

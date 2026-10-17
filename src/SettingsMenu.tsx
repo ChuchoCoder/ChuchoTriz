@@ -87,9 +87,8 @@ export function SettingsMenu() {
         aria-label="Configuración (ChuchoTriz)" title="Configuración · ChuchoTriz"
         aria-controls="ct-free-settings-panel" aria-expanded={open} aria-current={open ? "page" : undefined}
         onClick={event => { event.preventDefault(); setPosition(bounds()); setVisited(true); setOpen(true); }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path stroke="currentColor" strokeWidth="2" d="m9 3-1 3-3 1-2 3 2 2v3l2 3 3-1 2 3 3-1 1-3 3-1 2-3-2-2V9l-2-3-3 1-2-3H9Z" />
-          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+          <path fillRule="evenodd" d="M9.96 4.89 10.44 2.12 13.56 2.12 14.04 4.89 15.59 5.53 17.88 3.91 20.09 6.12 18.47 8.41 19.11 9.96 21.88 10.44 21.88 13.56 19.11 14.04 18.47 15.59 20.09 17.88 17.88 20.09 15.59 18.47 14.04 19.11 13.56 21.88 10.44 21.88 9.96 19.11 8.41 18.47 6.12 20.09 3.91 17.88 5.53 15.59 4.89 14.04 2.12 13.56 2.12 10.44 4.89 9.96 5.53 8.41 3.91 6.12 6.12 3.91 8.41 5.53Z M15.3 12a3.3 3.3 0 1 0-6.6 0a3.3 3.3 0 1 0 6.6 0Z" />
         </svg>
       </a>, slot)}
     {visited && <section id="ct-free-settings-panel" className="ct-free-settings-panel" style={position}
