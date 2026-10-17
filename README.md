@@ -1,4 +1,4 @@
-# ChuchoTriz gratuito
+# ChuchoTriz
 
 Extensión de Chrome para agilizar la carga de cantidades en el Mini Order Form de
 Matriz. Configurá presets por instrumento y aplicalos con un clic. La extensión
@@ -54,16 +54,16 @@ compila y comprueba el alcance de los archivos fuente y del paquete resultante.
 `npm run watch` recompila durante el desarrollo; validar con `package:free`
 antes de distribuir.
 
-CI ejecuta las pruebas, valida la edición gratuita, genera el ZIP y comprueba
+CI ejecuta las pruebas, valida la extensión, genera el ZIP y comprueba
 las dependencias. Los nuevos archivos requieren una revisión explícita y su
 incorporación en `free-files.json`.
 
 ## Datos y distribución
 
-Las preferencias se almacenan localmente. Esta edición pide solamente el permiso
+Las preferencias se almacenan localmente. La extensión pide solamente el permiso
 `storage` y no incorpora servidores propios, analítica ni pagos.
 La extensión no bloquea las solicitudes de telemetría de Matriz.
 
 - [Privacidad](PRIVACY.md).
-- [Alcance de la edición gratuita y preparación del Store](docs/free-edition.md).
+- [Mantenimiento y distribución](docs/distribution.md).
 - [Reportar problemas](https://github.com/ChuchoCoder/ChuchoTriz/issues).

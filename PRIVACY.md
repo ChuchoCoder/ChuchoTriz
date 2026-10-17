@@ -1,6 +1,6 @@
-# Privacidad de ChuchoTriz gratuito
+# Privacidad de ChuchoTriz
 
-Esta declaración describe la edición gratuita de este repositorio.
+Esta declaración describe la extensión ChuchoTriz.
 
 ChuchoTriz lee el instrumento, precio y cantidad del Mini Order Form de Matriz
 para mostrar presets y completar las cantidades cuando el usuario lo habilita.

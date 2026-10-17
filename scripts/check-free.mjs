@@ -11,7 +11,7 @@ const assert = (condition, message) => { if (!condition) throw new Error(message
 
 // Exact filenames require an explicit scope review whenever files are added.
 export function assertAllowed(paths, allowed) {
-  for (const path of paths) assert(allowed.includes(path), `Unreviewed free-edition file: ${path}`);
+  for (const path of paths) assert(allowed.includes(path), `Unreviewed file: ${path}`);
 }
 
 export function filesIn(directory, base = directory) {
@@ -51,8 +51,8 @@ export function assertManifest(manifest, built = false) {
 }
 
 export function assertFreeText(text, path) {
-  const forbidden = /\b(?:mep\w*|multileg\w*|multipata\w*|chuchotriz-premium)\b|matriz-bridge|CHUCHOTRIZ_BRIDGE|__matriz|\b(?:WebSocket|XMLHttpRequest|fetch|eval)\s*\(/i;
-  assert(!forbidden.test(text), `Excluded functionality or network code found in ${path}`);
+  const forbidden = /matriz-bridge|CHUCHOTRIZ_BRIDGE|__matriz|\b(?:WebSocket|XMLHttpRequest|fetch|eval)\s*\(/i;
+  assert(!forbidden.test(text), `Unexpected page bridge or network code found in ${path}`);
   assert(!/sourceMappingURL\s*=|(?:github_pat_|ghp_)[a-zA-Z0-9]{20,}|-----BEGIN [\w ]*PRIVATE KEY-----/.test(text),
     `Source map or possible secret found in ${path}`);
 }
@@ -93,5 +93,5 @@ export function checkFree({ built = false, directory = root } = {}) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   checkFree({ built: process.argv.includes('--dist') });
-  console.log('Free-edition scope verified' + (process.argv.includes('--dist') ? ' (source and dist)' : ' (source)'));
+  console.log('Package verified' + (process.argv.includes('--dist') ? ' (source and dist)' : ' (source)'));
 }

@@ -8,7 +8,7 @@ import instrumentPresetsRepository from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
 import { SettingsMenu } from "./SettingsMenu";
 
-// Settings belong to the free edition and do not depend on the order form.
+// Settings remain accessible independently of the order form.
 const settingsContainer = document.createElement("div");
 settingsContainer.id = "root-chuchotriz-settings";
 document.body.append(settingsContainer);

@@ -1,7 +1,7 @@
 [
   ".github/workflows/ci.yml",
   ".gitignore",
-  "docs/free-edition.md",
+  "docs/distribution.md",
   "docs/images/MiniOrderForm.png",
   "docs/images/MiniOrderForm2.png",
   "docs/images/Opciones.png",

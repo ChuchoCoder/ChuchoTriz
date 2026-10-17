@@ -20,9 +20,10 @@ test('accepts the minimal manifest and rejects extra capabilities', () => {
     assert.throws(() => assertManifest({ ...manifest(), ...change }));
   }
 });
-test('rejects excluded UI, page bridges, network code, secrets and source maps', () => {
-  for (const text of ['MepView', 'MultilegView', 'Multipata', 'matriz-bridge.js', 'ChuchoTriz-premium',
-    'new WebSocket(url)', 'fetch(url)', 'eval(code)', '//# sourceMappingURL=main.js.map', 'ghp_' + 'x'.repeat(36)]) {
+test('rejects page bridges, network code, secrets and source maps', () => {
+  for (const text of ['matriz-bridge.js', 'CHUCHOTRIZ_BRIDGE', '__matriz',
+    'new WebSocket(url)', 'new XMLHttpRequest()', 'fetch(url)', 'eval(code)',
+    '//# sourceMappingURL=main.js.map', 'ghp_' + 'x'.repeat(36)]) {
     assert.throws(() => assertFreeText(text, 'fixture.js'));
   }
   assert.doesNotThrow(() => assertFreeText('const presets = [{ cantidad: 100, mostrar: 0 }];', 'fixture.js'));

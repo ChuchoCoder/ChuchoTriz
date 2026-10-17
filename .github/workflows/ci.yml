@@ -1,4 +1,4 @@
-name: Free extension
+name: Extension validation
 on:
   pull_request:
   push:
