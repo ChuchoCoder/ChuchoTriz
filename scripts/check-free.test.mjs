@@ -12,7 +12,8 @@ test('rejects an extra source file, including an unused module', () => {
 test('accepts the minimal manifest and rejects extra capabilities', () => {
   assert.doesNotThrow(() => assertManifest(manifest()));
   for (const change of [{ permissions: ['storage', 'tabs'] }, { permissions: ['storage', 'declarativeNetRequest'] },
-    { declarative_net_request: { rule_resources: [] } }, { background: {} }, { web_accessible_resources: [] },
+    { declarative_net_request: { rule_resources: [] } }, { action: { default_popup: 'index.html' } },
+    { background: {} }, { web_accessible_resources: [] },
     { host_permissions: ['<all_urls>'] }, { optional_permissions: ['scripting'] },
     { content_scripts: [{ ...manifest().content_scripts[0], world: 'MAIN' }] },
     { content_scripts: [{ ...manifest().content_scripts[0], matches: ['<all_urls>'] }] }]) {

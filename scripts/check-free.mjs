@@ -26,7 +26,7 @@ export function filesIn(directory, base = directory) {
 export function assertManifest(manifest, built = false) {
   assert(manifest.manifest_version === 3, 'Manifest V3 required');
   assert(same(manifest.permissions, ['storage']), 'Only the storage permission is allowed');
-  for (const key of ['background', 'host_permissions', 'optional_permissions', 'optional_host_permissions',
+  for (const key of ['action', 'background', 'host_permissions', 'optional_permissions', 'optional_host_permissions',
     'externally_connectable', 'declarative_net_request', 'sandbox', 'devtools_page', 'side_panel', 'update_url', 'key']) {
     assert(!(key in manifest), `Unexpected manifest capability: ${key}`);
   }
@@ -84,8 +84,8 @@ export function checkFree({ built = false, directory = root } = {}) {
     assertManifest(manifest, true);
     const input = readJson(join(directory, 'manifest.json'));
     assert(manifest.version === input.version, 'Stale build version');
-    const referenced = [manifest.options_page, manifest.action.default_popup, ...Object.values(manifest.icons),
-      ...Object.values(manifest.action.default_icon), ...manifest.content_scripts.flatMap(script => [...script.js, ...(script.css ?? [])]),
+    const referenced = [manifest.options_page, ...Object.values(manifest.icons),
+      ...manifest.content_scripts.flatMap(script => [...script.js, ...(script.css ?? [])]),
       ...(manifest.web_accessible_resources ?? []).flatMap(resource => resource.resources)];
     for (const path of referenced) assert(files.includes(path), `Missing packaged resource: ${path}`);
   }
