@@ -190,6 +190,21 @@ describe("Matriz Mini Order Form", () => {
       expect(page.input("cantidadMostrar").value).toBe(mostrar ? mostrar.toString() : "");
     });
 
+    it.each(["input", "limpiar"])("does not toggle twice when %s cancels a write before another partial preset", async cancel => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      if (cancel === "limpiar") page.limpiarButton.click();
+      else {
+        page.input("cantidad").value = "50";
+        page.input("cantidad").dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      miniOrderForm.fill({ cantidad: 100000, mostrar: 10000 });
+
+      await vi.waitFor(() => expect(page.isExpanded()).toBe(true));
+      expect(page.input("cantidad").value).toBe("100000");
+      expect(page.input("cantidadMostrar").value).toBe("10000");
+    });
+
     it("rechecks ticket identity when Matriz replaces an input without an input event", async () => {
       const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
       miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });

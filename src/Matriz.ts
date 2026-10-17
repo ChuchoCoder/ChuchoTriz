@@ -31,11 +31,31 @@ function setInputValue(input: HTMLInputElement, value: string) {
     input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-// Cantidad a mostrar solo existe con el Mini Order Form expandido
+let cancelPendingExpansion: (() => void) | undefined;
+
+// Cantidad a mostrar solo existe con el Mini Order Form expandido.
+// Track the UI transition separately: cancelling a write must not issue a second toggle.
 function expandMiniOrderForm() {
-    if (!find(cantidadAMostrarSelector)) {
-        find(expandButtonSelector)?.click();
+    if (find(cantidadAMostrarSelector)) {
+        cancelPendingExpansion?.();
+        return;
     }
+    if (cancelPendingExpansion) return;
+    const button = find(expandButtonSelector);
+    if (!button) return;
+    const form = button.parentElement!;
+    const observer = new MutationObserver(() => {
+        if (!form.isConnected || find(cantidadAMostrarSelector)) stop();
+    });
+    const stop = () => {
+        observer.disconnect(); clearTimeout(timeout);
+        if (cancelPendingExpansion === stop) cancelPendingExpansion = undefined;
+    };
+    const timeout = setTimeout(stop, 2000);
+    cancelPendingExpansion = stop;
+    observer.observe(document.body, { childList: true, subtree: true });
+    button.click();
+    if (find(cantidadAMostrarSelector)) stop();
 }
 
 function toTicker(instrumento: string): string {
@@ -45,7 +65,7 @@ function toTicker(instrumento: string): string {
 let cancelPendingShownQuantity: (() => void) | undefined;
 
 function fill(cantidad: number, cantidadAMostrar: number) {
-    const wasExpanding = cancelPendingShownQuantity !== undefined;
+    const wasExpanding = cancelPendingExpansion !== undefined;
     cancelPendingShownQuantity?.();
     const cantidadInput = find<HTMLInputElement>(cantidadSelector);
     const instrumento = valueOf(instrumentoSelector);
