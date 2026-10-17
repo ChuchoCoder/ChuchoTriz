@@ -3,6 +3,7 @@ import { IInstrumentPresets, randomDisplayRange } from "./InstrumentPresets";
 import repository, { StoredSettings } from "./InstrumentPresetsRepository";
 import { defaultBook, format, label, parse } from "./PresetBook";
 import { DraftPreset, DraftPresets, PresetValidationError, serializePresets, toDraft } from "./InstrumentPresetsSettings";
+import chuchotrizIcon from "../public/logo48.png?inline";
 import "./Options.css";
 function sortTickers(presets: DraftPresets): string[] {
   return Object.keys(presets).sort((a, b) => a.localeCompare(b, "es"));
@@ -305,7 +306,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
     <form className={`options-window${embedded ? " options-embedded" : ""}`} onSubmit={save}
       onKeyDown={event => event.stopPropagation()} noValidate aria-busy={loading || saving}>
       {!embedded && <header className="options-brand">
-        <img src="/gear48.png" width="20" height="20" alt="" />
+        <img src={chuchotrizIcon} width="20" height="20" alt="" />
         <strong>ChuchoTriz</strong><span>Preferencias</span>
       </header>}
       <div className="options-content">
