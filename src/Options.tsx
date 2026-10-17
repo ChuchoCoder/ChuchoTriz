@@ -1,4 +1,4 @@
-import "./Options.css";
+import "./OptionsPage.css";
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
@@ -9,7 +9,6 @@ document.body.appendChild(root)
 const rootDiv = ReactDOM.createRoot(root);
 rootDiv.render(
   <React.StrictMode>
-    <h1>Opciones ChuchoTriz</h1>
     <InstrumentPresetsOptions />
   </React.StrictMode>
 );

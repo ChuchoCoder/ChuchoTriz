@@ -1,8 +1,8 @@
 {
-  "name": "Chuchotriz",
+  "name": "ChuchoTriz",
   "short_name": "ChuchoTriz",
-  "description": "Agrega funcionalidad en Matriz",
-  "version": "0.0.7",
+  "description": "Presets de cantidad por instrumento para el formulario de órdenes de Matriz.",
+  "version": "0.0.8",
   "author": "Chucho Trader",
   "homepage_url": "https://x.com/chuchotrader",
   "manifest_version": 3,
@@ -13,14 +13,14 @@
   },
   "icons": {
     "16": "logo16.png",
-    "24": "logo16.png",
+    "24": "logo24.png",
     "48": "logo48.png",
     "64": "logo64.png",
     "128": "logo128.png",
     "512": "logo512.png"
   },
   "action": {
-    "default_title": "Popup",
+    "default_title": "Configuración de ChuchoTriz",
     "default_popup": "index.html",
     "default_icon": {
       "48": "gear48.png"
@@ -28,7 +28,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.xoms.com.ar/*"],
+      "matches": ["https://*.xoms.com.ar/*", "https://remarkets.matriz.com.ar/*"],
       "js": ["src/main.tsx"],
       "media": [],
       "run_at": "document_end"
