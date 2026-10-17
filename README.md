@@ -60,6 +60,7 @@ incorporación en `free-files.json`.
 
 Las preferencias se almacenan localmente. Esta edición pide solamente el permiso
 `storage` y no incorpora servidores propios, analítica ni pagos.
+La extensión no bloquea las solicitudes de telemetría de Matriz.
 
 - [Privacidad](PRIVACY.md).
 - [Alcance de la edición gratuita y preparación del Store](docs/free-edition.md).
