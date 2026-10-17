@@ -13,6 +13,8 @@
 .ct-free-settings-panel .options-embedded { display: flex; flex-direction: column; flex: 1; min-height: 0; font: inherit; --options-background: var(--panel-body-background, #212936); --options-panel: var(--direct-access-bar-background, #2b3648); --options-field: var(--ant-input-background, rgba(3, 155, 229, .1)); --options-text: var(--text-color, #fff); --options-muted: var(--execution-text-color, #a6aebc); --options-border: var(--modal-border-color, #414d5f); --options-accent: var(--ant-button-text-color, #039be5); --options-selected: var(--ant-input-background, rgba(3, 155, 229, .1)); }
 .ct-free-settings-panel .options-content { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; padding: 12px; }
 .ct-free-settings-panel .options-fields { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ct-free-settings-panel .raw-presets-editor { overflow: hidden; }
+.ct-free-settings-panel .raw-presets-editor textarea { min-height: 100px; resize: none; }
 .ct-free-settings-panel .instrument-layout { flex: 1; min-height: 0; gap: 16px; }
 .ct-free-settings-panel .instrument-sidebar { display: flex; flex-direction: column; min-height: 0; padding-right: 12px; }
 .ct-free-settings-panel .instrument-list { min-height: 0; overflow-y: auto; flex: 1; overscroll-behavior: contain; }
@@ -30,7 +32,6 @@
   .ct-free-settings-panel .add-instrument { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .ct-free-settings-panel .add-instrument label { margin: 0; flex-shrink: 0; }
   .ct-free-settings-panel .add-instrument > div { min-width: 0; flex: 1; }
-  .ct-free-settings-panel .preset-columns, .ct-free-settings-panel .preset-row { grid-template-columns: 15px minmax(0, 1fr) minmax(0, 1fr) 98px; gap: 5px; }
 }
 @container (max-width: 340px) {
   .ct-free-settings-panel .preset-columns, .ct-free-settings-panel .preset-row { grid-template-columns: 15px minmax(0, 1fr) minmax(0, 1fr); }

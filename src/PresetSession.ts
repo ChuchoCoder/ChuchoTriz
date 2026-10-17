@@ -1,4 +1,4 @@
-import { IInstrumentPreset } from "./InstrumentPresets";
+import { IInstrumentPreset, resolvePreset } from "./InstrumentPresets";
 import { MiniOrderForm, Ticket } from "./MiniOrderForm";
 
 export interface PresetSettings {
@@ -66,10 +66,10 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
       if (!form.read().cantidad && enabled) {
         const lastUsed = lastUsedPresets.get(ticket.instrumento);
         if (lastUsed) {
-          form.fill(lastUsed);
+          form.fill(resolvePreset(lastUsed));
         }
         else if (presets.length > 0) {
-          form.fill(presets[0]);
+          form.fill(resolvePreset(presets[0]));
         }
         // Record the write before focusing: focusin can re-enter this handler.
         lastTicketKey = keyOf(form.read());
@@ -102,7 +102,7 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
     choose: (preset) => {
       if (disposed || identityOf(form.read()) !== visibleIdentity) return;
       revision++;
-      form.fill(preset);
+      form.fill(resolvePreset(preset));
       lastTicketKey = keyOf(form.read());
       form.editCantidad();
       lastUsedPresets.set(lastInstrumento, preset);

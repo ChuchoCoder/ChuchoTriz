@@ -1,5 +1,55 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { IInstrumentPresets, resolvePreset } from "./InstrumentPresets";
 import { defaultBook, fallbackPresets, format, label, parse, presetsFor, PresetBook } from "./PresetBook";
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("random display quantities", () => {
+  it("round trips rules alongside existing numeric presets without drawing numbers", () => {
+    const random = vi.spyOn(Math, "random");
+    const book: IInstrumentPresets = { AL30: [
+      { cantidad: 100000, mostrar: "R5" }, { cantidad: 100, mostrar: "R2" },
+      { cantidad: 500, mostrar: 10 }, { cantidad: 50, mostrar: 0 },
+    ] };
+    expect(parse(format(book))).toEqual({ book, errors: [] });
+    expect(label(book.AL30[0])).toBe("100k/R5");
+    expect(parse("AL30 100000/r005").book.AL30[0].mostrar).toBe("R5");
+    expect(random).not.toHaveBeenCalled();
+  });
+
+  it.each(["R0", "R1", "R-2", "R2.5", "R", "R1e2", "R9007199254740992"])("rejects %s", rule => {
+    const result = parse(`AL30 100000/${rule}`);
+    expect(result.errors).toHaveLength(1);
+    expect(result.book).toEqual({});
+  });
+
+  it.each([[0, 20000], [0.5, 20300], [0.999999, 20600]])("draw %s resolves to %s", (draw, expected) => {
+    vi.spyOn(Math, "random").mockReturnValue(draw);
+    const preset = { cantidad: 100000, mostrar: "R5" } as const;
+    expect(resolvePreset(preset)).toEqual({ cantidad: 100000, mostrar: expected });
+    expect(preset.mostrar).toBe("R5");
+  });
+
+  it.each([[1, "R5", 1, 1], [10, "R3", 3, 3], [101, "R2", 50, 52],
+    [100, "R9007199254740991", 1, 1], [9007199254740991, "R2", 4503599627370495, 4638707616191610]] as const)(
+    "keeps %s/%s integral, positive and within quantity", (cantidad, mostrar, minimum, maximum) => {
+      const random = vi.spyOn(Math, "random").mockReturnValue(0);
+      expect(resolvePreset({ cantidad, mostrar }).mostrar).toBe(minimum);
+      random.mockReturnValue(0.9999999999999999);
+      const actual = resolvePreset({ cantidad, mostrar }).mostrar;
+      expect(actual).toBe(maximum);
+      expect(Number.isSafeInteger(actual)).toBe(true);
+      expect(actual).toBeLessThanOrEqual(cantidad);
+    });
+
+  it("leaves fixed quantities and zero unchanged without consuming randomness", () => {
+    const random = vi.spyOn(Math, "random");
+    for (const mostrar of [0, 2500]) {
+      expect(resolvePreset({ cantidad: 10000, mostrar })).toEqual({ cantidad: 10000, mostrar });
+    }
+    expect(random).not.toHaveBeenCalled();
+  });
+});
 
 describe("parse y format", () => {
   it("parse(format(book)) devuelve el mismo Preset book", () => {

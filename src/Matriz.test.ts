@@ -6,6 +6,7 @@ import { createPresetSession, PresetSession } from "./PresetSession";
 let session: PresetSession | undefined;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   session?.dispose();
   session = undefined;
   document.body.replaceChildren();
@@ -82,6 +83,29 @@ function replaceInput(input: HTMLInputElement, value: string) {
 }
 
 describe("Matriz Mini Order Form", () => {
+  it("applies random rules as numeric DOM values and preserves them after manual quantity changes", async () => {
+    const page = renderMiniOrderForm({ expanded: false });
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const preset = { cantidad: 100000, mostrar: "R5" } as const;
+    session = createPresetSession(miniOrderForm, {
+      presetsFor: async () => [preset], autocompletar: async () => true,
+    });
+    page.input("precio").focus();
+    await vi.waitFor(() => expect(page.input("cantidadMostrar").value).toBe("20000"));
+    expect(page.isExpanded()).toBe(true);
+    expect(random).toHaveBeenCalledTimes(1);
+    page.input("cantidad").value = "10000";
+    page.input("cantidad").dispatchEvent(new Event("change", { bubbles: true }));
+    page.input("precio").focus();
+    await new Promise(resolve => setTimeout(resolve));
+    expect(page.input("cantidadMostrar").value).toBe("20000");
+    expect(random).toHaveBeenCalledTimes(1);
+    random.mockReturnValue(0.999999);
+    session.choose(preset);
+    expect(page.input("cantidad").value).toBe("100000");
+    expect(page.input("cantidadMostrar").value).toBe("20600");
+    expect(random).toHaveBeenCalledTimes(2);
+  });
   describe("read", () => {
     it("reads Instrumento, Ticker, Precio and Cantidad", () => {
       renderMiniOrderForm({ instrumento: "AL30 (CI)", precio: "70000", cantidad: "100" });

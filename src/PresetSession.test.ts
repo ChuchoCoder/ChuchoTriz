@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { IInstrumentPreset } from "./InstrumentPresets";
 import { MiniOrderForm, Ticket } from "./MiniOrderForm";
 import { createPresetSession, PresetSettings } from "./PresetSession";
@@ -6,6 +6,8 @@ import { createPresetSession, PresetSettings } from "./PresetSession";
 const big = { cantidad: 200000, mostrar: 20000 };
 const medium = { cantidad: 100000, mostrar: 10000 };
 const small = { cantidad: 50000, mostrar: 0 };
+
+afterEach(() => vi.restoreAllMocks());
 
 type Field = "instrumento" | "precio" | "cantidad" | "limpiar";
 
@@ -89,6 +91,47 @@ function deferred<T>() {
 }
 
 describe("Preset session", () => {
+  it("draws on each application including last-used autocomplete, but not focus or manual edits", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const preset = { cantidad: 100000, mostrar: "R5" } as const;
+    const page = fakeMiniOrderForm(al30);
+    const session = createPresetSession(page.form, fakeSettings({ AL30: [big, preset] }).settings);
+    await page.focus(); // Numeric first preset does not draw.
+    expect(random).not.toHaveBeenCalled();
+    session.choose(preset);
+    expect(page.state.cantidadAMostrar).toBe("20000");
+    random.mockReturnValue(0.999999);
+    session.choose(preset);
+    expect(page.state.cantidadAMostrar).toBe("20600");
+    page.type({ cantidad: "10000" }); // Matriz owns validation of this mismatch.
+    await page.focus("precio");
+    await page.focus("cantidad");
+    expect(page.state.cantidadAMostrar).toBe("20600");
+    expect(random).toHaveBeenCalledTimes(2);
+    random.mockReturnValue(0.5);
+    page.type({ cantidad: "" });
+    await page.focus("precio");
+    expect(page.state.ticket.cantidad).toBe("100000");
+    expect(page.state.cantidadAMostrar).toBe("20300");
+    expect(random).toHaveBeenCalledTimes(3);
+    expect(preset.mostrar).toBe("R5");
+    session.dispose();
+  });
+
+  it("draws for the first preset on autocomplete, including after Limpiar", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const page = fakeMiniOrderForm(al30);
+    const session = createPresetSession(page.form, fakeSettings({ AL30: [{ cantidad: 100000, mostrar: "R5" }] }).settings);
+    await page.focus();
+    expect(page.state.cantidadAMostrar).toBe("20000");
+    page.limpiar();
+    page.type(al30);
+    random.mockReturnValue(0.999999);
+    await page.focus();
+    expect(page.state.cantidadAMostrar).toBe("20600");
+    expect(random).toHaveBeenCalledTimes(2);
+    session.dispose();
+  });
   it.each([true, false])("ignores stale instrument lookups (old resolves first: %s)", async oldFirst => {
     const page = fakeMiniOrderForm(al30);
     const old = deferred<IInstrumentPreset[]>();

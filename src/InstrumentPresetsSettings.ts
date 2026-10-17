@@ -19,6 +19,14 @@ export class PresetValidationError extends Error {
 export function serializePresets(draft: DraftPresets): IInstrumentPresets {
   // Storage order breaks ties in prefix matching. Sort only the visible list.
   const tickers = Object.keys(draft);
+  for (const ticker of tickers) {
+    for (const preset of draft[ticker]) {
+      if (!/^\d+$/.test(preset.cantidad) || !/^(?:\d+|R\d+)$/i.test(preset.mostrar)) {
+        throw new PresetValidationError(ticker,
+          "Cantidad debe ser un entero positivo. A mostrar debe ser un entero o R seguido de un divisor entero desde 2.");
+      }
+    }
+  }
   const text = tickers.map(ticker => ticker + " " + draft[ticker]
     .map(preset => `${preset.cantidad}/${preset.mostrar}`).join(" ")).join("\n");
   const result = parse(text);
