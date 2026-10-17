@@ -1,0 +1,32 @@
+.DirectAccessBar .ct-free-settings-slot { width: 40px; min-height: 40px; }
+.DirectAccessBar .ct-free-settings-item { display: flex; align-items: center; justify-content: center; width: 40px; min-height: 40px; color: #fff; }
+.DirectAccessBar .ct-free-settings-item:hover, .DirectAccessBar .ct-free-settings-item.selected { background: var(--base-icon, #267bb5); }
+.DirectAccessBar .ct-free-settings-item:focus-visible { outline: 2px solid #4bb9ec; outline-offset: -2px; }
+.ct-free-settings-panel { position: fixed; z-index: 1000; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #202122; color: #ededed; container-type: inline-size; }
+.ct-free-settings-panel[hidden] { display: none; }
+.ct-free-settings-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #424548; gap: 10px; }
+.ct-free-settings-header h1 { margin: 0; font: 600 14px/1.4 "Segoe UI", sans-serif; }
+.ct-free-settings-header button { min-width: 36px; min-height: 36px; border: 1px solid #424548; background: transparent; color: inherit; font-size: 22px; cursor: pointer; }
+.ct-free-settings-header button:focus-visible { outline: 2px solid #4bb9ec; }
+.ct-free-settings-panel .options-embedded { display: flex; flex-direction: column; flex: 1; min-height: 0; font: 13px/1.4 "Segoe UI", sans-serif; }
+.ct-free-settings-panel .options-content { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; padding: 12px; }
+.ct-free-settings-panel .options-fields { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ct-free-settings-panel .instrument-layout { flex: 1; min-height: 0; gap: 16px; }
+.ct-free-settings-panel .instrument-sidebar { display: flex; flex-direction: column; min-height: 0; padding-right: 12px; }
+.ct-free-settings-panel .instrument-list { min-height: 0; overflow-y: auto; flex: 1; overscroll-behavior: contain; }
+.ct-free-settings-panel .instrument-list button { flex-shrink: 0; }
+.ct-free-settings-panel .instrument-detail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+.ct-free-settings-panel .add-instrument { margin-top: 10px; }
+.ct-free-settings-panel .autocomplete-setting { flex-shrink: 0; margin-top: 12px; padding-top: 10px; }
+.ct-free-settings-panel .options-footer { flex-shrink: 0; padding: 8px 12px; gap: 8px; }
+.ct-free-settings-panel .options-feedback { flex: 1; min-width: 100px; min-height: 0; padding: 0; }
+.ct-free-settings-panel .options-actions { margin-left: auto; }
+@container (max-width: 560px) {
+  .ct-free-settings-panel .instrument-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(190px, .8fr) minmax(160px, 1fr); gap: 10px; }
+  .ct-free-settings-panel .instrument-sidebar { border-right: 0; border-bottom: 1px solid #424548; padding: 0 0 8px; }
+  .ct-free-settings-panel .instrument-list { flex-direction: column; flex-wrap: nowrap; }
+  .ct-free-settings-panel .add-instrument { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .ct-free-settings-panel .add-instrument label { margin: 0; flex-shrink: 0; }
+  .ct-free-settings-panel .add-instrument > div { min-width: 0; flex: 1; }
+  .ct-free-settings-panel .preset-columns, .ct-free-settings-panel .preset-row { grid-template-columns: 15px minmax(0, 1fr) minmax(0, 1fr) 98px; gap: 5px; }
+}

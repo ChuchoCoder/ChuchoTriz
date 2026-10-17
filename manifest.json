@@ -2,7 +2,7 @@
   "name": "ChuchoTriz",
   "short_name": "ChuchoTriz",
   "description": "Presets de cantidad por instrumento para el formulario de órdenes de Matriz.",
-  "version": "0.0.8",
+  "version": "0.0.10",
   "author": "Chucho Trader",
   "homepage_url": "https://x.com/chuchotrader",
   "manifest_version": 3,
@@ -18,13 +18,6 @@
     "64": "logo64.png",
     "128": "logo128.png",
     "512": "logo512.png"
-  },
-  "action": {
-    "default_title": "Configuración de ChuchoTriz",
-    "default_popup": "index.html",
-    "default_icon": {
-      "48": "gear48.png"
-    }
   },
   "content_scripts": [
     {
