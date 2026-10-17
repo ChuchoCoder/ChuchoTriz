@@ -6,6 +6,13 @@ import { expandMiniOrderForm, miniOrderForm } from "./Matriz";
 import { createPresetSession } from "./PresetSession";
 import instrumentPresetsRepository from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
+import { SettingsMenu } from "./SettingsMenu";
+
+// Settings belong to the free edition and do not depend on the order form.
+const settingsContainer = document.createElement("div");
+settingsContainer.id = "root-chuchotriz-settings";
+document.body.append(settingsContainer);
+createRoot(settingsContainer).render(<React.StrictMode><SettingsMenu /></React.StrictMode>);
 
 // Read once; subsequent settings changes arrive through Chrome Storage.
 let storedSettings = instrumentPresetsRepository.readSettings();

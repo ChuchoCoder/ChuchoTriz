@@ -44,7 +44,7 @@ export function assertManifest(manifest, built = false) {
     for (const resource of manifest.web_accessible_resources ?? []) {
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
-        assert(/^assets\/(?:src-main\.tsx|InstrumentPresetsRepository)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
+        assert(/^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
       }
     }
   }
@@ -74,7 +74,7 @@ export function checkFree({ built = false, directory = root } = {}) {
   if (built) {
     const output = join(directory, 'dist');
     const staticFiles = ['manifest.json', 'index.html', ...allowed.filter(path => path.startsWith('public/')).map(path => path.slice(7))];
-    const assetPattern = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
+    const assetPattern = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
     const files = filesIn(output);
     for (const path of files) {
       assert(staticFiles.includes(path) || assetPattern.test(path), `Unexpected packaged file: ${path}`);

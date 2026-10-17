@@ -9,6 +9,7 @@ completa cantidades; la confirmación de órdenes se realiza desde Matriz.
 - Presets de Cantidad y Cantidad a mostrar por instrumento.
 - Autocompletado opcional: último preset elegido o primero configurado.
 - Editor por instrumento con lista alfabética, búsqueda, altas y bajas.
+- Acceso a Configuración desde el engranaje de la barra izquierda de Matriz.
 - Reordenamiento de presets con teclado y vista previa de los botones.
 - Validación de cantidades y recuperación ante errores al guardar.
 - Actualización de preferencias entre vistas, con aviso ante borradores en conflicto.
@@ -29,10 +30,11 @@ Mientras se prepara la publicación en Chrome Web Store:
 3. Abrir `chrome://extensions`, habilitar Modo de desarrollador y elegir
    Cargar extensión sin empaquetar.
 4. Seleccionar la carpeta que contiene `manifest.json`.
-5. Abrir Matriz y usar el icono de ChuchoTriz para configurar los presets.
+5. Abrir Matriz y usar Configuración en su barra izquierda. También se puede
+   configurar desde el icono de ChuchoTriz en Chrome.
 
 Las releases anteriores pueden contener una versión anterior de la interfaz.
-Compilar esta rama genera la versión 0.0.8. Para actualizar una instalación de
+Compilar esta rama genera la versión 0.0.9. Para actualizar una instalación de
 desarrollo, reemplazar el contenido de su carpeta y pulsar Recargar en Chrome.
 Conservar la misma carpeta mantiene su identidad y configuración de desarrollo.
 
@@ -46,7 +48,7 @@ npm test
 npm run package:free
 ```
 
-El paquete se genera en `releases/chuchotriz-free-0.0.8.zip`. También se puede
+El paquete se genera en `releases/chuchotriz-free-0.0.9.zip`. También se puede
 cargar `dist` directamente desde Chrome. `npm run build` ejecuta TypeScript,
 compila y comprueba el alcance de los archivos fuente y del paquete resultante.
 `npm run watch` recompila durante el desarrollo; validar con `package:free`
