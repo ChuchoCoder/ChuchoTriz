@@ -31,28 +31,29 @@ function setInputValue(input: HTMLInputElement, value: string) {
     input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-let cancelPendingExpansion: (() => void) | undefined;
+let pendingExpansion: { form: HTMLElement; stop: () => void } | undefined;
 
 // Cantidad a mostrar solo existe con el Mini Order Form expandido.
 // Track the UI transition separately: cancelling a write must not issue a second toggle.
 function expandMiniOrderForm() {
+    const form = find("#MiniOrderForm");
+    if (pendingExpansion && pendingExpansion.form !== form) pendingExpansion.stop();
     if (find(cantidadAMostrarSelector)) {
-        cancelPendingExpansion?.();
+        pendingExpansion?.stop();
         return;
     }
-    if (cancelPendingExpansion) return;
+    if (pendingExpansion) return;
     const button = find(expandButtonSelector);
-    if (!button) return;
-    const form = button.parentElement!;
+    if (!button || !form) return;
     const observer = new MutationObserver(() => {
         if (!form.isConnected || find(cantidadAMostrarSelector)) stop();
     });
     const stop = () => {
         observer.disconnect(); clearTimeout(timeout);
-        if (cancelPendingExpansion === stop) cancelPendingExpansion = undefined;
+        if (pendingExpansion?.stop === stop) pendingExpansion = undefined;
     };
     const timeout = setTimeout(stop, 2000);
-    cancelPendingExpansion = stop;
+    pendingExpansion = { form, stop };
     observer.observe(document.body, { childList: true, subtree: true });
     button.click();
     if (find(cantidadAMostrarSelector)) stop();
@@ -65,7 +66,7 @@ function toTicker(instrumento: string): string {
 let cancelPendingShownQuantity: (() => void) | undefined;
 
 function fill(cantidad: number, cantidadAMostrar: number) {
-    const wasExpanding = cancelPendingExpansion !== undefined;
+    const wasExpanding = pendingExpansion !== undefined && pendingExpansion.form === find("#MiniOrderForm");
     cancelPendingShownQuantity?.();
     const cantidadInput = find<HTMLInputElement>(cantidadSelector);
     const instrumento = valueOf(instrumentoSelector);
@@ -76,7 +77,7 @@ function fill(cantidad: number, cantidadAMostrar: number) {
 
     setInputValue(cantidadInput, cantidad.toString());
     const showPartial = Number.isInteger(cantidadAMostrar) && cantidadAMostrar > 0;
-    if (showPartial && !wasExpanding) expandMiniOrderForm();
+    if (showPartial) expandMiniOrderForm();
     const current = () => valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio &&
         valueOf(cantidadSelector) === cantidad.toString();
     const apply = () => {

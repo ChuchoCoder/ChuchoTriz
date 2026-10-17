@@ -214,6 +214,16 @@ describe("Matriz Mini Order Form", () => {
       expect(page.input("cantidadMostrar").value).toBe("");
     });
 
+    it("can expand a replacement form while the previous form is still rendering", async () => {
+      renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
+      const replacement = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 100000, mostrar: 10000 });
+
+      await vi.waitFor(() => expect(replacement.isExpanded()).toBe(true));
+      expect(replacement.input("cantidadMostrar").value).toBe("10000");
+    });
+
     it("stops waiting and cannot write into a field that appears after the timeout", async () => {
       vi.useFakeTimers();
       try {
