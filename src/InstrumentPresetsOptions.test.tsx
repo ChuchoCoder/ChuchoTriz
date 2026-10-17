@@ -5,6 +5,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
 import { defaultBook, format } from "./PresetBook";
 
+// Configuración guardada independiente del catálogo por defecto.
+const savedBook: typeof defaultBook = {
+  AL30: [
+    { cantidad: 200000, mostrar: 20000 },
+    { cantidad: 100000, mostrar: 10000 },
+    { cantidad: 50000, mostrar: 5000 },
+  ],
+  GD30: [{ cantidad: 200000, mostrar: 100000 }, { cantidad: 100000, mostrar: 50000 }],
+  GGAL: [{ cantidad: 5000, mostrar: 1000 }, { cantidad: 1000, mostrar: 500 }],
+  YPFD: [{ cantidad: 2000, mostrar: 500 }],
+  SPY: [{ cantidad: 100, mostrar: 10 }],
+  QQQ: [{ cantidad: 100, mostrar: 10 }],
+  DLR: [{ cantidad: 100, mostrar: 10 }],
+  GFG: [{ cantidad: 100, mostrar: 10 }],
+  PESOS: [{ cantidad: 100000000, mostrar: 0 }, { cantidad: 10000000, mostrar: 0 }, { cantidad: 1000000, mostrar: 0 }, { cantidad: 100000, mostrar: 0 }],
+};
+
 let root: Root;
 let container: HTMLDivElement;
 let set: ReturnType<typeof vi.fn>;
@@ -62,7 +79,7 @@ async function chooseMode(mode: string, index = 1) {
 }
 
 beforeEach(async () => {
-  stored = { InstrumentPresets: structuredClone(defaultBook), Autocomplete: true };
+  stored = { InstrumentPresets: structuredClone(savedBook), Autocomplete: true };
   storageListeners = new Set();
   set = vi.fn().mockImplementation(async values => {
     const previous = stored;
@@ -123,7 +140,7 @@ describe("Opciones por instrumento", () => {
       expect(container.querySelector('[role="alert"]')?.textContent).toContain('Línea 2');
       await act(async () => button('Guardar cambios').click());
       expect(set).not.toHaveBeenCalled();
-      expect(stored.InstrumentPresets).toEqual(defaultBook);
+      expect(stored.InstrumentPresets).toEqual(savedBook);
       await edit(rawEditor(), 'AL30 100000/R5 100/0');
       await act(async () => button('Guardar cambios').click());
       expect(set).toHaveBeenCalledTimes(1);
@@ -352,7 +369,7 @@ describe("Opciones por instrumento", () => {
     await act(async () => moveButton("Bajar", 2).click());
     expect(chips()).toEqual(["123.456k/10k", "50k/5k", "200k/20k"]);
     await act(async () => button("Guardar cambios").click());
-    expect(set.mock.calls[0][0].InstrumentPresets).toEqual({ ...defaultBook, AL30: [
+    expect(set.mock.calls[0][0].InstrumentPresets).toEqual({ ...savedBook, AL30: [
       { cantidad: 123456, mostrar: 10000 }, { cantidad: 50000, mostrar: 5000 }, { cantidad: 200000, mostrar: 20000 },
     ] });
   });
@@ -383,10 +400,10 @@ describe("Opciones por instrumento", () => {
     expect(quantity("Cantidad del preset 1 de AL30").value).toBe("234567");
     await act(async () => button("Guardar cambios").click());
     const stored = set.mock.calls[0][0].InstrumentPresets;
-    expect(Object.keys(stored)).toEqual(Object.keys(defaultBook));
+    expect(Object.keys(stored)).toEqual(Object.keys(savedBook));
     expect(stored.AL30[0].cantidad).toBe(234567);
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Limpiar búsqueda"]')!.click());
-    expect(displayedTickers()).toHaveLength(Object.keys(defaultBook).length);
+    expect(displayedTickers()).toHaveLength(Object.keys(savedBook).length);
     expect(search().value).toBe("");
     expect(document.activeElement).toBe(search());
   });
@@ -401,7 +418,7 @@ describe("Opciones por instrumento", () => {
     await act(async () => search().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
     expect(container.querySelector("#selected-instrument")?.textContent).toBe("GGAL");
     await act(async () => search().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
-    expect(displayedTickers()).toHaveLength(Object.keys(defaultBook).length);
+    expect(displayedTickers()).toHaveLength(Object.keys(savedBook).length);
     expect(search().value).toBe("");
     expect(set).not.toHaveBeenCalled();
   });
@@ -434,7 +451,7 @@ describe("Opciones por instrumento", () => {
     expect(set).toHaveBeenCalledTimes(1);
     const stored = set.mock.calls[0][0];
     expect(stored.InstrumentPresets.AL30[0]).toEqual({ cantidad: 234567, mostrar: 20000 });
-    expect(Object.keys(stored.InstrumentPresets)).toEqual([...Object.keys(defaultBook), "BONO"]);
+    expect(Object.keys(stored.InstrumentPresets)).toEqual([...Object.keys(savedBook), "BONO"]);
     expect(container.textContent).toContain("Cambios guardados");
   });
 
