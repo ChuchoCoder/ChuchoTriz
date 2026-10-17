@@ -11,7 +11,7 @@ completa cantidades; la confirmación de órdenes se realiza desde Matriz.
 - Autocompletado opcional: último preset elegido o primero configurado.
 - Editor por instrumento con lista alfabética, búsqueda, altas y bajas.
 - Modo RAW para editar todos los presets como texto y alternar con el editor visual.
-- Acceso a Configuración desde el engranaje de la barra izquierda de Matriz.
+- Acceso a Configuración desde el icono de ChuchoTriz en la barra izquierda de Matriz.
 - Reordenamiento de presets con teclado y vista previa de los botones.
 - Validación de cantidades y recuperación ante errores al guardar.
 - Actualización de preferencias entre vistas, con aviso ante borradores en conflicto.
@@ -68,8 +68,9 @@ Mientras se prepara la publicación en Chrome Web Store:
 3. Abrir `chrome://extensions`, habilitar Modo de desarrollador y elegir
    Cargar extensión sin empaquetar.
 4. Seleccionar la carpeta que contiene `manifest.json`.
-5. Abrir Matriz y usar Configuración en su barra izquierda. La extensión no
-   agrega un popup de configuración a la barra superior de Chrome.
+5. Abrir Matriz y pulsar el icono de ChuchoTriz en su barra izquierda para abrir
+   Configuración. La extensión no agrega un popup de configuración a la barra
+   superior de Chrome.
 
 Las releases anteriores pueden contener una versión anterior de la interfaz.
 Compilar esta rama genera la versión 0.0.13. Para actualizar una instalación de
