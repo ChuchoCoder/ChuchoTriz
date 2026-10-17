@@ -33,7 +33,7 @@ export const fallbackPresets: IInstrumentPreset[] = [
   { cantidad: 100, mostrar: 25 },
 ];
 
-const PresetPattern = /^(\d+)(?:\/(\d+))?$/;
+const PresetPattern = /^(\d+)(?:\/(\d+|R\d+))?$/i;
 
 // Gramática de Opciones, una línea por Ticker: "Ticker Cantidad/CantidadAMostrar Cantidad ..."
 // Las líneas con errores quedan fuera del Preset book
@@ -62,18 +62,23 @@ export function parse(text: string): { book: PresetBook; errors: ParseError[] } 
     for (const value of values) {
       const match = PresetPattern.exec(value);
       if (!match) {
-        lineErrors.push(`"${value}" no es un Preset; usar Cantidad o Cantidad/Cantidad_A_Mostrar, sólo con dígitos`);
+        lineErrors.push(`"${value}" no es un Preset; usar Cantidad, Cantidad/Cantidad_A_Mostrar o Cantidad/Rn con divisor entero desde 2`);
         continue;
       }
       const cantidad = Number.parseInt(match[1]);
-      const mostrar = match[2] === undefined ? 0 : Number.parseInt(match[2]);
+      const display = match[2]?.toUpperCase();
+      const mostrar = display?.startsWith("R") ? `R${Number(display.slice(1))}` as const : Number(display ?? 0);
+      const divisor = typeof mostrar === "string" ? Number(mostrar.slice(1)) : null;
       if (cantidad === 0) {
         lineErrors.push(`"${value}": la Cantidad debe ser mayor a cero`);
       }
       else if (!Number.isSafeInteger(cantidad)) {
         lineErrors.push(`"${value}": la Cantidad es demasiado grande`);
       }
-      else if (mostrar > cantidad) {
+      else if (divisor !== null && (!Number.isSafeInteger(divisor) || divisor < 2)) {
+        lineErrors.push(`"${value}": usá R seguido de un divisor entero desde 2, por ejemplo R5`);
+      }
+      else if (typeof mostrar === "number" && mostrar > cantidad) {
         lineErrors.push(`"${value}": la Cantidad a mostrar no puede ser mayor que la Cantidad`);
       }
       else {
@@ -108,7 +113,7 @@ export function format(book: PresetBook): string {
     text += ticker;
     for (const preset of book[ticker]) {
       text += " " + preset.cantidad;
-      if (preset.mostrar > 0) {
+      if (typeof preset.mostrar === "string" || preset.mostrar > 0) {
         text += "/" + preset.mostrar;
       }
     }
@@ -144,7 +149,8 @@ export function presetsFor(book: PresetBook, ticker: string): IInstrumentPreset[
 
 // Texto del botón de un Preset, por ejemplo "10k/2.5k"
 export function label(preset: IInstrumentPreset): string {
-  return quantityText(preset.cantidad) + (preset.mostrar > 0 ? "/" + quantityText(preset.mostrar) : "");
+  const display = typeof preset.mostrar === "string" ? preset.mostrar : preset.mostrar > 0 ? quantityText(preset.mostrar) : "";
+  return quantityText(preset.cantidad) + (display ? "/" + display : "");
 }
 
 function quantityText(quantity: number): string {

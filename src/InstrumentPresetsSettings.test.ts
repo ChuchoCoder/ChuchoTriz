@@ -6,6 +6,13 @@ import { presetsFor } from "./PresetBook";
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("instrument settings drafts", () => {
+  it("persists rules without resolving them and normalizes lowercase divisors", () => {
+    const book = { AL30: [{ cantidad: 100000, mostrar: "R5" as const }, { cantidad: 100, mostrar: 0 }] };
+    expect(serializePresets(toDraft(book))).toEqual(book);
+    expect(serializePresets({ AL30: [{ cantidad: "100000", mostrar: "r005" }] })).toEqual({
+      AL30: [{ cantidad: 100000, mostrar: "R5" }],
+    });
+  });
   it("preserves prefix precedence and saves both settings in one write", async () => {
     const book = { GGALD: [{ cantidad: 100, mostrar: 10 }], GGALC: [{ cantidad: 500, mostrar: 50 }] };
     const draft = toDraft(book);
@@ -29,7 +36,9 @@ describe("instrument settings drafts", () => {
   });
 
   it.each([["", "0"], ["0", "0"], ["1.5", "0"], ["100", "-1"], ["100", ""],
-    ["100", "2.5"], ["9007199254740992", "0"], ["1e2", "0"], ["100", "101"]])(
+    ["100", "2.5"], ["9007199254740992", "0"], ["1e2", "0"], ["100", "101"],
+    ["100", "R0"], ["100", "R1"], ["100", "R2.5"], ["100", "R9007199254740992"],
+    ["100", "R5 100/10"], ["100", "0\nGD30 100/10"], ["100", " 10"], ["100/10 200", "5"]])(
     "uses PresetBook validation for cantidad=%s mostrar=%s", (cantidad, mostrar) => {
       expect(() => serializePresets({ AL30: [{ cantidad: "100", mostrar: "0" }], GGAL: [{ cantidad, mostrar }] }))
         .toThrowError(PresetValidationError);

@@ -7,8 +7,10 @@ completa cantidades; la confirmación de órdenes se realiza desde Matriz.
 ## Funcionalidades
 
 - Presets de Cantidad y Cantidad a mostrar por instrumento.
+- Cantidad a mostrar aleatoria con reglas `R2`, `R3`, `R5`, etc.
 - Autocompletado opcional: último preset elegido o primero configurado.
 - Editor por instrumento con lista alfabética, búsqueda, altas y bajas.
+- Modo RAW para editar todos los presets como texto y alternar con el editor visual.
 - Acceso a Configuración desde el engranaje de la barra izquierda de Matriz.
 - Reordenamiento de presets con teclado y vista previa de los botones.
 - Validación de cantidades y recuperación ante errores al guardar.
@@ -24,6 +26,37 @@ La extensión conserva el formulario contraído al iniciar. Sólo lo expande al
 aplicar un preset con Cantidad a mostrar mayor que cero, también mediante
 Autocompletar. Si ya está expandido, un preset sin cantidad parcial limpia
 Cantidad a mostrar y conserva el formulario abierto.
+
+En **A mostrar** podés ingresar un número fijo, `0` para mostrar todo, o `Rn`,
+donde `n` es un divisor entero desde 2. Por ejemplo, Cantidad `100000` y A mostrar
+`R5` generan el botón `100k/R5`: en cada aplicación se sortea un entero entre
+`20000` y `20600`, con ambos extremos incluidos (cantidad dividida por 5, más hasta
+un 3%). Los límites se redondean hacia abajo, con un mínimo de una unidad y sin
+superar la cantidad total. El autocompletado también realiza un nuevo sorteo,
+incluso al reutilizar el último preset elegido. Cambiar manualmente Cantidad
+conserva el valor sorteado hasta volver a aplicar el preset; Matriz valida la
+relación entre ambas cantidades. La configuración guarda la regla, no el resultado.
+
+El editor muestra una fila compacta por preset. Un clic en cualquier celda o en
+el lápiz abre la edición de esa fila: **Mostrar todo**, **Fija** (valor numérico)
+o **Aleatoria** (divisor entero desde 2). Cantidad, opciones y valor o divisor
+comparten la misma línea en pantallas amplias. En Aleatoria se muestra también
+el rango posible. El botón ✓ o Enter en un campo termina la edición; **Guardar
+cambios** guarda todos los presets. Reordenar y quitar conservan sus botones.
+
+El selector **Visual / RAW** permite cambiar de editor conservando el borrador.
+RAW usa una línea por instrumento, por ejemplo:
+
+```text
+AL30 100000/R5 50000/5000 100
+GD30 200000/R4 50000/25000
+```
+
+Usá enteros sin separadores: `100` o `100/0` muestra todo, `100/20` fija la
+cantidad visible y `100/R5` aplica la regla aleatoria. El orden de los presets
+y de las líneas se conserva al guardar. Los errores indican su número de línea
+y deben corregirse antes de guardar o volver al modo visual. **Guardar cambios**,
+**Restablecer valores** y **Descartar cambios** funcionan también en RAW.
 
 ## Instalar
 

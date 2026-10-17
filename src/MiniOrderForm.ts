@@ -1,4 +1,4 @@
-import { IInstrumentPreset } from "./InstrumentPresets";
+import { ResolvedInstrumentPreset } from "./InstrumentPresets";
 
 // Lo que el trader cargó en el Mini Order Form
 export interface Ticket {
@@ -12,7 +12,7 @@ export interface MiniOrderForm {
     read(): Ticket;
     // Carga Cantidad y Cantidad a mostrar; no hace nada si falta Instrumento o Precio
     // Expande sólo para mostrar una cantidad parcial; espera el campo sin reutilizar un ticket modificado.
-    fill(preset: IInstrumentPreset): void;
+    fill(preset: ResolvedInstrumentPreset): void;
     // Hace foco en Cantidad con el texto seleccionado
     editCantidad(): void;
     // Foco en Instrumento, Precio o Cantidad. Devuelve la función para desuscribirse
