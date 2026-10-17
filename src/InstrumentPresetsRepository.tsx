@@ -1,89 +1,31 @@
-import { IInstrumentPresets, IInstrumentPreset } from "./InstrumentPresets";
+import { defaultBook, PresetBook } from "./PresetBook";
 
 const Key = "InstrumentPresets";
 const AutocompleteKey = "Autocomplete";
 
 const DefaultAutocomplete = true;
-const defaultInstrumentPresets = [{ cantidad: 10000, mostrar: 2500 }, { cantidad: 5000, mostrar: 2500 }, { cantidad: 1000, mostrar: 250 }, { cantidad: 100, mostrar: 25 }];
-const DefaultPresets: IInstrumentPresets = {
-  AL30: [
-    { cantidad: 200000, mostrar: 20000 },
-    { cantidad: 100000, mostrar: 10000 },
-    { cantidad: 50000, mostrar: 5000 },
-  ],
-  GD30: [{ cantidad: 200000, mostrar: 100000 }, { cantidad: 100000, mostrar: 50000 }],
-  GGAL: [{ cantidad: 5000, mostrar: 1000 }, { cantidad: 1000, mostrar: 500 }],
-  YPFD: [{ cantidad: 2000, mostrar: 500 }],
-  SPY: [{ cantidad: 100, mostrar: 10 }],
-  QQQ: [{ cantidad: 100, mostrar: 10 }],
-  DLR: [{ cantidad: 100, mostrar: 10 }],
-  GFG: [{ cantidad: 100, mostrar: 10 }],
-  PESOS: [{ cantidad: 100000000, mostrar: 0 }, { cantidad: 10000000, mostrar: 0 }, { cantidad: 1000000, mostrar: 0 }, { cantidad: 100000, mostrar: 0 }],
-};
 
-const getInstrumentPresets = async (instrument: string): Promise<IInstrumentPreset[]> => {
-  const instrumentPresets = await read();
-
-  if (instrumentPresets && instrumentPresets[instrument]) {
-    var preset = instrumentPresets[instrument];
-    return preset;
-  }
-
-  var wildcardInstrument = searchInstrument(instrument, instrumentPresets);
-
-  if (wildcardInstrument) {
-    return instrumentPresets[wildcardInstrument];
-  }
-
-  return defaultInstrumentPresets;
-};
-
-// Implement a search in instrumentPresets
-// Search to obtain instrument from instrumentPresets 
-// First tries exact match, then finds closest match with longest prefix
-const searchInstrument = (instrument: string, presets: IInstrumentPresets): string | null => {
-  // First try exact match
-  for (let key in presets) {
-    if (instrument === key) {
-      return key;
-    }
-  }
-  
-  // If no exact match, find the closest match with longest prefix
-  let bestMatch: string | null = null;
-  let longestPrefixLength = 0;
-  
-  for (let key in presets) {
-    // Check if the key is a prefix of the instrument
-    if (instrument.startsWith(key)) {
-      if (key.length > longestPrefixLength) {
-        longestPrefixLength = key.length;
-        bestMatch = key;
-      }
-    }
-    // Also check if the instrument is a prefix of the key
-    else if (key.startsWith(instrument)) {
-      if (instrument.length > longestPrefixLength) {
-        longestPrefixLength = instrument.length;
-        bestMatch = key;
-      }
-    }
-  }
-  
-  return bestMatch;
+// Lo que Opciones guarda: el Preset book y si Autocompletar está activado
+export interface StoredSettings {
+  book: PresetBook;
+  autocompletar: boolean;
 }
 
-const read = async (): Promise<IInstrumentPresets> => {
-  var storageValue = await chrome.storage.local.get(Key);
-
-  if (storageValue && storageValue[Key]) {
-    var presets = storageValue[Key];
-    return presets;
-  }
-  return DefaultPresets;
+const bookFrom = (value: unknown): PresetBook => {
+  return value ? value as PresetBook : defaultBook;
 };
 
-const save = async (presets: IInstrumentPresets): Promise<void> => {
+// En una instalación nueva get() devuelve {} y el valor es undefined
+const autocompleteFrom = (value: unknown): boolean => {
+  return typeof value === "boolean" ? value : DefaultAutocomplete;
+};
+
+const read = async (): Promise<PresetBook> => {
+  var storageValue = await chrome.storage.local.get(Key);
+  return bookFrom(storageValue?.[Key]);
+};
+
+const save = async (presets: PresetBook): Promise<void> => {
   //console.log("Save presets " + JSON.stringify(presets));
   var allSettings = {
     InstrumentPresets: presets,
@@ -93,11 +35,7 @@ const save = async (presets: IInstrumentPresets): Promise<void> => {
 
 const readAutocomplete = async (): Promise<boolean> => {
   var storageValue = await chrome.storage.local.get(AutocompleteKey);
-  let autocomplete = DefaultAutocomplete;
-  if (storageValue) {
-    autocomplete = storageValue[AutocompleteKey];
-  }
-  return autocomplete;
+  return autocompleteFrom(storageValue?.[AutocompleteKey]);
 };
 
 const saveAutocomplete = async (autocomplete: boolean): Promise<void> => {
@@ -108,12 +46,46 @@ const saveAutocomplete = async (autocomplete: boolean): Promise<void> => {
   await chrome.storage.local.set(allSettings);
 };
 
+const readSettings = async (): Promise<StoredSettings> => {
+  var storageValue = await chrome.storage.local.get([Key, AutocompleteKey]);
+  return {
+    book: bookFrom(storageValue?.[Key]),
+    autocompletar: autocompleteFrom(storageValue?.[AutocompleteKey]),
+  };
+};
+
+// Avisa cada vez que se guarda algo en Opciones, sólo con lo que cambió; devuelve la función para dejar de escuchar
+const watch = (listener: (change: Partial<StoredSettings>) => void): (() => void) => {
+  const onChanged = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+    if (areaName !== "local") {
+      return;
+    }
+    const change: Partial<StoredSettings> = {};
+    if (Key in changes) {
+      change.book = bookFrom(changes[Key].newValue);
+    }
+    if (AutocompleteKey in changes) {
+      change.autocompletar = autocompleteFrom(changes[AutocompleteKey].newValue);
+    }
+    if (Object.keys(change).length > 0) {
+      listener(change);
+    }
+  };
+  chrome.storage.onChanged.addListener(onChanged);
+  return () => chrome.storage.onChanged.removeListener(onChanged);
+};
+
+const saveSettings = async (presets: PresetBook, autocomplete: boolean): Promise<void> => {
+  await chrome.storage.local.set({ InstrumentPresets: presets, Autocomplete: autocomplete });
+};
+
 export default {
   read,
   save,
   readAutocomplete,
   saveAutocomplete,
-  getInstrumentPresets,
-  DefaultPresets,
+  saveSettings,
+  readSettings,
+  watch,
   DefaultAutocomplete
 };

@@ -2,79 +2,38 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./main.css";
 import App from "./App";
-import { RatioPanel } from "./components/RatioPanel";
-import matriz from "./Matriz";
+import { expandMiniOrderForm, miniOrderForm } from "./Matriz";
+import { createPresetSession } from "./PresetSession";
+import instrumentPresetsRepository from "./InstrumentPresetsRepository";
+import { presetsFor } from "./PresetBook";
 
-function waitForElement(selector: string) : Promise<Element | null> {
-  return new Promise(resolve => {
-      if (document.querySelector(selector)) {
-          return resolve(document.querySelector(selector));
-      }
+// Read once; subsequent settings changes arrive through Chrome Storage.
+let storedSettings = instrumentPresetsRepository.readSettings();
+instrumentPresetsRepository.watch((change) => {
+  storedSettings = storedSettings.then((current) => ({ ...current, ...change }));
+});
 
-      const observer = new MutationObserver(() => {
-          if (document.querySelector(selector)) {
-              observer.disconnect();
-              resolve(document.querySelector(selector));
-          }
-      });
+function mountPresets() {
+  const buttons = document.querySelector("#MiniOrderForm > div.MiniOrderForm_buttonsBlock");
+  if (!buttons) return false;
 
-      observer.observe(document.body, {
-          childList: true,
-          subtree: true
-      });
+  expandMiniOrderForm();
+  const container = document.createElement("div");
+  container.id = "root-chuchotriz";
+  buttons.append(container);
+  const session = createPresetSession(miniOrderForm, {
+    presetsFor: async (ticker) => presetsFor((await storedSettings).book, ticker),
+    autocompletar: async () => (await storedSettings).autocompletar,
   });
+  createRoot(container).render(
+    <React.StrictMode><App session={session} /></React.StrictMode>
+  );
+  return true;
 }
 
-waitForElement("#MiniOrderForm > div.MiniOrderForm_buttonsBlock").then((element) => {
-  //console.log('Element is ready');
-  
-  matriz.expandMiniOrderForm();
-
-  //const expandedForm = matriz.getMiniOrderFormExpand();
-
-  const app = document.createElement("div");
-
-  app.id = "root-chuchotriz";
-
-  if (element) {
-    element.append(app);
-  }
-  else{
-    console.log("No body found");
-  }
-
-  const container = document.getElementById("root-chuchotriz");
-  const root = createRoot(container!);
-
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-  
-});
-/*
-waitForElement("#ToolPanel > div.ToolPanelButtons").then((element) => {
-  //console.log('Element is ready');
-  
-  const app = document.createElement("div");
-
-  app.id = "root-chuchotriz-toolpanel";
-
-  if (element) {
-    element.append(app);
-  }
-  else{
-    console.log("No body found");
-  }
-
-  const container = document.getElementById("root-chuchotriz-toolpanel");
-  const root = createRoot(container!);
-
-  root.render(
-    <React.StrictMode>
-      <RatioPanel />
-    </React.StrictMode>
-  );
-  
-});*/
+if (!mountPresets()) {
+  const observer = new MutationObserver(() => {
+    if (mountPresets()) observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}

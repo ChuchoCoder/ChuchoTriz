@@ -1,27 +1,35 @@
 {
-  "name": "react-content-script",
+  "name": "chuchotriz",
   "private": true,
-  "version": "1.0.1",
+  "version": "0.0.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run check:free && tsc && vite build && node scripts/check-free.mjs --dist",
     "preview": "vite preview",
-    "watch": "tsc && vite build --watch"
+    "watch": "tsc && vite build --watch",
+    "test": "vitest run && node --test scripts/check-free.test.mjs",
+    "check:free": "node scripts/check-free.mjs",
+    "package:free": "npm run build && node scripts/package-free.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.26",
+    "@crxjs/vite-plugin": "^3.0.0",
     "@types/chrome": "^0.0.197",
-    "@types/node": "^18.8.3",
+    "@types/node": "^24.19.2",
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",
-    "@vitejs/plugin-react": "^2.1.0",
-    "typescript": "^4.6.4",
-    "vite": "^3.1.0",
-    "vite-plugin-svgr": "^2.2.1"
+    "@vitejs/plugin-react": "^5.2.0",
+    "fflate": "^0.8.3",
+    "jsdom": "^22.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
