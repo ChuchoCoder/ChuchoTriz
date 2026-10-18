@@ -9,7 +9,8 @@ configuración desde Matriz.
 2. Revisar los puntos de entrada y sus imports.
 3. Revisar el diff completo antes del push, incluidos tests, imágenes y scripts.
 4. Actualizar `free-files.json` solamente después de revisar cada nuevo archivo.
-5. Ejecutar `npm ci`, `npm test` y `npm run package:free`. Revisar el ZIP y el PR.
+5. Ejecutar `npm ci --ignore-scripts --no-audit`, `npm run security:check`,
+   `npm test` y `npm run package:free`. Revisar el ZIP y el PR.
 
 `check:free` exige una lista explícita de archivos del repositorio y examina
 también archivos ignorados dentro de `src` y `public`. El build valida permisos,
@@ -39,3 +40,7 @@ Google exige declarar el manejo de datos incluso si ocurre solamente de forma
 local: [FAQ de datos de usuario](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq).
 La publicación queda sujeta a la revisión de Google:
 [guía de publicación](https://developer.chrome.com/docs/webstore/publish).
+
+Los controles adicionales de dependencias, workflows, inyección y secretos están
+documentados en [SECURITY.md](../SECURITY.md). Mantener un único propietario
+humano, `@chuchocoder`, y los checks obligatorios de GitHub.

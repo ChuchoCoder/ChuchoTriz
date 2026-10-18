@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  merge_group:
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,6 +12,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   free:
+    name: Free validation (Node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.13.0', '24']
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -19,9 +25,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit
       - run: npm run check:free
       - run: npm test
       - run: npm run package:free

@@ -10,26 +10,35 @@
     "watch": "tsc && vite build --watch",
     "test": "vitest run && node --test scripts/check-free.test.mjs",
     "check:free": "node scripts/check-free.mjs",
-    "package:free": "npm run build && node scripts/package-free.mjs"
+    "package:free": "npm run build && node scripts/package-free.mjs",
+    "security:lint": "eslint \"src/**/*.{ts,tsx,js,jsx,mjs,cjs}\" \"public/**/*.{ts,tsx,js,jsx,mjs,cjs}\" --no-error-on-unmatched-pattern --max-warnings=0",
+    "security:policy": "node scripts/security/check-policy.mjs",
+    "security:test": "node --test scripts/security/*.test.mjs",
+    "security:tools": "node scripts/security/run-tools.mjs",
+    "security:check": "npm run security:test && npm run security:policy && npm run security:lint"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^3.0.0",
-    "@types/chrome": "^0.0.197",
-    "@types/node": "^24.19.2",
-    "@types/react": "^18.0.17",
-    "@types/react-dom": "^18.0.6",
-    "@vitejs/plugin-react": "^5.2.0",
-    "fflate": "^0.8.3",
-    "jsdom": "^22.1.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.7",
-    "vitest": "^4.1.12"
+    "@crxjs/vite-plugin": "3.0.0",
+    "@types/chrome": "0.0.197",
+    "@types/node": "24.19.2",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "5.2.0",
+    "fflate": "0.8.3",
+    "jsdom": "22.1.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "4.1.12",
+    "eslint": "10.13.0",
+    "@typescript-eslint/parser": "8.71.2",
+    "eslint-plugin-no-unsanitized": "4.1.5",
+    "yaml": "2.8.4"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   }
 }
