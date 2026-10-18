@@ -31,7 +31,14 @@ export function assertManifest(manifest, built = false) {
     assert(!(key in manifest), `Unexpected manifest capability: ${key}`);
   }
   assert(manifest.content_scripts?.length === 1, 'Expected only the presets content script');
+  const csp = manifest.content_security_policy;
+  assert(csp === undefined || (csp && typeof csp === 'object' && !Array.isArray(csp) &&
+    Object.keys(csp).length === 1 && csp.extension_pages === "script-src 'self'; object-src 'self';"),
+    'Unexpected extension CSP');
   const script = manifest.content_scripts[0];
+  for (const key of ['all_frames', 'match_about_blank', 'match_origin_as_fallback']) {
+    assert(!script[key], `Unexpected content-script capability: ${key}`);
+  }
   assert(same(script.matches, hosts), 'Unexpected content-script hosts');
   assert(!script.world || script.world === 'ISOLATED', 'Content script must use the isolated world');
   assert(script.js?.length === 1, 'Expected a single content-script entry');
@@ -42,6 +49,7 @@ export function assertManifest(manifest, built = false) {
   } else {
     assert(/^assets\/main\.tsx-loader-[\w-]+\.js$/.test(script.js[0]), 'Unexpected content loader');
     for (const resource of manifest.web_accessible_resources ?? []) {
+      assert(!('extension_ids' in resource), 'Resource exposure to other extensions is not allowed');
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
         assert(/^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
