@@ -25,6 +25,29 @@ export function SettingsMenu() {
   const [visited, setVisited] = useState(false);
   const [position, setPosition] = useState(bounds);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const [colorScheme, setColorScheme] = useState("dark");
+
+  useEffect(() => {
+    if (!open || !panel.current) return;
+    let frame = 0;
+    const update = () => {
+      // The panel background follows Matriz's theme; its child editor has its own palette.
+      const channels = getComputedStyle(panel.current!).backgroundColor.match(/[\d.]+/g)?.map(Number);
+      if (!channels || channels.length < 3) return;
+      const [r, g, b] = channels;
+      setColorScheme((r * .2126 + g * .7152 + b * .0722) > 128 ? "light" : "dark");
+    };
+    update();
+    const observer = new MutationObserver(records => {
+      if (records.every(record => panel.current?.contains(record.target))) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    });
+    observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true,
+      attributeFilter: ["class", "style", "href", "media"] });
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [open]);
 
   useEffect(() => {
     const item = document.createElement("div");
@@ -90,7 +113,8 @@ export function SettingsMenu() {
         onClick={event => { event.preventDefault(); setPosition(bounds()); setVisited(true); setOpen(true); }}>
         <img src={chuchotrizIcon} width="20" height="20" alt="" />
       </a>, slot)}
-    {visited && <section id="ct-free-settings-panel" className="ct-free-settings-panel" style={position}
+    {visited && <section ref={panel} id="ct-free-settings-panel" className="ct-free-settings-panel" style={position}
+      data-color-scheme={colorScheme}
       aria-label="Configuración de ChuchoTriz" hidden={!open}
       onKeyDownCapture={event => {
         if (event.key !== "Escape") return;
