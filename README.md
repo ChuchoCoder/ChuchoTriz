@@ -79,10 +79,17 @@ desde Configuración. Usa el último preset elegido para ese instrumento durante
 la sesión o, si todavía no elegiste uno, el primero de la lista.
 **Limpiar** olvida esa última elección para el instrumento durante la sesión.
 
-El formulario se conserva contraído al iniciar. Sólo se expande al aplicar un
-preset con Cantidad a mostrar mayor que cero, también mediante Autocompletar.
-Si ya está expandido, un preset sin cantidad parcial limpia Cantidad a mostrar
-y conserva el formulario abierto.
+El formulario se conserva contraído al iniciar y se expande al aplicar un
+preset, también mediante Autocompletar, para mostrar ambas cantidades.
+**Mostrar todo** completa Cantidad a mostrar con el total. Mientras ese modo siga
+activo, editar Cantidad actualiza también Cantidad a mostrar. Editar manualmente
+Cantidad a mostrar, elegir otro preset, cambiar de instrumento o pulsar Limpiar
+termina ese vínculo. Si contraés el formulario y luego editás el total en este
+modo, vuelve a expandirse para actualizar la cantidad visible.
+
+Esta representación evita que borrar un parcial termine en `displayQty:null`,
+rechazado por Matriz/ReMarkets. La validación en ReMarkets aceptó 100/100 como una
+orden sin iceberg; cero fue rechazado. Ver [diagnóstico y límites de validación](docs/diagnostico-displayqty.md).
 
 ## Configurar presets
 
