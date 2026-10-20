@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /// <reference types="node" />
-import { act } from "react-dom/test-utils";
+import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { parse } from "postcss";
 import { readFileSync } from "node:fs";
