@@ -27,7 +27,7 @@ export function resolvePreset(preset: IInstrumentPreset): ResolvedInstrumentPres
         throw new Error("Usá R seguido de un divisor entero desde 2, por ejemplo R5.");
     }
     // Enteros equiprobables, con extremos incluidos. Redondear hacia abajo y
-    // usar al menos una unidad evita que Matriz interprete cero como mostrar todo.
+    // usar al menos una unidad evita un parcial cero rechazado por ReMarkets.
     // La aritmética entera mantiene el límite del 3% incluso con cantidades grandes.
     const { minimum, maximum } = randomDisplayRange(preset.cantidad, divisor);
     return { cantidad: preset.cantidad,

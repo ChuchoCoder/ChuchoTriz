@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "environment": {
+    "origin": "https://remarkets.matriz.com.ar",
+    "nativeVersion": "4.23.16",
+    "simulation": true,
+    "accountVerifiedLocally": true
+  },
+  "authorization": {
+    "newOrderLimit": 3,
+    "totalQuantityPerOrder": 100,
+    "automaticRetries": false
+  },
+  "orderTests": [
+    {
+      "name": "omitted",
+      "request": {
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": 100000,
+        "quantity": 100
+      },
+      "acknowledgement": {
+        "httpStatus": 200,
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": "100000",
+        "orderQty": "100",
+        "displayQty": null,
+        "displayMethod": "",
+        "ordStatus": "",
+        "leavesQty": null,
+        "cumQty": null
+      },
+      "subsequentBrokerState": {
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": "100000",
+        "orderQty": "100",
+        "displayQty": null,
+        "displayMethod": null,
+        "ordStatus": "0",
+        "leavesQty": "100",
+        "cumQty": "0"
+      },
+      "cancellation": {
+        "httpStatus": 200,
+        "notApplicable": null
+      },
+      "finalState": {
+        "orderQty": "100",
+        "displayQty": null,
+        "displayMethod": null,
+        "status": "4",
+        "leavesQty": "100",
+        "cumQty": "0",
+        "text": "Cancelada"
+      },
+      "publicBook": {
+        "sequenceReceived": true,
+        "observedLevels": []
+      }
+    },
+    {
+      "name": "zero",
+      "request": {
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": 100000,
+        "quantity": 100,
+        "displayQty": 0
+      },
+      "acknowledgement": {
+        "httpStatus": 200,
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": "100000",
+        "orderQty": "100",
+        "displayQty": "0",
+        "displayMethod": "1",
+        "ordStatus": "",
+        "leavesQty": null,
+        "cumQty": null
+      },
+      "subsequentBrokerState": {
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": "100000",
+        "orderQty": "100",
+        "displayQty": "0",
+        "displayMethod": null,
+        "ordStatus": "8",
+        "leavesQty": "0",
+        "cumQty": "0",
+        "text": "La cantidad a divulgar es menor que la cantidad mínima a divulgar o la cantidad mínima para este contrato"
+      },
+      "cancellation": {
+        "httpStatus": null,
+        "notApplicable": "Rejected, no live remainder"
+      },
+      "finalState": {
+        "orderQty": "100",
+        "displayQty": "0",
+        "displayMethod": null,
+        "status": "8",
+        "leavesQty": "0",
+        "cumQty": "0",
+        "text": "La cantidad a divulgar es menor que la cantidad mínima a divulgar o la cantidad mínima para este contrato"
+      },
+      "publicBook": {
+        "sequenceReceived": true,
+        "observedLevels": []
+      }
+    },
+    {
+      "name": "total",
+      "request": {
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": 100000,
+        "quantity": 100,
+        "displayQty": 100
+      },
+      "acknowledgement": {
+        "httpStatus": 200,
+        "securityId": "bm_MERV_AL30_24hs",
+        "price": "100000",
+        "orderQty": "100",
+        "displayQty": "100",
+        "displayMethod": "1",
+        "ordStatus": "",
+        "leavesQty": null,
+        "cumQty": null
+      },
+      "subsequentBrokerState": {
+        "orderQty": "100",
+        "displayQty": null,
+        "displayMethod": null,
+        "status": "0",
+        "leavesQty": "100",
+        "cumQty": "0",
+        "text": "Aceptada"
+      },
+      "cancellation": {
+        "httpStatus": 200,
+        "notApplicable": null
+      },
+      "finalState": {
+        "orderQty": "100",
+        "displayQty": null,
+        "displayMethod": null,
+        "status": "4",
+        "leavesQty": "100",
+        "cumQty": "0",
+        "text": "Cancelada"
+      },
+      "publicBook": {
+        "sequenceReceived": true,
+        "observedLevels": []
+      }
+    }
+  ],
+  "finalPendingOrders": 0,
+  "publicBookLimitation": "Book sequence updated but no levels; no direct public-volume proof",
+  "adapterValidation": {
+    "mode": "source adapter in isolated world, native Matriz controls; no candidate installation",
+    "attemptedOrders": 0,
+    "observations": [
+      {
+        "name": "fixed",
+        "quantity": 100,
+        "displayQty": 20,
+        "displayType": "number",
+        "totalField": "100",
+        "displayField": "20"
+      },
+      {
+        "name": "fixed to full",
+        "quantity": 100,
+        "displayQty": 100,
+        "displayType": "number",
+        "totalField": "100",
+        "displayField": "100"
+      },
+      {
+        "name": "full follows manual total",
+        "quantity": 200,
+        "displayQty": 200,
+        "displayType": "number",
+        "totalField": "200",
+        "displayField": "200"
+      },
+      {
+        "name": "native quantity ArrowUp",
+        "quantity": 201,
+        "displayQty": 201,
+        "displayType": "number",
+        "totalField": "201",
+        "displayField": "201"
+      },
+      {
+        "name": "display ArrowUp manual takeover",
+        "quantity": 201,
+        "displayQty": 202,
+        "displayType": "number",
+        "totalField": "201",
+        "displayField": "202"
+      },
+      {
+        "name": "display ArrowUp stops following",
+        "quantity": 300,
+        "displayQty": 202,
+        "displayType": "number",
+        "totalField": "300",
+        "displayField": "202"
+      },
+      {
+        "name": "localized total input",
+        "quantity": 1,
+        "displayQty": 1,
+        "displayType": "number",
+        "totalField": "1",
+        "displayField": "1"
+      },
+      {
+        "name": "reset full after native localized parsing",
+        "quantity": 100,
+        "displayQty": 100,
+        "displayType": "number",
+        "totalField": "100",
+        "displayField": "100"
+      },
+      {
+        "name": "manual display after fill",
+        "quantity": 100,
+        "displayQty": 20,
+        "displayType": "number",
+        "totalField": "100",
+        "displayField": "20"
+      },
+      {
+        "name": "manual display after blur",
+        "quantity": 100,
+        "displayQty": 20,
+        "displayType": "number",
+        "totalField": "100",
+        "displayField": "20"
+      },
+      {
+        "name": "manual partial takes ownership",
+        "quantity": 300,
+        "displayQty": 20,
+        "displayType": "number",
+        "totalField": "300",
+        "displayField": "20"
+      },
+      {
+        "name": "random numeric",
+        "quantity": 100000,
+        "displayQty": 20571,
+        "displayType": "number",
+        "totalField": "100000",
+        "displayField": "20571"
+      },
+      {
+        "name": "random unchanged by manual total",
+        "quantity": 200000,
+        "displayQty": 20571,
+        "displayType": "number",
+        "totalField": "200000",
+        "displayField": "20571"
+      },
+      {
+        "name": "random to full",
+        "quantity": 100000,
+        "displayQty": 100000,
+        "displayType": "number",
+        "totalField": "100000",
+        "displayField": "100000"
+      },
+      {
+        "name": "full resynchronizes hidden field",
+        "quantity": 200000,
+        "displayQty": 200000,
+        "displayType": "number",
+        "totalField": "200000",
+        "displayField": "200000"
+      },
+      {
+        "name": "Limpiar",
+        "displayType": "undefined",
+        "totalField": "",
+        "displayField": ""
+      },
+      {
+        "name": "Limpiar leaves subsequent manual ticket independent",
+        "quantity": 100,
+        "displayQty": 20,
+        "displayType": "number",
+        "totalField": "100",
+        "displayField": "20"
+      }
+    ],
+    "sourceGitBlob": "977998f9a16b11e577d2ec2db671e29903d7db31",
+    "installedCandidate": false
+  }
+}

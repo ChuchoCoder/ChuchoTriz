@@ -11,7 +11,8 @@ export interface Ticket {
 export interface MiniOrderForm {
     read(): Ticket;
     // Carga Cantidad y Cantidad a mostrar; no hace nada si falta Instrumento o Precio
-    // Expande sólo para mostrar una cantidad parcial; espera el campo sin reutilizar un ticket modificado.
+    // Expande para escribir ambas cantidades; espera el campo sin reutilizar un ticket modificado.
+    // Mostrar todo sigue al total hasta editar el parcial, cambiar de instrumento/preset o Limpiar.
     fill(preset: ResolvedInstrumentPreset): void;
     // Hace foco en Cantidad con el texto seleccionado
     editCantidad(): void;
