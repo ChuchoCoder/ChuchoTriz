@@ -5,17 +5,17 @@ import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
 const barSelector = ".DirectAccessBar";
-const boundarySelectors = [".HeaderDMA", barSelector, "#ToolPanel", "#MiniOrderForm"];
+const boundarySelectors = [".HeaderDMA", barSelector, "#ToolPanel", "#MiniOrderForm", ".MobileHeaderDma", ".MobileFooterDma"];
 
 function bounds() {
-  const [header, bar, tools, ticket] = boundarySelectors.map(selector => {
+  const [header, bar, tools, ticket, mobileHeader, mobileFooter] = boundarySelectors.map(selector => {
     const rect = document.querySelector(selector)?.getBoundingClientRect();
     return rect && rect.width > 0 && rect.height > 0 ? rect : undefined;
   });
   return {
-    top: Math.max(0, header?.bottom ?? 0), left: Math.max(0, bar?.right ?? 0),
+    top: Math.max(0, header?.bottom ?? 0, mobileHeader?.bottom ?? 0), left: Math.max(0, bar?.right ?? 0),
     right: tools ? Math.max(0, innerWidth - tools.left) : 0,
-    bottom: ticket ? Math.max(0, innerHeight - ticket.top) : 0,
+    bottom: Math.max(0, ticket ? innerHeight - ticket.top : 0, mobileFooter ? innerHeight - mobileFooter.top : 0),
   };
 }
 

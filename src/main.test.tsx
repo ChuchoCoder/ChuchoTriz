@@ -132,5 +132,15 @@ it("mounts Configuración in the left menu even before the order form exists", a
   await act(async () => { document.body.append(form); });
   expect(form.querySelector("#root-chuchotriz")).not.toBeNull();
   expect(expand, "Mounting the extension must preserve the collapsed order form").not.toHaveBeenCalled();
+  const mobileHeader = document.createElement("div"), mobileFooter = document.createElement("footer");
+  mobileHeader.className = "MobileHeaderDma";
+  mobileFooter.className = "MobileFooterDma";
+  mobileHeader.getBoundingClientRect = () => ({ width: 360, height: 88, top: 0, bottom: 88, left: 0, right: 360 } as DOMRect);
+  mobileFooter.getBoundingClientRect = () => ({ width: 360, height: 83, top: innerHeight - 83, bottom: innerHeight, left: 0, right: 360 } as DOMRect);
+  await act(async () => { document.body.append(mobileHeader, mobileFooter); });
+  await act(async () => { document.querySelector<HTMLAnchorElement>('.ct-free-settings-item')!.click(); });
+  expect(panel!.style.top, "Keep Matriz's mobile header outside settings").toBe("88px");
+  expect(panel!.style.bottom, "Keep native mobile order navigation clear of the footer actions").toBe("83px");
+  await act(async () => { panel!.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); mobileHeader.remove(); mobileFooter.remove(); });
   computedStyle.mockRestore();
 });

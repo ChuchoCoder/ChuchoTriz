@@ -5,6 +5,8 @@
 /* Matriz's fixed toolbars and order form use layers 98–100. */
 .ct-free-settings-panel { position: fixed; z-index: 97; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel-body-background, #212936); color: var(--text-color, #fff); font: 13px/1.4 var(--app-font-family, "Lato", sans-serif); container-type: inline-size; }
 .ct-free-settings-panel[hidden] { display: none; }
+/* Matriz's mobile content reaches layer 100; native bottom navigation is 102. */
+body:has(.MobileFooterDma) .ct-free-settings-panel { z-index: 101; }
 .ct-free-settings-panel { --settings-header: #2b3648; --settings-text: #ededed; --settings-border: #8190a5; }
 .ct-free-settings-panel[data-color-scheme="light"] { --settings-header: #e9edf3; --settings-text: #202837; --settings-border: #7b8494; }
 .ct-free-settings-header { box-sizing: border-box; display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 16px; border-bottom: 1px solid var(--settings-border); gap: 10px; background: var(--settings-header); color: var(--settings-text); font: 400 16px/1.5 var(--app-font-family, "Lato", sans-serif); }
