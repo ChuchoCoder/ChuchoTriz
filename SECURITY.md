@@ -44,8 +44,8 @@ El escaneo git local no incluye cambios sin commit; CI sí incluye el commit del
 
 ## Verificación local
 
-Node >=22.13.0; CI verifica 22.13.0 y 24. La actualización mínima desde 22.12.0
-corresponde al engine de ESLint; se conservan Vite/Vitest y las versiones de producto.
+Node >=24.0.0; CI verifica únicamente Node 24, la versión de referencia para
+desarrollo y compilación.
 
 ```powershell
 npm ci --ignore-scripts --no-audit
@@ -69,7 +69,6 @@ Configuración prevista y verificada por API durante la entrega:
 - Actions exige SHA completo, token por defecto de lectura y no puede aprobar PRs.
 - main exige PR, resolución de conversaciones y checks al día, sin force-push ni
   borrado, aplicando las reglas también al administrador:
-  - Free validation (Node 22.13.0)
   - Free validation (Node 24)
   - Dependency audit (.)
   - Extension security policy and source
