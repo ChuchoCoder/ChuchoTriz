@@ -64,10 +64,67 @@ function toTicker(instrumento: string): string {
 }
 
 let cancelPendingShownQuantity: (() => void) | undefined;
+let cancelWholeQuantity: (() => void) | undefined;
+
+// Mostrar todo remains a mode while the trader edits the total. A manual
+// display-quantity edit takes ownership; fixed/random presets never follow it.
+function followWholeQuantity(form: HTMLElement, instrumento: string, precio: string) {
+    let writing = false;
+    let applied = false;
+    let lastQuantity = valueOf(cantidadSelector);
+    const current = () => form.isConnected && form === find("#MiniOrderForm") &&
+        valueOf(instrumentoSelector) === instrumento && (applied || valueOf(precioSelector) === precio);
+    const sync = () => {
+        if (!current()) { stop(); return; }
+        const quantity = valueOf(cantidadSelector);
+        const input = find<HTMLInputElement>(cantidadAMostrarSelector);
+        if (!input) {
+            // Preserve a deliberate collapse until the total actually changes.
+            if (quantity !== lastQuantity) expandMiniOrderForm();
+        } else {
+            if (input.value !== quantity) {
+                writing = true;
+                try { setInputValue(input, quantity); }
+                finally { writing = false; }
+            }
+            applied = true;
+            clearTimeout(timeout);
+        }
+        lastQuantity = quantity;
+    };
+    const edited = (event: Event) => {
+        if (writing) return;
+        const target = event.target instanceof Element ? event.target : null;
+        const stepping = ["click", "pointerdown"].includes(event.type) && !!target?.closest(".ant-input-number-handler-wrap") ||
+            event instanceof KeyboardEvent && ["ArrowUp", "ArrowDown"].includes(event.key);
+        const displayEdited = target?.closest(".amount-show__div") &&
+            (["input", "change"].includes(event.type) || stepping);
+        if (!current() || target?.matches(instrumentoSelector) && ["input", "change"].includes(event.type) || displayEdited) {
+            stop();
+        } else if (event.eventPhase !== Event.CAPTURING_PHASE && target?.closest(".MiniOrderFormQuantity-amount-input")) sync();
+    };
+    const observer = new MutationObserver(sync);
+    const stop = () => {
+        observer.disconnect(); clearTimeout(timeout); unsubscribeLimpiar();
+        for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.removeEventListener(type, edited, true);
+        for (const type of ["input", "change", "click", "keyup"]) document.removeEventListener(type, edited);
+        if (cancelWholeQuantity === stop) cancelWholeQuantity = undefined;
+    };
+    const unsubscribeLimpiar = onLimpiar(stop);
+    const timeout = setTimeout(() => { if (!applied) stop(); }, 2000);
+    cancelWholeQuantity = stop;
+    // Relinquish manual display edits before Matriz handles/stops the event.
+    for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.addEventListener(type, edited, true);
+    // Let Matriz consume the new total before writing the related field.
+    for (const type of ["input", "change", "click", "keyup"]) document.addEventListener(type, edited);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["value"] });
+    expandMiniOrderForm();
+    sync();
+}
 
 function fill(cantidad: number, cantidadAMostrar: number) {
-    const wasExpanding = pendingExpansion !== undefined && pendingExpansion.form === find("#MiniOrderForm");
     cancelPendingShownQuantity?.();
+    cancelWholeQuantity?.();
     const cantidadInput = find<HTMLInputElement>(cantidadSelector);
     const instrumento = valueOf(instrumentoSelector);
     const precio = valueOf(precioSelector);
@@ -77,18 +134,23 @@ function fill(cantidad: number, cantidadAMostrar: number) {
 
     setInputValue(cantidadInput, cantidad.toString());
     const showPartial = Number.isInteger(cantidadAMostrar) && cantidadAMostrar > 0;
-    if (showPartial) expandMiniOrderForm();
+    // Equal total/display was accepted as no iceberg by ReMarkets. Start the
+    // mode before expansion so manual total edits cannot leave a hidden partial.
+    if (!showPartial) {
+        followWholeQuantity(find("#MiniOrderForm")!, instrumento, precio);
+        return;
+    }
+    expandMiniOrderForm();
     const current = () => valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio &&
         valueOf(cantidadSelector) === cantidad.toString();
     const apply = () => {
         if (!current()) return true;
         const input = find<HTMLInputElement>(cantidadAMostrarSelector);
         if (!input) return false;
-        // Matriz represents showing the whole quantity with an empty field.
-        setInputValue(input, showPartial ? cantidadAMostrar.toString() : "");
+        setInputValue(input, cantidadAMostrar.toString());
         return true;
     };
-    if (apply() || (!showPartial && !wasExpanding)) return;
+    if (apply()) return;
 
     // Expansion can render on a later turn. Only the latest untouched ticket may receive this write.
     const observer = new MutationObserver(() => { if (apply()) stop(); });
