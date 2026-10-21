@@ -537,4 +537,25 @@ describe("Matriz Mini Order Form", () => {
     expect(activeSession.presets()).toEqual([gd30Preset]);
     expect(page.input("cantidadMostrar").value).toBe("10");
   });
+
+  it("applies another preset after the trader changes Precio and clicks its button", async () => {
+    const page = renderMiniOrderForm();
+    const first = { cantidad: 200000, mostrar: 20000 };
+    const second = { cantidad: 100000, mostrar: 10000 };
+    session = createPresetSession(miniOrderForm, {
+      presetsFor: async () => [first, second],
+      autocompletar: async () => true,
+    });
+    page.presetButton.addEventListener("click", () => session?.choose(second));
+
+    page.input("precio").focus();
+    await vi.waitFor(() => expect(page.input("cantidad").value).toBe("200000"));
+    page.input("precio").value = "69000";
+    page.input("precio").dispatchEvent(new Event("change", { bubbles: true }));
+    page.presetButton.click();
+
+    expect(page.input("precio").value).toBe("69000");
+    expect(page.input("cantidad").value).toBe("100000");
+    expect(page.input("cantidadMostrar").value).toBe("10000");
+  });
 });

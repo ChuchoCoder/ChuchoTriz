@@ -193,6 +193,21 @@ describe("Preset session", () => {
     session.dispose();
   });
 
+  it.each([
+    ["settlement changes", { instrumento: "AL30 (24hs)", ticker: "AL30" }],
+    ["Precio is cleared", { precio: "" }],
+  ] as const)("rejects a stale preset when %s", async (_case, change) => {
+    const page = fakeMiniOrderForm({ ...al30, cantidad: "1" });
+    const session = createPresetSession(page.form, fakeSettings({ AL30: [big] }).settings);
+    await page.focus();
+    page.type(change);
+
+    session.choose(big);
+
+    expect(page.state.ticket.cantidad).toBe("1");
+    session.dispose();
+  });
+
   it("shows no Presets until Instrumento and Precio have values", async () => {
     const page = fakeMiniOrderForm({ instrumento: "AL30 (CI)", ticker: "AL30" });
     const { settings, lookups } = fakeSettings({ AL30: [big] });

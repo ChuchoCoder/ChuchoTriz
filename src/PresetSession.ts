@@ -18,6 +18,7 @@ const NoPresets: IInstrumentPreset[] = [];
 
 const keyOf = (ticket: Ticket) => ticket.instrumento + " " + ticket.precio + " " + ticket.cantidad;
 const identityOf = (ticket: Ticket) => JSON.stringify([ticket.instrumento, ticket.ticker, ticket.precio]);
+const instrumentOf = (ticket: Ticket) => JSON.stringify([ticket.instrumento, ticket.ticker]);
 
 export function createPresetSession(form: MiniOrderForm, settings: PresetSettings): PresetSession {
   let visiblePresets = NoPresets;
@@ -25,12 +26,12 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
   let lastTicketKey = "";
   let revision = 0;
   let disposed = false;
-  let visibleIdentity = "";
+  let visibleInstrument = "";
   const lastUsedPresets = new Map<string, IInstrumentPreset>();
   const listeners = new Set<() => void>();
 
-  const show = (presets: IInstrumentPreset[], identity = "") => {
-    visibleIdentity = identity;
+  const show = (presets: IInstrumentPreset[], instrument = "") => {
+    visibleInstrument = instrument;
     if (presets !== visiblePresets) {
       visiblePresets = presets;
       listeners.forEach((listener) => listener());
@@ -76,7 +77,7 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
         form.editCantidad();
       }
 
-      if (current()) show(presets, identity);
+      if (current()) show(presets, instrumentOf(ticket));
     }
     catch (error) {
       console.error(error);
@@ -100,7 +101,9 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
       return () => listeners.delete(listener);
     },
     choose: (preset) => {
-      if (disposed || identityOf(form.read()) !== visibleIdentity) return;
+      const ticket = form.read();
+      // Presets belong to the instrument; editing Precio must not invalidate their buttons.
+      if (disposed || !ticket.precio || instrumentOf(ticket) !== visibleInstrument) return;
       revision++;
       form.fill(resolvePreset(preset));
       lastTicketKey = keyOf(form.read());
