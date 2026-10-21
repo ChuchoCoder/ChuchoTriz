@@ -125,7 +125,7 @@ test('validation and Security run for all PRs, pushes and merge groups without s
   }
 });
 test('ownership names only chuchocoder and root-only Dependabot updates remain enabled', async () => {
-  const owners = (await readFile('.github/CODEOWNERS', 'utf8')).split('\n').filter(line => line.trim() && !line.startsWith('#'));
+  const owners = (await readFile('.github/CODEOWNERS', 'utf8')).split(/\r?\n/).filter(line => line.trim() && !line.startsWith('#'));
   assert.deepEqual(owners, ['* @chuchocoder']);
   const config = parseDocument(await readFile('.github/dependabot.yml', 'utf8')).toJS();
   assert.deepEqual(config.updates.find(update => update['package-ecosystem'] === 'npm').directories, ['/']);
