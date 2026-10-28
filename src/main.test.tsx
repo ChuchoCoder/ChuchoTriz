@@ -132,6 +132,30 @@ it("mounts Configuración in the left menu even before the order form exists", a
   await act(async () => { document.body.append(form); });
   expect(form.querySelector("#root-chuchotriz")).not.toBeNull();
   expect(expand, "Mounting the extension must preserve the collapsed order form").not.toHaveBeenCalled();
+  // Matriz can focus Cantidad first, then select Precio after loading a quote.
+  form.insertAdjacentHTML("beforeend", `
+    <input id="rc_select_2" value="AL30 (CI)">
+    <div class="ant-form-item MiniOrderFormQuantity-price-input">
+      <div class="ant-input-number-input-wrap"><input id="quote-price" value="86000,000"></div>
+    </div>
+    <div class="ant-form-item MiniOrderFormQuantity-amount-input">
+      <div class="ant-input-number-input-wrap"><input id="quote-quantity" value="500000"></div>
+    </div>`);
+  const quote = document.createElement("div");
+  quote.className = "PriceCell bid";
+  document.body.append(quote);
+  const price = document.querySelector<HTMLInputElement>("#quote-price")!;
+  const quantity = document.querySelector<HTMLInputElement>("#quote-quantity")!;
+  quote.addEventListener("click", () => {
+    quantity.focus();
+    setTimeout(() => { price.focus(); price.select(); }, 0);
+  });
+  await act(async () => { quote.click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(document.activeElement, "A quote click must finish in Cantidad even when it already has a value").toBe(quantity);
+  expect([quantity.selectionStart, quantity.selectionEnd]).toEqual([0, 6]);
+  expect(price.value).toBe("86000,000");
+  expect(quantity.value).toBe("500000");
+  quote.remove();
   const mobileHeader = document.createElement("div"), mobileFooter = document.createElement("footer");
   mobileHeader.className = "MobileHeaderDma";
   mobileFooter.className = "MobileFooterDma";

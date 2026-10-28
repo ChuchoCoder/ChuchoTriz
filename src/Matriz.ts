@@ -183,6 +183,48 @@ function editCantidad() {
     }
 }
 
+// Only a market quote click may redirect Matriz's subsequent Precio focus.
+// Direct field clicks and keyboard navigation keep their native behavior.
+export function focusCantidadAfterQuoteClick(): () => void {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let revision = 0;
+    const cancel = () => {
+        clearTimeout(timeout);
+        timeout = undefined;
+        revision++;
+    };
+    const clicked = (event: Event) => {
+        cancel();
+        if (event.target instanceof Element &&
+            event.target.closest(".PriceCell, .MobilePricePanelItemLstdIsOperative") &&
+            !event.target.closest("#MiniOrderForm")) {
+            timeout = setTimeout(cancel, 2000);
+        }
+    };
+    const focused = (event: Event) => {
+        const input = event.target;
+        if (timeout === undefined || !(input instanceof HTMLInputElement) || !input.matches(precioSelector)) return;
+        clearTimeout(timeout);
+        timeout = undefined;
+        const request = revision;
+        // Let Matriz finish focus()/select() before selecting Cantidad.
+        queueMicrotask(() => {
+            if (request === revision && document.activeElement === input && input.isConnected) editCantidad();
+        });
+    };
+    document.addEventListener("click", clicked, true);
+    document.addEventListener("focusin", focused, true);
+    document.addEventListener("pointerdown", cancel, true);
+    document.addEventListener("keydown", cancel, true);
+    return () => {
+        cancel();
+        document.removeEventListener("click", clicked, true);
+        document.removeEventListener("focusin", focused, true);
+        document.removeEventListener("pointerdown", cancel, true);
+        document.removeEventListener("keydown", cancel, true);
+    };
+}
+
 function isTicketInput(target: EventTarget | null): boolean {
     return target instanceof Element &&
         (target.matches(instrumentoSelector) || target.matches(precioSelector) || target.matches(cantidadSelector));
