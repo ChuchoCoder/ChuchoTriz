@@ -2,11 +2,13 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./main.css";
 import App from "./App";
-import { miniOrderForm } from "./Matriz";
+import { focusCantidadAfterQuoteClick, miniOrderForm } from "./Matriz";
 import { createPresetSession } from "./PresetSession";
 import instrumentPresetsRepository from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
 import { SettingsMenu } from "./SettingsMenu";
+
+focusCantidadAfterQuoteClick();
 
 // Settings remain accessible independently of the order form.
 const settingsContainer = document.createElement("div");

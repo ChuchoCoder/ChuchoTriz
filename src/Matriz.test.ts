@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { expandMiniOrderForm, miniOrderForm } from "./Matriz";
+import { expandMiniOrderForm, focusCantidadAfterQuoteClick, miniOrderForm } from "./Matriz";
 import { createPresetSession, PresetSession } from "./PresetSession";
 
 let session: PresetSession | undefined;
+let stopQuoteFocus: (() => void) | undefined;
 
 afterEach(() => {
   vi.restoreAllMocks();
   session?.dispose();
   session = undefined;
+  stopQuoteFocus?.();
+  stopQuoteFocus = undefined;
+  vi.useRealTimers();
   document.body.replaceChildren();
 });
 
@@ -83,6 +87,95 @@ function replaceInput(input: HTMLInputElement, value: string) {
 }
 
 describe("Matriz Mini Order Form", () => {
+  describe("quantity focus after a quote click", () => {
+    function quote(className = "PriceCell askBook3") {
+      const cell = document.createElement("div");
+      cell.className = className;
+      cell.innerHTML = '<span class="PriceCell-content">86000</span>';
+      document.body.append(cell);
+      return cell.firstElementChild as HTMLElement;
+    }
+
+    it.each(["PriceCell bid", "PriceCell askBook3", "PriceCell lst", "MobilePricePanelItemLstdIsOperative"])(
+      "selects the current Cantidad after a delayed %s quote focus, without changing the ticket", async className => {
+        const page = renderMiniOrderForm({ cantidad: "500000" });
+        stopQuoteFocus = focusCantidadAfterQuoteClick();
+        quote(className).click();
+        await Promise.resolve();
+        replaceInput(page.input("cantidad"), "1234");
+        page.input("precio").focus();
+        page.input("precio").select();
+        await Promise.resolve();
+
+        expect(document.activeElement).toBe(page.input("cantidad"));
+        expect([page.input("cantidad").selectionStart, page.input("cantidad").selectionEnd]).toEqual([0, 4]);
+        expect(miniOrderForm.read()).toEqual({ instrumento: "AL30 (CI)", ticker: "AL30", precio: "70000", cantidad: "1234" });
+      });
+
+    it("allows direct price editing and moving back to Precio after the quote", async () => {
+      const page = renderMiniOrderForm();
+      stopQuoteFocus = focusCantidadAfterQuoteClick();
+      page.input("precio").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("precio"));
+      page.input("precio").blur();
+      quote().click();
+      page.input("precio").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("cantidad"));
+      page.input("precio").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("precio"));
+    });
+
+    it.each(["pointerdown", "keydown", "click"])("cancels a pending redirect on another %s interaction", async type => {
+      const page = renderMiniOrderForm();
+      stopQuoteFocus = focusCantidadAfterQuoteClick();
+      quote().click();
+      page.input("precio").dispatchEvent(new Event(type, { bubbles: true }));
+      page.input("precio").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("precio"));
+    });
+
+    it("expires a quote that never focused Precio", async () => {
+      vi.useFakeTimers();
+      const page = renderMiniOrderForm();
+      stopQuoteFocus = focusCantidadAfterQuoteClick();
+      quote().click();
+      await vi.advanceTimersByTimeAsync(2000);
+      page.input("precio").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("precio"));
+    });
+
+    it("does not steal focus when the user moved away before the redirect", async () => {
+      const page = renderMiniOrderForm();
+      stopQuoteFocus = focusCantidadAfterQuoteClick();
+      quote().click();
+      page.input("precio").focus();
+      page.input("cantidadMostrar").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("cantidadMostrar"));
+    });
+
+    it("removes listeners and cancels an already queued redirect when disposed", async () => {
+      const page = renderMiniOrderForm();
+      stopQuoteFocus = focusCantidadAfterQuoteClick();
+      const cell = quote();
+      cell.click();
+      page.input("precio").focus();
+      stopQuoteFocus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("precio"));
+      page.input("precio").blur();
+      cell.click();
+      page.input("precio").focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(page.input("precio"));
+    });
+  });
+
   it("autocompletes Mostrar todo and switches through fixed/random/full presets, then resets with Limpiar", async () => {
     const page = renderMiniOrderForm({ expanded: false });
     const whole = { cantidad: 100, mostrar: 0 };
