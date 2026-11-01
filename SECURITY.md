@@ -44,7 +44,8 @@ El escaneo git local no incluye cambios sin commit; CI sí incluye el commit del
 
 ## Verificación local
 
-Node >=24.0.0; CI verifica únicamente Node 24, la versión de referencia para
+Node ^24.15.0 o >=26.0.0, según el requisito de jsdom 30; Node 25 no está
+soportado. CI verifica únicamente Node 24, la versión de referencia para
 desarrollo y compilación.
 
 ```powershell
