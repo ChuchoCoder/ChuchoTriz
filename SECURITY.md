@@ -17,6 +17,10 @@ issues públicos. Usar el canal privado habitual con el propietario.
 - .npmrc deshabilita lifecycle scripts, guarda versiones exactas y exige el engine.
   CI usa npm ci --ignore-scripts --no-audit y no comparte caché npm. Los comandos
   explícitos de build y tests siguen ejecutando código del proyecto y sus dependencias.
+- El override exacto de minimatch 11.0.1 corrige GHSA-g3hv-75wg-m249 en las
+  dependencias transitivas de ESLint y typescript-eslint, que todavía solicitan v10.
+  Retirarlo cuando esas herramientas resuelvan una versión corregida sin override;
+  validar instalación, lint, tests y auditoría al actualizarlo.
 - ESLint analiza JS/JSX/MJS/CJS/TS/TSX de src y public. Rechaza usos directos de eval,
   Function, callbacks dinámicos de temporizadores, imports remotos/dinámicos y sinks
   de HTML inseguro. Los fixtures *.test.* están excluidos y no se distribuyen.

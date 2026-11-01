@@ -38,6 +38,9 @@
     "eslint-plugin-no-unsanitized": "4.1.5",
     "yaml": "2.9.1"
   },
+  "overrides": {
+    "minimatch": "11.0.1"
+  },
   "engines": {
     "node": ">=24.0.0"
   }
