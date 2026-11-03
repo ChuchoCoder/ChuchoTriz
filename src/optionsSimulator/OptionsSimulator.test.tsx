@@ -247,3 +247,39 @@ it("keeps small preset and chart prices as editable decimals rather than rejecte
   expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("0.00000095");
   expect(container.querySelector('.ct-sim-cursor')).not.toBeNull();
 });
+
+it("replaces the selectors with eight visual option families and previews variant changes before applying", async () => {
+  await mount();
+  expect(container.querySelector('[aria-label="Moneda y plazo de opciones"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Filtrar calls y puts"]')).toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await fill("Combos simulados", "3");
+  await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  const picker = byLabel("Selector visual de estrategias");
+  expect(picker.querySelectorAll('[data-family-name]')).toHaveLength(8);
+  for (const label of ["Calendar", "Covered", "Futures"]) expect(picker.textContent).not.toContain(label);
+  await act(async () => byLabel<HTMLButtonElement>("Alternar Call/Put de Vertical").click());
+  await act(async () => byLabel<HTMLButtonElement>("Alternar variante de Vertical").click());
+  expect(byLabel("Patas de la plantilla").textContent).toContain("Venta 1× PUT 100");
+  expect(byLabel("Patas de la plantilla").textContent).toContain("Compra 1× PUT 90");
+  expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(1);
+  expect(container.querySelector('.ct-sim-leg-symbol')!.textContent).toBe("CALL 100");
+  await act(async () => byLabel<HTMLButtonElement>("Aplicar Vertical · Short Put").click());
+  expect(container.querySelector('[aria-label="Selector visual de estrategias"]')).toBeNull();
+  expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(2);
+  expect(byLabel<HTMLInputElement>("Combos simulados").value).toBe("3");
+  expect(byLabel<HTMLButtonElement>("Editar Sentido pata 1").textContent).toBe("Venta");
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("4");
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("5");
+  expect(document.activeElement).toBe(byLabel("Elegir estrategia"));
+});
+
+it("disables unavailable template quotes and closes the strategy picker with Escape", async () => {
+  marketState.current.data!.instruments["call-100"].ask = undefined;
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  expect(byLabel<HTMLButtonElement>("Aplicar Option · Long Call").disabled).toBe(true);
+  expect(byLabel("Vista previa de la estrategia").textContent).toContain("sin ASK");
+  await act(async () => byLabel("Selector visual de estrategias").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(container.querySelector('[aria-label="Selector visual de estrategias"]')).toBeNull();
+  expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(0);
+});

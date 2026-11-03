@@ -100,6 +100,32 @@
 .ct-sim-vi-scale i { width: 45px; height: 5px; border-radius: 2px; background: linear-gradient(90deg, #6fd4a5, #ecda69, #f7a35c, #ef7888); }
 .ct-sim-strike-count { margin-left: auto; }
 .ct-sim-market-settings { margin-left: auto; }
+.ct-sim .ct-sim-strategy-trigger { min-height: 26px; padding: 3px 9px; font-size: 11px; }
+.ct-sim .ct-sim-strategy-trigger span { margin-left: 14px; }
+.ct-sim-strategy-picker { position: fixed; inset: auto; margin: 0; padding: 10px; max-width: calc(100vw - 16px); overflow-y: auto; scrollbar-width: thin; color: var(--sim-text); background: var(--sim-card); border: 1px solid var(--sim-border); border-radius: 7px; box-shadow: 0 8px 30px #0007; font: 13px/1.4 "Lato", system-ui, sans-serif; }
+.ct-sim-strategy-picker > header { display: flex; justify-content: space-between; align-items: start; gap: 12px; padding: 0 0 8px; }
+.ct-sim-strategy-picker > header small { display: block; color: var(--sim-muted); font-size: 10px; margin-top: 3px; }
+.ct-sim .ct-sim-strategy-picker > header button { min-height: 24px; width: 24px; padding: 0; background: transparent; border-color: transparent; color: var(--sim-muted); font-size: 20px; }
+.ct-sim-strategy-row { display: grid; grid-template-columns: 34px minmax(110px, 1fr) 86px 64px 32px; gap: 5px; align-items: center; min-height: 36px; padding: 3px 4px; border-bottom: 1px solid var(--sim-border); }
+.ct-sim-strategy-row.selected { background: color-mix(in srgb, var(--sim-theory) 12%, var(--sim-card)); }
+.ct-sim-strategy-row svg { width: 32px; height: 26px; color: var(--sim-muted); }
+.ct-sim-strategy-row.selected svg { color: var(--sim-theory); }
+.ct-sim-strategy-picker svg path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.ct-sim-strategy-picker svg line { stroke: var(--sim-muted); stroke-width: .6; opacity: .35; }
+.ct-sim .ct-sim-strategy-name { min-height: 28px; padding: 2px; border: 0; background: transparent; color: var(--sim-text); font-size: 13px; text-align: left; white-space: normal; }
+.ct-sim .ct-sim-strategy-variant { min-height: 28px; padding: 2px 5px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.ct-sim-strategy-picker .long, .ct-sim-strategy-picker .call { color: var(--sim-profit); border-color: var(--sim-profit); background: color-mix(in srgb, var(--sim-profit) 10%, var(--sim-field)); }
+.ct-sim-strategy-picker .short, .ct-sim-strategy-picker .put { color: var(--sim-loss); border-color: var(--sim-loss); background: color-mix(in srgb, var(--sim-loss) 10%, var(--sim-field)); }
+.ct-sim-strategy-both { font-size: 10px; color: var(--sim-muted); text-align: center; }
+.ct-sim .ct-sim-strategy-apply { min-height: 28px; padding: 2px; border-color: var(--sim-theory); color: var(--sim-theory); background: var(--sim-field); font-size: 17px; }
+.ct-sim-strategy-preview { padding: 12px 4px 2px; font-size: 11px; }
+.ct-sim-strategy-preview-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ct-sim-strategy-preview-title svg { width: 72px; height: 44px; color: var(--sim-accent); }
+.ct-sim-strategy-preview p { margin: 5px 0 8px; color: var(--sim-muted); }
+.ct-sim-strategy-preview ul { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; padding: 0; margin: 6px 0 10px; }
+.ct-sim-strategy-preview li { padding: 3px 6px; border: 1px solid var(--sim-border); border-radius: 3px; }
+.ct-sim-strategy-preview small { display: block; margin-top: 8px; color: var(--sim-muted); font-size: 10px; }
+.ct-sim-strategy-preview .ct-sim-strategy-unavailable { color: var(--sim-loss); }
 .ct-sim-market-settings-panel { position: absolute; z-index: 6; right: 0; top: calc(100% + 3px); width: min(430px, 100%); border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-card); box-shadow: 0 6px 20px #0005; }
 .ct-sim .ct-sim-market-settings-panel .ct-opt-metrics-filter { align-items: center; gap: 8px; padding: 10px; }
 .ct-sim .ct-sim-market-settings-panel label { flex-direction: row; align-items: center; }
@@ -171,6 +197,10 @@
   .ct-sim-scenario-advanced { grid-column: 1 / -1; }
 }
 @container (max-width: 580px) {
+  .ct-sim-strategy-row { grid-template-columns: 22px minmax(65px, 1fr) 60px 48px 28px; gap: 4px; padding: 3px 0; }
+  .ct-sim-strategy-row svg { width: 22px; }
+  .ct-sim .ct-sim-strategy-name { font-size: 11px; }
+  .ct-sim .ct-sim-strategy-variant { font-size: 10px; padding: 2px; }
   .ct-sim { padding: 12px; }
   .ct-sim h2 { font-size: 15px; }
   .ct-sim-scenario { grid-template-columns: 1fr; }

@@ -7,7 +7,7 @@ nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, s
 ni órdenes propias.
 
 La barra de mercado usa etiquetas y selectores en una sola fila. El engranaje **⚙ VI**
-abre el filtro de antigüedad sin desplazar la tabla. **Estrategias** reúne ejemplos,
+abre el filtro de antigüedad sin desplazar la tabla. **Mis estrategias** reúne ejemplos,
 guardado y carga; **Entrada** reúne los datos de entrada y gastos. La cadena
 usa la altura disponible de la ventana y permite recorrer sus filas internamente.
 
@@ -25,11 +25,18 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
 
 ## Uso
 
-1. Elegir subyacente, vencimiento, moneda/plazo y filtro Calls/Ambos/Puts.
+1. Elegir subyacente y vencimiento. Siempre se muestran calls y puts. El mercado se
+   elige automáticamente en la moneda del subyacente, con preferencia por 24 h y
+   un único plazo común; no se mezclan mercados ni se convierten monedas.
 2. Seleccionar un BID para simular venta o un ASK para simular compra. Seleccionar
    otra vez el mismo lado quita la pata; seleccionar el contrario cambia el lado y
-   copia esa punta. También se pueden cargar verticales, mariposa, iron condor y
-   straddle desde contratos de la cadena.
+   copia esa punta. **Estrategia** abre el selector visual: Option, Vertical,
+   Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
+   Cada fila permite alternar Long/Short y Call/Put cuando corresponde, o
+   Normal/Reversed. El dibujo y las patas se previsualizan sin modificar el armado.
+   La flecha reemplaza las patas con contratos de la cadena y conserva los combos.
+   Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
+   se explica el motivo. No incluye Calendar, Covered ni Futures.
 3. Las patas se muestran en filas compactas. Hacer clic en lado, cantidad, prima
    o VI para editar; Enter o salir del campo acepta, y Escape restaura el valor
    anterior. Las patas manuales permiten editar también tipo y strike.
@@ -79,6 +86,16 @@ físicas sobre acciones en ARS verificado en Premium. Los contratos ambiguos par
 un mismo strike y tipo no se eligen arbitrariamente.
 
 ## Modelo de resultados
+
+Las plantillas usan strikes únicos del mismo vencimiento. Butterfly exige alas
+simétricas 1:2:1. Ratio Spread Long es un backspread: vende una opción cercana y
+compra dos más alejadas; Short invierte esos lados
+([referencia OIC](https://prd-web.optionseducation.org/strategies/all-strategies/long-ratio-call-spread)).
+Jade Lizard Normal combina put vendida y call spread vendido; Reversed combina
+put spread vendido y call vendida (Twisted Sister), según la
+[guía de tastylive](https://assets.contentstack.io/v3/assets/blt40263f25ec36953f/blt094f33167a64ab9a/648c7f8b83c7fb90a25f4c77/tastylive-options-strategy-guide-2023.pdf).
+Los iconos muestran la forma del pago intrínseco, sin primas; el resultado monetario
+se calcula con las primas copiadas y editables, multiplicadores, combos y gastos.
 
 `resultado = Σ sentido × contratosPorCombo × combos × factor × (valor − prima) − gastos`
 
@@ -173,3 +190,15 @@ tres patas, precio 110 y cambio de VI +5 al alternar; el escenario al vencimient
 dio resultados idénticos en ambas curvas. La leyenda consolidada midió 24 px en
 una fila. El navegador permanecía oculto y las capturas de este último ajuste no
 estuvieron disponibles, por lo que no se acredita inspección visual por píxeles.
+
+### Selector visual de estructuras
+
+300 tests Vitest, 13 tests Node y 10 tests de seguridad aprobados; TypeScript,
+lint, políticas, guardas de distribución y paquete 0.0.17 aprobados. La revisión
+independiente del selector y sus recetas terminó sin hallazgos accionables.
+
+La fixture del bundle verificó por DOM las ocho familias, Vertical Short Put,
+Jade Lizard Reversed, previsualización sin alterar las patas y conservación de
+tres combos al aplicar. El foco volvió al botón de estrategia; Análisis mostró
+el crédito escalado y la cola ilimitada de la call vendida. El navegador compartido
+continuaba oculto; esta comprobación no acredita inspección visual por píxeles.

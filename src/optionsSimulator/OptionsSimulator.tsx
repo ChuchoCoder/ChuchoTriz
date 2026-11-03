@@ -262,7 +262,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       changeView(next); event.currentTarget.querySelector<HTMLButtonElement>(`[data-view="${next}"]`)?.focus();
     }}>{([ ["build", "Armado"], ["analysis", "Análisis"] ] as const).map(([key, label]) => <button key={key} type="button" role="tab" data-view={key}
       id={`${menusId}-${key}-tab`} aria-controls={`${menusId}-${key}-panel`} aria-selected={view === key} tabIndex={view === key ? 0 : -1} onClick={() => changeView(key)}>{label}</button>)}</div>
-    <details className="ct-sim-library-menu" name={`ct-sim-tools-${menusId}`}><summary>Estrategias</summary><div className="ct-sim-library"><label>Ejemplos con datos ficticios <select aria-label="Cargar ejemplo" value="" onChange={event => {
+    <details className="ct-sim-library-menu" name={`ct-sim-tools-${menusId}`}><summary>Mis estrategias</summary><div className="ct-sim-library"><label>Ejemplos con datos ficticios <select aria-label="Cargar ejemplo" value="" onChange={event => {
       if (!event.target.value) return;
       const initial = initialSimulation(input.valuationDate && Number.isFinite(dateDay(input.valuationDate)) ? input.valuationDate : undefined);
       const legs = exampleLegs(event.target.value as Example);

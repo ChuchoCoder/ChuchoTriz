@@ -6,11 +6,12 @@ import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatOptionNumber as fmt } from "./format";
 import { Leg, localDate, MAX_LEGS, newLeg, Simulation } from "./model";
 import "./MarketChain.css";
+import StrategyPicker from "./StrategyPicker";
+import { preferredOptionMarket, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
-const settlement = (value: string) => value === "1" ? "CI" : value === "2" ? "24 hs" : value;
 
 export default function MarketChain({ active, input, setInput, onPremiumReferences }: {
   active: boolean; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
@@ -21,7 +22,6 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   const [underlyingId, setUnderlying] = useState("");
   const [expiration, setExpiration] = useState("");
   const [market, setMarket] = useState("");
-  const [filter, setFilter] = useState("Ambos");
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState("");
   const [catalogCache, setCatalogCache] = useState<Catalog>();
@@ -33,14 +33,14 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   const underlyings = catalog?.underlyings ?? [];
   const contracts = catalog?.contracts.filter(contract => contract.underlyingId === underlyingId) ?? [];
   const expirations = [...new Set(contracts.map(contract => contract.expiration))].sort();
-  const markets = [...new Set(contracts.filter(contract => contract.expiration === expiration).map(marketKey))].sort();
   useEffect(() => {
     if (!underlyingId && underlyings.length) setUnderlying((underlyings.find(item => item.symbol === "GGAL") ?? underlyings[0]).id);
   }, [catalog, underlyingId]);
   useEffect(() => {
     if (!expiration && expirations.length) setExpiration(expirations.find(value => value >= localDate().replaceAll("-", "")) ?? expirations[0]);
-    if (!market && markets.length) setMarket(markets[0]);
-  }, [expiration, market, expirations.join(), markets.join()]);
+    const preferred = preferredOptionMarket(contracts.filter(contract => contract.expiration === expiration), underlyings.find(item => item.id === underlyingId)?.currency);
+    if (market !== preferred) setMarket(preferred);
+  }, [expiration, market, expirations.join(), catalog, underlyingId]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
   useEffect(() => {
@@ -73,10 +73,9 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     [viewport, ...root.current!.querySelectorAll(".ct-opt-controls, .ct-sim-chain-legend, .ct-sim-chain-notice")].forEach(node => resize.observe(node));
     return () => resize.disconnect();
   }, [active, !!reading.issue, !!notice]);
-  function change(field: "underlying" | "expiration" | "market", value: string) {
+  function change(field: "underlying" | "expiration", value: string) {
     if (field === "underlying") { setUnderlying(value); setExpiration(""); setMarket(""); }
     if (field === "expiration") { setExpiration(value); setMarket(""); }
-    if (field === "market") setMarket(value);
     setNotice(""); setInput(current => ({ ...current, legs: [] }));
   }
   function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote) {
@@ -99,29 +98,22 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
       legs: existing ? current.legs.map(item => item.securityId === contract.id ? leg : item) : [...current.legs, leg] }));
     setNotice("Pata agregada a la simulación. Prima y VI copiadas de esta lectura; quedan editables y no siguen al mercado automáticamente.");
   }
-  function chooseStrategy(value: string) {
-    if (!value || !data || !underlying || !comparable || !positive(spot)) { setNotice("Esperá una lectura completa con precio del subyacente para armar una estructura."); return; }
-    const center = strikes.reduce((best, strike, index) => Math.abs(strike - spot) < Math.abs(strikes[best] - spot) ? index : best, 0);
-    const at = (kind: "call" | "put", offset: number, side: "buy" | "sell", ratio = 1) => ({ contract: unique(kind, strikes[center + offset]), side, ratio });
-    const recipe = value === "vertical-call" ? [at("call", 0, "buy"), at("call", 1, "sell")]
-      : value === "vertical-put" ? [at("put", 0, "buy"), at("put", -1, "sell")]
-      : value === "condor" ? [at("put", -2, "buy"), at("put", -1, "sell"), at("call", 1, "sell"), at("call", 2, "buy")]
-      : value === "straddle" ? [at("call", 0, "buy"), at("put", 0, "buy")]
-      : [at("call", -1, "buy"), at("call", 0, "sell", 2), at("call", 1, "buy")];
-    const factor = recipe[0].contract?.factor;
-    if (!positive(factor) || recipe.some(item => !item.contract || item.contract.factor !== factor || item.contract.currency !== underlying.currency ||
-      !positive(data.instruments[item.contract.id]?.[item.side === "buy" ? "ask" : "bid"]?.price))) {
-      setNotice("Faltan ejercicios únicos, factores compatibles o puntas para esa estructura. Seleccioná las patas desde la cadena."); return;
+  function chooseStrategy(choice: StrategyChoice): boolean {
+    const recipe = strategyRecipe(choice, selected, spot), prices = recipePrices(recipe, data?.instruments, underlying?.currency);
+    if (!recipe.ok || !prices.ok || !data || !underlying || !positive(spot)) {
+      setNotice(!recipe.ok ? recipe.reason : !prices.ok ? prices.reason : "Esperando una lectura completa de mercado."); return false;
     }
-    const legs = recipe.map((item, index): Leg => {
-      const contract = item.contract!, quote = data.instruments[contract.id];
+    const factor = recipe.legs[0].contract.factor!;
+    const legs = recipe.legs.map((item, index): Leg => {
+      const contract = item.contract, quote = data.instruments[contract.id];
       return { ...newLeg(index + 1), securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side: item.side,
-        strike: String(contract.strike), premium: String(quote[item.side === "buy" ? "ask" : "bid"]!.price), contracts: String(item.ratio),
+        strike: String(contract.strike), premium: String(prices.premiums[index]), contracts: String(item.ratio),
         volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     });
-    setInput(current => ({ ...current, underlying: underlying.symbol, expiry: expiryDate(expiration), currency: recipe[0].contract!.currency,
+    setInput(current => ({ ...current, underlying: underlying.symbol, expiry: expiryDate(expiration), currency: recipe.legs[0].contract.currency,
       multiplier: String(factor), spot: String(spot), rangeMin: String(spot * .75), rangeMax: String(spot * 1.25), scenarioDate: current.valuationDate, legs }));
-    setNotice("Estructura simulada cargada desde la cadena. Revisá proporciones, primas y VI antes de interpretar el gráfico.");
+    setNotice(`${strategyLabel(choice)} cargada. Primas y VI copiadas de esta lectura.`);
+    return true;
   }
   const metricCell = (contract: Contract | undefined, field: "volume" | "change" | "delta" | "iv", kind: "call" | "put") =>
     <OptionMetricCell contract={contract} field={field} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />;
@@ -147,9 +139,8 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   return <section ref={root} className="ct-sim-card ct-options ct-sim-market"><div className="ct-opt-controls" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value}>{expiryDate(value)}</option>)}</select></label>
-    <label>Moneda / plazo<select aria-label="Moneda y plazo de opciones" value={market} onChange={event => change("market", event.target.value)}><option value="">Seleccionar</option>{markets.map(value => <option key={value} value={value}>{value.split("|")[0]} · {settlement(value.split("|")[1])}</option>)}</select></label>
-    <label>Mostrar<select aria-label="Filtrar calls y puts" value={filter} onChange={event => setFilter(event.target.value)}>{["Calls", "Ambos", "Puts"].map(value => <option key={value}>{value}</option>)}</select></label>
-    <label>Estrategia<select aria-label="Armar estrategia desde la cadena" value="" onChange={event => chooseStrategy(event.target.value)}><option value="">Personalizada</option><option value="vertical-call">Vertical call</option><option value="vertical-put">Vertical put</option><option value="condor">Iron condor</option><option value="butterfly">Mariposa call</option><option value="straddle">Straddle comprado</option></select></label>
+    <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency}
+      context={`${underlying?.symbol ?? "Sin selección"} · ${expiryDate(expiration)}`} onApply={chooseStrategy} />
     <details className="ct-sim-market-settings"><summary aria-label="Configurar filtro de VI" title="Configurar filtro y escala de VI">⚙ VI</summary><div className="ct-sim-market-settings-panel">
     <div className="ct-opt-metrics-filter" role="group" aria-label="Filtro temporal de VI">
       <label><input type="checkbox" checked={viEnabled} onChange={event => setViEnabled(event.target.checked)} />Filtrar VI por última operación</label>
@@ -164,23 +155,23 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     {!catalog && !reading.issue && <p role="status" className="ct-sim-chain-notice">Leyendo catálogo de opciones de Matriz…</p>}
     {notice && <p role="status" className="ct-sim-chain-notice" title={notice}>{notice}</p>}
     <div className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
-      <span>{underlying?.symbol ?? "Subyacente"} <strong>{money(spot)}</strong></span>
+      <span title={market ? `${market.split("|")[0]} · ${market.split("|")[1] === "2" ? "24 hs" : `Plazo ${market.split("|")[1]}`} · Selección automática sin mezclar mercados` : "Sin mercado compatible"}>{underlying?.symbol ?? "Subyacente"} <strong>{money(spot)}</strong></span>
       <span className="ct-sim-vi-scale" title="VI relativa de menor a mayor; el filtro se configura desde ⚙ VI">VI <i aria-hidden="true" /></span>
-      {filter !== "Puts" && viLegend("call")}{filter !== "Calls" && viLegend("put")}
+      {viLegend("call")}{viLegend("put")}
       <span className="ct-sim-strike-count">{strikes.length} ejercicios</span>
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
     </div>
     <div className="ct-table-scroll ct-opt-chain-scroll" style={chainHeight === undefined ? undefined : { maxHeight: chainHeight }} role="region" aria-label="Cadena de opciones" tabIndex={0}>
-      <table className={`ct-opt-chain ct-opt-metrics-chain${filter !== "Ambos" ? " single" : ""}`}>
-        <colgroup>{filter !== "Puts" && <><col className="nominal" /><col className="change" /><col className="delta" /><col /><col /><col className="iv" /></>}<col className="strike" />{filter !== "Calls" && <><col className="iv" /><col /><col /><col className="delta" /><col className="change" /><col className="nominal" /></>}</colgroup>
-        <thead><tr>{filter !== "Puts" && <th colSpan={6}>CALLS</th>}<th className="ct-opt-strike">Ejercicio</th>{filter !== "Calls" && <th colSpan={6}>PUTS</th>}</tr><tr>{filter !== "Puts" && <><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>VI</th></>}<th className="ct-opt-strike">Strike</th>{filter !== "Calls" && <><th>VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></>}</tr></thead>
+      <table className="ct-opt-chain ct-opt-metrics-chain">
+        <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
+        <thead><tr><th colSpan={6}>CALLS</th><th className="ct-opt-strike">Ejercicio</th><th colSpan={6}>PUTS</th></tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>VI</th><th className="ct-opt-strike">Strike</th><th>VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead>
         <tbody>{strikes.map((strike, index) => {
           const call = unique("call", strike), put = unique("put", strike);
           return <Fragment key={strike}><tr className={itmSpot === strike ? "ct-opt-atm" : ""}>
-            {filter !== "Puts" && <>{metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}</>}
+            {metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}
             <th className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM · Subyacente</span>}</th>
-            {filter !== "Calls" && <>{metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}</>}
-          </tr>{itmSpot !== undefined && strike < itmSpot && strikes[index + 1] > itmSpot && <tr className="ct-opt-itm-boundary"><td colSpan={filter === "Ambos" ? 13 : 7}><div className={`ct-opt-itm-line ${filter === "Calls" ? "calls-only" : filter === "Puts" ? "puts-only" : ""}`} aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">{filter !== "Puts" && "↑ ITM"}</span><span className="ct-opt-itm-spot">$ {fmt(itmSpot)}</span><span className="ct-opt-itm-put">{filter !== "Calls" && "↓ ITM"}</span></div></td></tr>}</Fragment>;
+            {metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}
+          </tr>{itmSpot !== undefined && strike < itmSpot && strikes[index + 1] > itmSpot && <tr className="ct-opt-itm-boundary"><td colSpan={13}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span><span className="ct-opt-itm-spot">$ {fmt(itmSpot)}</span><span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table>{!strikes.length && <p className="ct-opt-empty">Sin contratos completos para esta selección.</p>}
     </div>
