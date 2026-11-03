@@ -1,7 +1,7 @@
 import "./OptionsPage.css";
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
+import ChuchoTrizTools from "./ChuchoTrizTools";
 
 const root = document.createElement("div")
 root.className = "container"
@@ -9,6 +9,6 @@ document.body.appendChild(root)
 const rootDiv = ReactDOM.createRoot(root);
 rootDiv.render(
   <React.StrictMode>
-    <InstrumentPresetsOptions />
+    <ChuchoTrizTools />
   </React.StrictMode>
 );

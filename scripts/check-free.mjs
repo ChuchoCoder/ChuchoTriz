@@ -45,14 +45,17 @@ export function assertManifest(manifest, built = false) {
   assert(script.run_at === 'document_end', 'Unexpected content-script timing');
   if (!built) {
     assert(same(script.js, ['src/main.tsx']), 'Unexpected content-script entry');
-    assert(!manifest.web_accessible_resources, 'Source manifest must not expose page bridges');
+    if (manifest.web_accessible_resources !== undefined) {
+      assert(same(manifest.web_accessible_resources, [{ resources: ['options-market-reader.js'], matches: hosts }]),
+        'Only the options market reader may be exposed by the source manifest');
+    }
   } else {
     assert(/^assets\/main\.tsx-loader-[\w-]+\.js$/.test(script.js[0]), 'Unexpected content loader');
     for (const resource of manifest.web_accessible_resources ?? []) {
       assert(!('extension_ids' in resource), 'Resource exposure to other extensions is not allowed');
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
-        assert(/^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
+        assert(path === 'options-market-reader.js' || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
       }
     }
   }
@@ -61,6 +64,8 @@ export function assertManifest(manifest, built = false) {
 export function assertFreeText(text, path) {
   const forbidden = /matriz-bridge|CHUCHOTRIZ_BRIDGE|__matriz|\b(?:WebSocket|XMLHttpRequest|fetch|eval)\s*\(/i;
   assert(!forbidden.test(text), `Unexpected page bridge or network code found in ${path}`);
+  assert(!/\b(?:orderStore|orderEntryStore|positionStore|balanceStore)\b|\b(?:sendOrder|cancelOrder|replaceOrder|submitOrder)\s*\(/.test(text),
+    `Unexpected account or execution capability found in ${path}`);
   assert(!/sourceMappingURL\s*=|(?:github_pat_|ghp_)[a-zA-Z0-9]{20,}|-----BEGIN [\w ]*PRIVATE KEY-----/.test(text),
     `Source map or possible secret found in ${path}`);
 }
@@ -82,7 +87,7 @@ export function checkFree({ built = false, directory = root } = {}) {
   if (built) {
     const output = join(directory, 'dist');
     const staticFiles = ['manifest.json', 'index.html', ...allowed.filter(path => path.startsWith('public/')).map(path => path.slice(7))];
-    const assetPattern = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
+    const assetPattern = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
     const files = filesIn(output);
     for (const path of files) {
       assert(staticFiles.includes(path) || assetPattern.test(path), `Unexpected packaged file: ${path}`);

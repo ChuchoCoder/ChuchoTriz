@@ -1,8 +1,8 @@
 {
   "name": "ChuchoTriz",
   "short_name": "ChuchoTriz",
-  "description": "Presets de cantidad por instrumento para el formulario de órdenes de Matriz.",
-  "version": "0.0.16",
+  "description": "Presets de cantidad y simulador de estrategias de opciones con cadena de Matriz y gráficos de resultados.",
+  "version": "0.0.17",
   "author": "Chucho Trader",
   "homepage_url": "https://x.com/chuchotrader",
   "manifest_version": 3,
@@ -28,6 +28,10 @@
       "run_at": "document_end"
     }
   ],
+  "web_accessible_resources": [{
+    "resources": ["options-market-reader.js"],
+    "matches": ["https://*.xoms.com.ar/*", "https://remarkets.matriz.com.ar/*"]
+  }],
   "permissions": [
     "storage"
   ]

@@ -28,3 +28,14 @@ test('rejects page bridges, network code, secrets and source maps', () => {
   }
   assert.doesNotThrow(() => assertFreeText('const presets = [{ cantidad: 100, mostrar: 0 }];', 'fixture.js'));
 });
+
+test('accepts exactly the scoped options market reader and rejects broader page exposure', () => {
+  const resource = { resources: ['options-market-reader.js'], matches: manifest().content_scripts[0].matches };
+  assert.doesNotThrow(() => assertManifest({ ...manifest(), web_accessible_resources: [resource] }));
+  for (const change of [
+    { resources: ['options-market-reader.js', 'other.js'] }, { matches: ['<all_urls>'] },
+    { extension_ids: ['*'] }, { resources: ['https://remote.example/code.js'] },
+  ]) assert.throws(() => assertManifest({ ...manifest(), web_accessible_resources: [{ ...resource, ...change }] }));
+  for (const text of ['store.orderStore.orders', 'store.positionStore', 'store.balanceStore', 'sendOrder(dto)', 'cancelOrder(id)', 'replaceOrder(dto)'])
+    assert.throws(() => assertFreeText(text, 'fixture.js'));
+});

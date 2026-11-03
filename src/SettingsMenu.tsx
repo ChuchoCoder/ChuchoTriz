@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
+import ChuchoTrizTools from "./ChuchoTrizTools";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
@@ -124,7 +124,7 @@ export function SettingsMenu() {
       <header className="ct-free-settings-header"><h1>ChuchoTriz · Configuración</h1>
         <button ref={closeButton} type="button" aria-label="Volver a Matriz" onClick={close}>×</button>
       </header>
-      <InstrumentPresetsOptions embedded />
+      <ChuchoTrizTools embedded active={open} />
     </section>}
   </>;
 }

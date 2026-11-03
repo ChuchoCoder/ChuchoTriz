@@ -1,0 +1,55 @@
+import type { Contract as OptionContract, Quote as OptionMarketMetrics, Snapshot as OptionsSnapshot } from "./market";
+
+export const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const positive = (value: unknown): value is number => finiteMetric(value) && value > 0;
+const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+const day = (time: number) => dateFormat.format(time);
+export interface MetricCell extends OptionMarketMetrics { eligible: boolean; reason: string }
+export interface MetricScale { min?: number; max?: number; volumeMax: number; included: number; total: number }
+export function deriveOptionMetrics(contracts: OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
+  settings: { now: number; minutes: string; enabled: boolean; available: boolean }) {
+  const parsed = /^\d+$/.test(settings.minutes) ? Number(settings.minutes) : NaN;
+  const windowValid = Number.isSafeInteger(parsed) && parsed > 0;
+  const nowValid = finiteMetric(settings.now) && settings.now >= 0 && !Number.isNaN(new Date(settings.now).getTime());
+  const byId: Record<string, MetricCell> = {};
+  const scales: Record<"call" | "put", MetricScale> = {
+    call: { volumeMax: 0, included: 0, total: 0 }, put: { volumeMax: 0, included: 0, total: 0 },
+  };
+  for (const contract of contracts) {
+    const raw = instruments?.[contract.id];
+    const vi = finiteMetric(raw?.impliedVolatility) ? raw.impliedVolatility : undefined;
+    const stamp = finiteMetric(raw?.lastTradeAt) && raw.lastTradeAt >= 0 && !Number.isNaN(new Date(raw.lastTradeAt).getTime()) ? raw.lastTradeAt : undefined;
+    const volume = finiteMetric(raw?.nominalVolume) && raw.nominalVolume >= 0 ? raw.nominalVolume : undefined;
+    let reason = "", eligible = false;
+    if (!settings.available || !nowValid) reason = "Sin lectura de mercado vigente";
+    else if (!positive(vi)) reason = "VI no disponible o no válida";
+    else if (!settings.enabled) { eligible = true; reason = "Filtro temporal desactivado"; }
+    else if (!windowValid) reason = "Ingresá minutos enteros mayores que cero";
+    else if (stamp === undefined) reason = "Sin fecha verificable de última operación";
+    else if (stamp > settings.now) reason = "Fecha de operación posterior al reloj actual";
+    else if (day(stamp) !== day(settings.now)) reason = "Última operación de otra fecha";
+    else {
+      const age = (settings.now - stamp) / 60000;
+      eligible = age <= parsed;
+      reason = `Última operación hace ${age.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min${eligible ? "" : ` · supera ${parsed} min`}`;
+    }
+    const cell: MetricCell = { impliedVolatility: vi, lastTradeAt: stamp, nominalVolume: volume,
+      delta: finiteMetric(raw?.delta) ? raw.delta : undefined,
+      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, eligible, reason };
+    byId[contract.id] = cell;
+    const scale = scales[contract.kind]; scale.total++;
+    if (volume !== undefined && settings.available) scale.volumeMax = Math.max(scale.volumeMax, volume);
+    if (eligible && vi !== undefined) {
+      scale.included++; scale.min = Math.min(scale.min ?? vi, vi); scale.max = Math.max(scale.max ?? vi, vi);
+    }
+  }
+  return { byId, scales, windowValid };
+}
+/** Green → yellow → orange → red. Undefined means no comparative range. */
+export function viGradeColor(cell: MetricCell | undefined, scale: MetricScale) {
+  if (!cell?.eligible || !finiteMetric(cell.impliedVolatility) || scale.min === undefined || scale.max === undefined || scale.max <= scale.min) return;
+  const stops = [[111, 212, 165], [236, 218, 105], [247, 163, 92], [239, 120, 136]];
+  const position = Math.max(0, Math.min(1, (cell.impliedVolatility - scale.min) / (scale.max - scale.min))) * 3;
+  const i = Math.min(2, Math.floor(position)), weight = position - i;
+  return `rgb(${stops[i].map((v, channel) => Math.round(v + (stops[i + 1][channel] - v) * weight)).join(",")})`;
+}

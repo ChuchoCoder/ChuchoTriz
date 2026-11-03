@@ -1,0 +1,118 @@
+# Simulador de opciones de Free
+
+El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulador de
+opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
+central y puts a la derecha, con BID/ASK, cantidades, VI, delta, variación y volumen
+nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
+ni órdenes propias.
+
+## Uso
+
+1. Elegir subyacente, vencimiento, moneda/plazo y filtro Calls/Ambos/Puts.
+2. Seleccionar un BID para simular venta o un ASK para simular compra. Seleccionar
+   otra vez el mismo lado quita la pata; seleccionar el contrario cambia el lado y
+   copia esa punta. También se pueden cargar verticales, mariposa, iron condor y
+   straddle desde contratos de la cadena.
+3. Editar proporciones por combo, combos, primas de entrada y VI de las patas.
+   Las primas y VI copiadas quedan fijas. Natural/MID/Opuesto permiten volver a
+   copiar precios explícitamente; una actualización de mercado no altera la posición
+   simulada. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
+4. Consultar el gráfico al vencimiento y el teórico; modificar fecha objetivo,
+   cambio de VI en puntos porcentuales, tasa y dividendos. Hover explora precios,
+   clic los fija y el slider permite consultar ambos resultados con teclado/touch.
+
+Las simulaciones guardadas incluyen primas, contratos, VI, fechas, moneda, factor,
+gastos y parámetros del modelo. No son órdenes ni se guardan en Matriz. No hay
+sincronización entre dispositivos. La configuración de cantidades sigue en su
+pestaña y conserva su borrador al alternar con el simulador.
+
+## Datos nativos y aislamiento
+
+`public/options-market-reader.js` expone únicamente `catalog` y `snapshot` mediante
+un canal de mensajes. No importa los puentes, coordinadores ni motores de Premium.
+Solo consulta `securityStore.options`, `underlyingsForMatrix`, `getSecurity` y
+suscripciones `md`/`book`. La cuenta activa participa únicamente en la detección
+interna de cambios de contexto y nunca se devuelve. No lee credenciales.
+
+Versiones admitidas: Matriz 4.24.1 y 4.24.4, como el lector de referencia. Máximo de
+160 instrumentos por lectura y 256 suscripciones acumuladas por contexto. No se
+publica una cadena incompleta: el cliente divide la selección en grupos
+secuenciales de 23 opciones más el subyacente. No se
+desuscribe, porque Matriz comparte suscripciones con otras vistas. Las llamadas
+nativas son secuenciales, con una reserva que se mantiene hasta resolver la llamada
+real, incluso si el cliente dejó de esperar. El cierre del panel o cambio de pestaña
+retira el interés. No se promete cancelar HTTP interno de Matriz.
+
+Una lectura que cambia de catálogo, cuenta/contexto o conexión se descarta. La
+regresión de secuencias oculta las referencias. Las métricas son las de Matriz;
+no se infiere VI desde precios. La escala de VI conserva el filtro de operación
+reciente y sus ventanas de 15/30/60 minutos. La hora de lectura local no es un
+timestamp de bolsa, y una cotización observada no acredita vigencia ni ejecución.
+
+Los factores monetarios se toman de los metadatos nativos:
+`totalAmountFactor × contractMultiplier × roundLot`. Se exige factor positivo,
+coincidencia de monedas de prima/ejercicio/subyacente, vencimiento y mercado común.
+La única resolución implícita de moneda de ejercicio es el caso BYMA de opciones
+físicas sobre acciones en ARS verificado en Premium. Los contratos ambiguos para
+un mismo strike y tipo no se eligen arbitrariamente.
+
+## Modelo de resultados
+
+`resultado = Σ sentido × contratosPorCombo × combos × factor × (valor − prima) − gastos`
+
+Compra tiene sentido +1 y venta −1. Al vencimiento, valor es el intrínseco.
+Máximos y equilibrios se calculan sobre todos los tramos lineales desde 0 hasta
+infinito, sin limitarse al rango del gráfico. Incluye colas ilimitadas, equilibrios
+puntuales y tramos enteros de equilibrio.
+
+El teórico es Black–Scholes–Merton europeo con días calendario / 365, tasa y
+dividendos continuos y VI constante por pata, más el cambio de escenario. Falta de
+VI oculta solo la curva teórica; al vencimiento no hace falta VI. A fecha de
+vencimiento ambas curvas coinciden. Casos de volatilidad cero y subyacente cero
+tienen soluciones límite explícitas. Como referencia del tipo de modelo y sus
+entradas, ver [la calculadora de Cboe](https://www.cboe.com/oi/tools/options_calculator/).
+
+No incluye ejercicio anticipado, dividendos en efectivo, garantías, financiación
+de primas, impuestos ni gastos de salida/ejercicio. Tasa y dividendos parten de 0%
+y son supuestos editables, no condiciones actuales. Los ejemplos de aprendizaje
+usan subyacente 100 y primas ficticias; cargar uno reemplaza explícitamente los
+datos de la simulación.
+
+## Referencia y validación
+
+Referencia de UI y métricas: ChuchoTriz Premium `7c2419d`, archivos
+`src/multileg/options/{OptionsView,OptionsMetrics,OptionQuoteValue,optionsMarketMetrics}`.
+Se adaptaron los componentes puros de métricas y cotizaciones y el estilo de la
+cadena; la lectura de Free tiene una API independiente de solo dos métodos.
+
+`npm test` verifica resultados de spreads, straddle, mariposa, condor, cantidades,
+costos, colas, equilibrios, Black–Scholes y paridad, validación, cadena y guardado.
+El lector real se ejecuta también en VM con stores controlados para verificar su
+protocolo, exclusión, cambios de contexto y rechazo de métodos ajenos al mercado.
+`npm run security:check` y `npm run package:free` verifican lint, políticas,
+distribución y el ZIP. El permiso de Chrome sigue siendo únicamente `storage`;
+el manifiesto expone solo el lector empaquetado a los dominios de Matriz existentes.
+
+Para revisar el bundle sin broker: `node tools/preview-free.mjs`, abrir `/fixture`
+en la URL loopback impresa y entrar al simulador desde Configuración. El servidor
+sirve el bundle de producción con catálogo/cotizaciones ficticias y almacenamiento
+local de demostración. Esta fixture no acredita integración nativa ni precios vivos.
+
+### Verificación del 3 de noviembre de 2026
+
+- 266 tests Vitest, 13 tests Node del lector/guardas y 10 tests de seguridad aprobados;
+  TypeScript, lint, política y `package:free` aprobados. Paquete candidato 0.0.17.
+- Revisión independiente del cálculo, lector, selección, privacidad y guardas sin
+  hallazgos importantes; revisión posterior del batching también aprobada.
+- Playwright sobre el bundle real con fixture loopback: cadena reflejada, selección
+  BID/ASK, mariposa 1:2:1, guardado local, borrador entre pestañas, curvas iguales al
+  vencimiento, entrada inválida sin gráfico anterior, desconexión/recuperación y
+  rechazo/recuperación de secuencia. Se inspeccionaron temas claro/oscuro y anchos
+  1920/1440/1024/390; sin desborde horizontal del simulador y con gráfico adaptable.
+- Lectura nativa independiente en la sesión compartida autenticada de Matriz
+  4.24.4: 44 subyacentes, 1160 contratos completos y factor monetario 100 en seis
+  opciones GGAL del 20/11/2026. Esas seis opciones no devolvieron BID/ASK ni VI en
+  esa lectura, realizada después del cierre. La presentación de puntas/VI pobladas
+  queda validada con fixture, pendiente de observar datos nativos disponibles.
+- No se reemplazó ni recargó la extensión instalada. El lector de prueba se retiró
+  del canal al terminar. No se enviaron, modificaron ni cancelaron órdenes.
