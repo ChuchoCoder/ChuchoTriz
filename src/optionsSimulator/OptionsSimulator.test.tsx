@@ -50,6 +50,8 @@ async function fill(label: string, value: string) {
   });
 }
 async function mount() { await act(async () => root.render(<OptionsSimulator />)); }
+async function showAnalysis() { await act(async () => button("Análisis").click()); }
+async function showBuild() { await act(async () => button("Armado").click()); }
 
 it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable simulation legs", async () => {
   await mount();
@@ -60,6 +62,7 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("5");
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("4");
   expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40");
+  await showAnalysis();
   expect(container.querySelectorAll(".ct-sim-chart path")).toHaveLength(3);
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
@@ -69,10 +72,11 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   await mount();
   expect(byLabel<HTMLButtonElement>("Comprar PUT 100 en simulación").disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
   expect(container.textContent).toContain("Teórico no disponible");
   expect(container.querySelector(".ct-sim-expiry-line")).not.toBeNull();
   expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
-  await fill("VI pata 1", "45");
+  await showBuild(); await fill("VI pata 1", "45"); await showAnalysis();
   expect(container.querySelector(".ct-sim-theory-line")).not.toBeNull();
 });
 it("selecting a marked quote removes the leg; no execution controls are present", async () => {
@@ -163,4 +167,83 @@ it("removes market references during a disconnect and keeps the VI controls fold
   await act(async () => root.render(<OptionsSimulator />));
   expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
   expect(byLabel<HTMLInputElement>("Prima pata 1").value).toBe("5");
+});
+
+it("separates build and analysis while preserving legs, market selection and scenario assumptions", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await fill("Prima pata 1", "7,5");
+  await showAnalysis();
+  const panels = container.querySelectorAll<HTMLElement>('[role="tabpanel"]');
+  expect(panels[0].hidden).toBe(true); expect(panels[1].hidden).toBe(false);
+  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
+  expect(byLabel("Patas analizadas").textContent).toContain("Compra 1× CALL 100");
+  await act(async () => byLabel<HTMLButtonElement>("Precio Sube (+10 %)").click());
+  await act(async () => byLabel<HTMLButtonElement>("VI Sube (+5 pp)").click());
+  await showBuild();
+  expect(panels[0].hidden).toBe(false); expect(panels[1].hidden).toBe(true);
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("7,5");
+  expect(byLabel<HTMLSelectElement>("Subyacente de opciones").value).toBe("GGAL");
+  await showAnalysis();
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("110");
+  expect(byLabel<HTMLInputElement>("Cambio de VI (puntos porcentuales)").value).toBe("5");
+});
+
+it("scenario toggles change only the hypothetical price, VI and date, and coincide at expiry", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  const outputs = () => Array.from(container.querySelectorAll('.ct-sim-inspect output')).map(output => output.textContent);
+  const initial = outputs();
+  await act(async () => byLabel<HTMLButtonElement>("VI Sube (+5 pp)").click());
+  expect(outputs()[0]).toBe(initial[0]); expect(outputs()[1]).not.toBe(initial[1]);
+  await act(async () => byLabel<HTMLButtonElement>("Precio Sube (+10 %)").click());
+  expect(outputs()[0]).toBe("500 ARS");
+  expect(byLabel<HTMLInputElement>("Precio de referencia").value).toBe("100");
+  expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40");
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento (30 días)").click());
+  expect(outputs()[0]).toBe(outputs()[1]);
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Mitad (15 días)").click());
+  expect(byLabel<HTMLInputElement>("Fecha teórica").value).toBe(addDays(localDate(), 15));
+});
+
+it("consolidates useful market information into one legend without repeated book/time/volume-scale noise", async () => {
+  await mount();
+  const legends = container.querySelectorAll('.ct-sim-chain-legend');
+  expect(legends).toHaveLength(1);
+  expect(legends[0].textContent).toContain("GGAL 100 ARS");
+  expect(legends[0].textContent).toContain("Calls 40 %"); expect(legends[0].textContent).toContain("Puts 40 %");
+  for (const text of ["Barra 100", "VN", "BID", "ASK", "Lectura", "Excluidos", "recientes"]) expect(legends[0].textContent).not.toContain(text);
+  expect(container.querySelector('.ct-opt-chain-footer')).toBeNull();
+});
+
+it("validates a custom scenario price and never clamps its reported profit to the plotted range", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis(); await fill("Precio del escenario", "1000");
+  expect(container.querySelector('.ct-sim-inspect output')!.textContent).toBe("89.500 ARS");
+  expect(container.querySelector('.ct-sim-cursor')).toBeNull();
+  expect(container.textContent).toContain("fuera del rango visible");
+  await fill("Precio del escenario", "");
+  expect(container.querySelector('.ct-sim-chart')).toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Precio Mantiene (0 %)").click());
+  expect(container.querySelector('.ct-sim-chart')).not.toBeNull();
+});
+
+it("disables a VI preset that would make a leg's volatility negative", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await fill("VI pata 1", "2"); await showAnalysis();
+  expect(byLabel<HTMLButtonElement>("VI Baja (−5 pp)").disabled).toBe(true);
+  expect(byLabel<HTMLButtonElement>("VI Mantiene (0 pp)").getAttribute("aria-pressed")).toBe("true");
+});
+
+it("keeps small preset and chart prices as editable decimals rather than rejected exponent notation", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await fill("Precio de referencia", "0,000001"); await showAnalysis();
+  await act(async () => byLabel<HTMLButtonElement>("Precio Baja (−10 %)").click());
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("0.0000009");
+  expect(container.querySelector('.ct-sim-chart')).not.toBeNull();
+  await fill("Precio mínimo", "0"); await fill("Precio máximo", "0.000002");
+  await fill("Precio a evaluar", "0.00000095");
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("0.00000095");
+  expect(container.querySelector('.ct-sim-cursor')).not.toBeNull();
 });

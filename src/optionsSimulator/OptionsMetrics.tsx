@@ -30,10 +30,3 @@ export function OptionMetricCell({ contract, field, cell, scale }: {
     {value === undefined ? "—" : field === "delta" ? fmt(value, 3) : `${value > 0 ? "+" : ""}${fmt(value, 2)} %`}
   </td>;
 }
-export function OptionsMetricsLegend({ kind, scale, enabled }: { kind: "call" | "put"; scale: MetricScale; enabled: boolean }) {
-  return <div className={`ct-opt-metrics-legend ${kind}`} aria-label={`Escala de ${kind === "call" ? "Calls" : "Puts"}`}>
-    <strong>{kind === "call" ? "CALLS" : "PUTS"}</strong><span>VI · {scale.included}/{scale.total} {enabled ? "recientes" : "con dato"}</span>
-    {scale.min !== undefined && scale.max !== undefined && scale.min < scale.max ? <><span>{fmt(scale.min, 2)} %</span><i aria-hidden="true" /><span>{fmt(scale.max, 2)} %</span></> : <span>Sin rango para colorear</span>}
-    <span className="ct-opt-volume-max">Barra 100 % = {fmt(scale.volumeMax, 0)} VN</span>
-  </div>;
-}

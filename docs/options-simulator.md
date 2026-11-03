@@ -8,8 +8,20 @@ ni órdenes propias.
 
 La barra de mercado usa etiquetas y selectores en una sola fila. El engranaje **⚙ VI**
 abre el filtro de antigüedad sin desplazar la tabla. **Estrategias** reúne ejemplos,
-guardado y carga; **Supuestos** reúne los datos de entrada y gastos. La cadena
+guardado y carga; **Entrada** reúne los datos de entrada y gastos. La cadena
 usa la altura disponible de la ventana y permite recorrer sus filas internamente.
+
+**Armado** contiene cadena y patas; **Análisis** contiene gráfico y escenarios.
+Las patas, primas y escenarios se conservan al alternar. En Análisis se pausa la
+observación de mercado y se muestra un resumen de las patas. Los toggles permiten
+probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha de
+entrada/mitad del plazo/vencimiento. Los campos manuales siguen disponibles.
+El precio del escenario se evalúa independientemente del precio de entrada.
+
+La leyenda de la cadena ocupa una fila: subyacente y precio, rangos de VI de
+Calls/Puts y cantidad de ejercicios. La cobertura y antigüedad de la escala quedan
+en los tooltips. Solo aparece la advertencia de contratos incompletos si hay alguno;
+se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repetidas.
 
 ## Uso
 
@@ -26,7 +38,8 @@ usa la altura disponible de la ventana y permite recorrer sus filas internamente
    Natural/MID/Opuesto para copiar esa referencia solamente a esa pata;
    una actualización de mercado no altera la posición
    simulada. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
-4. Consultar el gráfico al vencimiento y el teórico; modificar fecha objetivo,
+4. Entrar en **Análisis** para consultar el gráfico al vencimiento y el teórico;
+   usar los toggles o modificar manualmente precio del escenario, fecha objetivo,
    cambio de VI en puntos porcentuales, tasa y dividendos. Hover explora precios,
    clic los fija y el slider permite consultar ambos resultados con teclado/touch.
 
@@ -146,3 +159,17 @@ individual y apertura del filtro sin desplazar la cadena. En esa sesión el nave
 compartido estaba oculto: las acciones se ejercitaron mediante DOM y las capturas
 del propio navegador, además de las pruebas de componentes; no se atribuyen a una
 campaña de interacción nativa con datos de mercado.
+
+### Pestañas y escenarios rápidos
+
+275 tests Vitest y 13 tests Node aprobados, además de TypeScript, políticas de
+seguridad, lint y empaquetado. Regresiones nuevas verifican conservación entre
+pestañas, presets de precio/VI/fecha, precio externo al rango sin falsear el P&L,
+presets que volverían negativa la VI y precios pequeños sin notación exponencial.
+La revisión independiente identificó este último caso y confirmó su corrección.
+
+En el navegador compartido con fixture se comprobó por DOM la conservación de
+tres patas, precio 110 y cambio de VI +5 al alternar; el escenario al vencimiento
+dio resultados idénticos en ambas curvas. La leyenda consolidada midió 24 px en
+una fila. El navegador permanecía oculto y las capturas de este último ajuste no
+estuvieron disponibles, por lo que no se acredita inspección visual por píxeles.

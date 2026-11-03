@@ -1,7 +1,7 @@
 import { Dispatch, Fragment, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { Catalog, Contract, PremiumReference, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
-import { OptionMetricCell, OptionsMetricsLegend } from "./OptionsMetrics";
+import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatOptionNumber as fmt } from "./format";
 import { Leg, localDate, MAX_LEGS, newLeg, Simulation } from "./model";
@@ -65,13 +65,12 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   useEffect(() => {
     const viewport = root.current?.closest<HTMLElement>(".ct-sim");
     const scroll = root.current?.querySelector<HTMLElement>(".ct-opt-chain-scroll");
-    const footer = root.current?.querySelector<HTMLElement>(".ct-opt-chain-footer");
-    if (!active || !viewport || !scroll || !footer || typeof ResizeObserver === "undefined") return;
+    if (!active || !viewport || !scroll || typeof ResizeObserver === "undefined") return;
     const resize = new ResizeObserver(() => {
       const offset = scroll.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
-      setChainHeight(Math.max(180, Math.floor(viewport.clientHeight - offset - footer.offsetHeight - 16)));
+      setChainHeight(Math.max(180, Math.floor(viewport.clientHeight - offset - 16)));
     });
-    [viewport, footer, ...root.current!.querySelectorAll(".ct-opt-controls, .ct-opt-metrics-legends, .ct-sim-chain-notice")].forEach(node => resize.observe(node));
+    [viewport, ...root.current!.querySelectorAll(".ct-opt-controls, .ct-sim-chain-legend, .ct-sim-chain-notice")].forEach(node => resize.observe(node));
     return () => resize.disconnect();
   }, [active, !!reading.issue, !!notice]);
   function change(field: "underlying" | "expiration" | "market", value: string) {
@@ -138,6 +137,13 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
       </button></td>;
   };
   const money = (value: number | undefined) => value === undefined ? "—" : `${fmt(value)} ${underlying?.currency ?? ""}`;
+  const viLegend = (kind: "call" | "put") => {
+    const scale = metrics.scales[kind];
+    const range = scale.min === undefined || scale.max === undefined ? "—"
+      : scale.min === scale.max ? `${fmt(scale.min, 2)} %` : `${fmt(scale.min, 2)}–${fmt(scale.max, 2)} %`;
+    return <span title={`${scale.included}/${scale.total} VI ${viEnabled ? `de operaciones de los últimos ${viMinutes} min` : "con dato"}. Gris: fuera de la escala.`}>
+      {kind === "call" ? "Calls" : "Puts"} <strong>{range}</strong></span>;
+  };
   return <section ref={root} className="ct-sim-card ct-options ct-sim-market"><div className="ct-opt-controls" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value}>{expiryDate(value)}</option>)}</select></label>
@@ -157,7 +163,13 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     {reading.issue && <p role="status" className="ct-sim-error ct-sim-chain-notice">{reading.issue}</p>}
     {!catalog && !reading.issue && <p role="status" className="ct-sim-chain-notice">Leyendo catálogo de opciones de Matriz…</p>}
     {notice && <p role="status" className="ct-sim-chain-notice" title={notice}>{notice}</p>}
-    <div className="ct-opt-metrics-legends">{filter !== "Puts" && <OptionsMetricsLegend kind="call" scale={metrics.scales.call} enabled={viEnabled} />}{filter !== "Calls" && <OptionsMetricsLegend kind="put" scale={metrics.scales.put} enabled={viEnabled} />}</div>
+    <div className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
+      <span>{underlying?.symbol ?? "Subyacente"} <strong>{money(spot)}</strong></span>
+      <span className="ct-sim-vi-scale" title="VI relativa de menor a mayor; el filtro se configura desde ⚙ VI">VI <i aria-hidden="true" /></span>
+      {filter !== "Puts" && viLegend("call")}{filter !== "Calls" && viLegend("put")}
+      <span className="ct-sim-strike-count">{strikes.length} ejercicios</span>
+      {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
+    </div>
     <div className="ct-table-scroll ct-opt-chain-scroll" style={chainHeight === undefined ? undefined : { maxHeight: chainHeight }} role="region" aria-label="Cadena de opciones" tabIndex={0}>
       <table className={`ct-opt-chain ct-opt-metrics-chain${filter !== "Ambos" ? " single" : ""}`}>
         <colgroup>{filter !== "Puts" && <><col className="nominal" /><col className="change" /><col className="delta" /><col /><col /><col className="iv" /></>}<col className="strike" />{filter !== "Calls" && <><col className="iv" /><col /><col /><col className="delta" /><col className="change" /><col className="nominal" /></>}</colgroup>
@@ -172,8 +184,5 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
         })}</tbody>
       </table>{!strikes.length && <p className="ct-opt-empty">Sin contratos completos para esta selección.</p>}
     </div>
-    <div className="ct-opt-chain-footer"><span>{strikes.length} ejercicios · {selected.length} contratos</span>
-      <div className="ct-opt-market-status"><span>Último <strong>{money(spot)}</strong></span><span>BID <strong>{money(spotQuote?.bid?.price)}</strong></span><span>ASK <strong>{money(spotQuote?.ask?.price)}</strong></span><span>Lectura <strong>{data ? new Date(data.capturedAt).toLocaleTimeString("es-AR", { hour12: false }) : "—"}</strong></span></div>
-      <span title="OTM: fondo de color. El destello azul indica un cambio de precio o cantidad.">Excluidos: {catalog?.excluded ?? 0}</span></div>
   </section>;
 }
