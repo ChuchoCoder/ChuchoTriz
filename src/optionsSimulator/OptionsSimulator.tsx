@@ -3,6 +3,8 @@ import { addDays, curve, dateDay, Example, exampleLegs, expirySummary, initialSi
   newLeg, numeric, parseSimulation, resultAt, Simulation, Strategy } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
+import { formatOptionNumber } from "./format";
+import type { PremiumReference } from "./market";
 
 const storageKey = "OptionsSimulatorStrategiesV1";
 const fmt = (value: number) => value.toLocaleString("es-AR", value !== 0 && Math.abs(value) < .01 ? { maximumSignificantDigits: 4 } : { maximumFractionDigits: 2 });
@@ -30,6 +32,68 @@ function Field({ label, value, onChange, type = "text", ...attributes }: {
 }) {
   return <label className="ct-sim-field"><span>{label}</span><input type={type} value={value}
     inputMode={type === "text" ? "decimal" : undefined} onChange={event => onChange(event.target.value)} {...attributes} /></label>;
+}
+
+function EditableLegValue({ label, value, onChange, options, references, className = "" }: {
+  label: string; value: string; onChange(value: string): void;
+  options?: readonly (readonly [string, string])[]; references?: readonly (readonly [string, number])[]; className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const control = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const original = useRef(value);
+  const returnFocus = useRef(false);
+  const referencePopup = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (editing) {
+      control.current?.focus();
+      if (control.current instanceof HTMLInputElement) control.current.select();
+    } else if (returnFocus.current) {
+      returnFocus.current = false; button.current?.focus();
+    }
+  }, [editing]);
+  useEffect(() => {
+    const popup = referencePopup.current;
+    if (!editing || !control.current || !popup || typeof popup.showPopover !== "function") return;
+    const position = () => {
+      const rect = control.current?.getBoundingClientRect();
+      if (!rect) return;
+      popup.style.left = `${Math.max(8, Math.min(innerWidth - 268, rect.right - 260))}px`;
+      popup.style.top = `${Math.max(8, Math.min(innerHeight - 90, rect.bottom + 4))}px`;
+    };
+    position();
+    popup.showPopover();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true);
+      if (popup.isConnected) popup.hidePopover();
+    };
+  }, [editing, references?.length]);
+  const display = options ? options.find(([key]) => key === value)?.[1] ?? value
+    : value.trim() === "" ? "—" : Number.isFinite(numeric(value)) ? formatOptionNumber(numeric(value)) : value;
+  const finish = (focus: boolean) => { returnFocus.current = focus; setEditing(false); };
+  const keyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== "Escape") return;
+    if (event.key === "Enter" && event.target instanceof HTMLButtonElement) return;
+    event.preventDefault(); event.stopPropagation();
+    if (event.key === "Escape") onChange(original.current);
+    finish(true);
+  };
+  return <span className={`ct-sim-editable ${className}`} onKeyDown={editing ? keyDown : undefined}
+    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) finish(false); }}>
+    {editing ? options ? <select ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={value}
+      onChange={event => onChange(event.target.value)}>
+      {options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
+    </select> : <input ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={value} inputMode="decimal"
+      onChange={event => onChange(event.target.value)} />
+      : <button ref={button} type="button" className="ct-sim-cell-value" aria-label={`Editar ${label}`} aria-description={`Valor actual: ${display}`}
+        title={`${label}: ${display} · Clic para editar`} onClick={() => { original.current = value; setEditing(true); }}>{display}</button>}
+    {editing && !!references?.length && <div ref={referencePopup} popover="manual" data-ct-inline-editor className="ct-sim-premium-references" role="group" aria-label={`Referencias para ${label}`}>
+      <span>Prima por unidad · referencia de mercado</span><div>{references.map(([name, price]) => <button key={name} type="button" aria-label={`Tomar ${name} para ${label}`}
+        onMouseDown={event => event.preventDefault()} onClick={() => { onChange(String(price)); finish(true); }}>{name}<strong>{formatOptionNumber(price)}</strong></button>)}</div>
+    </div>}
+  </span>;
 }
 
 function ResultsChart({ strategy, currency, scenarioDate }: { strategy: Strategy; currency: string; scenarioDate: string }) {
@@ -113,6 +177,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const [selectedSaved, setSelectedSaved] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [storageError, setStorageError] = useState("");
   const [status, setStatus] = useState("");
+  const [premiumReferences, setPremiumReferences] = useState<Record<string, PremiumReference>>({});
+  const menusId = useId();
   const nextId = useRef(3);
   const results = useRef<HTMLElement>(null);
   const parsed = useMemo(() => parseSimulation(input), [input]);
@@ -148,10 +214,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     finally { setBusy(false); }
   }
   const money = (value: number) => `${fmt(value)} ${input.currency}`;
+  const referencesFor = (leg: Leg): readonly (readonly [string, number])[] | undefined => {
+    const quote = leg.securityId ? premiumReferences[leg.securityId] : undefined;
+    return quote ? [["Natural", leg.side === "buy" ? quote.ask : quote.bid], ["MID", (quote.bid + quote.ask) / 2], ["Opuesto", leg.side === "buy" ? quote.bid : quote.ask]] : undefined;
+  };
   return <div className="ct-sim" aria-label="Simulador de opciones">
-    <header className="ct-sim-heading"><div><span className="ct-sim-eyebrow">CHUCHOTRIZ · LABORATORIO</span><h2>Simulador de opciones</h2>
-      <p>Seleccioná BID o ASK de la cadena para armar patas y explorar su resultado.</p></div><span className="ct-sim-badge">Solo simulación</span></header>
-    <div className="ct-sim-library"><label>Ejemplos con datos ficticios <select aria-label="Cargar ejemplo" value="" onChange={event => {
+    <div className="ct-sim-topbar"><header className="ct-sim-heading"><h2>Simulador de opciones</h2><span className="ct-sim-badge">Solo simulación</span></header>
+    <details className="ct-sim-library-menu" name={`ct-sim-tools-${menusId}`}><summary>Estrategias</summary><div className="ct-sim-library"><label>Ejemplos con datos ficticios <select aria-label="Cargar ejemplo" value="" onChange={event => {
       if (!event.target.value) return;
       const initial = initialSimulation(input.valuationDate && Number.isFinite(dateDay(input.valuationDate)) ? input.valuationDate : undefined);
       const legs = exampleLegs(event.target.value as Example);
@@ -166,10 +235,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       }}><option value="">{loading ? "Cargando…" : "Seleccionar…"}</option>{saved.map(entry => <option key={entry.name}>{entry.name}</option>)}</select></label>
       <label>Nombre de la estrategia <input aria-label="Nombre de la estrategia" value={name} maxLength={80} placeholder="Mi estrategia" onChange={event => setName(event.target.value)} /></label>
       <button type="button" disabled={!parsed.ok || !name.trim() || loading || busy} onClick={() => void save()}>{busy ? "Guardando…" : saved.some(entry => entry.name === name.trim()) ? "Actualizar guardada" : "Guardar estrategia"}</button>
-    </div>
-    {storageError && <p className="ct-sim-error" role="alert">{storageError}</p>}
-    <p role="status" className="ct-sim-status">{status}</p>
-    <details className="ct-sim-card"><summary>Datos de la simulación · subyacente, vencimiento y gastos</summary><div className="ct-sim-fields ct-sim-assumption-fields">
+    </div></details>
+    <details className="ct-sim-setup-menu" name={`ct-sim-tools-${menusId}`}><summary title="Subyacente, vencimiento, factor y gastos de la simulación">Supuestos</summary><div className="ct-sim-setup-panel"><div className="ct-sim-fields">
       <label className="ct-sim-field"><span>Subyacente</span><input value={input.underlying} maxLength={40} onChange={event => update("underlying", event.target.value)} /></label>
       <label className="ct-sim-field"><span>Moneda común</span><select value={input.currency} onChange={event => update("currency", event.target.value)}><option>ARS</option><option>USD</option></select></label>
       <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />
@@ -177,22 +244,34 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       <Field label="Vencimiento" type="date" value={input.expiry} min={input.valuationDate} onChange={value => update("expiry", value)} />
       <Field label="Factor monetario por contrato" value={input.multiplier} onChange={value => update("multiplier", value)} />
       <Field label="Gastos de entrada totales" value={input.costs} onChange={value => update("costs", value)} />
-    </div><p className="ct-sim-hint">Todas las patas comparten subyacente, moneda y vencimiento. Desde la cadena se copia el factor nativo: totalAmountFactor × contractMultiplier × roundLot. Las primas y VI quedan fijas al agregarlas; son referencias de simulación.</p></details>
-    <div className="ct-sim-market-layout"><MarketChain active={active} input={input} setInput={setInput} />
+    </div><p className="ct-sim-hint">Todas las patas comparten subyacente, moneda y vencimiento. Desde la cadena se copia el factor nativo: totalAmountFactor × contractMultiplier × roundLot. Las primas y VI quedan fijas al agregarlas; son referencias de simulación.</p></div></details></div>
+    {storageError && <p className="ct-sim-error" role="alert">{storageError}</p>}
+    {status && <p role="status" className="ct-sim-status">{status}</p>}
+    <div className="ct-sim-market-layout"><MarketChain active={active} input={input} setInput={setInput} onPremiumReferences={setPremiumReferences} />
     <section className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-section-heading"><h3>Patas de la estrategia</h3><button type="button" onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar patas</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con primas por unidad y VI anual">
-        <thead><tr><th>Pata / instrumento</th><th>Sentido</th><th>Tipo</th><th>Strike</th><th>Prima de entrada</th><th>Contratos</th><th>VI %</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
-        <tbody>{input.legs.map((leg, index) => <tr key={leg.id}><th scope="row" title={leg.symbol}>{leg.symbol ?? index + 1}</th><td><select className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"} aria-label={`Sentido pata ${index + 1}`} value={leg.side} onChange={event => updateLeg(leg.id, "side", event.target.value)}><option value="buy">Compra</option><option value="sell">Venta</option></select></td>
-          <td><select aria-label={`Tipo pata ${index + 1}`} value={leg.kind} disabled={!!leg.securityId} onChange={event => updateLeg(leg.id, "kind", event.target.value)}><option value="call">Call</option><option value="put">Put</option></select></td>
-          {([ ["strike", "Strike"], ["premium", "Prima"], ["contracts", "Contratos por combo"], ["volatility", "VI"] ] as const).map(([key, label]) => <td key={key}><input aria-label={`${label} pata ${index + 1}`} disabled={key === "strike" && !!leg.securityId} inputMode="decimal" value={leg[key]} onChange={event => updateLeg(leg.id, key, event.target.value)} /></td>)}
-          <td><button type="button" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
+        <colgroup><col className="ct-sim-leg-side" /><col /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-premium" /><col className="ct-sim-leg-vi" /><col className="ct-sim-leg-remove" /></colgroup>
+        <thead><tr><th>Lado</th><th>Instrumento</th><th title="Contratos por combo">Cant.</th><th>Prima</th><th>VI %</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
+        <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
+          <td><EditableLegValue label={`Sentido pata ${index + 1}`} value={leg.side} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}
+            options={[["buy", "Compra"], ["sell", "Venta"]]} onChange={value => updateLeg(leg.id, "side", value)} /></td>
+          <th scope="row" title={leg.symbol ? `${leg.symbol} · ${leg.kind === "call" ? "Call" : "Put"} ${leg.strike} · Elegí el instrumento desde la cadena` : `Pata manual ${index + 1}`}>
+            {leg.securityId ? <span className="ct-sim-leg-symbol">{leg.symbol}</span> : <span className="ct-sim-leg-instrument">
+              <EditableLegValue label={`Tipo pata ${index + 1}`} value={leg.kind} options={[["call", "Call"], ["put", "Put"]]} onChange={value => updateLeg(leg.id, "kind", value)} />
+              <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />
+            </span>}
+          </th>
+          {([ ["contracts", "Contratos por combo"], ["premium", "Prima"], ["volatility", "VI"] ] as const).map(([key, label]) => <td key={key}>
+            <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]} references={key === "premium" ? referencesFor(leg) : undefined} onChange={value => updateLeg(leg.id, key, value)} />
+          </td>)}
+          <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
-      <button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
+      <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
         setInput(current => ({ ...current, legs: [...current.legs, newLeg(Math.max(nextId.current++, ...current.legs.map(leg => leg.id + 1)), numeric(current.spot) > 0 ? numeric(current.spot) : 100)] })); setStatus("");
       }}>+ Pata manual</button>
-      <Field label="Combos simulados" value={input.combos} onChange={value => update("combos", value)} />
-      <p className="ct-sim-hint">Contratos totales = contratos por combo × combos. Prima por unidad y VI editables. Compra / Venta describe la posición simulada.</p>
+      <Field label="Combos simulados" value={input.combos} onChange={value => update("combos", value)} /></div>
+      <p className="ct-sim-hint">Clic en un valor para editar · Enter o salir para aceptar · Esc para deshacer. Cantidad por combo.</p>
       {summary && <p className="ct-sim-equilibria">{summary.entry < 0 ? "Crédito" : "Débito"} total: <strong>{money(Math.abs(summary.entry))}</strong></p>}
       <button type="button" className="ct-sim-results-link" onClick={() => { results.current?.scrollIntoView({ block: "start" }); results.current?.focus({ preventScroll: true }); }}>Ver gráfico de resultados ↓</button>
     </section></div>

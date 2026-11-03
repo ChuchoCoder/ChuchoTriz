@@ -1,19 +1,24 @@
 .ct-tools { font: 14px/1.45 "Lato", system-ui, sans-serif; color: #e8edf6; background: #151d2b; }
 .ct-tools-embedded { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.ct-tools-tabs { display: flex; flex-shrink: 0; gap: 6px; padding: 10px 16px; border-bottom: 1px solid #64748b; background: #202b3d; flex-wrap: wrap; }
-.ct-tools-tabs button { border: 1px solid #8291a7; border-radius: 5px; padding: 7px 14px; background: transparent; color: #e8edf6; cursor: pointer; font: inherit; }
+.ct-tools-tabs { display: flex; flex-shrink: 0; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #64748b; background: #202b3d; flex-wrap: wrap; }
+.ct-tools-tabs button { border: 1px solid #8291a7; border-radius: 5px; padding: 4px 10px; background: transparent; color: #e8edf6; cursor: pointer; font: inherit; font-size: 13px; }
 .ct-tools-tabs button[aria-pressed="true"] { background: #c8a9ff; color: #211033; border-color: #c8a9ff; }
 .ct-tools-content { min-width: 0; }
 .ct-tools-embedded > .ct-tools-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .ct-tools-content[hidden], .ct-tools-embedded > .ct-tools-content[hidden] { display: none; }
 .ct-tools button:focus-visible, .ct-tools input:focus-visible, .ct-tools select:focus-visible, .ct-tools summary:focus-visible { outline: 2px solid #c8a9ff; outline-offset: 2px; }
-.ct-sim { --sim-bg: #151d2b; --sim-card: #202b3d; --sim-field: #131c2b; --sim-text: #e8edf6; --sim-muted: #b1bfd2; --sim-border: #64748b; --sim-accent: #c8a9ff; --sim-theory: #69d9ed; --sim-profit: #81e1b6; --sim-loss: #ffa4af; box-sizing: border-box; padding: 24px; background: var(--sim-bg); color: var(--sim-text); font: 14px/1.45 "Lato", system-ui, sans-serif; overflow-y: auto; overscroll-behavior: contain; min-width: 0; color-scheme: dark; }
+.ct-sim { --sim-bg: #151d2b; --sim-card: #202b3d; --sim-field: #131c2b; --sim-text: #e8edf6; --sim-muted: #b1bfd2; --sim-border: #64748b; --sim-accent: #c8a9ff; --sim-theory: #69d9ed; --sim-profit: #81e1b6; --sim-loss: #ffa4af; box-sizing: border-box; padding: 8px 12px; background: var(--sim-bg); color: var(--sim-text); font: 14px/1.45 "Lato", system-ui, sans-serif; overflow-y: auto; overscroll-behavior: contain; min-width: 0; color-scheme: dark; }
 .ct-sim *, .ct-sim *::before, .ct-sim *::after { box-sizing: border-box; }
-.ct-sim-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.ct-sim-heading { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
 .ct-sim-eyebrow { font-size: 10px; letter-spacing: 2px; color: var(--sim-accent); }
-.ct-sim h2 { color: inherit; font: 600 26px/1.25 "Lato", system-ui, sans-serif; margin: 5px 0; }
+.ct-sim h2 { color: inherit; font: 600 16px/1.25 "Lato", system-ui, sans-serif; margin: 0; }
 .ct-sim-heading p { color: var(--sim-muted); margin: 6px 0 0; }
-.ct-sim-badge { border: 1px solid var(--sim-border); border-radius: 20px; color: var(--sim-accent); padding: 5px 12px; white-space: nowrap; font-size: 12px; }
+.ct-sim-badge { border: 1px solid var(--sim-border); border-radius: 20px; color: var(--sim-accent); padding: 2px 8px; white-space: nowrap; font-size: 10px; }
+.ct-sim-topbar { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; margin-bottom: 6px; }
+.ct-sim-topbar > details > summary, .ct-sim-market-settings > summary { list-style: none; cursor: pointer; padding: 4px 9px; border: 1px solid var(--sim-border); border-radius: 4px; font-size: 11px; color: var(--sim-accent); background: var(--sim-field); }
+.ct-sim-topbar > details > summary::-webkit-details-marker, .ct-sim-market-settings > summary::-webkit-details-marker { display: none; }
+.ct-sim-topbar > details[open] > summary, .ct-sim-market-settings[open] > summary { border-color: var(--sim-accent); }
+.ct-sim-library-menu > .ct-sim-library, .ct-sim-setup-panel { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; right: 0; padding: 14px; border: 1px solid var(--sim-border); border-radius: 6px; background: var(--sim-card); box-shadow: 0 6px 20px #0005; }
 .ct-sim label { color: inherit; font: inherit; margin: 0; }
 .ct-sim input, .ct-sim select { display: block; width: 100%; min-width: 0; height: 34px; border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-field); color: var(--sim-text); padding: 5px 9px; font: inherit; }
 .ct-sim input::placeholder { color: var(--sim-muted); opacity: 1; }
@@ -22,7 +27,7 @@
 .ct-sim button:disabled { opacity: .5; cursor: default; }
 .ct-sim-library { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 12px; align-items: end; }
 .ct-sim-library label, .ct-sim-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
-.ct-sim-status { min-height: 20px; color: var(--sim-muted); font-size: 12px; margin: 8px 0; }
+.ct-sim-status { color: var(--sim-muted); font-size: 11px; margin: 4px 0; }
 .ct-sim-card { padding: 18px; margin-bottom: 16px; border: 1px solid var(--sim-border); border-radius: 9px; background: var(--sim-card); min-width: 0; }
 .ct-sim h3 { font: 600 14px/1.4 "Lato", system-ui, sans-serif; color: inherit; margin: 0 0 16px; }
 .ct-sim h4 { font: 600 13px/1.4 "Lato", system-ui, sans-serif; color: inherit; margin: 20px 0 12px; }
@@ -42,22 +47,52 @@
 .ct-sim .ct-sim-sell { color: var(--sim-loss); }
 .ct-sim-assumption-fields { margin-top: 16px; }
 .ct-sim-market-layout { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; align-items: start; }
-.ct-sim-legs-card .ct-sim-table-scroll { overflow: visible; }
-.ct-sim-legs-card table { min-width: 0; display: block; }
-.ct-sim-legs-card thead { display: none; }
-.ct-sim-legs-card tbody { display: grid; gap: 12px; }
-.ct-sim-legs-card tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; border-bottom: 1px solid var(--sim-border); padding-bottom: 12px; }
-.ct-sim-legs-card th { grid-column: 1 / -1; width: auto!important; font-weight: 600; color: var(--sim-text); }
-.ct-sim-legs-card th, .ct-sim-legs-card td { border: 0; padding: 0; }
-.ct-sim-legs-card td:nth-child(5)::before { content: "Prima"; }
-.ct-sim-legs-card td:nth-child(6)::before { content: "Por combo"; }
-.ct-sim-legs-card td:nth-child(7)::before { content: "VI %"; }
-.ct-sim-legs-card td::before { color: var(--sim-muted); font-size: 10px; }
-.ct-sim-legs-card td:nth-child(4) { grid-column: span 2; }
-.ct-sim-legs-card td:last-child { display: flex; align-items: end; justify-content: flex-end; }
+.ct-sim-legs-card { padding: 12px; }
+.ct-sim-legs-card table { min-width: 290px; font-size: 11px; }
+.ct-sim-legs-card th, .ct-sim-legs-card td { height: 34px; padding: 2px; vertical-align: middle; }
+.ct-sim-legs-card thead th { height: 26px; font-size: 10px; }
+.ct-sim-legs-card th:first-child, .ct-sim-legs-card th:last-child { width: auto; }
+.ct-sim-legs-card tbody th { color: var(--sim-text); font-weight: 500; }
+.ct-sim-leg-side { width: 52px; }
+.ct-sim-leg-quantity { width: 34px; }
+.ct-sim-leg-premium { width: 56px; }
+.ct-sim-leg-vi { width: 44px; }
+.ct-sim-leg-remove { width: 22px; }
+.ct-sim-leg-symbol { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-sim-leg-instrument { display: flex; align-items: center; min-width: 0; }
+.ct-sim-leg-instrument > :last-child { flex: 1; min-width: 0; }
+.ct-sim-editable { display: block; min-width: 0; }
+.ct-sim-legs-card .ct-sim-cell-value { display: block; width: 100%; min-height: 26px; padding: 2px 3px; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; background: transparent; border-radius: 3px; font-size: 11px; color: inherit; text-align: left; font-variant-numeric: tabular-nums; }
+.ct-sim-legs-card .ct-sim-cell-value:hover { background: var(--sim-field); border-color: var(--sim-border); }
+.ct-sim-legs-card .ct-sim-editable input, .ct-sim-legs-card .ct-sim-editable select { height: 26px; padding: 2px 3px; font-size: 11px; }
+.ct-sim-legs-card .ct-sim-remove-leg { width: 20px; min-height: 26px; padding: 0; font-size: 18px; border-color: transparent; background: transparent; color: var(--sim-muted); }
+.ct-sim-legs-footer { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-top: 10px; }
+.ct-sim-legs-footer > .ct-sim-field { width: 100px; }
+.ct-sim .ct-sim-legs-footer label { font-size: 10px; gap: 3px; }
+.ct-sim-legs-footer button, .ct-sim-legs-footer input { min-height: 28px; height: 28px; font-size: 12px; }
+.ct-sim-legs-card .ct-sim-hint { font-size: 10px; }
+.ct-sim-legs-card .ct-sim-equilibria { margin: 10px 0; }
+.ct-sim-premium-references { position: fixed; inset: auto; margin: 0; width: 260px; padding: 8px; color: var(--sim-text); border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-card); box-shadow: 0 4px 16px #0005; }
+.ct-sim-premium-references > span { display: block; font-size: 10px; color: var(--sim-muted); margin-bottom: 4px; }
+.ct-sim-premium-references > div { display: flex; gap: 4px; }
+.ct-sim .ct-sim-premium-references button { width: auto; flex: 1; min-height: 36px; padding: 3px 6px; font-size: 10px; }
+.ct-sim-premium-references strong { display: block; font-size: 11px; font-weight: 600; }
 .ct-sim-results-link { color: var(--sim-accent); display: block; margin-top: 16px; }
-.ct-sim-market { --ct-bg: var(--sim-bg); --ct-panel: var(--sim-card); --ct-input: var(--sim-field); --ct-text: var(--sim-text); --ct-muted: var(--sim-muted); --ct-border: var(--sim-border); --ct-accent: var(--sim-accent); padding: 0; gap: 0; }
-.ct-sim-market .ct-opt-chain-scroll { max-height: 580px; min-height: 180px; }
+.ct-sim-market { --ct-bg: var(--sim-bg); --ct-panel: var(--sim-card); --ct-input: var(--sim-field); --ct-text: var(--sim-text); --ct-muted: var(--sim-muted); --ct-border: var(--sim-border); --ct-accent: var(--sim-accent); padding: 0; gap: 0; overflow: visible; }
+.ct-sim .ct-sim-market.ct-options { gap: 0; }
+.ct-sim .ct-sim-market .ct-opt-controls { position: relative; padding: 4px 6px; gap: 6px 10px; align-items: center; }
+.ct-sim .ct-sim-market .ct-opt-controls > label { flex-direction: row; align-items: center; gap: 5px; white-space: nowrap; }
+.ct-sim .ct-sim-market .ct-opt-controls select { max-width: 150px; height: 26px; padding: 2px 5px; font-size: 11px; }
+.ct-sim .ct-sim-market .ct-opt-metrics-legends { padding: 3px 8px; }
+.ct-sim .ct-sim-market .ct-opt-chain-footer { padding: 3px 8px; font-size: 9px; }
+.ct-sim .ct-sim-market .ct-opt-market-status { font-size: 9px; gap: 4px 10px; }
+.ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 0 0 auto; height: auto; max-height: 60vh; min-height: 180px; }
+.ct-sim-chain-notice { padding: 3px 8px; font-size: 10px; color: var(--sim-muted); margin: 0; }
+.ct-sim-market-settings { margin-left: auto; }
+.ct-sim-market-settings-panel { position: absolute; z-index: 6; right: 0; top: calc(100% + 3px); width: min(430px, 100%); border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-card); box-shadow: 0 6px 20px #0005; }
+.ct-sim .ct-sim-market-settings-panel .ct-opt-metrics-filter { align-items: center; gap: 8px; padding: 10px; }
+.ct-sim .ct-sim-market-settings-panel label { flex-direction: row; align-items: center; }
+.ct-sim .ct-sim-market-settings-panel .ct-opt-metrics-grey-key { margin-left: 0; }
 .ct-sim-market .ct-opt-chain { display: table; table-layout: fixed; }
 .ct-sim-market .ct-opt-chain th:first-child, .ct-sim-market .ct-opt-chain th:last-child { width: auto; }
 .ct-sim-market .ct-opt-chain caption { display: none; }
@@ -70,6 +105,7 @@
 .ct-sim-reference-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; font-size: 10px; color: var(--sim-muted); }
 .ct-sim-reference-buttons button { min-height: 26px; padding: 3px 8px; }
 .ct-sim-market .ct-opt-metrics-legend { min-width: 250px; flex-wrap: wrap; }
+.ct-sim .ct-sim-market .ct-opt-metrics-chain td, .ct-sim .ct-sim-market .ct-opt-metrics-chain .ct-opt-price button { height: 32px; }
 .ct-sim-analysis { display: grid; grid-template-columns: 225px minmax(0, 1fr); gap: 16px; align-items: start; }
 .ct-sim-scenario .ct-sim-field { margin-bottom: 14px; }
 .ct-sim input[type="range"] { accent-color: var(--sim-accent); padding: 0; border: 0; background: transparent; cursor: pointer; }
@@ -112,8 +148,7 @@
 }
 @container (max-width: 580px) {
   .ct-sim { padding: 12px; }
-  .ct-sim h2 { font-size: 22px; }
-  .ct-sim-heading { flex-direction: column; }
+  .ct-sim h2 { font-size: 15px; }
   .ct-sim-scenario { grid-template-columns: 1fr 1fr; }
   .ct-sim-metrics { grid-template-columns: 1fr; gap: 8px; }
   .ct-sim-metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }

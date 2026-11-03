@@ -6,12 +6,13 @@ import { checkFree, filesIn } from '../scripts/check-free.mjs';
 
 checkFree({ built: true });
 const dist = new URL('../dist/', import.meta.url);
-const files = filesIn(fileURLToPath(dist));
-const main = files.find(path => /^assets\/src-main\.tsx-[\w-]+\.js$/.test(path));
-const styles = JSON.parse(readFileSync(new URL('manifest.json', dist), 'utf8')).content_scripts[0].css
-  .map(path => `<link rel="stylesheet" href="/${path}">`).join('');
 const number = (field, id, value) => `<div class="ant-form-item ${field}"><div class="ant-input-number-input-wrap"><input id="${id}" value="${value}"></div></div>`;
-const fixture = `<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChuchoTriz · SIMULACIÓN</title>
+function renderFixture() {
+  const files = filesIn(fileURLToPath(dist));
+  const main = files.find(path => /^assets\/src-main\.tsx-[\w-]+\.js$/.test(path));
+  const styles = JSON.parse(readFileSync(new URL('manifest.json', dist), 'utf8')).content_scripts[0].css
+    .map(path => `<link rel="stylesheet" href="/${path}">`).join('');
+  return `<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChuchoTriz · SIMULACIÓN</title>
 ${styles}<style>@media(max-width:600px){#ToolPanel{display:none}#MiniOrderForm{right:0!important}}</style><body style="background:#202122;color:white;font:16px sans-serif">
 <header class="HeaderDMA" style="position:fixed;left:0;top:0;right:0;height:40px">ChuchoTriz · DATOS SIMULADOS · Sin conexión a broker</header>
 <nav class="DirectAccessBar" style="position:fixed;left:0;top:40px;bottom:0;width:40px;background:#303843"><a class="Item" href="#favoritos" style="color:white">F</a></nav>
@@ -23,6 +24,7 @@ ${number('MiniOrderFormQuantity-amount-input', 'cantidad', '')}
 ${number('amount-show__div', 'mostrar', '')}</form>
 <div class="MiniOrderForm_buttonsBlock"><button class="ButtonLimpiar" onclick="document.querySelector('#cantidad').value='';document.querySelector('#mostrar').value=''">Limpiar</button></div></div>
 <script src="/market-fixture.js"></script><script type="module" src="/${main}"></script></body></html>`;
+}
 
 // This harness runs only on loopback; it is never included in the extension ZIP.
 function installMarketFixture() {
@@ -49,14 +51,18 @@ function installMarketFixture() {
 }
 
 const mime = { js: 'text/javascript', css: 'text/css', html: 'text/html', json: 'application/json', png: 'image/png', ico: 'image/x-icon' };
+const previewPort = Number(process.env.CHUCHOTRIZ_PREVIEW_PORT ?? 0);
+if (!Number.isInteger(previewPort) || previewPort < 0 || previewPort > 65535) throw Error('Invalid preview port');
 createServer((request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
   const path = new URL(request.url, 'http://localhost').pathname.slice(1) || 'index.html';
   if (path === 'market-fixture.js') { response.setHeader('Content-Type', 'text/javascript; charset=utf-8'); response.end(`(${installMarketFixture.toString()})();`); return; }
-  if (path === 'fixture') { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end(fixture); return; }
+  if (path === 'fixture') { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end(renderFixture()); return; }
+  const files = filesIn(fileURLToPath(dist));
   if (!files.includes(path)) { response.writeHead(404); response.end(); return; }
   response.setHeader('Content-Type', (mime[path.split('.').pop()] ?? 'text/plain') + '; charset=utf-8');
   response.end(readFileSync(new URL(path, dist)));
-}).listen(0, '127.0.0.1', function () {
+}).listen(previewPort, '127.0.0.1', function () {
   console.log(`Local preview: http://127.0.0.1:${this.address().port}`);
   console.log('Open /fixture for a simulated Matriz chain and local preferences. No broker connection.');
 });

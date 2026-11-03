@@ -6,6 +6,11 @@ central y puts a la derecha, con BID/ASK, cantidades, VI, delta, variación y vo
 nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
 ni órdenes propias.
 
+La barra de mercado usa etiquetas y selectores en una sola fila. El engranaje **⚙ VI**
+abre el filtro de antigüedad sin desplazar la tabla. **Estrategias** reúne ejemplos,
+guardado y carga; **Supuestos** reúne los datos de entrada y gastos. La cadena
+usa la altura disponible de la ventana y permite recorrer sus filas internamente.
+
 ## Uso
 
 1. Elegir subyacente, vencimiento, moneda/plazo y filtro Calls/Ambos/Puts.
@@ -13,9 +18,13 @@ ni órdenes propias.
    otra vez el mismo lado quita la pata; seleccionar el contrario cambia el lado y
    copia esa punta. También se pueden cargar verticales, mariposa, iron condor y
    straddle desde contratos de la cadena.
-3. Editar proporciones por combo, combos, primas de entrada y VI de las patas.
-   Las primas y VI copiadas quedan fijas. Natural/MID/Opuesto permiten volver a
-   copiar precios explícitamente; una actualización de mercado no altera la posición
+3. Las patas se muestran en filas compactas. Hacer clic en lado, cantidad, prima
+   o VI para editar; Enter o salir del campo acepta, y Escape restaura el valor
+   anterior. Las patas manuales permiten editar también tipo y strike.
+   Ajustar proporciones por combo, combos, primas de entrada y VI de las patas.
+   Las primas y VI copiadas quedan fijas. Al editar una prima aparecen
+   Natural/MID/Opuesto para copiar esa referencia solamente a esa pata;
+   una actualización de mercado no altera la posición
    simulada. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
 4. Consultar el gráfico al vencimiento y el teórico; modificar fecha objetivo,
    cambio de VI en puntos porcentuales, tasa y dividendos. Hover explora precios,
@@ -116,3 +125,24 @@ local de demostración. Esta fixture no acredita integración nativa ni precios 
   queda validada con fixture, pendiente de observar datos nativos disponibles.
 - No se reemplazó ni recargó la extensión instalada. El lector de prueba se retiró
   del canal al terminar. No se enviaron, modificaron ni cancelaron órdenes.
+
+### Ajuste de densidad y edición por clic
+
+Se compactaron patas a filas de 34 px, controles de mercado a una barra horizontal
+y filas de cadena a 32 px. El filtro de VI se abre en un panel superpuesto desde el
+engranaje; Natural/MID/Opuesto aparece únicamente al editar la prima de una pata.
+La biblioteca y los supuestos quedan plegados, y la cadena limita su altura al
+espacio disponible, sin agrandar una cadena corta innecesariamente.
+
+269 tests Vitest, 13 tests Node, política/lint/seguridad y el paquete 0.0.17
+aprobados. La revisión independiente detectó y permitió corregir Enter en los
+botones de referencias; una regresión verifica su activación nativa. El popover se
+reposiciona al desplazar o redimensionar y desaparece al terminar la edición.
+
+QA del bundle con una cadena sintética de 41 ejercicios: 19 filas completas
+visibles a 1920×1080, altura de cadena 680 px, sin desborde horizontal del simulador.
+Se verificaron también anchos 1440/1024/390, Escape sin cerrar el panel, copia MID
+individual y apertura del filtro sin desplazar la cadena. En esa sesión el navegador
+compartido estaba oculto: las acciones se ejercitaron mediante DOM y las capturas
+del propio navegador, además de las pruebas de componentes; no se atribuyen a una
+campaña de interacción nativa con datos de mercado.

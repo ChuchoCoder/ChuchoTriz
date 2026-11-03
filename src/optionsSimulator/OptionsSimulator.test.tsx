@@ -41,6 +41,9 @@ const button = (label: string) => {
 };
 async function fill(label: string, value: string) {
   await act(async () => {
+    container.querySelector<HTMLButtonElement>(`[aria-label="Editar ${label}"]`)?.click();
+  });
+  await act(async () => {
     const node = byLabel<HTMLInputElement>(label);
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);
     node.dispatchEvent(new Event("input", { bubbles: true }));
@@ -54,9 +57,9 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(Array.from(groupHeaders).map(node => node.textContent)).toEqual(["CALLS", "Ejercicio", "PUTS"]);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
-  expect(byLabel<HTMLInputElement>("Prima pata 1").value).toBe("5");
-  expect(byLabel<HTMLInputElement>("Prima pata 2").value).toBe("4");
-  expect(byLabel<HTMLInputElement>("VI pata 1").value).toBe("40");
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("5");
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("4");
+  expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40");
   expect(container.querySelectorAll(".ct-sim-chart path")).toHaveLength(3);
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
@@ -102,4 +105,62 @@ it("contains malformed stored data without breaking the chain", async () => {
   stored.OptionsSimulatorStrategiesV1 = [{ name: "malformed", simulation: null }];
   await mount(); expect(container.textContent).toContain("No se pudieron leer");
   expect(byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").disabled).toBe(false);
+});
+
+it("edits compact cells on click, accepts on Enter or blur, and restores the original value on Escape", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  expect(container.querySelectorAll('.ct-sim-legs-card tbody input, .ct-sim-legs-card tbody select')).toHaveLength(0);
+  await fill("Prima pata 1", "7,5");
+  const premium = byLabel<HTMLInputElement>("Prima pata 1");
+  expect(document.activeElement).toBe(premium);
+  await act(async () => premium.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("7,5");
+  expect(document.activeElement).toBe(byLabel("Editar Prima pata 1"));
+  expect(container.textContent).toContain("750 ARS");
+  await fill("VI pata 1", "60");
+  await act(async () => byLabel<HTMLInputElement>("VI pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40");
+  await fill("Contratos por combo pata 1", "3");
+  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").focus());
+  expect(byLabel<HTMLButtonElement>("Editar Contratos por combo pata 1").textContent).toBe("3");
+  expect(container.textContent).toContain("2.250 ARS");
+});
+
+it("offers Natural/MID/Opuesto only while editing one premium, using that leg's side", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
+  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").click());
+  expect(byLabel<HTMLButtonElement>("Tomar Natural para Prima pata 1").textContent).toBe("Natural5");
+  expect(byLabel<HTMLButtonElement>("Tomar Opuesto para Prima pata 1").textContent).toBe("Opuesto4");
+  await act(async () => byLabel<HTMLButtonElement>("Tomar MID para Prima pata 1").click());
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("4,5");
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("4");
+  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 2").click());
+  expect(byLabel<HTMLButtonElement>("Tomar Natural para Prima pata 2").textContent).toBe("Natural4");
+  await act(async () => byLabel<HTMLButtonElement>("Tomar Opuesto para Prima pata 2").click());
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("5");
+  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").click());
+  const natural = byLabel<HTMLButtonElement>("Tomar Natural para Prima pata 1");
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  await act(async () => { natural.focus(); natural.dispatchEvent(enter); });
+  expect(enter.defaultPrevented, "Enter must preserve the reference button's native activation").toBe(false);
+  expect(container.querySelector('.ct-sim-premium-references')).not.toBeNull();
+  await act(async () => natural.click());
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("5");
+});
+
+it("removes market references during a disconnect and keeps the VI controls folded initially", async () => {
+  await mount();
+  expect(byLabel("Configurar filtro de VI").closest("details")!.open).toBe(false);
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").click());
+  expect(container.querySelector('.ct-sim-premium-references')).not.toBeNull();
+  marketState.current = { catalog: marketState.current.catalog, issue: "Disconnected" };
+  await act(async () => root.render(<OptionsSimulator />));
+  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Prima pata 1").value).toBe("5");
 });
