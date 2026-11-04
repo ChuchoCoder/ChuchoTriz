@@ -3,9 +3,9 @@ import { addDays, curve, dateDay, daysToExpiry, Example, exampleLegs, expirySumm
   newLeg, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, Strategy } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
-import { formatExpiryDays, formatOptionAmount as fmt, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
+import { formatExpiryDays, formatOptionAmount as fmt, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { PremiumReference } from "./market";
-import { adjustStrategyQuantity, shiftStrategyStrikes, type StrikeMarket } from "./strategyAdjustments";
+import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 
 const storageKey = "OptionsSimulatorStrategiesV1";
 const examples: [Example, string][] = [["bull-call", "Bull call spread"], ["bear-put", "Bear put spread"],
@@ -47,13 +47,15 @@ function Field({ label, value, onChange, type = "text", ...attributes }: {
     inputMode={type === "text" ? "decimal" : undefined} onChange={event => onChange(event.target.value)} {...attributes} /></label>;
 }
 
-function EditableLegValue({ label, value, onChange, options, references, className = "", formatValue = formatOptionNumber, valueDescription }: {
+function EditableLegValue({ label, value, onChange, options, references, className = "", formatValue = formatOptionNumber, valueDescription, inputMode = "decimal" }: {
   label: string; value: string; onChange(value: string): void;
   options?: readonly (readonly [string, string])[]; references?: readonly (readonly [string, number])[]; className?: string;
   formatValue?(value: number): string;
   valueDescription?: string;
+  inputMode?: "decimal" | "text";
 }) {
   const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
   const control = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const original = useRef(value);
@@ -97,18 +99,39 @@ function EditableLegValue({ label, value, onChange, options, references, classNa
   };
   return <span className={`ct-sim-editable ${className}`} onKeyDown={editing ? keyDown : undefined}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) finish(false); }}>
-    {editing ? options ? <select ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={value}
-      onChange={event => onChange(event.target.value)}>
+    {editing ? options ? <select ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={draft}
+      onChange={event => { setDraft(event.target.value); onChange(event.target.value); }}>
       {options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
-    </select> : <input ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={value} inputMode="decimal"
-      onChange={event => onChange(event.target.value)} />
+    </select> : <input ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={draft} inputMode={inputMode}
+      onChange={event => { setDraft(event.target.value); onChange(event.target.value); }} />
       : <button ref={button} type="button" className="ct-sim-cell-value" aria-label={`Editar ${label}`} aria-description={`Valor actual: ${valueDescription ?? display}`}
-        title={`${label}: ${valueDescription ?? display} · Clic para editar`} onClick={() => { original.current = value; setEditing(true); }}>{display}</button>}
+        title={`${label}: ${valueDescription ?? display} · Clic para editar`} onClick={() => { original.current = value; setDraft(value); setEditing(true); }}>{display}</button>}
     {editing && !!references?.length && <div ref={referencePopup} popover="manual" data-ct-inline-editor className="ct-sim-premium-references" role="group" aria-label={`Referencias para ${label}`}>
       <span>Prima por unidad · referencia de mercado</span><div>{references.map(([name, price]) => <button key={name} type="button" aria-label={`Tomar ${name} para ${label}`}
         onMouseDown={event => event.preventDefault()} onClick={() => { onChange(String(price)); finish(true); }}>{name}<strong>{formatOptionNumber(price)}</strong></button>)}</div>
     </div>}
   </span>;
+}
+
+function StrategyPriceControl({ input, market, entry, onChange }: {
+  input: Simulation; market?: StrikeMarket; entry?: number; onChange(position: number): void;
+}) {
+  const references = useMemo(() => strategyPriceReferences(input, market), [input, market]);
+  const total = references.ok ? references.currentTotal : entry;
+  const span = references.ok ? references.natural.total - references.opposite.total : 0;
+  const position = references.ok && total !== undefined && span > 0 ? (references.natural.total - total) / span : 0;
+  const text = (amount: number | undefined) => amount === undefined ? "—" : `${amount < 0 ? "Crédito" : amount > 0 ? "Débito" : "Neutra"} ${fmt(Math.abs(amount))} ${input.currency}`;
+  return <section className="ct-sim-strategy-price" aria-label="Precio total de entrada de la estrategia">
+    <header><span>Precio total de entrada</span><strong aria-label="Crédito o débito de la estrategia">{text(total)}</strong></header>
+    <input type="range" aria-label="Precio de entrada de la estrategia" min="0" max="100" step="1" disabled={!references.ok || span <= 0}
+      value={Math.max(0, Math.min(100, position * 100))} aria-valuetext={text(total)} onChange={event => onChange(Number(event.target.value) / 100)} />
+    <div className="ct-sim-strategy-price-points">{([ ["natural", "Natural", 0], ["mid", "Mid", .5], ["opposite", "Opuesto", 1] ] as const).map(([key, label, value]) =>
+      <button key={key} type="button" aria-label={`Tomar precio ${label} de la estrategia`} disabled={!references.ok} aria-pressed={references.ok && total !== undefined && Math.abs(position - value) < 1e-8}
+        onClick={() => onChange(value)}><span>{label}</span><small>{text(references.ok ? references[key].total : undefined)}</small></button>)}</div>
+    {!references.ok && <p className="ct-sim-hint" role="status">{references.reason}</p>}
+    {references.ok && total !== undefined && (position < -1e-8 || position > 1 + 1e-8) && <p className="ct-sim-hint">La entrada fijada está fuera de las referencias actuales.</p>}
+    {numeric(input.costs) > 0 && <p className="ct-sim-hint">Incluye gastos de entrada: {fmt(numeric(input.costs))} {input.currency}.</p>}
+  </section>;
 }
 
 function ScenarioButtons({ label, value, options, onChange, numericValues = false }: {
@@ -268,6 +291,14 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   function updateLeg(id: number, key: keyof Leg, value: string) {
     setStatus(""); setInput(current => ({ ...current, legs: current.legs.map(leg => leg.id === id ? { ...leg, [key]: value } : leg) }));
   }
+  function updateQuantity(id: number, value: string) {
+    const signed = value.trim().replace(/^−/, "-");
+    const contracts = signed.replace(/^[+-]/, "");
+    setStatus("");
+    setInput(current => ({ ...current, legs: current.legs.map(leg => leg.id === id ? {
+      ...leg, contracts, side: numeric(contracts) > 0 ? signed.startsWith("-") ? "sell" : "buy" : leg.side,
+    } : leg) }));
+  }
   function adjust(kind: "strike" | "quantity", direction: -1 | 1) {
     setInput(current => {
       const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction);
@@ -276,6 +307,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     setStatus(kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
       : input.legs.some(leg => leg.securityId) ? "Strikes desplazados a bases contiguas. Primas y VI copiadas de esta lectura."
       : "Strikes manuales desplazados un punto; primas y VI conservadas.");
+  }
+  function changeEntryPrice(position: number) {
+    setStatus("");
+    setInput(current => {
+      const result = setStrategyPrice(current, position, strikeMarket);
+      return result.ok ? { ...current, legs: result.legs } : current;
+    });
   }
   async function save() {
     if (!parsed.ok || busy || loading || !name.trim()) return;
@@ -333,7 +371,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       <Field label="Vencimiento" type="date" value={input.expiry} min={input.valuationDate} onChange={value => update("expiry", value)} />
       <Field label="Factor monetario por contrato" value={input.multiplier} onChange={value => update("multiplier", value)} />
       <Field label="Gastos de entrada totales" value={input.costs} onChange={value => update("costs", value)} />
-    </div><p className="ct-sim-hint">Todas las patas comparten subyacente, moneda y vencimiento. Desde la cadena se copia el factor nativo: totalAmountFactor × contractMultiplier × roundLot. Las primas y VI quedan fijas al agregarlas; son referencias de simulación.</p></div></details></div>
+    </div><details key={`${view}-${active}`} className="ct-sim-leg-prices"><summary>Precios de entrada por pata</summary>{input.legs.map((leg, index) => <div key={leg.id}>
+      <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
+      <EditableLegValue label={`Prima pata ${index + 1}`} value={leg.premium} references={referencesFor(leg)} onChange={value => updateLeg(leg.id, "premium", value)} />
+    </div>)}</details><p className="ct-sim-hint">Todas las patas comparten subyacente, moneda y vencimiento. Desde la cadena se copia el factor nativo: totalAmountFactor × contractMultiplier × roundLot. Las primas y VI quedan fijas al agregarlas; son referencias de simulación.</p></div></details></div>
     {storageError && <p className="ct-sim-error" role="alert">{storageError}</p>}
     {status && <p role="status" className="ct-sim-status">{status}</p>}
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} input={input} setInput={setInput} onPremiumReferences={setPremiumReferences} onStrikeMarket={setStrikeMarket} />
@@ -347,33 +388,32 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
               : "Una unidad de la proporción actual, sin cambiar las relaciones entre patas" : result.reason}>{direction < 0 ? "↓" : "↑"}</button>;
         })}</div></fieldset>)}</div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
-        <colgroup><col className="ct-sim-leg-side" /><col className="ct-sim-leg-kind" /><col /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-premium" /><col className="ct-sim-leg-days" /><col className="ct-sim-leg-remove" /></colgroup>
-        <thead><tr><th>Lado</th><th>Tipo</th><th>Strike</th><th title="Contratos de la pata">Cant.</th><th>Prima</th><th>Vto.</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
+        <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-remove" /></colgroup>
+        <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
         <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
-          <td><EditableLegValue label={`Sentido pata ${index + 1}`} value={leg.side} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}
-            options={[["buy", "+"], ["sell", "−"]]} valueDescription={leg.side === "buy" ? "Compra" : "Venta"} onChange={value => updateLeg(leg.id, "side", value)} /></td>
           <td><span className={`ct-sim-kind-chip ct-sim-kind-${leg.kind}`}>
             {leg.securityId ? <abbr title={leg.kind === "call" ? "Call" : "Put"}>{leg.kind === "call" ? "C" : "P"}</abbr>
               : <EditableLegValue label={`Tipo pata ${index + 1}`} value={leg.kind} options={[["call", "C"], ["put", "P"]]}
                 valueDescription={leg.kind === "call" ? "Call" : "Put"} onChange={value => updateLeg(leg.id, "kind", value)} />}
           </span></td>
+          <td><EditableLegValue label={`Contratos pata ${index + 1}`} value={leg.contracts === "" ? "" : `${leg.side === "sell" ? "-" : ""}${leg.contracts}`}
+            formatValue={value => `${value < 0 ? "−" : "+"}${formatOptionNumber(Math.abs(value))}`}
+            valueDescription={`${leg.side === "buy" ? "Compra" : "Venta"} · ${leg.contracts} contratos`}
+            className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"} inputMode="text" onChange={value => updateQuantity(leg.id, value)} /></td>
+          <td className="ct-sim-leg-expiry-date" title={`Vencimiento ${input.expiry}`}>{formatOptionExpiry(input.expiry)}</td>
+          <td className="ct-sim-leg-expiry" title={`Días calendario desde hoy · Vencimiento ${input.expiry}`}>{formatExpiryDays(daysToExpiry(input.expiry))}</td>
           <th scope="row">
             {leg.securityId ? <span className="ct-sim-leg-strike" aria-label={`Strike pata ${index + 1}`}>{formatOptionNumber(numeric(leg.strike))}</span>
               : <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />}
           </th>
-          {([ ["contracts", "Contratos"], ["premium", "Prima"] ] as const).map(([key, label]) => <td key={key}>
-            <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]}
-              references={key === "premium" ? referencesFor(leg) : undefined} onChange={value => updateLeg(leg.id, key, value)} />
-          </td>)}
-          <td className="ct-sim-leg-expiry" title={`Días calendario desde hoy · Vencimiento ${input.expiry}`}>{formatExpiryDays(daysToExpiry(input.expiry))}</td>
           <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
         setInput(current => ({ ...current, legs: [...current.legs, newLeg(Math.max(nextId.current++, ...current.legs.map(leg => leg.id + 1)), numeric(current.spot) > 0 ? numeric(current.spot) : 100)] })); setStatus("");
       }}>+ Pata manual</button></div>
-      <p className="ct-sim-hint">Clic en un valor para editar · Enter o salir para aceptar · Esc para deshacer. Cantidad total de contratos por pata.</p>
-      {summary && <p className="ct-sim-equilibria">{summary.entry < 0 ? "Crédito" : "Débito"} total: <strong>{money(Math.abs(summary.entry))}</strong></p>}
+      <p className="ct-sim-hint">Clic para editar · Enter o salir para aceptar · Esc para deshacer. Cantidad positiva = compra; negativa = venta.</p>
+      {!!input.legs.length && <StrategyPriceControl input={input} market={strikeMarket} entry={summary?.entry} onChange={changeEntryPrice} />}
     </section>
     {view === "build" && <section className="ct-sim-card ct-sim-quick-results" aria-label="Resultado rápido del armado">
       <div className="ct-sim-section-heading"><h3>Resultado rápido</h3><button type="button" onClick={() => changeView("analysis")}>Análisis →</button></div>

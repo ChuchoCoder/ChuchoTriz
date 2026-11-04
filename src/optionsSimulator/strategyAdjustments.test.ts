@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exampleLegs, initialSimulation, MAX_CONTRACTS } from "./model";
-import { adjustStrategyQuantity, shiftStrategyStrikes, type StrikeMarket } from "./strategyAdjustments";
+import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 
 const input = () => ({ ...initialSimulation("2026-11-03"), underlying: "GGAL", legs: exampleLegs("butterfly").map(leg => ({
   ...leg, securityId: `call-${leg.strike}`, symbol: `CALL ${leg.strike}`,
@@ -87,5 +87,57 @@ describe("strike adjustments", () => {
     expect(result.ok && result.legs).toEqual(original.legs.map(leg => ({ ...leg, strike: String(Number(leg.strike) - 1) })));
     original.legs[0].strike = "0,5";
     expect(shiftStrategyStrikes(original, -1).ok).toBe(false);
+  });
+});
+
+describe("whole-strategy entry pricing", () => {
+  it("prices Natural/Mid/Opposite with signed sides, ratios, multiplier and fixed total costs", () => {
+    const original = { ...input(), costs: "15" };
+    const references = strategyPriceReferences(original, market());
+    if (!references.ok) throw Error(references.reason);
+    expect([references.natural.total, references.mid.total, references.opposite.total, references.currentTotal]).toEqual([215, 15, -185, 315]);
+    const double = strategyPriceReferences({ ...original, legs: original.legs.map(leg => ({ ...leg, contracts: String(Number(leg.contracts) * 2) })) }, market());
+    expect(double.ok && [double.natural.total, double.mid.total, double.opposite.total]).toEqual([415, 15, -385]);
+  });
+  it("interpolates every premium together without modifying quantities, side or VI", () => {
+    const original = { ...input(), costs: "15" };
+    const adjusted = setStrategyPrice(original, .25, market());
+    if (!adjusted.ok) throw Error(adjusted.reason);
+    expect(adjusted.legs.map(leg => leg.premium)).toEqual(["9.75", "10.25", "11.75"]);
+    expect(adjusted.legs.map(({ premium: _premium, ...leg }) => leg)).toEqual(original.legs.map(({ premium: _premium, ...leg }) => leg));
+    const references = strategyPriceReferences({ ...original, legs: adjusted.legs }, market());
+    expect(references.ok && references.currentTotal).toBe(115);
+    expect(original.legs.map(leg => leg.premium)).toEqual(["13", "6", "2"]);
+  });
+  it("rejects missing book sides, incompatible contexts, invalid quantities and invalid interpolation", () => {
+    const original = input(), source = market(); source.quotes['call-90'].bid = undefined;
+    expect(strategyPriceReferences(original, source).ok).toBe(false);
+    expect(setStrategyPrice(original, .5, source).ok).toBe(false);
+    expect(strategyPriceReferences({ ...original, expiry: "2027-01-01" }, market()).ok).toBe(false);
+    expect(strategyPriceReferences({ ...original, legs: exampleLegs('butterfly') }, market()).ok).toBe(false);
+    expect(strategyPriceReferences({ ...original, legs: original.legs.map(leg => ({ ...leg, contracts: "0" })) }, market()).ok).toBe(false);
+    for (const position of [-1, 2, NaN]) expect(setStrategyPrice(original, position, market()).ok).toBe(false);
+  });
+  it("never changes a chosen entry when fresh references arrive", () => {
+    const original = input(), adjusted = setStrategyPrice(original, .5, market());
+    if (!adjusted.ok) throw Error(adjusted.reason);
+    const chosen = { ...original, legs: adjusted.legs }, source = market();
+    source.quotes['call-90'].ask!.price = 20;
+    const references = strategyPriceReferences(chosen, source);
+    expect(references.ok && references.currentTotal).toBe(0);
+    expect(chosen.legs.map(leg => leg.premium)).toEqual(["9.5", "10.5", "11.5"]);
+  });
+  it("rejects unsafe gross amounts before large buy/sell legs can cancel and lose fees", () => {
+    const original = input(), leg = original.legs[1];
+    original.costs = "1";
+    original.legs = [{ ...leg, id: 1, side: "buy", contracts: "10000000000", premium: "5" },
+      { ...leg, id: 2, side: "sell", contracts: "10000000000", premium: "5" }];
+    const source = market();
+    source.quotes['call-100'] = { bid: { price: 100000000, size: 10 }, ask: { price: 100000001, size: 10 } };
+    expect(strategyPriceReferences(original, source)).toMatchObject({ ok: false, reason: expect.stringContaining('exposición bruta') });
+    expect(setStrategyPrice(original, .5, source).ok).toBe(false);
+    // Safe new quotes must not legitimize an existing unsafe entry either.
+    original.legs = original.legs.map(item => ({ ...item, premium: "100000000" }));
+    expect(strategyPriceReferences(original, market())).toMatchObject({ ok: false, reason: expect.stringContaining('exposición bruta') });
   });
 });

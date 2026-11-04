@@ -67,9 +67,11 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    La flecha reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
    Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
    se explica el motivo. No incluye Calendar, Covered ni Futures.
-3. Las patas se muestran como **+ / −**, chip **C / P**, strike, cantidad, prima y
-   días al vencimiento. No muestran nombre del instrumento ni columna de VI.
-   Hacer clic en lado, cantidad o prima para editar; Enter o salir del campo acepta, y Escape restaura el valor
+3. Las patas se muestran en este orden: chip **C / P**, cantidad con signo,
+   fecha de vencimiento (**Dic 13**), días (**17d**) y strike. Una cantidad positiva
+   representa compra; una negativa representa venta. No hay columna de lado,
+   instrumento, prima ni VI.
+   Hacer clic en cantidad para editar número y sentido juntos; Enter o salir del campo acepta, y Escape restaura el valor
    anterior. Las patas manuales permiten editar también tipo y strike.
    La VI de cada pata se conserva y se edita desde **Análisis → VI por pata**,
    con dos decimales al mostrarla y precisión original al editarla.
@@ -81,10 +83,16 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    no se mezcla este ajuste con patas de la cadena.
    **Cantidad ↓/↑** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
    3:6:3; bajar vuelve una unidad de esa proporción. No baja cantidades a cero.
-   Las primas y VI copiadas quedan fijas. Al editar una prima aparecen
-   Natural/MID/Opuesto para copiar esa referencia solamente a esa pata;
-   una actualización de mercado no altera la posición
-   simulada. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
+   Debajo de las patas, el slider de **precio total de entrada** permite elegir
+   **Natural / Mid / Opuesto** y puntos intermedios. Natural toma ASK de compras
+   y BID de ventas; Opuesto toma las puntas contrarias; Mid interpola a mitad.
+   El importe incluye cantidades, factor y gastos totales e indica crédito,
+   débito o entrada neutra. La selección cambia todas las primas juntas y
+   conserva cantidades, sentido y VI. Cotizaciones nuevas actualizan las
+   referencias sin modificar la entrada fijada; si esta queda fuera, se informa.
+   Si falta una punta válida o no coincide el contexto, el control se deshabilita.
+   Los precios individuales/manuales siguen en **Entrada → Precios de entrada por
+   pata**. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
 4. Entrar en **Análisis** para consultar el gráfico al vencimiento y el teórico;
    usar los toggles o modificar manualmente precio del escenario, fecha objetivo,
    cambio de VI en puntos porcentuales, tasa y dividendos. Clic o toque en el gráfico
@@ -334,3 +342,20 @@ La fixture confirmó por DOM **30d** después del selector y filas con **+ C 100
 y **− P 90**, sin instrumento ni VI. Las filas conservan 34 px de alto y la tabla
 entra en el panel de 390 px. Al llevar el escenario al vencimiento, las patas
 siguen mostrando los días desde hoy. El editor de VI permanece en Análisis.
+
+### Cantidad con signo y precio total de entrada
+
+Las filas quedan en orden C/P, cantidad firmada, fecha mes/día, días y strike.
+La prima individual sale del panel; el precio se ajusta debajo con slider y
+botones Natural/Mid/Opuesto, mostrando crédito o débito total.
+
+342 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y paquete aprobados.
+Las regresiones cubren cambio de sentido por signo, borradores incompletos, Escape,
+guardado compatible, fecha Dic 13, interpolación, proporciones, factor, gastos y
+conservación de precios con cotizaciones nuevas. La revisión detectó y permitió
+corregir la validación de exposición bruta antes de compensar compras/ventas;
+sin hallazgos pendientes.
+
+La fixture confirmó por DOM patas sin columna de prima, filas de 34 px y un Iron
+Condor con créditos Natural 360, Mid 400 y Opuesto 440 ARS. Los controles cambiaron
+las primas de entrada y editar −1 cambió el sentido. Sin QA por píxeles.
