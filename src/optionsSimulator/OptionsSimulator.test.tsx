@@ -497,8 +497,8 @@ it("replaces per-leg prices with a total-price slider showing Natural, Mid and O
   const panel = container.querySelector('.ct-sim-legs-card')!;
   expect(panel.querySelector('[aria-label^="Editar Prima"]')).toBeNull();
   expect(byLabel("Crédito o débito de la estrategia").textContent).toBe("Débito 100 ARS");
-  expect(byLabel("Tomar precio Mid de la estrategia").textContent).toContain("Neutra 0 ARS");
-  expect(byLabel("Tomar precio Opuesto de la estrategia").textContent).toContain("Crédito 100 ARS");
+  expect(byLabel("Tomar precio Mid de la estrategia").textContent).toContain("0 neutro");
+  expect(byLabel("Tomar precio Opuesto de la estrategia").textContent).toContain("100 cr");
   await act(async () => byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").click());
   expect(byLabel("Crédito o débito de la estrategia").textContent).toBe("Neutra 0 ARS");
   expect(byLabel<HTMLInputElement>("Precio de entrada de la estrategia").value).toBe("50");

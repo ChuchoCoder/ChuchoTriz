@@ -100,11 +100,26 @@
 .ct-sim-strategy-price { border-top: 1px solid var(--sim-border); margin-top: 6px; padding-top: 6px; }
 .ct-sim-strategy-price > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px; font-size: 11px; }
 .ct-sim-strategy-price > header > span { color: var(--sim-muted); }
-.ct-sim-strategy-price > input { height: 18px; margin: 4px 0; }
-.ct-sim-strategy-price-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-.ct-sim .ct-sim-strategy-price-points button { min-height: 30px; padding: 2px; font-size: 10px; white-space: normal; }
-.ct-sim-strategy-price-points button[aria-pressed="true"] { border-color: var(--sim-accent); background: color-mix(in srgb, var(--sim-accent) 12%, var(--sim-field)); }
-.ct-sim-strategy-price-points small { display: block; margin-top: 1px; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-sim-price-bar { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 5px; height: 54px; }
+.ct-sim-price-rail { position: absolute; top: 25px; left: 4px; right: 4px; height: 4px; border-radius: 2px; background: var(--sim-border); }
+.ct-sim-price-rail i { position: absolute; height: 100%; background: var(--ct-entry-color); }
+.ct-sim-price-rail b { position: absolute; top: 0; width: 4px; height: 4px; border-radius: 50%; background: var(--sim-text); transform: translateX(-50%); }
+.ct-sim-price-rail b:nth-of-type(1) { left: 0; }
+.ct-sim-price-rail b:nth-of-type(2) { left: 50%; }
+.ct-sim-price-rail b:nth-of-type(3) { left: 100%; }
+.ct-sim .ct-sim-price-bar > input[type="range"] { appearance: none; position: absolute; z-index: 2; top: 17px; left: 0; width: 100%; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; }
+.ct-sim-price-bar > input::-webkit-slider-runnable-track { height: 4px; background: transparent; }
+.ct-sim-price-bar > input::-webkit-slider-thumb { appearance: none; width: 8px; height: 8px; margin-top: -2px; border: 1px solid var(--sim-card); border-radius: 50%; background: var(--ct-entry-color); }
+.ct-sim-price-bar > input::-moz-range-track { height: 4px; background: transparent; }
+.ct-sim-price-bar > input::-moz-range-thumb { width: 6px; height: 6px; border: 1px solid var(--sim-card); border-radius: 50%; background: var(--ct-entry-color); }
+.ct-sim-price-bar > input:disabled { opacity: .35; cursor: default; }
+.ct-sim .ct-sim-price-bar > button { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--sim-muted); font-size: 10px; text-align: center; }
+.ct-sim-price-bar > button:first-of-type { text-align: left; align-items: flex-start; }
+.ct-sim-price-bar > button:last-of-type { text-align: right; align-items: flex-end; }
+.ct-sim-price-bar > button > span, .ct-sim-price-bar > button > strong { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-sim-price-bar > button > strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.ct-sim-price-bar > button[aria-pressed="true"] > strong { color: var(--ct-entry-color); }
+.ct-sim-price-bar > button:hover:enabled { color: var(--sim-text); }
 .ct-sim-max-loss { display: flex; align-items: center; gap: 4px; font-size: 10px; }
 .ct-sim-max-loss > span { color: var(--sim-muted); }
 .ct-sim-max-loss > strong { color: var(--sim-loss); }

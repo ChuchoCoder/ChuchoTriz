@@ -65,15 +65,30 @@ function StrategyPriceControl({ input, market, entry, maxLoss, onChange }: {
   const span = references.ok ? references.natural.total - references.opposite.total : 0;
   const position = references.ok && total !== undefined && span > 0 ? (references.natural.total - total) / span : 0;
   const text = (amount: number | undefined) => amount === undefined ? "—" : `${amount < 0 ? "Crédito" : amount > 0 ? "Débito" : "Neutra"} ${fmt(Math.abs(amount))} ${input.currency}`;
+  const compactText = (amount: number | undefined) => amount === undefined ? "—" : `${fmt(Math.abs(amount))} ${amount < 0 ? "cr" : amount > 0 ? "db" : "neutro"}`;
+  const marker = Math.max(0, Math.min(100, position * 100));
+  const tone = total === undefined || total === 0 ? "var(--sim-muted)" : total < 0 ? "var(--sim-profit)" : "var(--sim-loss)";
+  const costs = numeric(input.costs);
+  const credit = references.ok && references.natural.total - costs < 0 && references.opposite.total - costs < 0;
+  const debit = references.ok && references.natural.total - costs > 0 && references.opposite.total - costs > 0;
   return <section className="ct-sim-strategy-price" aria-label="Precio total de entrada de la estrategia">
     <header><strong aria-label="Crédito o débito de la estrategia" title="Precio total de entrada">{text(total)}</strong>
       <div className="ct-sim-max-loss" aria-label="Pérdida máxima del armado al vencimiento"><span>Pérdida máx.</span><strong title={maxLoss === Infinity ? "Pérdida ilimitada" : "Pérdida máxima al vencimiento"}>
         {maxLoss === undefined ? "—" : maxLoss === Infinity ? "∞" : `${fmt(maxLoss)} ${input.currency}`}</strong></div></header>
-    <input type="range" aria-label="Precio de entrada de la estrategia" min="0" max="100" step="1" disabled={!references.ok || span <= 0}
-      value={Math.max(0, Math.min(100, position * 100))} aria-valuetext={text(total)} onChange={event => onChange(Number(event.target.value) / 100)} />
-    <div className="ct-sim-strategy-price-points">{([ ["natural", "Natural", 0], ["mid", "Mid", .5], ["opposite", "Opuesto", 1] ] as const).map(([key, label, value]) =>
-      <button key={key} type="button" aria-label={`Tomar precio ${label} de la estrategia`} disabled={!references.ok} aria-pressed={references.ok && total !== undefined && Math.abs(position - value) < 1e-8}
-        title={`${label}: ${text(references.ok ? references[key].total : undefined)}`} onClick={() => onChange(value)}><span>{label}</span><small>{text(references.ok ? references[key].total : undefined)}</small></button>)}</div>
+    <div className="ct-sim-price-bar" style={{ "--ct-entry-color": tone } as React.CSSProperties}>
+      <div className="ct-sim-price-rail" aria-hidden="true"><i style={{ left: `${Math.min(50, marker)}%`, width: `${total === undefined || !references.ok ? 0 : Math.abs(marker - 50)}%` }} />
+        <b /><b /><b /></div>
+      <input type="range" aria-label="Precio de entrada de la estrategia" min="0" max="100" step="1" disabled={!references.ok || span <= 0}
+        value={marker} aria-valuetext={text(total)} onChange={event => onChange(Number(event.target.value) / 100)} />
+      {([ ["natural", "Natural", 0], ["mid", "Mid", .5], ["opposite", "Opuesto", 1] ] as const).map(([key, label, value]) => {
+        const amount = references.ok ? references[key].total : undefined;
+        const caption = key === "mid" ? "MID" : key === "natural" ? credit ? "BID (NAT)" : debit ? "ASK (NAT)" : "NATURAL"
+          : credit ? "ASK (OPP)" : debit ? "BID (OPP)" : "OPUESTO";
+        return <button key={key} type="button" aria-label={`Tomar precio ${label} de la estrategia`} aria-description={text(amount)} disabled={!references.ok}
+          aria-pressed={references.ok && total !== undefined && Math.abs(position - value) < 1e-8}
+          title={`${label}: ${text(amount)}`} onClick={() => onChange(value)}><span>{caption}</span><strong>{compactText(amount)}</strong></button>;
+      })}
+    </div>
     {!references.ok && <p className="ct-sim-hint" role="status">{references.reason}</p>}
     {references.ok && total !== undefined && (position < -1e-8 || position > 1 + 1e-8) && <p className="ct-sim-hint">La entrada fijada está fuera de las referencias actuales.</p>}
     {numeric(input.costs) > 0 && <p className="ct-sim-hint">Incluye gastos de entrada: {fmt(numeric(input.costs))} {input.currency}.</p>}

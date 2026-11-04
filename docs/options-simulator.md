@@ -435,3 +435,18 @@ controles alineados, cantidades globales 1→2→1 y ajustes individuales.
 357 tests Vitest y 13 tests Node aprobados, junto a seguridad (10 tests), lint,
 TypeScript y empaquetado. Verificación del navegador compartido por DOM y
 colores computados; estaba oculto, sin inspección visual por píxeles.
+
+### Barra de precio de entrada
+
+Natural, Mid y Opuesto se integran en una sola barra fina con importes `cr`/`db`
+debajo, marcas en extremos/centro e indicador arrastrable. Las referencias
+siguen siendo botones accesibles por teclado; el slider conserva su valor
+descriptivo completo en moneda. En estructuras de crédito se rotulan BID (NAT)
+y ASK (OPP), y en débito se invierten; si las puntas cruzan cero se usan los
+nombres Natural/Opuesto. La clasificación BID/ASK toma las primas antes de
+gastos, mientras los importes y el crédito/débito mostrado incluyen gastos.
+
+31 pruebas de interfaz, TypeScript, lint y empaquetado aprobados. Se verificaron
+en la fixture crédito (360/400/440 cr), débito (810/800/790 db), selección Mid,
+interpolación al 75 % y alineación. Se inspeccionó una captura del panel con
+el navegador compartido visible.
