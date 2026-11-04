@@ -12,7 +12,8 @@ por instrumento se mantiene en memoria durante la sesión del formulario.
 
 El simulador de opciones lee el catálogo y las cotizaciones de mercado de Matriz
 para mostrar calls/puts, VI y otras métricas. No lee órdenes propias, tenencias ni
-saldos y no envía operaciones. El armado y sus supuestos se mantienen en memoria
+saldos y no envía operaciones. La selección de subyacente y vencimiento se guarda
+localmente por sitio de Matriz. El armado y sus supuestos se mantienen en memoria
 mientras el simulador permanece abierto. El guardado de estrategias está retirado
 de la interfaz; el simulador no lee ni sobrescribe datos guardados por versiones
 anteriores.

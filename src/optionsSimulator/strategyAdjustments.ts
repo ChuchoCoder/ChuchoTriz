@@ -75,7 +75,7 @@ export function shiftStrategyStrikes(input: Simulation, direction: -1 | 1, marke
 }
 
 export function strategyPriceReferences(input: Simulation, market?: StrikeMarket) {
-  if (!input.legs.length || input.legs.some(leg => !leg.securityId)) return fail("Natural, Mid y Opuesto requieren todas las patas de la cadena. Los precios manuales se editan en Análisis, Más supuestos y rango.");
+  if (!input.legs.length || input.legs.some(leg => !leg.securityId)) return fail("Natural, Mid y Opuesto requieren todas las patas de la cadena. Los precios manuales se editan en Análisis → Supuestos de valuación.");
   const context = nativeContext(input, market);
   if (!context.ok) return context;
   const quantities = input.legs.map(leg => numeric(leg.contracts)), factor = numeric(input.multiplier), costs = numeric(input.costs);

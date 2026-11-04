@@ -37,7 +37,7 @@ function installMarketFixture() {
   } };
   const expiry = new Date(); expiry.setDate(expiry.getDate() + 30);
   const maturityDateStr = `${expiry.getFullYear()}${String(expiry.getMonth() + 1).padStart(2, '0')}${String(expiry.getDate()).padStart(2, '0')}`;
-  const underlying = { id: 'DEMO-GGAL', symbolStr: 'GGAL', currency: 'ARS', cfiCode: 'ESXXXX', md: { lst: 100, seq: 10, bid: 99.9, bsz: 100, ask: 100.1, asz: 100 } };
+  const underlying = { id: 'DEMO-GGAL', symbolStr: 'GGAL', currency: 'ARS', cfiCode: 'ESXXXX', change: 1.25, md: { lst: 100, seq: 10, bid: 99.9, bsz: 100, ask: 100.1, asz: 100 } };
   const options = [70, 80, 90, 100, 110, 120, 130].flatMap(strike => ['call', 'put'].map(kind => {
     const price = Math.max(0, kind === 'call' ? 100 - strike : strike - 100) + 2 + Math.max(0, 6 - Math.abs(100 - strike) / 5);
     return { id: `${kind}-${strike}`, symbolStr: `DEMO ${kind.toUpperCase()} ${strike}`, marketId: 'bm', underlying: underlying.id, currency: 'ARS', settlementType: '2', cfiCode: kind === 'call' ? 'OCASPS' : 'OPASPS',
