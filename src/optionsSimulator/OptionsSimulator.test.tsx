@@ -4,7 +4,7 @@ import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OptionsSimulator from "./OptionsSimulator";
 import { Catalog, Quote, Snapshot } from "./market";
-import { addDays, localDate } from "./model";
+import { addDays, initialSimulation, localDate, Simulation } from "./model";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string } }));
 vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
@@ -111,6 +111,45 @@ it("contains malformed stored data without breaking the chain", async () => {
   expect(byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").disabled).toBe(false);
 });
 
+it("uses each leg's total contracts without a global multiplier in either view", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await fill("Contratos pata 1", "3");
+  await showAnalysis();
+  expect(container.textContent?.toLowerCase()).not.toContain("combo");
+  expect(byLabel("Patas analizadas").textContent).toContain("Compra 3× CALL 100");
+  expect(container.querySelector('.ct-sim-metrics')!.textContent).toContain("1.500 ARS");
+  await showBuild(); await fill("Nombre de la estrategia", "Tres contratos");
+  await act(async () => button("Guardar estrategia").click());
+  const saved = (stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation;
+  expect(saved.legs[0].contracts).toBe("3");
+  expect(saved).not.toHaveProperty("combos");
+});
+
+it("converts saved legacy combos into total quantities exactly once without changing profit or loss", async () => {
+  stored.OptionsSimulatorStrategiesV1 = [{ name: "Anterior", simulation: { ...initialSimulation(localDate()), combos: "3" } }];
+  await mount();
+  await act(async () => {
+    const select = byLabel<HTMLSelectElement>("Cargar estrategia guardada");
+    select.value = "Anterior"; select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  for (const index of [1, 2]) expect(byLabel<HTMLButtonElement>(`Editar Contratos pata ${index}`).textContent).toBe("3");
+  await showAnalysis();
+  expect(container.querySelector('.ct-sim-metrics')!.textContent).toContain("1.200 ARS");
+  expect(container.querySelector('.ct-sim-metrics')!.textContent).toContain("1.800 ARS");
+  await showBuild(); await act(async () => button("Actualizar guardada").click());
+  const saved = (stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation;
+  expect(saved).not.toHaveProperty("combos");
+  expect(saved.legs.map(leg => leg.contracts)).toEqual(["3", "3"]);
+  await act(async () => button("Actualizar guardada").click());
+  expect((stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation.legs.map(leg => leg.contracts)).toEqual(["3", "3"]);
+});
+
+it.each(["1.5", "0", "100001", "bad"])("rejects invalid legacy multiplier %s before migration", async combos => {
+  stored.OptionsSimulatorStrategiesV1 = [{ name: "Inválida", simulation: { ...initialSimulation(localDate()), combos } }];
+  await mount(); expect(container.textContent).toContain("No se pudieron leer");
+});
+
 it("edits compact cells on click, accepts on Enter or blur, and restores the original value on Escape", async () => {
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
@@ -125,9 +164,9 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
   await fill("VI pata 1", "60");
   await act(async () => byLabel<HTMLInputElement>("VI pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40");
-  await fill("Contratos por combo pata 1", "3");
+  await fill("Contratos pata 1", "3");
   await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").focus());
-  expect(byLabel<HTMLButtonElement>("Editar Contratos por combo pata 1").textContent).toBe("3");
+  expect(byLabel<HTMLButtonElement>("Editar Contratos pata 1").textContent).toBe("3");
   expect(container.textContent).toContain("2.250 ARS");
 });
 
@@ -253,7 +292,8 @@ it("replaces the selectors with eight visual option families and previews varian
   expect(container.querySelector('[aria-label="Moneda y plazo de opciones"]')).toBeNull();
   expect(container.querySelector('[aria-label="Filtrar calls y puts"]')).toBeNull();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
-  await fill("Combos simulados", "3");
+  await fill("Contratos pata 1", "3");
+  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").focus());
   await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   const picker = byLabel("Selector visual de estrategias");
   expect(picker.querySelectorAll('[data-family-name]')).toHaveLength(8);
@@ -267,7 +307,8 @@ it("replaces the selectors with eight visual option families and previews varian
   await act(async () => byLabel<HTMLButtonElement>("Aplicar Vertical · Short Put").click());
   expect(container.querySelector('[aria-label="Selector visual de estrategias"]')).toBeNull();
   expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(2);
-  expect(byLabel<HTMLInputElement>("Combos simulados").value).toBe("3");
+  expect(byLabel<HTMLButtonElement>("Editar Contratos pata 1").textContent).toBe("1");
+  expect(byLabel<HTMLButtonElement>("Editar Contratos pata 2").textContent).toBe("1");
   expect(byLabel<HTMLButtonElement>("Editar Sentido pata 1").textContent).toBe("Venta");
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("4");
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("5");

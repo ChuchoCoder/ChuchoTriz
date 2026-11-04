@@ -87,7 +87,7 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
         </li>)}</ul>}
         {cash !== undefined && <strong>{cash < 0 ? "Crédito" : "Débito"} por estructura: {fmt(Number(Math.abs(cash).toPrecision(12)))} {currency}</strong>}
         {!current.prices.ok && <p className="ct-sim-strategy-unavailable" role="status">{current.prices.reason}</p>}
-        <small>El icono indica la forma del pago. La flecha carga las patas y conserva los combos.</small>
+        <small>El icono indica la forma del pago. La flecha carga las patas; podés editar sus cantidades.</small>
       </section>
     </div>}
   </>;

@@ -21,7 +21,6 @@ export interface Simulation {
   rate: string;
   dividendYield: string;
   multiplier: string;
-  combos: string;
   costs: string;
   volatilityShift: string;
   rangeMin: string;
@@ -71,7 +70,7 @@ export function exampleLegs(example: Example): Leg[] {
 }
 export function initialSimulation(today = localDate()): Simulation {
   return { underlying: "EJEMPLO", currency: "ARS", spot: "100", valuationDate: today,
-    expiry: addDays(today, 30), scenarioDate: today, rate: "0", dividendYield: "0", multiplier: "100", combos: "1", costs: "0",
+    expiry: addDays(today, 30), scenarioDate: today, rate: "0", dividendYield: "0", multiplier: "100", costs: "0",
     volatilityShift: "0", rangeMin: "60", rangeMax: "140", legs: exampleLegs("bull-call") };
 }
 
@@ -85,7 +84,6 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   };
   const spot = read(input.spot, "Precio del subyacente", .000001, 1e9);
   const multiplier = read(input.multiplier, "Factor monetario por contrato", .000001, 100000);
-  const combos = read(input.combos, "Combos", 1, 100000, true);
   const costs = read(input.costs, "Gastos de entrada", 0, 1e12);
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
@@ -106,7 +104,7 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500) + shift;
     if (volatility < 0 || volatility > 500) errors.push(`${prefix}: la VI más el cambio debe estar entre 0% y 500%.`);
     return { kind: leg.kind, side: leg.side, strike: read(leg.strike, `${prefix}, strike`, .000001, 1e9),
-      premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos por combo`, 1, 100000, true) * combos,
+      premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, 1e10, true),
       volatility: volatility / 100 };
   });
   const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, rangeMax, leg.strike, leg.premium), costs);

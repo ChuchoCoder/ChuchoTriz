@@ -71,10 +71,8 @@
 .ct-sim-legs-card .ct-sim-cell-value:hover { background: var(--sim-field); border-color: var(--sim-border); }
 .ct-sim-legs-card .ct-sim-editable input, .ct-sim-legs-card .ct-sim-editable select { height: 26px; padding: 2px 3px; font-size: 11px; }
 .ct-sim-legs-card .ct-sim-remove-leg { width: 20px; min-height: 26px; padding: 0; font-size: 18px; border-color: transparent; background: transparent; color: var(--sim-muted); }
-.ct-sim-legs-footer { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-top: 10px; }
-.ct-sim-legs-footer > .ct-sim-field { width: 100px; }
-.ct-sim .ct-sim-legs-footer label { font-size: 10px; gap: 3px; }
-.ct-sim-legs-footer button, .ct-sim-legs-footer input { min-height: 28px; height: 28px; font-size: 12px; }
+.ct-sim-legs-footer { margin-top: 10px; }
+.ct-sim-legs-footer button { min-height: 28px; height: 28px; font-size: 12px; }
 .ct-sim-legs-card .ct-sim-hint { font-size: 10px; }
 .ct-sim-legs-card .ct-sim-equilibria { margin: 10px 0; }
 .ct-sim-premium-references { position: fixed; inset: auto; margin: 0; width: 260px; padding: 8px; color: var(--sim-text); border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-card); box-shadow: 0 4px 16px #0005; }

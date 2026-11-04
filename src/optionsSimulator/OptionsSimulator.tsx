@@ -22,8 +22,21 @@ function readSaved(value: unknown): Saved[] {
       !keys.every(key => typeof input[key] === "string") || !Array.isArray(input.legs) ||
       !input.legs.every((leg: Leg) => leg && ["strike", "premium", "contracts", "volatility"].every(key => typeof leg[key as keyof Leg] === "string") &&
         Number.isSafeInteger(leg.id) && leg.id > 0 && [leg.securityId, leg.symbol].every(value => value === undefined || typeof value === "string")) || new Set(input.legs.map((leg: Leg) => leg.id)).size !== input.legs.length ||
-      !["ARS", "USD"].includes(input.currency) || !parseSimulation(input).ok) throw Error("Hay una estrategia guardada inválida.");
-    return { name: entry.name, simulation: input as Simulation };
+      !["ARS", "USD"].includes(input.currency)) throw Error("Hay una estrategia guardada inválida.");
+    const { combos: legacyCombos, ...fields } = input;
+    let legs: Leg[] = input.legs;
+    if (legacyCombos !== undefined) {
+      // Preserve the total position of strategies saved before per-leg quantities.
+      const count = typeof legacyCombos === "string" ? numeric(legacyCombos) : NaN;
+      if (!Number.isInteger(count) || count < 1 || count > 100000 || legs.some(leg => {
+        const quantity = numeric(leg.contracts);
+        return !Number.isInteger(quantity) || quantity < 1 || quantity > 100000;
+      })) throw Error("Hay una estrategia guardada inválida.");
+      legs = legs.map(leg => ({ ...leg, contracts: String(numeric(leg.contracts) * count) }));
+    }
+    const simulation: Simulation = { ...fields, legs };
+    if (!parseSimulation(simulation).ok) throw Error("Hay una estrategia guardada inválida.");
+    return { name: entry.name, simulation };
   });
 }
 
@@ -293,7 +306,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     <section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-section-heading"><h3>Patas de la estrategia</h3><button type="button" onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar patas</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con primas por unidad y VI anual">
         <colgroup><col className="ct-sim-leg-side" /><col /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-premium" /><col className="ct-sim-leg-vi" /><col className="ct-sim-leg-remove" /></colgroup>
-        <thead><tr><th>Lado</th><th>Instrumento</th><th title="Contratos por combo">Cant.</th><th>Prima</th><th>VI %</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
+        <thead><tr><th>Lado</th><th>Instrumento</th><th title="Contratos de la pata">Cant.</th><th>Prima</th><th>VI %</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
         <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
           <td><EditableLegValue label={`Sentido pata ${index + 1}`} value={leg.side} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}
             options={[["buy", "Compra"], ["sell", "Venta"]]} onChange={value => updateLeg(leg.id, "side", value)} /></td>
@@ -303,7 +316,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
               <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />
             </span>}
           </th>
-          {([ ["contracts", "Contratos por combo"], ["premium", "Prima"], ["volatility", "VI"] ] as const).map(([key, label]) => <td key={key}>
+          {([ ["contracts", "Contratos"], ["premium", "Prima"], ["volatility", "VI"] ] as const).map(([key, label]) => <td key={key}>
             <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]} references={key === "premium" ? referencesFor(leg) : undefined} onChange={value => updateLeg(leg.id, key, value)} />
           </td>)}
           <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
@@ -311,9 +324,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
         setInput(current => ({ ...current, legs: [...current.legs, newLeg(Math.max(nextId.current++, ...current.legs.map(leg => leg.id + 1)), numeric(current.spot) > 0 ? numeric(current.spot) : 100)] })); setStatus("");
-      }}>+ Pata manual</button>
-      <Field label="Combos simulados" value={input.combos} onChange={value => update("combos", value)} /></div>
-      <p className="ct-sim-hint">Clic en un valor para editar · Enter o salir para aceptar · Esc para deshacer. Cantidad por combo.</p>
+      }}>+ Pata manual</button></div>
+      <p className="ct-sim-hint">Clic en un valor para editar · Enter o salir para aceptar · Esc para deshacer. Cantidad total de contratos por pata.</p>
       {summary && <p className="ct-sim-equilibria">{summary.entry < 0 ? "Crédito" : "Débito"} total: <strong>{money(Math.abs(summary.entry))}</strong></p>}
       <button type="button" className="ct-sim-results-link" onClick={() => changeView("analysis")}>Analizar estrategia →</button>
     </section></div>
@@ -346,7 +358,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       <h4>Rango del gráfico</h4><Field label="Precio mínimo" value={input.rangeMin} onChange={value => update("rangeMin", value)} />
       <Field label="Precio máximo" value={input.rangeMax} onChange={value => update("rangeMax", value)} />
       </details>
-    </section><section className="ct-sim-card ct-sim-results" aria-label="Resultados de la simulación"><div className="ct-sim-section-heading"><h3>{input.underlying || "Sin selección"} · {input.expiry} · {input.legs.length} patas · {input.combos} combos</h3><button type="button" onClick={() => changeView("build")}>Editar armado</button></div>
+    </section><section className="ct-sim-card ct-sim-results" aria-label="Resultados de la simulación"><div className="ct-sim-section-heading"><h3>{input.underlying || "Sin selección"} · {input.expiry} · {input.legs.length} patas</h3><button type="button" onClick={() => changeView("build")}>Editar armado</button></div>
       <div className="ct-sim-strategy-summary" aria-label="Patas analizadas">{input.legs.map(leg => <span key={leg.id} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
         {leg.side === "buy" ? "Compra" : "Venta"} {leg.contracts}× {leg.symbol ?? `${leg.kind === "call" ? "Call" : "Put"} ${leg.strike}`}
       </span>)}</div>

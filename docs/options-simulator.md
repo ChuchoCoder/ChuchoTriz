@@ -34,13 +34,13 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
    Cada fila permite alternar Long/Short y Call/Put cuando corresponde, o
    Normal/Reversed. El dibujo y las patas se previsualizan sin modificar el armado.
-   La flecha reemplaza las patas con contratos de la cadena y conserva los combos.
+   La flecha reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
    Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
    se explica el motivo. No incluye Calendar, Covered ni Futures.
 3. Las patas se muestran en filas compactas. Hacer clic en lado, cantidad, prima
    o VI para editar; Enter o salir del campo acepta, y Escape restaura el valor
    anterior. Las patas manuales permiten editar también tipo y strike.
-   Ajustar proporciones por combo, combos, primas de entrada y VI de las patas.
+   Ajustar la cantidad total de contratos, prima de entrada y VI de cada pata.
    Las primas y VI copiadas quedan fijas. Al editar una prima aparecen
    Natural/MID/Opuesto para copiar esa referencia solamente a esa pata;
    una actualización de mercado no altera la posición
@@ -95,9 +95,14 @@ Jade Lizard Normal combina put vendida y call spread vendido; Reversed combina
 put spread vendido y call vendida (Twisted Sister), según la
 [guía de tastylive](https://assets.contentstack.io/v3/assets/blt40263f25ec36953f/blt094f33167a64ab9a/648c7f8b83c7fb90a25f4c77/tastylive-options-strategy-guide-2023.pdf).
 Los iconos muestran la forma del pago intrínseco, sin primas; el resultado monetario
-se calcula con las primas copiadas y editables, multiplicadores, combos y gastos.
+se calcula con las primas copiadas y editables, contratos de cada pata, factor y gastos.
 
-`resultado = Σ sentido × contratosPorCombo × combos × factor × (valor − prima) − gastos`
+`resultado = Σ sentido × contratosDeLaPata × factor × (valor − prima) − gastos`
+
+No hay multiplicador global de combos. Las estrategias guardadas en el formato
+anterior convierten sus contratos por combo en cantidades totales al cargarse,
+conservando la exposición y el resultado. Al guardarlas nuevamente se usa el
+formato de cantidades totales.
 
 Compra tiene sentido +1 y venta −1. Al vencimiento, valor es el intrínseco.
 Máximos y equilibrios se calculan sobre todos los tramos lineales desde 0 hasta
@@ -202,3 +207,12 @@ Jade Lizard Reversed, previsualización sin alterar las patas y conservación de
 tres combos al aplicar. El foco volvió al botón de estrategia; Análisis mostró
 el crédito escalado y la cola ilimitada de la call vendida. El navegador compartido
 continuaba oculto; esta comprobación no acredita inspección visual por píxeles.
+
+### Cantidades directas por pata
+
+Se retiraron el control y el multiplicador global de combos. 309 tests Vitest,
+13 tests Node, 10 tests de seguridad, TypeScript, lint y empaquetado aprobados.
+Las regresiones verifican cantidades directas, migración de guardados sin alterar
+el P&L y sin multiplicarlos nuevamente al guardar. Revisión independiente sin
+hallazgos. La fixture confirmó por DOM tres contratos de una call, su débito total
+y el gráfico disponible, sin referencias a combos en Armado ni Análisis.
