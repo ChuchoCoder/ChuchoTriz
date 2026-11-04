@@ -175,6 +175,16 @@
 .ct-sim-legend i { display: inline-block; width: 22px; height: 0; }
 .ct-sim-expiry-key { border-top: 3px solid var(--sim-accent); }
 .ct-sim-theory-key { border-top: 3px dashed var(--sim-theory); }
+.ct-sim-sigma-one-key { border-top: 2px dashed var(--sim-profit); }
+.ct-sim-sigma-two-key { border-top: 2px dotted var(--sim-loss); }
+.ct-sim-sigma-1 { color: var(--sim-profit); }
+.ct-sim-sigma-2 { color: var(--sim-loss); }
+.ct-sim-sigma line { stroke: currentColor; stroke-width: 1; opacity: .7; }
+.ct-sim-sigma-1 line { stroke-dasharray: 6 4; }
+.ct-sim-sigma-2 line { stroke-dasharray: 2 4; }
+.ct-sim-chart .ct-sim-sigma text { fill: currentColor; font-size: 10px; paint-order: stroke; stroke: var(--sim-card); stroke-width: 3px; }
+.ct-sim-deviations { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 10px; color: var(--sim-muted); font-size: 10px; }
+.ct-sim-deviations > span:first-child { flex-basis: 100%; }
 .ct-sim-chart { display: block; width: 100%; height: auto; margin: 18px 0 12px; overflow: visible; }
 .ct-sim-chart text { font: 12px system-ui, sans-serif; fill: var(--sim-muted); }
 .ct-sim-grid { stroke: var(--sim-border); stroke-width: .7; opacity: .5; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curve, dateDay, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, theoreticalPrice } from "./model";
+import { curve, dateDay, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice } from "./model";
 
 function strategy(change: Partial<Simulation> = {}) {
   const parsed = parseSimulation({ ...initialSimulation("2026-11-03"), ...change });
@@ -78,6 +78,42 @@ describe("European theoretical prices", () => {
     expect(resultAt(value, 100, "theoretical")).toBeNaN();
   });
 });
+describe("standard deviation reference levels", () => {
+  const annual = () => strategy({ expiry: "2027-11-03", legs: exampleLegs("bull-call").map(leg => ({ ...leg, volatility: leg.strike === "100" ? "20" : "80" })) });
+  it("uses S × IV × sqrt(T) at the nearest selected strike, independently of cursor and range", () => {
+    const reference = standardDeviationLevels(annual())!;
+    expect(reference).toMatchObject({ volatility: .2, move: 20, strikes: [100] });
+    expect(reference.levels.map(level => level.price)).toEqual([60, 80, 120, 140]);
+    const value = annual(); value.rangeMin = 90; value.rangeMax = 110;
+    expect(standardDeviationLevels(value)).toEqual(reference);
+  });
+  it("averages equally near types and strikes without buy/sell or quantity weighting", () => {
+    const value = annual(), leg = value.legs[0];
+    value.legs = [{ ...leg, strike: 90, volatility: .2, contracts: 100 }, { ...leg, kind: "put", strike: 110, volatility: .4, side: "sell", contracts: 1 }];
+    expect(standardDeviationLevels(value)!.volatility).toBeCloseTo(.3);
+    value.legs.push({ ...value.legs[0], side: "sell", contracts: 3 });
+    expect(standardDeviationLevels(value)!.volatility).toBeCloseTo(.3);
+    value.legs[0].volatility = NaN;
+    expect(standardDeviationLevels(value)).toBeUndefined();
+  });
+  it("scales with remaining time and effective scenario IV and collapses at zero time/VI", () => {
+    const value = annual(); value.years = .25;
+    expect(standardDeviationLevels(value)!.move).toBe(10);
+    value.legs[0].volatility = .25;
+    expect(standardDeviationLevels(value)!.move).toBe(12.5);
+    value.years = 0;
+    expect(standardDeviationLevels(value)!.levels.every(level => level.price === 100)).toBe(true);
+    value.years = 1; value.legs[0].volatility = 0;
+    expect(standardDeviationLevels(value)!.move).toBe(0);
+  });
+  it("keeps negative or offscreen approximate levels unchanged instead of clamping them", () => {
+    const value = annual(); value.legs[0].volatility = 5;
+    expect(standardDeviationLevels(value)!.levels.map(level => level.price)).toEqual([-900, -400, 600, 1100]);
+    value.legs = [];
+    expect(standardDeviationLevels(value)).toBeUndefined();
+  });
+});
+
 describe("input validation", () => {
   it.each(["0", "1.5", "10000000001"])("rejects invalid per-leg total contracts %s", contracts => {
     const input = initialSimulation("2026-11-03"); input.legs[0].contracts = contracts;

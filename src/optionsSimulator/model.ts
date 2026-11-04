@@ -116,6 +116,24 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
 export function intrinsic(kind: OptionKind, spot: number, strike: number): number {
   return Math.max(0, kind === "call" ? spot - strike : strike - spot);
 }
+
+/** Linear expected-move approximation, using the nearest selected strikes and ACT/365. */
+export function standardDeviationLevels(strategy: Strategy) {
+  const distance = Math.min(...strategy.legs.map(leg => Math.abs(leg.strike - strategy.spot)));
+  const nearest = strategy.legs.filter(leg => Math.abs(Math.abs(leg.strike - strategy.spot) - distance) <= Math.max(1, strategy.spot) * Number.EPSILON * 8);
+  if (!nearest.length || nearest.some(leg => !Number.isFinite(leg.volatility))) return undefined;
+  // Equal weight per contract identity (kind + strike), independent of side/quantity.
+  const groups = new Map<string, number[]>();
+  for (const leg of nearest) {
+    const key = `${leg.kind}|${leg.strike}`;
+    groups.set(key, [...groups.get(key) ?? [], leg.volatility]);
+  }
+  const volatilities = [...groups.values()].map(values => values.reduce((sum, value) => sum + value, 0) / values.length);
+  const volatility = volatilities.reduce((sum, value) => sum + value, 0) / volatilities.length;
+  const move = strategy.spot * volatility * Math.sqrt(strategy.years);
+  return { volatility, move, strikes: [...new Set(nearest.map(leg => leg.strike))],
+    levels: ([-2, -1, 1, 2] as const).map(sigma => ({ sigma, price: strategy.spot + sigma * move })) };
+}
 // Abramowitz & Stegun 26.2.17; absolute CDF error below 7.5e-8.
 function normalCdf(x: number): number {
   const t = 1 / (1 + .2316419 * Math.abs(x));

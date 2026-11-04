@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { addDays, curve, dateDay, Example, exampleLegs, expirySummary, initialSimulation, Leg, MAX_LEGS,
-  newLeg, numeric, parseSimulation, resultAt, Simulation, Strategy } from "./model";
+  newLeg, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, Strategy } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
-import { formatOptionInput, formatOptionNumber } from "./format";
+import { formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { PremiumReference } from "./market";
 
 const storageKey = "OptionsSimulatorStrategiesV1";
@@ -47,9 +47,10 @@ function Field({ label, value, onChange, type = "text", ...attributes }: {
     inputMode={type === "text" ? "decimal" : undefined} onChange={event => onChange(event.target.value)} {...attributes} /></label>;
 }
 
-function EditableLegValue({ label, value, onChange, options, references, className = "" }: {
+function EditableLegValue({ label, value, onChange, options, references, className = "", formatValue = formatOptionNumber }: {
   label: string; value: string; onChange(value: string): void;
   options?: readonly (readonly [string, string])[]; references?: readonly (readonly [string, number])[]; className?: string;
+  formatValue?(value: number): string;
 }) {
   const [editing, setEditing] = useState(false);
   const control = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
@@ -84,7 +85,7 @@ function EditableLegValue({ label, value, onChange, options, references, classNa
     };
   }, [editing, references?.length]);
   const display = options ? options.find(([key]) => key === value)?.[1] ?? value
-    : value.trim() === "" ? "—" : Number.isFinite(numeric(value)) ? formatOptionNumber(numeric(value)) : value;
+    : value.trim() === "" ? "—" : Number.isFinite(numeric(value)) ? formatValue(numeric(value)) : value;
   const finish = (focus: boolean) => { returnFocus.current = focus; setEditing(false); };
   const keyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "Enter" && event.key !== "Escape") return;
@@ -128,6 +129,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
 }) {
   const gradientId = useId().replace(/:/g, "");
   const points = useMemo(() => curve(strategy), [strategy]);
+  const deviations = useMemo(() => standardDeviationLevels(strategy), [strategy]);
   const [hover, setHover] = useState<number | undefined>(undefined);
   useEffect(() => { setHover(undefined); }, [selectedPrice, scenarioDate, strategy]);
   const svg = useRef<SVGSVGElement>(null);
@@ -163,7 +165,8 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   };
   return <>
     <div className="ct-sim-legend"><span><i className="ct-sim-expiry-key" /> Al vencimiento</span>
-      {hasTheory && <span><i className="ct-sim-theory-key" /> Teórico · {scenarioDate}</span>}</div>
+      {hasTheory && <span><i className="ct-sim-theory-key" /> Teórico · {scenarioDate}</span>}
+      {deviations && deviations.move > 0 && <><span><i className="ct-sim-sigma-one-key" /> ±1σ</span><span><i className="ct-sim-sigma-two-key" /> ±2σ</span></>}</div>
     {!hasTheory && <p role="status" className="ct-sim-hint">Teórico no disponible: completá la VI de cada pata. El resultado al vencimiento no necesita VI.</p>}
     <svg ref={svg} className="ct-sim-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Resultado de la estrategia según el precio del subyacente"
       onPointerMove={event => { if (event.pointerType === "mouse") setHover(pointerPrice(event)); }} onPointerLeave={() => setHover(undefined)}
@@ -180,6 +183,12 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       })}
       <path d={area} fill={`url(#${gradientId})`} />
       <line x1={left} x2={width - right} y1={y(0)} y2={y(0)} className="ct-sim-zero" />
+      {deviations && deviations.move > 0 && deviations.levels.filter(level => level.price >= strategy.rangeMin && level.price <= strategy.rangeMax).map(level =>
+        <g key={level.sigma} className={`ct-sim-sigma ct-sim-sigma-${Math.abs(level.sigma)}`} aria-label={`${level.sigma > 0 ? "+" : ""}${level.sigma}σ: ${fmt(level.price)} ${currency}`}>
+          <title>{level.sigma > 0 ? "+" : ""}{level.sigma}σ: {fmt(level.price)} {currency}</title>
+          <line x1={x(level.price)} x2={x(level.price)} y1={top} y2={height - bottom} />
+          <text x={Math.max(left + 13, Math.min(width - right - 13, x(level.price)))} y={top + (Math.abs(level.sigma) === 1 ? 11 : 24)} textAnchor="middle">{level.sigma > 0 ? "+" : ""}{level.sigma}σ</text>
+        </g>)}
       {strategy.spot >= strategy.rangeMin && strategy.spot <= strategy.rangeMax && <line x1={x(strategy.spot)} x2={x(strategy.spot)} y1={top} y2={height - bottom} className="ct-sim-spot" />}
       {Array.from({ length: 5 }, (_, index) => {
         const value = strategy.rangeMin + (strategy.rangeMax - strategy.rangeMin) * index / 4;
@@ -193,6 +202,15 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       <text x={left} y="14">Resultado · {currency}</text>
       <text x={(width + left - right) / 2} y={height - 3} textAnchor="middle">Precio del subyacente · {currency}</text>
     </svg>
+    <div className="ct-sim-deviations" aria-label="Referencias de desvío estándar">
+      {!deviations ? <span>Desvíos no disponibles: completá la VI de las patas más cercanas al subyacente.</span> : <>
+        <span title={`VI promedio por tipo y strike entre las patas más cercanas: ${deviations.strikes.map(fmt).join(" / ")}. Incluye el cambio de VI del escenario. Aproximación: precio de referencia × VI × raíz(días/365).`}>
+          Desvíos aprox. · VI ref. {formatOptionVolatility(deviations.volatility * 100)} % · {Math.round(strategy.years * 365)} días restantes</span>
+        {([1, 2] as const).map(sigma => <span key={sigma} className={`ct-sim-sigma-${sigma}`}>±{sigma}σ: {fmt(strategy.spot - sigma * deviations.move)} / {fmt(strategy.spot + sigma * deviations.move)} {currency}</span>)}
+        {deviations.move === 0 && <span>Los niveles coinciden con el precio de referencia.</span>}
+        {deviations.levels.some(level => level.price < strategy.rangeMin || level.price > strategy.rangeMax) && <span>Hay niveles σ fuera del rango visible.</span>}
+      </>}
+    </div>
     <div className="ct-sim-inspect">
       <label>Precio a evaluar <strong>{fmt(price)} {currency}</strong><input aria-label="Precio a evaluar" type="range"
         min={strategy.rangeMin} max={strategy.rangeMax} step={(strategy.rangeMax - strategy.rangeMin) / 1000}
@@ -327,7 +345,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
             </span>}
           </th>
           {([ ["contracts", "Contratos"], ["premium", "Prima"], ["volatility", "VI"] ] as const).map(([key, label]) => <td key={key}>
-            <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]} references={key === "premium" ? referencesFor(leg) : undefined} onChange={value => updateLeg(leg.id, key, value)} />
+            <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]} formatValue={key === "volatility" ? formatOptionVolatility : undefined}
+              references={key === "premium" ? referencesFor(leg) : undefined} onChange={value => updateLeg(leg.id, key, value)} />
           </td>)}
           <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
@@ -340,7 +359,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </section>
     {view === "build" && <section className="ct-sim-card ct-sim-quick-results" aria-label="Resultado rápido del armado">
       <div className="ct-sim-section-heading"><h3>Resultado rápido</h3><button type="button" onClick={() => changeView("analysis")}>Análisis →</button></div>
-      <p className="ct-sim-hint">Comparte los supuestos de Análisis · VI {input.volatilityShift} pp.</p>
+      <p className="ct-sim-hint">Comparte los supuestos de Análisis · Cambio de VI {formatOptionVolatility(numeric(input.volatilityShift))} pp.</p>
       {chart}
     </section>}</div></div>
     <div id={`${menusId}-analysis-panel`} role="tabpanel" aria-labelledby={`${menusId}-analysis-tab`} hidden={view !== "analysis"} className="ct-sim-analysis-panel">{analysisVisited && <>

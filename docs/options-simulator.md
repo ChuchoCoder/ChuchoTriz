@@ -20,6 +20,24 @@ probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha d
 entrada/mitad del plazo/vencimiento. Los campos manuales siguen disponibles.
 El precio del escenario se evalúa independientemente del precio de entrada.
 
+La VI se presenta con dos decimales en cadena, patas y leyendas; el cálculo y la
+edición conservan la precisión original. Ambos gráficos incluyen líneas verticales
+−2σ, −1σ, +1σ y +2σ con la aproximación de movimiento esperado
+`precio de referencia ± n × precio de referencia × VI de referencia × √(días/365)`.
+El escalado de volatilidad con la raíz del tiempo sigue la
+[explicación de CME](https://www.cmegroup.com/education/courses/introduction-to-options/discover-options-volatility).
+Se usan los días restantes desde la fecha teórica hasta el vencimiento y la VI
+efectiva (incluido el cambio del escenario) de las patas con strike más cercano al
+precio de referencia. En empates se promedian por tipo/strike sin ponderar compra,
+venta o cantidad. No se presenta como VI ATM del mercado ni como probabilidad de
+ganancia. El tooltip describe la referencia utilizada.
+
+Los niveles numéricos se muestran aunque queden fuera del rango visible; las líneas
+solo se dibujan dentro del gráfico, sin recortar niveles negativos a cero. Con VI
+cero o al vencimiento coinciden con el precio de referencia y se evitan líneas
+superpuestas. Si falta VI en las patas de referencia no se infiere un dato para los
+desvíos; la curva al vencimiento sigue disponible.
+
 La leyenda de la cadena ocupa una fila: subyacente y precio, rangos de VI de
 Calls/Puts y cantidad de ejercicios. La cobertura y antigüedad de la escala quedan
 en los tooltips. Solo aparece la advertencia de contratos incompletos si hay alguno;
@@ -230,3 +248,14 @@ La regresión verifica edición inmediata, escenarios compartidos y datos invál
 Revisión independiente sin hallazgos. La fixture confirmó por DOM resultados
 idénticos entre vistas, conservación del cambio de VI y alturas de 240/340 px para
 los gráficos compacto/completo. El navegador seguía oculto; sin QA por píxeles.
+
+### VI con dos decimales y referencias de desvíos
+
+316 tests Vitest, 13 tests Node, 10 tests de seguridad, TypeScript, lint y paquete
+0.0.17 aprobados. Revisión independiente sin hallazgos. Pruebas específicas
+verifican preservación de precisión, fórmula, empates, datos faltantes, plazo cero,
+VI cero y niveles fuera de rango.
+
+En la fixture se confirmó por DOM VI 35,00 %, ±1σ en 89,97/110,03 y ±2σ en
+79,93/120,07 para precio 100 y 30 días; ambos gráficos coincidieron. Subir la VI
+5 pp actualizó las referencias a 40,00 %. Sin inspección visual por píxeles.

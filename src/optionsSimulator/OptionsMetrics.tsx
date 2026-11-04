@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { formatOptionNumber } from "./format";
+import { formatOptionNumber, formatOptionVolatility } from "./format";
 import type { MetricCell, MetricScale } from "./marketMetrics";
 import { viGradeColor } from "./marketMetrics";
 import type { Contract as OptionContract } from "./market";
@@ -17,7 +17,7 @@ export function OptionMetricCell({ contract, field, cell, scale }: {
     const stamp = cell?.lastTradeAt === undefined ? "" : ` · Última operación: ${tradeTimeFormat.format(cell.lastTradeAt)} ART`;
     return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}><span className={`ct-opt-iv-value${color ? "" : " excluded"}`} data-grading={color ? "included" : "excluded"}
       style={color ? { "--ct-iv": color } as CSSProperties : undefined} title={`${symbol} · ${reason}${stamp}${color ? "" : " · Fuera de la escala"}`}>
-      {value === undefined ? "—" : `${fmt(value, 2)} %`}</span></td>;
+      {value === undefined ? "—" : `${formatOptionVolatility(value)} %`}</span></td>;
   }
   if (field === "volume") {
     const value = cell?.nominalVolume, percent = value === undefined || scale.volumeMax === 0 ? 0 : value / scale.volumeMax * 100;

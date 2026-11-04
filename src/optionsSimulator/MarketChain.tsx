@@ -3,7 +3,7 @@ import { Catalog, Contract, PremiumReference, Quote, useOptionMarket } from "./m
 import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
-import { formatOptionNumber as fmt } from "./format";
+import { formatOptionNumber as fmt, formatOptionVolatility } from "./format";
 import { Leg, localDate, MAX_LEGS, newLeg, Simulation } from "./model";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
@@ -132,7 +132,7 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   const viLegend = (kind: "call" | "put") => {
     const scale = metrics.scales[kind];
     const range = scale.min === undefined || scale.max === undefined ? "—"
-      : scale.min === scale.max ? `${fmt(scale.min, 2)} %` : `${fmt(scale.min, 2)}–${fmt(scale.max, 2)} %`;
+      : scale.min === scale.max ? `${formatOptionVolatility(scale.min)} %` : `${formatOptionVolatility(scale.min)}–${formatOptionVolatility(scale.max)} %`;
     return <span title={`${scale.included}/${scale.total} VI ${viEnabled ? `de operaciones de los últimos ${viMinutes} min` : "con dato"}. Gris: fuera de la escala.`}>
       {kind === "call" ? "Calls" : "Puts"} <strong>{range}</strong></span>;
   };
