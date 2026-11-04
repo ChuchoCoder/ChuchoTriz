@@ -52,6 +52,13 @@ async function fill(label: string, value: string) {
 async function mount() { await act(async () => root.render(<OptionsSimulator />)); }
 async function showAnalysis() { await act(async () => button("Análisis").click()); }
 async function showBuild() { await act(async () => button("Armado").click()); }
+async function clickChartAt(fraction: number) {
+  const chart = container.querySelector<SVGSVGElement>('.ct-sim-chart')!;
+  const [, , width, height] = chart.getAttribute('viewBox')!.split(' ').map(Number);
+  const left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24;
+  vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, width, height));
+  await act(async () => chart.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: left + fraction * (width - left - right) })));
+}
 
 it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable simulation legs", async () => {
   await mount();
@@ -253,7 +260,7 @@ it("shows a live chart below the legs and shares its scenario with the full anal
   expect(byLabel("Resultado rápido del armado").textContent).toContain("VI 5,00 pp");
   await fill("Contratos pata 1", "2");
   expect(outputs()).toEqual(["500 ARS", "500 ARS"]);
-  await fill("Precio a evaluar", "105");
+  await clickChartAt(.6);
   expect(outputs()).toEqual(["-500 ARS", "-500 ARS"]);
   await showAnalysis();
   expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("105");
@@ -317,9 +324,36 @@ it("keeps small preset and chart prices as editable decimals rather than rejecte
   expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("0.0000009");
   expect(container.querySelector('.ct-sim-chart')).not.toBeNull();
   await fill("Precio mínimo", "0"); await fill("Precio máximo", "0.000002");
-  await fill("Precio a evaluar", "0.00000095");
+  await clickChartAt(.475);
   expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("0.00000095");
   expect(container.querySelector('.ct-sim-cursor')).not.toBeNull();
+});
+
+it("pins the clicked analysis price through pointer movement, replaces it on another click and has no price slider", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis(); await clickChartAt(.7);
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("110");
+  expect(byLabel("Precio fijado").textContent).toBe("110 ARS");
+  const chart = container.querySelector('.ct-sim-chart')!;
+  const cursor = container.querySelector('.ct-sim-cursor')!.getAttribute('x1');
+  const outputs = () => [...container.querySelectorAll('.ct-sim-inspect output')].map(node => node.textContent);
+  const results = outputs();
+  await act(async () => {
+    const event = new MouseEvent('pointermove', { bubbles: true, clientX: 150 });
+    Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+    chart.dispatchEvent(event);
+  });
+  expect(container.querySelector('.ct-sim-cursor')!.getAttribute('x1')).toBe(cursor);
+  expect(outputs()).toEqual(results);
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("110");
+  expect(container.querySelector('.ct-sim-inspect input[type="range"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Precio a evaluar"]')).toBeNull();
+  await clickChartAt(.3);
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("90");
+  expect(byLabel("Precio fijado").textContent).toBe("90 ARS");
+  await showBuild();
+  expect(byLabel("Precio fijado").textContent).toBe("90 ARS");
+  expect(container.querySelector('.ct-sim-inspect input')).toBeNull();
 });
 
 it("replaces the selectors with eight visual option families and previews variant changes before applying", async () => {

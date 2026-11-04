@@ -129,8 +129,6 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   const gradientId = useId().replace(/:/g, "");
   const points = useMemo(() => curve(strategy), [strategy]);
   const deviations = useMemo(() => standardDeviationLevels(strategy), [strategy]);
-  const [hover, setHover] = useState<number | undefined>(undefined);
-  useEffect(() => { setHover(undefined); }, [selectedPrice, scenarioDate, strategy]);
   const svg = useRef<SVGSVGElement>(null);
   const [width, setWidth] = useState(900);
   useEffect(() => {
@@ -143,7 +141,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
     observer.observe(chart); return () => observer.disconnect();
   }, []);
   const clamp = (value: number) => Math.max(strategy.rangeMin, Math.min(strategy.rangeMax, value));
-  const price = hover ?? selectedPrice;
+  const price = selectedPrice;
   const cursorVisible = price >= strategy.rangeMin && price <= strategy.rangeMax;
   const height = compact ? 240 : 340, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = 26, bottom = 48;
   const hasTheory = strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
@@ -168,10 +166,9 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       {deviations && deviations.move > 0 && <><span><i className="ct-sim-sigma-one-key" /> ±1σ</span><span><i className="ct-sim-sigma-two-key" /> ±2σ</span></>}</div>
     {!hasTheory && <p role="status" className="ct-sim-hint">Teórico no disponible: completá la VI de cada pata. El resultado al vencimiento no necesita VI.</p>}
     <svg ref={svg} className="ct-sim-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Resultado de la estrategia según el precio del subyacente"
-      onPointerMove={event => { if (event.pointerType === "mouse") setHover(pointerPrice(event)); }} onPointerLeave={() => setHover(undefined)}
-      onClick={event => { setHover(undefined); onPriceChange(pointerPrice(event)); }}>
+      onClick={event => onPriceChange(pointerPrice(event))}>
       <title>Resultado total en {currency}. Línea continua al vencimiento y línea punteada teórica.</title>
-      <desc>Usá el control Precio a evaluar debajo del gráfico para consultar ambas curvas con teclado o pantalla táctil.</desc>
+      <desc>Hacé clic o tocá el gráfico para fijar un precio y consultar ambas curvas. También podés editar Precio del escenario en Análisis.</desc>
       <defs><linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="var(--sim-accent)" stopOpacity=".22" /><stop offset="100%" stopColor="var(--sim-accent)" stopOpacity=".02" />
       </linearGradient></defs>
@@ -211,14 +208,12 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       </>}
     </div>
     <div className="ct-sim-inspect">
-      <label>Precio a evaluar <strong>{fmt(price)} {currency}</strong><input aria-label="Precio a evaluar" type="range"
-        min={strategy.rangeMin} max={strategy.rangeMax} step={(strategy.rangeMax - strategy.rangeMin) / 1000}
-        value={clamp(price)} onChange={event => { setHover(undefined); onPriceChange(Number(event.target.value)); }} /></label>
+      <div className="ct-sim-selected-price"><span>Precio fijado</span><strong aria-label="Precio fijado">{fmt(price)} {currency}</strong></div>
       <div><span>Al vencimiento</span><output className={expiryResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{fmt(expiryResult)} {currency}</output></div>
       <div><span>Teórico · {scenarioDate}</span><output className={theoreticalResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{hasTheory ? `${fmt(theoreticalResult)} ${currency}` : "Sin VI"}</output></div>
     </div>
     {!cursorVisible && <p className="ct-sim-hint">El precio evaluado está fuera del rango visible. Ampliá el rango para ubicarlo en el gráfico.</p>}
-    <p className="ct-sim-hint">Pasá el cursor para explorar o hacé clic para fijar un precio. La línea vertical punteada marca el precio de referencia.</p>
+    <p className="ct-sim-hint">Hacé clic o tocá el gráfico para fijar otro precio. La línea vertical punteada marca el precio de referencia.</p>
   </>;
 }
 

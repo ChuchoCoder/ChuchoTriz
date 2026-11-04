@@ -74,8 +74,10 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    simulada. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
 4. Entrar en **Análisis** para consultar el gráfico al vencimiento y el teórico;
    usar los toggles o modificar manualmente precio del escenario, fecha objetivo,
-   cambio de VI en puntos porcentuales, tasa y dividendos. Hover explora precios,
-   clic los fija y el slider permite consultar ambos resultados con teclado/touch.
+   cambio de VI en puntos porcentuales, tasa y dividendos. Clic o toque en el gráfico
+   fija el precio; mover el cursor no cambia la selección. **Precio del escenario**
+   permite ingresarlo con teclado. Debajo del gráfico se muestran el precio fijado
+   y ambos resultados, sin slider de precio.
 
 Las simulaciones guardadas incluyen primas, contratos, VI, fechas, moneda, factor,
 gastos y parámetros del modelo. No son órdenes ni se guardan en Matriz. No hay
@@ -279,3 +281,12 @@ QA por DOM con fixture: cuatro niveles iguales a los del gráfico, mismo número
 de filas y capas sin capturar clics. A 1024 px de ventana, tabla y líneas midieron
 1110 px y conservaron alineación al desplazar hacia puts; a 1920 px volvieron a
 coincidir en todo el ancho. No se acredita inspección visual por píxeles.
+
+### Precio fijado por clic sin slider
+
+318 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y paquete aprobados;
+revisión independiente sin hallazgos. Se verifican selección por clic, segundo clic,
+persistencia al mover el puntero y alternar vistas, y precios pequeños sin exponentes.
+La fixture confirmó por DOM que precio, cursor y ambos resultados permanecen
+idénticos tras `pointermove`, que otro clic cambia el precio y que no hay slider
+inferior. Sin inspección visual por píxeles.

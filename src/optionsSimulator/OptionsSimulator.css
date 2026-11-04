@@ -60,9 +60,9 @@
 .ct-sim-quick-results .ct-sim-legend { gap: 8px 14px; font-size: 10px; }
 .ct-sim-quick-results .ct-sim-chart { margin: 10px 0; }
 .ct-sim-quick-results .ct-sim-inspect { grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 8px; }
-.ct-sim-quick-results .ct-sim-inspect > label { grid-column: 1 / -1; }
-.ct-sim-quick-results .ct-sim-inspect label, .ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
-.ct-sim-quick-results .ct-sim-inspect output { font-size: 14px; }
+.ct-sim-quick-results .ct-sim-selected-price { grid-column: 1 / -1; }
+.ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
+.ct-sim-quick-results .ct-sim-inspect output, .ct-sim-quick-results .ct-sim-inspect strong { font-size: 14px; }
 .ct-sim-legs-card { padding: 12px; }
 .ct-sim-legs-card table { min-width: 290px; font-size: 11px; }
 .ct-sim-legs-card th, .ct-sim-legs-card td { height: 34px; padding: 2px; vertical-align: middle; }
@@ -185,7 +185,7 @@
 .ct-sim-chart .ct-sim-sigma text { fill: currentColor; font-size: 10px; paint-order: stroke; stroke: var(--sim-card); stroke-width: 3px; }
 .ct-sim-deviations { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 10px; color: var(--sim-muted); font-size: 10px; }
 .ct-sim-deviations > span:first-child { flex-basis: 100%; }
-.ct-sim-chart { display: block; width: 100%; height: auto; margin: 18px 0 12px; overflow: visible; }
+.ct-sim-chart { display: block; width: 100%; height: auto; margin: 18px 0 12px; overflow: visible; cursor: crosshair; }
 .ct-sim-chart text { font: 12px system-ui, sans-serif; fill: var(--sim-muted); }
 .ct-sim-grid { stroke: var(--sim-border); stroke-width: .7; opacity: .5; }
 .ct-sim-zero { stroke: var(--sim-muted); stroke-width: 1; }
@@ -196,8 +196,7 @@
 .ct-sim-expiry-dot { fill: var(--sim-accent); }
 .ct-sim-theory-dot { fill: var(--sim-theory); }
 .ct-sim-inspect { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; align-items: center; border-top: 1px solid var(--sim-border); padding-top: 16px; }
-.ct-sim-inspect label { display: flex; flex-wrap: wrap; justify-content: space-between; font-size: 12px; }
-.ct-sim-inspect output { display: block; font-size: 18px; margin-top: 4px; }
+.ct-sim-inspect output, .ct-sim-inspect strong { display: block; font-size: 18px; margin-top: 4px; }
 .ct-sim-profit { color: var(--sim-profit); }
 .ct-sim-loss, .ct-sim-error, .ct-sim-errors { color: var(--sim-loss); }
 .ct-sim-assumptions { color: var(--sim-muted); font-size: 12px; }
@@ -226,6 +225,6 @@
   .ct-sim-metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .ct-sim-metrics strong { font-size: 16px; white-space: nowrap; }
   .ct-sim-inspect { grid-template-columns: 1fr 1fr; }
-  .ct-sim-inspect > label { grid-column: 1 / -1; }
+  .ct-sim-selected-price { grid-column: 1 / -1; }
   .ct-sim-chart text { font-size: 12px; }
 }
