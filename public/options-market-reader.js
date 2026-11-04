@@ -21,8 +21,8 @@
     if (!ms.webSocketConnectionStatus) throw Error("Market data desconectado. Esperando reconexión de Matriz.");
     return { ms, revision, version };
   }
-  function sources() {
-    const ss = context().ms.securityStore;
+  function sources(ms) {
+    const ss = ms.securityStore;
     const options = ss.options, underlyings = ss.underlyingsForMatrix;
     if (!Array.isArray(options) || !Array.isArray(underlyings) || options.length > 10000 || underlyings.length > 2000)
       throw Error("Catálogo de opciones de Matriz no disponible o fuera del límite de lectura.");
@@ -71,15 +71,23 @@
     if (!channels.has(operation.channel) || operation.retired || Date.now() > operation.deadline) throw Error("Lectura retirada o fuera de tiempo.");
     if (context().revision !== operation.revision) throw Error("Cambió el contexto de mercado durante la lectura.");
   }
-  async function snapshot(params, operation) {
-    const source = sources(), catalog = catalogOf(source);
+  async function snapshot(params, operation, ms) {
+    if (!Array.isArray(params.ids) || !params.ids.length || params.ids.length > 160)
+      throw Error("Selección de opciones inválida (hasta 160 instrumentos por lectura).");
+    const requested = new Set(params.ids);
+    const source = sources(ms), catalog = catalogOf(source);
     const underlying = source.underlyings.find(u => u.id === params.underlyingId);
-    const allowed = new Map(source.options.filter(s => catalog.contracts.some(c => c.id === s?.id && c.underlyingId === params.underlyingId)).map(s => [s.id, s]));
+    const allowedIds = new Set(catalog.contracts.filter(c => c.underlyingId === params.underlyingId && requested.has(c.id)).map(c => c.id));
+    const allowed = new Map();
+    for (const sec of source.options) {
+      const id = sec?.id;
+      if (allowedIds.has(id)) allowed.set(id, sec);
+    }
     if (underlying) allowed.set(underlying.id, underlying);
-    if (!underlying || !Array.isArray(params.ids) || !params.ids.length || params.ids.length > 160 || new Set(params.ids).size !== params.ids.length || params.ids.some(id => !allowed.has(id)))
+    if (!underlying || requested.size !== params.ids.length || params.ids.some(id => !allowed.has(id)))
       throw Error("Selección de opciones inválida (hasta 160 instrumentos por lectura).");
     if (new Set([...subscribed, ...params.ids]).size > 256) throw Error("Límite de suscripciones de lectura alcanzado. Recargá Matriz para cambiar de mercado.");
-    const ms = context().ms, fresh = params.ids.filter(id => !subscribed.has(id));
+    const fresh = params.ids.filter(id => !subscribed.has(id));
     if (fresh.length) {
       // Market subscriptions only. Never unsubscribe: other Matriz views share these topics.
       ms.dmaWebSocket.addSubscription("md", fresh.map(id => "md." + id));
@@ -94,8 +102,13 @@
       if (!sec || sec.id !== id) throw Error("Instrumento no disponible en Matriz.");
       instruments[id] = snapshotOf(sec);
     }
-    const final = sources();
-    if (catalogOf(final).catalogRevision !== catalog.catalogRevision || params.ids.some(id => allowed.get(id) !== (id === underlying.id ? final.underlyings : final.options).find(s => s.id === id)))
+    const final = sources(ms), finalOptions = new Map();
+    for (const sec of final.options) {
+      const id = sec?.id;
+      if (allowedIds.has(id) && !finalOptions.has(id)) finalOptions.set(id, sec);
+    }
+    const finalUnderlying = final.underlyings.find(u => u.id === underlying.id);
+    if (catalogOf(final).catalogRevision !== catalog.catalogRevision || params.ids.some(id => allowed.get(id) !== (id === underlying.id ? finalUnderlying : finalOptions.get(id))))
       throw Error("Cambió el catálogo durante la lectura.");
     return { instruments, underlyingId: underlying.id, capturedAt: Date.now(), contextRevision: operation.revision, catalogRevision: catalog.catalogRevision };
   }
@@ -110,13 +123,13 @@
     try {
       if (msg.method === "catalog") {
         const current = context();
-        reply({ result: { ...catalogOf(sources()), contextRevision: current.revision, version: current.version } });
+        reply({ result: { ...catalogOf(sources(current.ms)), contextRevision: current.revision, version: current.version } });
       } else if (msg.method === "snapshot") {
         if (active) throw Error("Hay una lectura de mercado pendiente. Esperando a que termine.");
         const current = context();
         operation = { id: msg.id, channel: msg.channel, revision: current.revision, deadline: Date.now() + 4500 };
         active = operation;
-        const result = await snapshot(msg.params || {}, operation);
+        const result = await snapshot(msg.params || {}, operation, current.ms);
         assertCurrent(operation); reply({ result });
       } else throw Error("Método no permitido por el lector de mercado.");
     } catch (error) { reply({ error: error instanceof Error ? error.message : "Lectura no disponible." }); }

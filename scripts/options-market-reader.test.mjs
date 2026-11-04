@@ -57,6 +57,28 @@ test('deduplicates market subscriptions across polls', async () => {
   await f.call('snapshot', { underlyingId: 'GGAL', ids: ['option-0'] });
   assert.equal(f.subscriptions.length, 2); assert.equal(f.calls.length, 2);
 });
+test('looks up a small snapshot in a large catalog with linear work', async () => {
+  const f = fixture(), size = 1000;
+  let idReads = 0;
+  for (let index = 0; index < size; index++) {
+    f.contracts.push({ ...f.contracts[0], get id() { idReads++; return `demo-${index}`; } });
+  }
+  const response = await f.call('snapshot', { underlyingId: 'GGAL', ids: ['option-0', 'option-1'] });
+  assert.ok(response.result);
+  assert.deepEqual(f.calls, ['option-0', 'option-1']);
+  assert.ok(idReads < size * 8, `Instrument IDs read ${idReads} times for ${size} catalog entries`);
+});
+test('stops native reads if the displayed Matriz version changes mid-snapshot', async () => {
+  const f = fixture();
+  const original = f.store.securityStore.getSecurity;
+  f.store.securityStore.getSecurity = async id => {
+    f.document.body.innerText = id === 'option-0' ? 'Versión: 99.0' : 'Versión: 4.24.4';
+    return original(id);
+  };
+  const params = { underlyingId: 'GGAL', ids: ['option-0', 'option-1'] };
+  assert.match((await f.call('snapshot', params)).error, /Versión/);
+  assert.deepEqual(f.calls, ['option-0']);
+});
 test('serializes native reads even if the client times out or detaches', async () => {
   const f = fixture(); let release;
   const original = f.store.securityStore.getSecurity;
