@@ -86,6 +86,14 @@ export function strategyRecipe(choice: StrategyChoice, contracts: readonly Contr
   return { ok: true, legs: legs.map(item => ({ ...item, side: invert ? item.side === "buy" ? "sell" : "buy" : item.side })) };
 }
 
+export function quotePrice(quote: Quote | undefined, side: Side): { ok: true; price: number } | { ok: false; reason: string } {
+  const level = quote?.[side === "buy" ? "ask" : "bid"];
+  if (!level || !Number.isFinite(level.price) || level.price <= 0 || !Number.isFinite(level.size) || level.size <= 0)
+    return { ok: false, reason: `sin ${side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
+  if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, reason: "BID/ASK cerrado o cruzado." };
+  return { ok: true, price: level.price };
+}
+
 export function recipePrices(recipe: Recipe, quotes: Record<string, Quote> | undefined, currency: string | undefined): { ok: true; premiums: number[] } | { ok: false; reason: string } {
   if (!recipe.ok) return recipe;
   if (!recipe.legs.length) return { ok: false, reason: "No hay patas para calcular el resultado." };
@@ -94,11 +102,9 @@ export function recipePrices(recipe: Recipe, quotes: Record<string, Quote> | und
     return { ok: false, reason: "Faltan factores compatibles o las monedas de prima, ejercicio y subyacente son diferentes." };
   const premiums: number[] = [];
   for (const item of recipe.legs) {
-    const quote = quotes?.[item.contract.id], level = quote?.[item.side === "buy" ? "ask" : "bid"];
-    if (!level || !Number.isFinite(level.price) || level.price <= 0 || !Number.isFinite(level.size) || level.size <= 0)
-      return { ok: false, reason: `${item.contract.symbol}: sin ${item.side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
-    if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, reason: `${item.contract.symbol}: BID/ASK cerrado o cruzado.` };
-    premiums.push(level.price);
+    const price = quotePrice(quotes?.[item.contract.id], item.side);
+    if (!price.ok) return { ok: false, reason: `${item.contract.symbol}: ${price.reason}` };
+    premiums.push(price.price);
   }
   return { ok: true, premiums };
 }

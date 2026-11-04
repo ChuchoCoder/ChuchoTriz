@@ -7,7 +7,7 @@ import { formatExpiryDays, formatOptionAmount, formatOptionNumber as fmt, format
 import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSimulation, Simulation, standardDeviationLevels } from "./model";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
-import { preferredOptionMarket, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
+import { preferredOptionMarket, quotePrice, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
 import type { StrikeMarket } from "./strategyAdjustments";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -118,7 +118,9 @@ export default function MarketChain({ active, input, setInput, onStrikeMarket }:
     const mismatched = input.legs.length && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || input.legs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
     if (mismatched) { setNotice("Limpiá las patas antes de cambiar el contexto de la simulación o combinar con datos manuales."); return; }
     const level = quote[side === "buy" ? "ask" : "bid"];
-    if (!level || !positive(level.price) || !positive(level.size)) return;
+    const price = quotePrice(quote, side);
+    if (!price.ok) { setNotice(price.reason); return; }
+    if (!level) return;
     const leg: Leg = { ...newLeg(existing?.id ?? Math.max(0, ...input.legs.map(item => item.id)) + 1), securityId: contract.id, symbol: contract.symbol,
       kind: contract.kind, side, strike: String(contract.strike), premium: String(level.price),
       contracts: existing?.contracts ?? "1", volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
@@ -148,12 +150,13 @@ export default function MarketChain({ active, input, setInput, onStrikeMarket }:
     <OptionMetricCell contract={contract} field={field} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />;
   const quoteCell = (contract: Contract | undefined, side: "buy" | "sell") => {
     const quote = contract && data?.instruments[contract.id], level = quote?.[side === "buy" ? "ask" : "bid"];
+    const price = quotePrice(quote, side);
     const marked = contract && input.legs.find(leg => leg.securityId === contract.id && leg.side === side);
-    const available = !!contract && !!quote && !!level && positive(level.price) && positive(level.size) && !reading.issue;
+    const available = !!contract && !!quote && !!level && price.ok && !reading.issue;
     const moneyness = contract && itmSpot !== undefined && contract.strike !== itmSpot ? (contract.kind === "call" ? contract.strike < itmSpot : contract.strike > itmSpot) ? "itm" : "otm" : undefined;
     return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}>
       <button type="button" disabled={!available} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
-        aria-pressed={!!marked} title={contract?.symbol} onClick={() => contract && quote && selectQuote(contract, side, quote)}>
+        aria-pressed={!!marked} title={price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}`} onClick={() => contract && quote && selectQuote(contract, side, quote)}>
         <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : ""}</span><OptionQuoteValue quantity value={available ? level.size : undefined} /><OptionQuoteValue value={available ? level.price : undefined} />
       </button></td>;
   };

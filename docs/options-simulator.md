@@ -40,7 +40,7 @@ precio de referencia. En empates se promedian por tipo/strike sin ponderar compr
 venta o cantidad. No se presenta como VI ATM del mercado ni como probabilidad de
 ganancia. El tooltip describe la referencia utilizada.
 
-Los niveles numéricos se muestran aunque queden fuera del rango visible; las líneas
+En Análisis los niveles numéricos se muestran aunque queden fuera del rango visible; las líneas
 solo se dibujan dentro del gráfico, sin recortar niveles negativos a cero. Con VI
 cero o al vencimiento coinciden con el precio de referencia y se evitan líneas
 superpuestas. Si falta VI en las patas de referencia no se infiere un dato para los
@@ -86,10 +86,11 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    ambiguos, factores incompatibles o sin la punta requerida. En estrategias
    totalmente manuales el paso de strike es un punto, conservando prima y VI;
    no se mezcla este ajuste con patas de la cadena.
-   **Cantidad ↓/↑** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
-   3:6:3; bajar vuelve una unidad de esa proporción. No baja cantidades a cero.
+   **Cantidad −/+** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
+   3:6:3; bajar vuelve una unidad de esa proporción. Doble clic ajusta diez
+   unidades de proporción en total (1:2:1 → 11:22:11). No baja cantidades a cero.
    Cada pata tiene además botones **− / +** junto a su cantidad: quitan o agregan
-   un contrato solo en esa pata, conservando su sentido (una venta −1 pasa a −2
+   un contrato (diez con doble clic) solo en esa pata, conservando su sentido (una venta −1 pasa a −2
    al agregar). Reducir queda deshabilitado en un contrato y aumentar al alcanzar
    el máximo; para cambiar compra/venta se edita el signo directamente.
    Debajo de las patas, el slider de **precio total de entrada** permite elegir
@@ -101,8 +102,9 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    referencias sin modificar la entrada fijada; si esta queda fuera, se informa.
    Si falta una punta válida o no coincide el contexto, el control se deshabilita.
    Los precios individuales/manuales siguen en **Análisis → Más supuestos y rango →
-   Precios de entrada por pata**. Debajo de las patas también se muestra la pérdida
-   máxima global al vencimiento, con **∞** cuando es ilimitada.
+   Precios de entrada por pata**. Crédito/débito, ganancia y pérdida máximas
+   globales al vencimiento se muestran en una sola fila, con **∞** cuando son
+   ilimitadas. La moneda se toma del mercado; no hay selector de moneda o plazo.
 4. Entrar en **Análisis** para consultar el gráfico al vencimiento y el teórico;
    usar los toggles o modificar manualmente precio del escenario, fecha objetivo,
    cambio de VI en puntos porcentuales, tasa y dividendos. Clic o toque en el gráfico

@@ -25,8 +25,11 @@ issues públicos. Usar el canal privado habitual con el propietario.
   Function, callbacks dinámicos de temporizadores, imports remotos/dinámicos y sinks
   de HTML inseguro. Los fixtures *.test.* están excluidos y no se distribuyen.
 - scripts/check-free.mjs mantiene la autoridad única del manifest y paquete: solo
-  storage, dominios actuales y recursos explícitos, sin workers, puentes, permisos
-  opcionales ni acceso ampliado. Se revisan CSP, frames y exposición a otras extensiones.
+  storage, dominios actuales y recursos explícitos, sin workers, permisos opcionales
+  ni acceso ampliado. La única excepción de lectura de página es
+  `options-market-reader.js`, limitado a catálogo y cotizaciones públicas nativas
+  para el simulador; no expone ejecución, credenciales ni datos privados de cuenta.
+  Se revisan CSP, frames y exposición a otras extensiones.
   La ausencia de CSP conserva los valores predeterminados de Chrome MV3.
 - free-files.json enumera cada archivo autorizado. Cada incorporación requiere
   revisión individual; las guardas inspeccionan también src/public ignorados y dist.

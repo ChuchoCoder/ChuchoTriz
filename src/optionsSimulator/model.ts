@@ -181,27 +181,30 @@ export interface Equilibrium { from: number; to: number }
 export function expirySummary(strategy: Strategy) {
   const knots = [...new Set([0, ...strategy.legs.map(leg => leg.strike)])].sort((a, b) => a - b);
   const values = knots.map(price => resultAt(strategy, price, "expiry"));
-  const slope = strategy.legs.filter(leg => leg.kind === "call").reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier, 0);
-  const tolerance = 1e-7;
-  const zero = (value: number) => Math.abs(value) < tolerance;
+  // Integer quantities cancel exactly before applying a potentially fractional factor.
+  const slope = strategy.legs.filter(leg => leg.kind === "call").reduce((sum, leg) => sum + direction(leg) * leg.contracts, 0) * strategy.multiplier;
+  // Bound rounding relative to the actual terms, so tiny valid losses remain losses.
+  const zeros = values.map((value, index) => Math.abs(value) <= Number.EPSILON * 32 * (Math.abs(strategy.costs) + strategy.legs.reduce((sum, leg) =>
+    sum + leg.contracts * strategy.multiplier * (intrinsic(leg.kind, knots[index], leg.strike) + leg.premium), 0)));
   const equilibria: Equilibrium[] = [];
   const add = (from: number, to = from) => {
     const last = equilibria.at(-1);
-    if (last && Math.abs(last.to - from) < tolerance) last.to = to;
+    if (last && last.to === from) last.to = to;
     else equilibria.push({ from, to });
   };
   for (let i = 0; i < knots.length - 1; i++) {
     const [a, b] = [values[i], values[i + 1]];
-    if (zero(a) && zero(b)) add(knots[i], knots[i + 1]);
+    const [zeroA, zeroB] = [zeros[i], zeros[i + 1]];
+    if (zeroA && zeroB) add(knots[i], knots[i + 1]);
     else {
-      if (zero(a)) add(knots[i]);
-      if (!zero(a) && !zero(b) && Math.sign(a) !== Math.sign(b)) add(knots[i] - a * (knots[i + 1] - knots[i]) / (b - a));
+      if (zeroA) add(knots[i]);
+      if (!zeroA && !zeroB && Math.sign(a) !== Math.sign(b)) add(knots[i] - a * (knots[i + 1] - knots[i]) / (b - a));
     }
   }
   const lastPrice = knots.at(-1)!, lastValue = values.at(-1)!;
-  if (slope === 0 && zero(lastValue)) add(lastPrice, Infinity);
+  if (slope === 0 && zeros.at(-1)) add(lastPrice, Infinity);
   else {
-    if (zero(lastValue)) add(lastPrice);
+    if (zeros.at(-1)) add(lastPrice);
     else if (slope !== 0 && -lastValue / slope > 0) add(lastPrice - lastValue / slope);
   }
   return { entry: entryCost(strategy), maxProfit: slope > 0 ? Infinity : Math.max(0, ...values),

@@ -93,6 +93,26 @@ it("selecting a marked quote removes the leg; no execution controls are present"
   await act(async () => buy.click()); expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(0);
   for (const label of ["Enviar", "Cancelar orden", "Ejecutar", "Maker", "Cruce", "Preparar operación"]) expect(container.textContent).not.toContain(label);
 });
+it("rejects crossed and locked books on direct chain selection and recovers with valid quotes", async () => {
+  for (const ask of [10, 12]) {
+    marketState.current.data!.instruments["call-100"] = { bid: { price: 12, size: 100 }, ask: { price: ask, size: 100 } };
+    await mount();
+    for (const action of ["Comprar", "Vender"]) {
+      const quote = byLabel<HTMLButtonElement>(`${action} CALL 100 en simulación`);
+      expect(quote.disabled).toBe(true);
+      expect(quote.title).toContain("cerrado o cruzado");
+      await act(async () => quote.click());
+    }
+    expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(0);
+  }
+  marketState.current.data!.instruments["call-100"].ask = { price: 13, size: 100 };
+  await mount();
+  expect(byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").disabled).toBe(false);
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  expect(byLabel("Editar Prima pata 1").textContent).toBe("13");
+  await showAnalysis();
+  expect([...container.querySelectorAll('label')].some(label => label.textContent?.includes("Moneda común"))).toBe(false);
+});
 it("rejects incoherent currencies or native factors rather than assuming a lot of 100", async () => {
   marketState.current.catalog!.contracts.find(contract => contract.id === "call-100")!.factor = undefined;
   await mount();

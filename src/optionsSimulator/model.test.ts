@@ -7,6 +7,28 @@ function strategy(change: Partial<Simulation> = {}) {
   return parsed.strategy;
 }
 describe("total profit and loss at expiry", () => {
+  it("does not turn small valid losses into equilibrium intervals", () => {
+    const value = strategy({ multiplier: "0.000001", legs: [
+      { id: 1, kind: "call", side: "buy", strike: "1", premium: "0.000001", contracts: "1", volatility: "40" },
+    ] });
+    const summary = expirySummary(value);
+    expect(resultAt(value, 0, "expiry")).toBeCloseTo(-1e-12, 18);
+    expect(summary.equilibria).toHaveLength(1);
+    expect(summary.equilibria[0].from).toBeCloseTo(1.000001, 12);
+    expect(summary.equilibria[0].to).toBe(summary.equilibria[0].from);
+  });
+  it("keeps distinct nearby break-even prices separate", () => {
+    const value = strategy({ multiplier: "1", legs: [
+      { id: 1, kind: "call", side: "buy", strike: "1", premium: "0.00000001", contracts: "1", volatility: "40" },
+      { id: 2, kind: "call", side: "sell", strike: "1.00000002", premium: "0", contracts: "2", volatility: "40" },
+      { id: 3, kind: "call", side: "buy", strike: "1.00000004", premium: "0", contracts: "1", volatility: "40" },
+    ] });
+    const summary = expirySummary(value);
+    expect(summary.equilibria).toHaveLength(2);
+    expect(summary.equilibria[0].from).toBeCloseTo(1.00000001, 14);
+    expect(summary.equilibria[1].from).toBeCloseTo(1.00000003, 14);
+    expect(summary.equilibria.every(point => point.from === point.to)).toBe(true);
+  });
   it("bull spread accounts for both premiums, per-leg contracts and entry costs", () => {
     const value = strategy({ legs: exampleLegs("bull-call").map(leg => ({ ...leg, contracts: "3" })), costs: "15" });
     expect(resultAt(value, 95, "expiry")).toBe(-1215);
@@ -46,6 +68,20 @@ describe("total profit and loss at expiry", () => {
   });
 });
 describe("European theoretical prices", () => {
+  it("keeps exactly hedged decimal-factor call tails bounded in either direction", () => {
+    for (const reverse of [false, true]) {
+      const value = strategy({ multiplier: "0.1", legs: [
+        { id: 1, kind: "call", side: reverse ? "sell" : "buy", strike: "100", premium: "0", contracts: "3", volatility: "40" },
+        { id: 2, kind: "call", side: reverse ? "buy" : "sell", strike: "110", premium: "0", contracts: "1", volatility: "40" },
+        { id: 3, kind: "call", side: reverse ? "buy" : "sell", strike: "120", premium: "0", contracts: "2", volatility: "40" },
+      ] });
+      const summary = expirySummary(value);
+      expect(summary.maxProfit).toBeCloseTo(reverse ? 0 : 5);
+      expect(summary.maxLoss).toBeCloseTo(reverse ? 5 : 0);
+      expect(summary.equilibria).toEqual([{ from: 0, to: 100 }]);
+      expect(resultAt(value, 10000, "expiry")).toBeCloseTo(reverse ? -5 : 5);
+    }
+  });
   it("computes daily analytical theta and matches independent time differences for calls and puts", () => {
     expect(theoreticalTheta("call", 100, 100, 1, .2, .05, 0)).toBeCloseTo(-6.4140275 / 365, 8);
     for (const kind of ["call", "put"] as const) {

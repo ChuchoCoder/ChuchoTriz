@@ -377,7 +377,6 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         onChange={event => update("scenarioDate", addDays(input.valuationDate, Number(event.target.value)))} /></label>}</div>
       <details className="ct-sim-scenario-advanced"><summary>Más supuestos y rango</summary>
       <label className="ct-sim-field"><span>Subyacente</span><input aria-label="Subyacente manual" value={input.underlying} maxLength={40} onChange={event => update("underlying", event.target.value)} /></label>
-      <label className="ct-sim-field"><span>Moneda común</span><select value={input.currency} onChange={event => update("currency", event.target.value)}><option>ARS</option><option>USD</option></select></label>
       <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />
       <Field label="Fecha de entrada" type="date" value={input.valuationDate} onChange={value => update("valuationDate", value)} />
       <Field label="Vencimiento" type="date" value={input.expiry} min={input.valuationDate} onChange={value => update("expiry", value)} />
