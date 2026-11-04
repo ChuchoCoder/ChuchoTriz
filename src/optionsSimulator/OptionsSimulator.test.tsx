@@ -30,7 +30,7 @@ beforeEach(() => {
   };
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const byLabel = <T extends HTMLElement>(label: string) => {
   const node = Array.from(container.querySelectorAll<T>("[aria-label]")).find(element => element.getAttribute("aria-label") === label);
   if (!node) throw Error("Missing: " + label); return node;
@@ -390,4 +390,34 @@ it("draws four standard-deviation references in both charts and updates them wit
   await showBuild(); await fill("VI pata 1", "");
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("Desvíos no disponibles");
   expect(container.querySelector('.ct-sim-expiry-line')).not.toBeNull();
+});
+
+it("positions chain deviation lines between actual strike row centers without adding rows or mixing contexts", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
+    const strike = this.dataset.optionStrike;
+    return strike === undefined ? new DOMRect(0, 0, 750, 212) : new DOMRect(0, 52 + (Number(strike) - 80) / 10 * 32, 750, 32);
+  });
+  await mount();
+  const markers = () => [...container.querySelectorAll<HTMLElement>('.ct-opt-sigma-line')];
+  const rowCount = container.querySelectorAll('.ct-opt-chain tbody tr').length;
+  expect(markers()).toHaveLength(0);
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  // ±2σ are outside this chain's 80..120 strikes: never pin them to its edges.
+  expect(markers()).toHaveLength(2);
+  const lower = markers().find(node => node.getAttribute('aria-label')?.startsWith('-1σ'))!;
+  const price = 100 - 100 * .4 * Math.sqrt(30 / 365);
+  expect(parseFloat(lower.style.top)).toBeCloseTo(68 + (price - 80) / 10 * 32);
+  expect(container.querySelectorAll('.ct-opt-chain tbody tr')).toHaveLength(rowCount);
+  await fill("VI pata 1", "10");
+  expect(markers()).toHaveLength(4);
+  expect(markers().map(node => parseFloat(node.style.top))).toEqual(markers().map(node => parseFloat(node.style.top)).sort((a, b) => a - b));
+  const chartLabels = [...container.querySelectorAll('.ct-sim-sigma')].map(node => node.getAttribute('aria-label'));
+  expect(markers().map(node => node.getAttribute('aria-label')?.replace(' en cadena', ''))).toEqual(chartLabels);
+  await fill("Vencimiento", addDays(expiry, 1));
+  expect(markers()).toHaveLength(0);
+  await fill("Vencimiento", expiry);
+  expect(markers()).toHaveLength(4);
+  await showAnalysis();
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento (30 días)").click());
+  await showBuild(); expect(markers()).toHaveLength(0);
 });

@@ -3,11 +3,10 @@ import { addDays, curve, dateDay, Example, exampleLegs, expirySummary, initialSi
   newLeg, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, Strategy } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
-import { formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
+import { formatOptionAmount as fmt, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { PremiumReference } from "./market";
 
 const storageKey = "OptionsSimulatorStrategiesV1";
-const fmt = (value: number) => value.toLocaleString("es-AR", value !== 0 && Math.abs(value) < .01 ? { maximumSignificantDigits: 4 } : { maximumFractionDigits: 2 });
 const examples: [Example, string][] = [["bull-call", "Bull call spread"], ["bear-put", "Bear put spread"],
   ["straddle", "Straddle comprado"], ["butterfly", "Mariposa de calls"], ["iron-condor", "Iron condor"]];
 type Saved = { name: string; simulation: Simulation };

@@ -38,6 +38,13 @@ cero o al vencimiento coinciden con el precio de referencia y se evitan líneas
 superpuestas. Si falta VI en las patas de referencia no se infiere un dato para los
 desvíos; la curva al vencimiento sigue disponible.
 
+La grilla de calls y puts comparte esas referencias con los gráficos: líneas
+horizontales atraviesan ambos lados y se interpolan entre los centros de las filas
+de strikes, con etiqueta y precio. Son capas superpuestas sin filas adicionales;
+no alteran las puntas ni sus clics. Se muestran cuando el subyacente, vencimiento
+y moneda del armado coinciden con la cadena. Los niveles fuera de los strikes
+disponibles no se fijan artificialmente al borde.
+
 La leyenda de la cadena ocupa una fila: subyacente y precio, rangos de VI de
 Calls/Puts y cantidad de ejercicios. La cobertura y antigüedad de la escala quedan
 en los tooltips. Solo aparece la advertencia de contratos incompletos si hay alguno;
@@ -259,3 +266,16 @@ VI cero y niveles fuera de rango.
 En la fixture se confirmó por DOM VI 35,00 %, ±1σ en 89,97/110,03 y ±2σ en
 79,93/120,07 para precio 100 y 30 días; ambos gráficos coincidieron. Subir la VI
 5 pp actualizó las referencias a 40,00 %. Sin inspección visual por píxeles.
+
+### Desvíos en la cadena
+
+317 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y paquete aprobados.
+La regresión verifica interpolación entre filas, coincidencia con el gráfico,
+actualización por VI, cero días y ocultación al cambiar el contexto; no suma filas.
+La revisión detectó y permitió corregir el ancho del overlay en tablas con scroll.
+Sin hallazgos pendientes.
+
+QA por DOM con fixture: cuatro niveles iguales a los del gráfico, mismo número
+de filas y capas sin capturar clics. A 1024 px de ventana, tabla y líneas midieron
+1110 px y conservaron alineación al desplazar hacia puts; a 1920 px volvieron a
+coincidir en todo el ancho. No se acredita inspección visual por píxeles.

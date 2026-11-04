@@ -3,8 +3,8 @@ import { Catalog, Contract, PremiumReference, Quote, useOptionMarket } from "./m
 import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
-import { formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { Leg, localDate, MAX_LEGS, newLeg, Simulation } from "./model";
+import { formatOptionAmount, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
+import { Leg, localDate, MAX_LEGS, newLeg, parseSimulation, Simulation, standardDeviationLevels } from "./model";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
@@ -18,6 +18,8 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   onPremiumReferences(references: Record<string, PremiumReference>): void;
 }) {
   const root = useRef<HTMLElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const [strikeCenters, setStrikeCenters] = useState<{ strike: number; y: number }[]>([]);
   const [chainHeight, setChainHeight] = useState<number>();
   const [underlyingId, setUnderlying] = useState("");
   const [expiration, setExpiration] = useState("");
@@ -61,6 +63,35 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   };
   const comparable = !!underlying && selected.length > 0 && selected.every(contract => contract.strikeCurrency === underlying.currency);
   const itmSpot = comparable ? spot : undefined;
+  const parsed = useMemo(() => parseSimulation(input), [input]);
+  const deviationReference = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
+  const sameContext = comparable && input.underlying === underlying?.symbol && input.expiry === expiryDate(expiration) && input.currency === underlying?.currency;
+  const deviations = sameContext ? deviationReference : undefined;
+  const gridLevels = deviations && deviations.move > 0 && strikeCenters.length === strikes.length && strikeCenters.every((row, index) => row.strike === strikes[index])
+    ? deviations.levels.flatMap(level => {
+      const index = strikes.findIndex(strike => strike >= level.price);
+      if (index < 0 || level.price < strikes[0]) return [];
+      const high = strikeCenters[index], low = strikeCenters[Math.max(0, index - 1)];
+      const fraction = high.strike === low.strike ? 0 : (level.price - low.strike) / (high.strike - low.strike);
+      return [{ ...level, y: low.y + (high.y - low.y) * fraction }];
+    }) : [];
+  useEffect(() => {
+    const container = grid.current;
+    if (!active || !container) return;
+    const position = () => {
+      const base = container.getBoundingClientRect().top;
+      const rows = [...container.querySelectorAll<HTMLTableRowElement>("tr[data-option-strike]")];
+      setStrikeCenters(rows.flatMap(row => {
+        const rect = row.getBoundingClientRect();
+        return rect.height > 0 ? [{ strike: Number(row.dataset.optionStrike), y: rect.top - base + rect.height / 2 }] : [];
+      }));
+    };
+    position();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(position);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [active, strikes.join("|")]);
   const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue });
   useEffect(() => {
     const viewport = root.current?.closest<HTMLElement>(".ct-sim");
@@ -158,22 +189,28 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
       <span title={market ? `${market.split("|")[0]} · ${market.split("|")[1] === "2" ? "24 hs" : `Plazo ${market.split("|")[1]}`} · Selección automática sin mezclar mercados` : "Sin mercado compatible"}>{underlying?.symbol ?? "Subyacente"} <strong>{money(spot)}</strong></span>
       <span className="ct-sim-vi-scale" title="VI relativa de menor a mayor; el filtro se configura desde ⚙ VI">VI <i aria-hidden="true" /></span>
       {viLegend("call")}{viLegend("put")}
+      {deviations && deviations.move > 0 && <span className="ct-opt-sigma-key" title={`Desvíos de la simulación · Precio de referencia ${fmt(parsed.ok ? parsed.strategy.spot : NaN)} · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${parsed.ok ? Math.round(parsed.strategy.years * 365) : 0} días restantes. Los niveles fuera de los strikes de la cadena no se dibujan.`}>
+        <i className="ct-opt-sigma-1">±1σ</i> <i className="ct-opt-sigma-2">±2σ</i></span>}
       <span className="ct-sim-strike-count">{strikes.length} ejercicios</span>
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
     </div>
     <div className="ct-table-scroll ct-opt-chain-scroll" style={chainHeight === undefined ? undefined : { maxHeight: chainHeight }} role="region" aria-label="Cadena de opciones" tabIndex={0}>
-      <table className="ct-opt-chain ct-opt-metrics-chain">
+      <div ref={grid} className="ct-opt-chain-grid"><table className="ct-opt-chain ct-opt-metrics-chain">
         <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
         <thead><tr><th colSpan={6}>CALLS</th><th className="ct-opt-strike">Ejercicio</th><th colSpan={6}>PUTS</th></tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>VI</th><th className="ct-opt-strike">Strike</th><th>VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead>
         <tbody>{strikes.map((strike, index) => {
           const call = unique("call", strike), put = unique("put", strike);
-          return <Fragment key={strike}><tr className={itmSpot === strike ? "ct-opt-atm" : ""}>
+          return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}>
             {metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}
             <th className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM · Subyacente</span>}</th>
             {metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}
           </tr>{itmSpot !== undefined && strike < itmSpot && strikes[index + 1] > itmSpot && <tr className="ct-opt-itm-boundary"><td colSpan={13}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span><span className="ct-opt-itm-spot">$ {fmt(itmSpot)}</span><span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
-      </table>{!strikes.length && <p className="ct-opt-empty">Sin contratos completos para esta selección.</p>}
+      </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
+        <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}
+          aria-label={`${level.sigma > 0 ? "+" : ""}${level.sigma}σ en cadena: ${formatOptionAmount(level.price)} ${input.currency}`}>
+          <span className={level.sigma < 0 ? "ct-opt-sigma-left" : "ct-opt-sigma-right"}>{level.sigma > 0 ? "+" : ""}{level.sigma}σ · {formatOptionAmount(level.price)}</span>
+        </div>)}</div></div>{!strikes.length && <p className="ct-opt-empty">Sin contratos completos para esta selección.</p>}
     </div>
   </section>;
 }
