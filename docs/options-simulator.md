@@ -485,3 +485,25 @@ el gráfico completo de 340 px y sus explicaciones.
 confirmó por geometría y captura visible IC 360/360/640 ARS en una sola fila sin
 desborde, panel rápido de 304 px y resultados alineados. Las regresiones verifican
 ganancia ilimitada de la call comprada y pérdida ilimitada de la call vendida.
+
+### Validación del PR
+
+La revisión de estándares y requisitos corrigió los extremos con factor decimal,
+los equilibrios de importes pequeños, la validación de libros cerrados o cruzados
+y el selector de moneda restante. Playwright detectó que el aviso del primer clic
+desplazaba el botón global de cantidades antes del segundo clic. El aviso sigue
+disponible para lectores de pantalla y ya no altera la posición del botón.
+
+Para repetir el recorrido, ejecutar `npm run package:free`, iniciar
+`tools/preview-free.mjs` con `CHUCHOTRIZ_PREVIEW_PORT=60472` y seleccionar
+`http://127.0.0.1:60472/fixture` en el perfil compartido de ChuchoTriz. Pasar la
+función de `tools/validate-options-simulator.playwright.js` al argumento `code`
+de `browser_run_code_unsafe`. Si el navegador está oculto, se puede activar
+temporalmente `Emulation.setFocusEmulationEnabled` en el tab de la fixture y
+restaurarlo al terminar. El reporte distingue clics de Playwright y eventos DOM.
+
+Pasaron las 34 comprobaciones en la fixture, con 136 interacciones de puntero.
+El recorrido cubre las 24 variantes de las ocho familias, cantidades, strikes,
+referencias de entrada, gráficos y escenarios, además de cotizaciones cruzadas,
+VI ausente y recuperación ante desconexión. Usa el paquete de producción con
+datos sintéticos locales.

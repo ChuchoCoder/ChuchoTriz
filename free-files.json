@@ -95,6 +95,7 @@
   "src/SettingsMenu.css",
   "src/SettingsMenu.tsx",
   "tools/preview-free.mjs",
+  "tools/validate-options-simulator.playwright.js",
   "tsconfig.json",
   "tsconfig.node.json",
   "vite.config.ts",

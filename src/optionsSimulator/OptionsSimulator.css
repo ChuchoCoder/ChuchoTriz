@@ -30,7 +30,6 @@
 .ct-sim button:hover:enabled { border-color: var(--sim-accent); }
 .ct-sim button:disabled { opacity: .5; cursor: default; }
 .ct-sim-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
-.ct-sim-status { color: var(--sim-muted); font-size: 11px; margin: 4px 0; }
 .ct-sim-card { padding: 18px; margin-bottom: 16px; border: 1px solid var(--sim-border); border-radius: 9px; background: var(--sim-card); min-width: 0; }
 .ct-sim h3 { font: 600 14px/1.4 "Lato", system-ui, sans-serif; color: inherit; margin: 0 0 16px; }
 .ct-sim h4 { font: 600 13px/1.4 "Lato", system-ui, sans-serif; color: inherit; margin: 20px 0 12px; }
