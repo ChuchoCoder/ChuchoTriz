@@ -10,6 +10,13 @@ Los presets por instrumento y la preferencia de autocompletar se guardan en
 `chrome.storage.local`, dentro del perfil de Chrome. El último preset elegido
 por instrumento se mantiene en memoria durante la sesión del formulario.
 
+El simulador de opciones lee el catálogo y las cotizaciones de mercado de Matriz
+para mostrar calls/puts, VI y otras métricas. No lee órdenes propias, tenencias ni
+saldos y no envía operaciones. El armado y sus supuestos se mantienen en memoria
+mientras el simulador permanece abierto. El guardado de estrategias está retirado
+de la interfaz; el simulador no lee ni sobrescribe datos guardados por versiones
+anteriores.
+
 La extensión no incorpora analítica, servidores propios, cuentas de usuario,
 pagos ni transmisión de esos datos a terceros. No lee contraseñas, cookies ni
 tokens de autenticación. Las comunicaciones de Matriz con su broker son

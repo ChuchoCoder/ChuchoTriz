@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
+import ChuchoTrizTools from "./ChuchoTrizTools";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
@@ -118,13 +118,14 @@ export function SettingsMenu() {
       aria-label="Configuración de ChuchoTriz" hidden={!open}
       onKeyDownCapture={event => {
         if (event.key !== "Escape") return;
+        if (event.target instanceof Element && event.target.closest("[data-ct-inline-editor]")) return;
         if (event.target instanceof HTMLInputElement && event.target.getAttribute("role") === "searchbox" && event.target.value) return;
         event.preventDefault(); event.stopPropagation(); close();
       }}>
       <header className="ct-free-settings-header"><h1>ChuchoTriz · Configuración</h1>
         <button ref={closeButton} type="button" aria-label="Volver a Matriz" onClick={close}>×</button>
       </header>
-      <InstrumentPresetsOptions embedded />
+      <ChuchoTrizTools embedded active={open} />
     </section>}
   </>;
 }

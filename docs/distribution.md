@@ -1,7 +1,8 @@
 # Mantenimiento y distribución
 
-ChuchoTriz ofrece presets por instrumento, autocompletado de cantidades y su
-configuración desde Matriz.
+ChuchoTriz ofrece presets por instrumento, autocompletado de cantidades, su
+configuración desde Matriz y un simulador de estrategias de opciones sin envío
+de órdenes. El lector de mercado independiente expone solo catálogo y snapshots.
 
 ## Incorporar cambios
 
