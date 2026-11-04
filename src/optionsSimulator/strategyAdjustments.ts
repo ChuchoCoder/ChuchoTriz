@@ -26,17 +26,19 @@ function nativeContext(input: Simulation, market?: StrikeMarket): { ok: true; ma
   return { ok: true, market, contracts };
 }
 
-/** One unit of the existing integer ratio, with no global quantity multiplier. */
-export function adjustStrategyQuantity(legs: Leg[], direction: -1 | 1): Adjustment {
+/** Adjust ratio units, stopping at the minimum/maximum without changing proportions. */
+export function adjustStrategyQuantity(legs: Leg[], direction: -1 | 1, steps = 1): Adjustment {
   if (!legs.length) return fail("Agregá patas a la estrategia.");
+  if (!Number.isSafeInteger(steps) || steps < 1 || steps > MAX_CONTRACTS) return fail("El paso de cantidad no es válido.");
   const quantities = legs.map(leg => numeric(leg.contracts));
   if (quantities.some(quantity => !Number.isSafeInteger(quantity) || quantity < 1 || quantity > MAX_CONTRACTS))
     return fail("Completá cantidades enteras válidas en todas las patas.");
   const gcd = (a: number, b: number): number => { while (b) [a, b] = [b, a % b]; return a; };
   const units = quantities.reduce(gcd);
-  if (direction < 0 && units === 1) return fail("Ya está en la cantidad mínima de su proporción.");
-  const next = quantities.map(quantity => quantity + direction * (quantity / units));
-  if (next.some(quantity => quantity > MAX_CONTRACTS)) return fail("La cantidad supera el máximo admitido.");
+  const maxUnits = Math.min(...quantities.map(quantity => Math.floor(MAX_CONTRACTS / (quantity / units))));
+  const nextUnits = Math.max(1, Math.min(maxUnits, units + direction * steps));
+  if (nextUnits === units) return fail(direction < 0 ? "Ya está en la cantidad mínima de su proporción." : "La cantidad supera el máximo admitido.");
+  const next = quantities.map(quantity => nextUnits * (quantity / units));
   return { ok: true, legs: legs.map((leg, index) => ({ ...leg, contracts: String(next[index]) })) };
 }
 

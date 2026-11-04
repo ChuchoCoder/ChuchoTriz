@@ -34,6 +34,20 @@ describe("quantity adjustments", () => {
     const legs = input().legs.map(leg => ({ ...leg, contracts: String(MAX_CONTRACTS) }));
     expect(adjustStrategyQuantity(legs, 1).ok).toBe(false);
   });
+  it("adjusts ten ratio units and clamps at either bound while preserving sides and proportions", () => {
+    const original = input().legs;
+    const up = adjustStrategyQuantity(original, 1, 10);
+    if (!up.ok) throw Error(up.reason);
+    expect(up.legs.map(leg => leg.contracts)).toEqual(["11", "22", "11"]);
+    expect(up.legs.map(leg => leg.side)).toEqual(original.map(leg => leg.side));
+    expect(adjustStrategyQuantity(up.legs, -1, 10)).toEqual({ ok: true, legs: original });
+    const small = original.map(leg => ({ ...leg, contracts: String(Number(leg.contracts) * 3) }));
+    expect(adjustStrategyQuantity(small, -1, 10)).toEqual({ ok: true, legs: original });
+    const nearMax = original.map(leg => ({ ...leg, contracts: String(Number(leg.contracts) * (MAX_CONTRACTS / 2 - 2)) }));
+    const capped = adjustStrategyQuantity(nearMax, 1, 10);
+    expect(capped.ok && capped.legs.map(leg => Number(leg.contracts))).toEqual([MAX_CONTRACTS / 2, MAX_CONTRACTS, MAX_CONTRACTS / 2]);
+    for (const steps of [0, -1, 1.5, NaN, Infinity, MAX_CONTRACTS + 1]) expect(adjustStrategyQuantity(original, 1, steps).ok).toBe(false);
+  });
 });
 
 describe("strike adjustments", () => {

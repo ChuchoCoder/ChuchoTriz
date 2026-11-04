@@ -450,3 +450,18 @@ gastos, mientras los importes y el crédito/débito mostrado incluyen gastos.
 en la fixture crédito (360/400/440 cr), débito (810/800/790 db), selección Mid,
 interpolación al 75 % y alineación. Se inspeccionó una captura del panel con
 el navegador compartido visible.
+
+### Cantidades con doble clic
+
+Los botones por pata y los globales de cantidad usan `−`/`+`: un clic ajusta una
+unidad y un doble clic diez en total. El segundo evento `click` del doble clic
+completa nueve unidades adicionales, sin demorar el clic simple. El ajuste
+global mueve unidades de la proporción actual (1:2:1 → 11:22:11); por pata mueve
+contratos, conservando compra/venta. Los extremos se limitan a una unidad de la
+proporción y al máximo permitido, sin pasar por cero ni alterar relaciones.
+
+360 tests Vitest, 13 Node, lint, TypeScript y empaquetado aprobados. Las pruebas
+cubren los eventos click/click/dblclick completos, límites y ambos controles.
+La fixture confirmó las secuencias por eventos DOM y las etiquetas `−`/`+`.
+El navegador compartido estaba oculto; los intentos con mouse no entregaron
+eventos y no se consideran validación de interacción física.

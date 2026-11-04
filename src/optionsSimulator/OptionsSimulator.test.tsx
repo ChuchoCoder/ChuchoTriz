@@ -564,6 +564,34 @@ it("steps each leg independently without flipping its side or crossing zero, inc
   expect(byLabel<HTMLButtonElement>("Reducir contratos pata 1").disabled).toBe(true);
 });
 
+async function doubleQuantityClick(label: string) {
+  for (const detail of [1, 2]) await act(async () => byLabel(label).dispatchEvent(new MouseEvent("click", { bubbles: true, detail })));
+  await act(async () => byLabel(label).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 })));
+}
+
+it("adjusts a leg by ten per double click, preserving buy/sell and stopping at one", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
+  await doubleQuantityClick("Aumentar contratos pata 1");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−11");
+  await doubleQuantityClick("Reducir contratos pata 1");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−1");
+  await act(async () => byLabel<HTMLButtonElement>("Aumentar contratos pata 1").click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−2");
+  await doubleQuantityClick("Reducir contratos pata 1");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−1");
+  expect(byLabel<HTMLButtonElement>("Reducir contratos pata 1").disabled).toBe(true);
+});
+
+it("double clicks adjust ten whole-strategy units without counting extra clicks or changing ratios", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => byLabel<HTMLButtonElement>("Aplicar Butterfly · Long Call").click());
+  await doubleQuantityClick("Subir cantidades de toda la estrategia");
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+11", "−22", "+11"]);
+  await doubleQuantityClick("Bajar cantidades de toda la estrategia");
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+1", "−2", "+1"]);
+});
+
 it("colors both curves and the expiry fill on the zero axis and each marker by its own profit/loss", async () => {
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   function verifyGradient() {

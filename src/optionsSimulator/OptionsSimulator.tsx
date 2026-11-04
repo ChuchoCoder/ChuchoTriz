@@ -6,6 +6,9 @@ import MarketChain from "./MarketChain";
 import { formatExpiryDays, formatOptionAmount as fmt, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 
+// A native double click delivers two click events: 1 + 9 makes ten in total.
+const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 9 : 1;
+
 function Field({ label, value, onChange, type = "text", ...attributes }: {
   label: string; value: string; onChange(value: string): void; type?: string; min?: string; max?: string;
 }) {
@@ -254,17 +257,17 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       ...leg, contracts, side: numeric(contracts) > 0 ? signed.startsWith("-") ? "sell" : "buy" : leg.side,
     } : leg) }));
   }
-  function stepQuantity(id: number, direction: -1 | 1) {
+  function stepQuantity(id: number, direction: -1 | 1, steps: number) {
     setStatus("");
     setInput(current => ({ ...current, legs: current.legs.map(leg => {
       if (leg.id !== id) return leg;
-      const result = adjustStrategyQuantity([leg], direction);
+      const result = adjustStrategyQuantity([leg], direction, steps);
       return result.ok ? result.legs[0] : leg;
     }) }));
   }
-  function adjust(kind: "strike" | "quantity", direction: -1 | 1) {
+  function adjust(kind: "strike" | "quantity", direction: -1 | 1, steps = 1) {
     setInput(current => {
-      const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction);
+      const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction, steps);
       return result.ok ? { ...current, legs: result.legs } : current;
     });
     setStatus(kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
@@ -301,9 +304,9 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         <div key={kind} className="ct-sim-adjustment-group" role="group" aria-label={label}><span>{kind === "quantity" ? "Cant." : label}</span><div>{([-1, 1] as const).map(direction => {
           const result = kind === "strike" ? shiftStrategyStrikes(input, direction, strikeMarket) : adjustStrategyQuantity(input.legs, direction);
           const action = `${direction < 0 ? "Bajar" : "Subir"} ${kind === "strike" ? "strikes" : "cantidades"} de toda la estrategia`;
-          return <button key={direction} type="button" aria-label={action} disabled={!result.ok} onClick={() => adjust(kind, direction)}
+          return <button key={direction} type="button" aria-label={action} disabled={!result.ok} onClick={event => adjust(kind, direction, kind === "quantity" ? quantityClickSteps(event.detail) : 1)}
             title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
-              : "Una unidad de la proporción actual, sin cambiar las relaciones entre patas" : result.reason}>{direction < 0 ? "↓" : "↑"}</button>;
+              : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↓" : "↑"}</button>;
         })}</div></div>)}</div>
       <button type="button" className="ct-sim-clear-legs" aria-label="Limpiar patas" onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
@@ -317,13 +320,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
           </span></td>
           <td><div className="ct-sim-quantity-stepper">
             <button type="button" className="ct-sim-quantity-step" aria-label={`Reducir contratos pata ${index + 1}`} disabled={!adjustStrategyQuantity([leg], -1).ok}
-              title="Quitar un contrato sin cambiar compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, -1); }}>−</button>
+              title="Clic: quitar 1 · Doble clic: quitar 10 · Conserva compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, -1, quantityClickSteps(event.detail)); }}>−</button>
             <EditableLegValue label={`Contratos pata ${index + 1}`} value={leg.contracts === "" ? "" : `${leg.side === "sell" ? "-" : ""}${leg.contracts}`}
             formatValue={value => `${value < 0 ? "−" : "+"}${formatOptionNumber(Math.abs(value))}`}
             valueDescription={`${leg.side === "buy" ? "Compra" : "Venta"} · ${leg.contracts} contratos`}
             className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"} inputMode="text" onChange={value => updateQuantity(leg.id, value)} />
             <button type="button" className="ct-sim-quantity-step" aria-label={`Aumentar contratos pata ${index + 1}`} disabled={!adjustStrategyQuantity([leg], 1).ok}
-              title="Agregar un contrato sin cambiar compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, 1); }}>+</button>
+              title="Clic: agregar 1 · Doble clic: agregar 10 · Conserva compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, 1, quantityClickSteps(event.detail)); }}>+</button>
           </div></td>
           <td className="ct-sim-leg-expiry-date" title={`Vencimiento ${input.expiry}`}>{formatOptionExpiry(input.expiry)}</td>
           <td className="ct-sim-leg-expiry" title={`Días calendario desde hoy · Vencimiento ${input.expiry}`}>{formatExpiryDays(daysToExpiry(input.expiry))}</td>
