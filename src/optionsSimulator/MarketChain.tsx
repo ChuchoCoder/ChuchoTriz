@@ -19,7 +19,7 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
 }) {
   const root = useRef<HTMLElement>(null);
   const grid = useRef<HTMLDivElement>(null);
-  const [strikeCenters, setStrikeCenters] = useState<{ strike: number; y: number }[]>([]);
+  const [strikeRows, setStrikeRows] = useState<{ strike: number; top: number; bottom: number }[]>([]);
   const [chainHeight, setChainHeight] = useState<number>();
   const [underlyingId, setUnderlying] = useState("");
   const [expiration, setExpiration] = useState("");
@@ -67,13 +67,13 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   const deviationReference = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
   const sameContext = comparable && input.underlying === underlying?.symbol && input.expiry === expiryDate(expiration) && input.currency === underlying?.currency;
   const deviations = sameContext ? deviationReference : undefined;
-  const gridLevels = deviations && deviations.move > 0 && strikeCenters.length === strikes.length && strikeCenters.every((row, index) => row.strike === strikes[index])
+  const gridLevels = deviations && deviations.move > 0 && strikes.length > 1 && strikeRows.length === strikes.length && strikeRows.every((row, index) => row.strike === strikes[index])
     ? deviations.levels.flatMap(level => {
       const index = strikes.findIndex(strike => strike >= level.price);
       if (index < 0 || level.price < strikes[0]) return [];
-      const high = strikeCenters[index], low = strikeCenters[Math.max(0, index - 1)];
-      const fraction = high.strike === low.strike ? 0 : (level.price - low.strike) / (high.strike - low.strike);
-      return [{ ...level, y: low.y + (high.y - low.y) * fraction }];
+      const upperIndex = Math.max(1, index);
+      const low = strikeRows[upperIndex - 1], high = strikeRows[upperIndex];
+      return [{ ...level, y: (low.bottom + high.top) / 2 }];
     }) : [];
   useEffect(() => {
     const container = grid.current;
@@ -81,9 +81,9 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     const position = () => {
       const base = container.getBoundingClientRect().top;
       const rows = [...container.querySelectorAll<HTMLTableRowElement>("tr[data-option-strike]")];
-      setStrikeCenters(rows.flatMap(row => {
+      setStrikeRows(rows.flatMap(row => {
         const rect = row.getBoundingClientRect();
-        return rect.height > 0 ? [{ strike: Number(row.dataset.optionStrike), y: rect.top - base + rect.height / 2 }] : [];
+        return rect.height > 0 ? [{ strike: Number(row.dataset.optionStrike), top: rect.top - base, bottom: rect.bottom - base }] : [];
       }));
     };
     position();

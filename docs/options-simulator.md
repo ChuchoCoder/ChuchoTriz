@@ -39,8 +39,8 @@ superpuestas. Si falta VI en las patas de referencia no se infiere un dato para 
 desvíos; la curva al vencimiento sigue disponible.
 
 La grilla de calls y puts comparte esas referencias con los gráficos: líneas
-horizontales atraviesan ambos lados y se interpolan entre los centros de las filas
-de strikes, con etiqueta y precio. Son capas superpuestas sin filas adicionales;
+horizontales atraviesan ambos lados por la separación entre las filas de strikes
+que contienen cada nivel, con etiqueta y precio calculado. Son capas superpuestas sin filas adicionales;
 no alteran las puntas ni sus clics. Se muestran cuando el subyacente, vencimiento
 y moneda del armado coinciden con la cadena. Los niveles fuera de los strikes
 disponibles no se fijan artificialmente al borde.
@@ -290,3 +290,11 @@ persistencia al mover el puntero y alternar vistas, y precios pequeños sin expo
 La fixture confirmó por DOM que precio, cursor y ambos resultados permanecen
 idénticos tras `pointermove`, que otro clic cambia el precio y que no hay slider
 inferior. Sin inspección visual por píxeles.
+
+### Líneas de desvío entre bases
+
+Las referencias de la grilla se ajustan a la separación entre filas y conservan
+el precio calculado en la etiqueta, incluso si varios niveles comparten intervalo.
+318 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y empaquetado aprobados;
+revisión independiente sin hallazgos. La fixture confirmó por DOM las cuatro
+líneas en límites de filas (70/80, 80/90, 110/120 y 120/130), sin cruzar sus centros.

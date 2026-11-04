@@ -426,7 +426,7 @@ it("draws four standard-deviation references in both charts and updates them wit
   expect(container.querySelector('.ct-sim-expiry-line')).not.toBeNull();
 });
 
-it("positions chain deviation lines between actual strike row centers without adding rows or mixing contexts", async () => {
+it("positions chain deviation lines on row boundaries without crossing quotes, adding rows or mixing contexts", async () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
     const strike = this.dataset.optionStrike;
     return strike === undefined ? new DOMRect(0, 0, 750, 212) : new DOMRect(0, 52 + (Number(strike) - 80) / 10 * 32, 750, 32);
@@ -439,12 +439,12 @@ it("positions chain deviation lines between actual strike row centers without ad
   // ±2σ are outside this chain's 80..120 strikes: never pin them to its edges.
   expect(markers()).toHaveLength(2);
   const lower = markers().find(node => node.getAttribute('aria-label')?.startsWith('-1σ'))!;
-  const price = 100 - 100 * .4 * Math.sqrt(30 / 365);
-  expect(parseFloat(lower.style.top)).toBeCloseTo(68 + (price - 80) / 10 * 32);
+  expect(parseFloat(lower.style.top)).toBe(84); // Boundary between the 80 and 90 rows.
   expect(container.querySelectorAll('.ct-opt-chain tbody tr')).toHaveLength(rowCount);
   await fill("VI pata 1", "10");
   expect(markers()).toHaveLength(4);
-  expect(markers().map(node => parseFloat(node.style.top))).toEqual(markers().map(node => parseFloat(node.style.top)).sort((a, b) => a - b));
+  // Levels in the same strike interval share its boundary; none crosses a row's center.
+  expect(markers().map(node => parseFloat(node.style.top))).toEqual([116, 116, 148, 148]);
   const chartLabels = [...container.querySelectorAll('.ct-sim-sigma')].map(node => node.getAttribute('aria-label'));
   expect(markers().map(node => node.getAttribute('aria-label')?.replace(' en cadena', ''))).toEqual(chartLabels);
   await fill("Vencimiento", addDays(expiry, 1));
