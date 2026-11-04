@@ -123,6 +123,8 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   const low = minValue - padding, high = maxValue + padding;
   const x = (value: number) => left + (value - strategy.rangeMin) / (strategy.rangeMax - strategy.rangeMin) * (width - left - right);
   const y = (value: number) => top + (high - value) / (high - low) * (height - top - bottom);
+  const zeroOffset = (y(0) - top) / (height - top - bottom);
+  const pnlGradientId = `${gradientId}-pnl`;
   const path = (mode: "expiry" | "theoretical") => points.map((point, index) => `${index ? "L" : "M"}${x(point.price)},${y(point[mode])}`).join(" ");
   const area = `${path("expiry")} L${x(strategy.rangeMax)},${y(0)} L${x(strategy.rangeMin)},${y(0)} Z`;
   const pointerPrice = (event: { currentTarget: SVGSVGElement; clientX: number }) => {
@@ -137,10 +139,17 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
     <svg ref={svg} className="ct-sim-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Resultado de la estrategia según el precio del subyacente"
       onClick={event => onPriceChange(pointerPrice(event))}>
       <title>Resultado total en {currency}. Línea continua al vencimiento y línea punteada teórica.</title>
-      <desc>Hacé clic o tocá el gráfico para fijar un precio y consultar ambas curvas. También podés editar Precio del escenario en Análisis.</desc>
-      <defs><linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="var(--sim-accent)" stopOpacity=".22" /><stop offset="100%" stopColor="var(--sim-accent)" stopOpacity=".02" />
-      </linearGradient></defs>
+      <desc>Verde indica ganancia y rojo pérdida respecto del eje cero. La curva continua es al vencimiento y la punteada es teórica. Hacé clic o tocá el gráfico para fijar un precio; también podés editar Precio del escenario en Análisis.</desc>
+      <defs>
+        <linearGradient id={pnlGradientId} gradientUnits="userSpaceOnUse" x1="0" y1={top} x2="0" y2={height - bottom}>
+          <stop offset="0" stopColor="var(--sim-profit)" /><stop offset={zeroOffset} stopColor="var(--sim-profit)" />
+          <stop offset={zeroOffset} stopColor="var(--sim-loss)" /><stop offset="1" stopColor="var(--sim-loss)" />
+        </linearGradient>
+        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="0" y1={top} x2="0" y2={height - bottom}>
+          <stop offset="0" stopColor="var(--sim-profit)" stopOpacity=".2" /><stop offset={zeroOffset} stopColor="var(--sim-profit)" stopOpacity=".03" />
+          <stop offset={zeroOffset} stopColor="var(--sim-loss)" stopOpacity=".03" /><stop offset="1" stopColor="var(--sim-loss)" stopOpacity=".2" />
+        </linearGradient>
+      </defs>
       {Array.from({ length: 5 }, (_, index) => {
         const value = low + (high - low) * index / 4;
         return <g key={index}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} className="ct-sim-grid" />
@@ -159,11 +168,11 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
         const value = strategy.rangeMin + (strategy.rangeMax - strategy.rangeMin) * index / 4;
         return <text key={index} x={x(value)} y={height - 24} textAnchor="middle">{fmt(value)}</text>;
       })}
-      <path d={path("expiry")} className="ct-sim-expiry-line" />
-      {hasTheory && <path d={path("theoretical")} className="ct-sim-theory-line" />}
+      <path d={path("expiry")} className="ct-sim-expiry-line" stroke={`url(#${pnlGradientId})`} />
+      {hasTheory && <path d={path("theoretical")} className="ct-sim-theory-line" stroke={`url(#${pnlGradientId})`} />}
       {cursorVisible && <><line x1={x(price)} x2={x(price)} y1={top} y2={height - bottom} className="ct-sim-cursor" />
-      <circle cx={x(price)} cy={y(expiryResult)} r="4" className="ct-sim-expiry-dot" />
-      {hasTheory && <circle cx={x(price)} cy={y(theoreticalResult)} r="4" className="ct-sim-theory-dot" />}</>}
+      <circle cx={x(price)} cy={y(expiryResult)} r="4" className="ct-sim-expiry-dot" fill={expiryResult >= 0 ? "var(--sim-profit)" : "var(--sim-loss)"} />
+      {hasTheory && <circle cx={x(price)} cy={y(theoreticalResult)} r="4" className="ct-sim-theory-dot" fill={theoreticalResult >= 0 ? "var(--sim-profit)" : "var(--sim-loss)"} />}</>}
       <text x={left} y="14">Resultado · {currency}</text>
       <text x={(width + left - right) / 2} y={height - 3} textAnchor="middle">Precio del subyacente · {currency}</text>
     </svg>
@@ -227,6 +236,14 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       ...leg, contracts, side: numeric(contracts) > 0 ? signed.startsWith("-") ? "sell" : "buy" : leg.side,
     } : leg) }));
   }
+  function stepQuantity(id: number, direction: -1 | 1) {
+    setStatus("");
+    setInput(current => ({ ...current, legs: current.legs.map(leg => {
+      if (leg.id !== id) return leg;
+      const result = adjustStrategyQuantity([leg], direction);
+      return result.ok ? result.legs[0] : leg;
+    }) }));
+  }
   function adjust(kind: "strike" | "quantity", direction: -1 | 1) {
     setInput(current => {
       const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction);
@@ -279,10 +296,16 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
               : <EditableLegValue label={`Tipo pata ${index + 1}`} value={leg.kind} options={[["call", "C"], ["put", "P"]]}
                 valueDescription={leg.kind === "call" ? "Call" : "Put"} onChange={value => updateLeg(leg.id, "kind", value)} />}
           </span></td>
-          <td><EditableLegValue label={`Contratos pata ${index + 1}`} value={leg.contracts === "" ? "" : `${leg.side === "sell" ? "-" : ""}${leg.contracts}`}
+          <td><div className="ct-sim-quantity-stepper">
+            <button type="button" className="ct-sim-quantity-step" aria-label={`Reducir contratos pata ${index + 1}`} disabled={!adjustStrategyQuantity([leg], -1).ok}
+              title="Quitar un contrato sin cambiar compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, -1); }}>−</button>
+            <EditableLegValue label={`Contratos pata ${index + 1}`} value={leg.contracts === "" ? "" : `${leg.side === "sell" ? "-" : ""}${leg.contracts}`}
             formatValue={value => `${value < 0 ? "−" : "+"}${formatOptionNumber(Math.abs(value))}`}
             valueDescription={`${leg.side === "buy" ? "Compra" : "Venta"} · ${leg.contracts} contratos`}
-            className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"} inputMode="text" onChange={value => updateQuantity(leg.id, value)} /></td>
+            className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"} inputMode="text" onChange={value => updateQuantity(leg.id, value)} />
+            <button type="button" className="ct-sim-quantity-step" aria-label={`Aumentar contratos pata ${index + 1}`} disabled={!adjustStrategyQuantity([leg], 1).ok}
+              title="Agregar un contrato sin cambiar compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, 1); }}>+</button>
+          </div></td>
           <td className="ct-sim-leg-expiry-date" title={`Vencimiento ${input.expiry}`}>{formatOptionExpiry(input.expiry)}</td>
           <td className="ct-sim-leg-expiry" title={`Días calendario desde hoy · Vencimiento ${input.expiry}`}>{formatExpiryDays(daysToExpiry(input.expiry))}</td>
           <th scope="row">

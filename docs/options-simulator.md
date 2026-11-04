@@ -19,6 +19,9 @@ fecha teórica del escenario; para fechas anteriores se muestra **Vencido**.
 **Armado** contiene cadena, patas y un gráfico compacto debajo de las patas;
 **Análisis** conserva el gráfico completo y los escenarios. Ambos gráficos usan
 las mismas patas, precio evaluado y supuestos, y se actualizan al editar el armado.
+Las curvas y el área al vencimiento se colorean en verde por encima del eje cero
+y rojo por debajo. Vencimiento conserva trazo continuo y teórico punteado; las
+referencias σ usan colores distintos para no confundirlas con ganancia/pérdida.
 Las patas, primas y escenarios se conservan al alternar. En Análisis se pausa la
 observación de mercado y se muestra un resumen de las patas. Los toggles permiten
 probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha de
@@ -85,6 +88,10 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    no se mezcla este ajuste con patas de la cadena.
    **Cantidad ↓/↑** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
    3:6:3; bajar vuelve una unidad de esa proporción. No baja cantidades a cero.
+   Cada pata tiene además botones **− / +** junto a su cantidad: quitan o agregan
+   un contrato solo en esa pata, conservando su sentido (una venta −1 pasa a −2
+   al agregar). Reducir queda deshabilitado en un contrato y aumentar al alcanzar
+   el máximo; para cambiar compra/venta se edita el signo directamente.
    Debajo de las patas, el slider de **precio total de entrada** permite elegir
    **Natural / Mid / Opuesto** y puntos intermedios. Natural toma ASK de compras
    y BID de ventas; Opuesto toma las puntas contrarias; Mid interpola a mitad.
@@ -389,3 +396,16 @@ cadena con Theta y Extrínseco en calls y puts, y el panel de patas sin esas
 columnas. Para una call ATM, Extrínseco fue 8 ARS por unidad; la pérdida máxima
 pasó de 810 ARS en compra a ∞ en venta. Tabla y overlay midieron 1378 px de ancho.
 Sin inspección visual por píxeles ni afirmación de datos bursátiles vivos.
+
+### Cantidades por pata y colores de resultados
+
+340 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y empaquetado aprobados.
+La revisión independiente no dejó hallazgos bloqueantes. Cada pata dispone de
+botones para ajustar magnitud sin cambiar sentido; se verifican mínimos, máximos,
+borradores inválidos, foco y clics rápidos.
+
+Ambos gráficos separan rojo/verde exactamente en el eje cero con gradientes SVG
+en coordenadas del gráfico. Los marcadores usan el signo de su propio resultado;
+las referencias σ son grises/púrpuras también en la cadena. La fixture confirmó
+por DOM venta −1 → −2 → −1, filas de 34 px, curva teórica punteada y colores
+computados rojo/verde. Sin inspección visual por píxeles.

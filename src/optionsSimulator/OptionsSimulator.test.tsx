@@ -541,3 +541,50 @@ it("shows exact bounded maximum loss in the build and infinity for an uncovered 
   await showAnalysis();
   expect(container.querySelector('.ct-sim-metrics .ct-sim-loss')!.textContent).toBe('∞');
 });
+
+it("steps each leg independently without flipping its side or crossing zero, including rapid clicks and editing", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
+  expect(byLabel<HTMLButtonElement>("Reducir contratos pata 2").disabled).toBe(true);
+  await act(async () => { byLabel<HTMLButtonElement>("Aumentar contratos pata 2").click(); byLabel<HTMLButtonElement>("Aumentar contratos pata 2").click(); });
+  expect(byLabel("Editar Contratos pata 2").textContent).toBe("−3");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+1");
+  expect(byLabel("Vender PUT 90 en simulación").getAttribute('aria-pressed')).toBe('true');
+  await act(async () => byLabel<HTMLButtonElement>("Reducir contratos pata 2").click());
+  expect(byLabel("Editar Contratos pata 2").textContent).toBe("−2");
+  await fill("Contratos pata 1", "4");
+  await act(async () => byLabel<HTMLButtonElement>("Aumentar contratos pata 1").click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+5");
+  expect(container.querySelector('[aria-label="Contratos pata 1"]')).toBeNull();
+  await fill("Contratos pata 1", "10000000000");
+  expect(byLabel<HTMLButtonElement>("Aumentar contratos pata 1").disabled).toBe(true);
+  await fill("Contratos pata 1", "");
+  expect(byLabel<HTMLButtonElement>("Aumentar contratos pata 1").disabled).toBe(true);
+  expect(byLabel<HTMLButtonElement>("Reducir contratos pata 1").disabled).toBe(true);
+});
+
+it("colors both curves and the expiry fill on the zero axis and each marker by its own profit/loss", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  function verifyGradient() {
+    const chart = container.querySelector('.ct-sim-chart')!;
+    const gradient = chart.querySelector('linearGradient[id$="-pnl"]')!;
+    expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
+    const stops = [...gradient.querySelectorAll('stop')];
+    expect(stops.map(node => node.getAttribute('stop-color'))).toEqual(['var(--sim-profit)', 'var(--sim-profit)', 'var(--sim-loss)', 'var(--sim-loss)']);
+    const zero = Number(chart.querySelector('.ct-sim-zero')!.getAttribute('y1'));
+    const top = Number(gradient.getAttribute('y1')), bottom = Number(gradient.getAttribute('y2'));
+    expect(Number(stops[1].getAttribute('offset'))).toBeCloseTo((zero - top) / (bottom - top));
+    expect(stops[1].getAttribute('offset')).toBe(stops[2].getAttribute('offset'));
+    for (const path of chart.querySelectorAll('.ct-sim-expiry-line, .ct-sim-theory-line')) expect(path.getAttribute('stroke')).toBe(`url(#${gradient.id})`);
+    const fill = chart.querySelector('linearGradient:not([id$="-pnl"])')!;
+    expect(fill.querySelectorAll('stop')[1].getAttribute('offset')).toBe(stops[1].getAttribute('offset'));
+  }
+  verifyGradient();
+  await clickChartAt(.58); // 104: expiry is losing while the theoretical value is profitable.
+  expect(container.querySelector('.ct-sim-expiry-dot')!.getAttribute('fill')).toBe('var(--sim-loss)');
+  expect(container.querySelector('.ct-sim-theory-dot')!.getAttribute('fill')).toBe('var(--sim-profit)');
+  await showAnalysis(); verifyGradient();
+  await clickChartAt(.8);
+  expect(container.querySelector('.ct-sim-expiry-dot')!.getAttribute('fill')).toBe('var(--sim-profit)');
+});

@@ -74,7 +74,10 @@
 .ct-sim-legs-card th:first-child, .ct-sim-legs-card th:last-child { width: auto; }
 .ct-sim-legs-card tbody th { color: var(--sim-text); font-weight: 500; }
 .ct-sim-leg-kind { width: 28px; }
-.ct-sim-leg-quantity { width: 52px; }
+.ct-sim-leg-quantity { width: 80px; }
+.ct-sim-quantity-stepper { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.ct-sim-quantity-stepper > .ct-sim-editable { flex: 1; }
+.ct-sim-legs-card .ct-sim-quantity-step { width: 18px; flex: 0 0 18px; min-height: 24px; padding: 0; font-size: 14px; line-height: 22px; border-radius: 3px; }
 .ct-sim-leg-date { width: 48px; }
 .ct-sim-leg-days { width: 42px; }
 .ct-sim-leg-remove { width: 22px; }
@@ -196,12 +199,12 @@
 .ct-sim-legend { display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px; }
 .ct-sim-legend span { display: inline-flex; align-items: center; gap: 7px; }
 .ct-sim-legend i { display: inline-block; width: 22px; height: 0; }
-.ct-sim-expiry-key { border-top: 3px solid var(--sim-accent); }
-.ct-sim-theory-key { border-top: 3px dashed var(--sim-theory); }
-.ct-sim-sigma-one-key { border-top: 2px dashed var(--sim-profit); }
-.ct-sim-sigma-two-key { border-top: 2px dotted var(--sim-loss); }
-.ct-sim-sigma-1 { color: var(--sim-profit); }
-.ct-sim-sigma-2 { color: var(--sim-loss); }
+.ct-sim-legend .ct-sim-expiry-key, .ct-sim-legend .ct-sim-theory-key { height: 3px; background: linear-gradient(90deg, var(--sim-loss) 50%, var(--sim-profit) 50%); }
+.ct-sim-theory-key { mask-image: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 8px); }
+.ct-sim-sigma-one-key { border-top: 2px dashed var(--sim-muted); }
+.ct-sim-sigma-two-key { border-top: 2px dotted var(--sim-accent); }
+.ct-sim-sigma-1 { color: var(--sim-muted); }
+.ct-sim-sigma-2 { color: var(--sim-accent); }
 .ct-sim-sigma line { stroke: currentColor; stroke-width: 1; opacity: .7; }
 .ct-sim-sigma-1 line { stroke-dasharray: 6 4; }
 .ct-sim-sigma-2 line { stroke-dasharray: 2 4; }
@@ -213,11 +216,9 @@
 .ct-sim-grid { stroke: var(--sim-border); stroke-width: .7; opacity: .5; }
 .ct-sim-zero { stroke: var(--sim-muted); stroke-width: 1; }
 .ct-sim-spot { stroke: var(--sim-muted); stroke-dasharray: 3 5; stroke-width: 1; }
-.ct-sim-expiry-line { fill: none; stroke: var(--sim-accent); stroke-width: 2.7; }
-.ct-sim-theory-line { fill: none; stroke: var(--sim-theory); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.ct-sim-expiry-line { fill: none; stroke-width: 2.7; }
+.ct-sim-theory-line { fill: none; stroke-width: 2.5; stroke-dasharray: 6 4; }
 .ct-sim-cursor { stroke: var(--sim-text); stroke-width: 1; opacity: .55; }
-.ct-sim-expiry-dot { fill: var(--sim-accent); }
-.ct-sim-theory-dot { fill: var(--sim-theory); }
 .ct-sim-inspect { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; align-items: center; border-top: 1px solid var(--sim-border); padding-top: 16px; }
 .ct-sim-inspect output, .ct-sim-inspect strong { display: block; font-size: 18px; margin-top: 4px; }
 .ct-sim-profit { color: var(--sim-profit); }
