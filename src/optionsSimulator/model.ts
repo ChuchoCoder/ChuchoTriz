@@ -51,6 +51,10 @@ export function dateDay(value: string): number {
 export function localDate(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
+export function daysToExpiry(expiry: string, today = localDate()): number | undefined {
+  const days = dateDay(expiry) - dateDay(today);
+  return Number.isFinite(days) ? days : undefined;
+}
 export function addDays(date: string, days: number): string {
   return new Date((dateDay(date) + days) * dayMs).toISOString().slice(0, 10);
 }

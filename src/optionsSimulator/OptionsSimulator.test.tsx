@@ -68,8 +68,8 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("5");
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("4");
-  expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40,00");
   await showAnalysis();
+  expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40,00");
   expect(container.querySelectorAll(".ct-sim-chart path")).toHaveLength(3);
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
@@ -83,7 +83,7 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   expect(container.textContent).toContain("Teórico no disponible");
   expect(container.querySelector(".ct-sim-expiry-line")).not.toBeNull();
   expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
-  await showBuild(); await fill("VI pata 1", "45"); await showAnalysis();
+  await fill("VI pata 1", "45");
   expect(container.querySelector(".ct-sim-theory-line")).not.toBeNull();
 });
 it("selecting a marked quote removes the leg; no execution controls are present", async () => {
@@ -168,9 +168,9 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("7,5");
   expect(document.activeElement).toBe(byLabel("Editar Prima pata 1"));
   expect(container.textContent).toContain("750 ARS");
-  await fill("VI pata 1", "60");
-  await act(async () => byLabel<HTMLInputElement>("VI pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40,00");
+  await fill("Prima pata 1", "60");
+  await act(async () => byLabel<HTMLInputElement>("Prima pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("7,5");
   await fill("Contratos pata 1", "3");
   await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").focus());
   expect(byLabel<HTMLButtonElement>("Editar Contratos pata 1").textContent).toBe("3");
@@ -312,7 +312,7 @@ it("validates a custom scenario price and never clamps its reported profit to th
 
 it("disables a VI preset that would make a leg's volatility negative", async () => {
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
-  await fill("VI pata 1", "2"); await showAnalysis();
+  await showAnalysis(); await fill("VI pata 1", "2");
   expect(byLabel<HTMLButtonElement>("VI Baja (−5 pp)").disabled).toBe(true);
   expect(byLabel<HTMLButtonElement>("VI Mantiene (0 pp)").getAttribute("aria-pressed")).toBe("true");
 });
@@ -372,13 +372,13 @@ it("replaces the selectors with eight visual option families and previews varian
   expect(byLabel("Patas de la plantilla").textContent).toContain("Venta 1× PUT 100");
   expect(byLabel("Patas de la plantilla").textContent).toContain("Compra 1× PUT 90");
   expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(1);
-  expect(container.querySelector('.ct-sim-leg-symbol')!.textContent).toBe("CALL 100");
+  expect(container.querySelector('.ct-sim-leg-strike')!.textContent).toBe("100");
   await act(async () => byLabel<HTMLButtonElement>("Aplicar Vertical · Short Put").click());
   expect(container.querySelector('[aria-label="Selector visual de estrategias"]')).toBeNull();
   expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(2);
   expect(byLabel<HTMLButtonElement>("Editar Contratos pata 1").textContent).toBe("1");
   expect(byLabel<HTMLButtonElement>("Editar Contratos pata 2").textContent).toBe("1");
-  expect(byLabel<HTMLButtonElement>("Editar Sentido pata 1").textContent).toBe("Venta");
+  expect(byLabel<HTMLButtonElement>("Editar Sentido pata 1").textContent).toBe("−");
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("4");
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("5");
   expect(document.activeElement).toBe(byLabel("Elegir estrategia"));
@@ -400,6 +400,7 @@ it("shows native and leg IV with exactly two decimals while preserving precision
   expect(byLabel("VI CALL 100").textContent).toBe("40,13 %");
   expect(byLabel("VI PUT 100").textContent).toBe("40,00 %");
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
   expect(byLabel("Editar VI pata 1").textContent).toBe("40,13");
   await act(async () => byLabel<HTMLButtonElement>("Editar VI pata 1").click());
   expect(byLabel<HTMLInputElement>("VI pata 1").value).toBe("40.12987");
@@ -421,7 +422,7 @@ it("draws four standard-deviation references in both charts and updates them wit
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento (30 días)").click());
   expect(labels()).toHaveLength(0);
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("Los niveles coinciden");
-  await showBuild(); await fill("VI pata 1", "");
+  await fill("VI pata 1", "");
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("Desvíos no disponibles");
   expect(container.querySelector('.ct-sim-expiry-line')).not.toBeNull();
 });
@@ -441,7 +442,7 @@ it("positions chain deviation lines on row boundaries without crossing quotes, a
   const lower = markers().find(node => node.getAttribute('aria-label')?.startsWith('-1σ'))!;
   expect(parseFloat(lower.style.top)).toBe(84); // Boundary between the 80 and 90 rows.
   expect(container.querySelectorAll('.ct-opt-chain tbody tr')).toHaveLength(rowCount);
-  await fill("VI pata 1", "10");
+  await showAnalysis(); await fill("VI pata 1", "10"); await showBuild();
   expect(markers()).toHaveLength(4);
   // Levels in the same strike interval share its boundary; none crosses a row's center.
   expect(markers().map(node => parseFloat(node.style.top))).toEqual([116, 116, 148, 148]);
@@ -472,13 +473,14 @@ it("adjusts all quantities proportionally and shifts the whole strategy to nativ
   await act(async () => downQuantity().click());
   expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["2", "4", "2"]);
   await act(async () => upStrike().click());
-  expect([...container.querySelectorAll('.ct-sim-leg-symbol')].map(node => node.textContent)).toEqual(["CALL 100", "CALL 110", "CALL 120"]);
+  expect([...container.querySelectorAll('.ct-sim-leg-strike')].map(node => node.textContent)).toEqual(["100", "110", "120"]);
   expect([1, 2, 3].map(index => byLabel(`Editar Prima pata ${index}`).textContent)).toEqual(["5", "8", "2"]);
-  expect([1, 2, 3].map(index => byLabel(`Editar VI pata ${index}`).textContent)).toEqual(["40,00", "50,00", "60,00"]);
   expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["2", "4", "2"]);
   expect(upStrike().disabled).toBe(true);
   expect(byLabel<HTMLButtonElement>("Comprar CALL 120 en simulación").getAttribute('aria-pressed')).toBe('true');
   expect(container.querySelector('.ct-sim-quick-results .ct-sim-chart')).not.toBeNull();
+  await showAnalysis();
+  expect([1, 2, 3].map(index => byLabel(`Editar VI pata ${index}`).textContent)).toEqual(["40,00", "50,00", "60,00"]);
 });
 
 it("disables a whole-strategy strike move when any destination quote is missing or the feed disconnects", async () => {
@@ -488,9 +490,39 @@ it("disables a whole-strategy strike move when any destination quote is missing 
   await act(async () => byLabel<HTMLButtonElement>("Aplicar Butterfly · Long Call").click());
   expect(byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia").disabled).toBe(true);
   expect(byLabel("Subir strikes de toda la estrategia").title).toContain("sin ASK");
-  expect([...container.querySelectorAll('.ct-sim-leg-symbol')].map(node => node.textContent)).toEqual(["CALL 90", "CALL 100", "CALL 110"]);
+  expect([...container.querySelectorAll('.ct-sim-leg-strike')].map(node => node.textContent)).toEqual(["90", "100", "110"]);
   marketState.current = { catalog: marketState.current.catalog, issue: "Sin conexión" };
   await act(async () => root.render(<OptionsSimulator />));
   expect(byLabel<HTMLButtonElement>("Bajar strikes de toda la estrategia").disabled).toBe(true);
   expect(byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia").disabled).toBe(false);
+});
+
+it("shows days after the expiry selector and compact signed C/P legs without instrument names or IV", async () => {
+  await mount();
+  const expiryControl = byLabel<HTMLSelectElement>("Vencimiento de opciones");
+  expect(expiryControl.nextElementSibling).toBe(byLabel("Días al vencimiento de la cadena"));
+  expect(byLabel("Días al vencimiento de la cadena").textContent).toBe("30d");
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
+  const panel = container.querySelector('.ct-sim-legs-card')!;
+  expect([...panel.querySelectorAll('thead th')].map(node => node.textContent)).toEqual(["Lado", "Tipo", "Strike", "Cant.", "Prima", "Vto.", "Acciones"]);
+  expect([1, 2].map(index => byLabel(`Editar Sentido pata ${index}`).textContent)).toEqual(["+", "−"]);
+  expect([...panel.querySelectorAll('.ct-sim-kind-chip')].map(node => node.textContent)).toEqual(["C", "P"]);
+  expect([...panel.querySelectorAll('.ct-sim-leg-strike')].map(node => node.textContent)).toEqual(["100", "90"]);
+  expect([...panel.querySelectorAll('.ct-sim-leg-expiry')].map(node => node.textContent)).toEqual(["30d", "30d"]);
+  expect(panel.textContent).not.toContain("CALL 100"); expect(panel.textContent).not.toContain("PUT 90");
+  expect(panel.querySelector('[aria-label="Editar VI pata 1"]')).toBeNull();
+  expect(byLabel("Editar Sentido pata 1").getAttribute('aria-description')).toContain("Compra");
+  await showAnalysis();
+  expect(byLabel("Editar VI pata 1").textContent).toBe("40,00");
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento (30 días)").click());
+  await showBuild();
+  expect(container.querySelector('.ct-sim-leg-expiry')!.textContent).toBe("30d");
+  await act(async () => button("+ Pata manual").click());
+  await act(async () => byLabel<HTMLButtonElement>("Editar Tipo pata 3").click());
+  await act(async () => { const select = byLabel<HTMLSelectElement>("Tipo pata 3"); select.value = "put"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => byLabel<HTMLButtonElement>("Editar Contratos pata 3").focus());
+  expect(byLabel("Editar Tipo pata 3").textContent).toBe("P");
+  await fill("Vencimiento", "");
+  expect(container.querySelector('.ct-sim-leg-expiry')!.textContent).toBe("—");
 });

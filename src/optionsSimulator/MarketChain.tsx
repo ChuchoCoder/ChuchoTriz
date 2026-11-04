@@ -3,8 +3,8 @@ import { Catalog, Contract, PremiumReference, Quote, useOptionMarket } from "./m
 import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
-import { formatOptionAmount, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { Leg, localDate, MAX_LEGS, newLeg, parseSimulation, Simulation, standardDeviationLevels } from "./model";
+import { formatExpiryDays, formatOptionAmount, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, parseSimulation, Simulation, standardDeviationLevels } from "./model";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
@@ -176,7 +176,8 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   };
   return <section ref={root} className="ct-sim-card ct-options ct-sim-market"><div className="ct-opt-controls" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
-    <label>Vencimiento<select aria-label="Vencimiento de opciones" value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value}>{expiryDate(value)}</option>)}</select></label>
+    <label>Vencimiento<select aria-label="Vencimiento de opciones" value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value}>{expiryDate(value)}</option>)}</select>
+      <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
     <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency}
       context={`${underlying?.symbol ?? "Sin selección"} · ${expiryDate(expiration)}`} onApply={chooseStrategy} />
     <details className="ct-sim-market-settings"><summary aria-label="Configurar filtro de VI" title="Configurar filtro y escala de VI">⚙ VI</summary><div className="ct-sim-market-settings-panel">

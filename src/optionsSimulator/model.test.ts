@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curve, dateDay, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice } from "./model";
+import { curve, dateDay, daysToExpiry, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice } from "./model";
 
 function strategy(change: Partial<Simulation> = {}) {
   const parsed = parseSimulation({ ...initialSimulation("2026-11-03"), ...change });
@@ -115,6 +115,13 @@ describe("standard deviation reference levels", () => {
 });
 
 describe("input validation", () => {
+  it("counts calendar days to expiry without time-of-day or DST offsets", () => {
+    expect(daysToExpiry("2026-11-26", "2026-11-03")).toBe(23);
+    expect(daysToExpiry("2026-11-03", "2026-11-03")).toBe(0);
+    expect(daysToExpiry("2026-11-02", "2026-11-03")).toBe(-1);
+    expect(daysToExpiry("2028-03-01", "2028-02-28")).toBe(2);
+    expect(daysToExpiry("bad", "2026-11-03")).toBeUndefined();
+  });
   it.each(["0", "1.5", "10000000001"])("rejects invalid per-leg total contracts %s", contracts => {
     const input = initialSimulation("2026-11-03"); input.legs[0].contracts = contracts;
     expect(parseSimulation(input).ok).toBe(false);

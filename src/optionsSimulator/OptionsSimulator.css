@@ -75,17 +75,28 @@
 .ct-sim-legs-card thead th { height: 26px; font-size: 10px; }
 .ct-sim-legs-card th:first-child, .ct-sim-legs-card th:last-child { width: auto; }
 .ct-sim-legs-card tbody th { color: var(--sim-text); font-weight: 500; }
-.ct-sim-leg-side { width: 52px; }
+.ct-sim-leg-side { width: 28px; }
+.ct-sim-leg-kind { width: 28px; }
 .ct-sim-leg-quantity { width: 34px; }
 .ct-sim-leg-premium { width: 56px; }
-.ct-sim-leg-vi { width: 44px; }
+.ct-sim-leg-days { width: 42px; }
 .ct-sim-leg-remove { width: 22px; }
-.ct-sim-leg-symbol { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ct-sim-leg-instrument { display: flex; align-items: center; min-width: 0; }
-.ct-sim-leg-instrument > :last-child { flex: 1; min-width: 0; }
+.ct-sim-kind-chip { display: block; width: 24px; text-align: center; border: 1px solid currentColor; border-radius: 4px; font-size: 10px; line-height: 20px; }
+.ct-sim-kind-call { color: var(--sim-profit); }
+.ct-sim-kind-put { color: var(--sim-theory); }
+.ct-sim-kind-chip abbr { text-decoration: none; }
+.ct-sim-legs-card .ct-sim-kind-chip .ct-sim-cell-value { min-height: 20px; padding: 0; text-align: center; color: inherit; }
+.ct-sim-leg-strike { display: block; font-variant-numeric: tabular-nums; }
+.ct-sim-leg-expiry { color: var(--sim-muted); font-size: 10px; white-space: nowrap; }
+.ct-sim-expiry-days { color: var(--sim-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.ct-sim-leg-volatilities { margin-top: 8px; font-size: 11px; }
+.ct-sim-leg-volatilities summary { cursor: pointer; color: var(--sim-muted); }
+.ct-sim-leg-volatilities > div { display: grid; grid-template-columns: 1fr 72px 12px; align-items: center; gap: 5px; padding-top: 4px; }
+.ct-sim .ct-sim-leg-volatilities .ct-sim-cell-value { min-height: 26px; padding: 2px 5px; font-size: 11px; }
 .ct-sim-editable { display: block; min-width: 0; }
 .ct-sim-legs-card .ct-sim-cell-value { display: block; width: 100%; min-height: 26px; padding: 2px 3px; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; background: transparent; border-radius: 3px; font-size: 11px; color: inherit; text-align: left; font-variant-numeric: tabular-nums; }
 .ct-sim-legs-card .ct-sim-cell-value:hover { background: var(--sim-field); border-color: var(--sim-border); }
+.ct-sim-legs-card td:first-child .ct-sim-cell-value { text-align: center; font-size: 16px; padding: 0; }
 .ct-sim-legs-card .ct-sim-editable input, .ct-sim-legs-card .ct-sim-editable select { height: 26px; padding: 2px 3px; font-size: 11px; }
 .ct-sim-legs-card .ct-sim-remove-leg { width: 20px; min-height: 26px; padding: 0; font-size: 18px; border-color: transparent; background: transparent; color: var(--sim-muted); }
 .ct-sim-legs-footer { margin-top: 10px; }

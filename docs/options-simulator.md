@@ -10,6 +10,9 @@ La barra de mercado usa etiquetas y selectores en una sola fila. El engranaje **
 abre el filtro de antigüedad sin desplazar la tabla. **Mis estrategias** reúne ejemplos,
 guardado y carga; **Entrada** reúne los datos de entrada y gastos. La cadena
 usa la altura disponible de la ventana y permite recorrer sus filas internamente.
+Después del selector de vencimiento se muestran los días calendario desde hoy,
+por ejemplo **23d**. Las patas usan el mismo criterio, independientemente de la
+fecha teórica del escenario; para fechas anteriores se muestra **Vencido**.
 
 **Armado** contiene cadena, patas y un gráfico compacto debajo de las patas;
 **Análisis** conserva el gráfico completo y los escenarios. Ambos gráficos usan
@@ -64,10 +67,12 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    La flecha reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
    Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
    se explica el motivo. No incluye Calendar, Covered ni Futures.
-3. Las patas se muestran en filas compactas. Hacer clic en lado, cantidad, prima
-   o VI para editar; Enter o salir del campo acepta, y Escape restaura el valor
+3. Las patas se muestran como **+ / −**, chip **C / P**, strike, cantidad, prima y
+   días al vencimiento. No muestran nombre del instrumento ni columna de VI.
+   Hacer clic en lado, cantidad o prima para editar; Enter o salir del campo acepta, y Escape restaura el valor
    anterior. Las patas manuales permiten editar también tipo y strike.
-   Ajustar la cantidad total de contratos, prima de entrada y VI de cada pata.
+   La VI de cada pata se conserva y se edita desde **Análisis → VI por pata**,
+   con dos decimales al mostrarla y precisión original al editarla.
    Los botones **Strike ↓/↑** desplazan todas las patas a la base contigua del
    mismo tipo y vencimiento, copiando BID para ventas, ASK para compras y VI del
    destino. El ajuste es completo o no se aplica: no salta bases con contratos
@@ -318,3 +323,14 @@ La fixture confirmó por DOM una Butterfly 1:2:1 que pasó a 2:4:2, movió sus s
 90/100/110 a 100/110/120 con primas/VI del destino y volvió a 1:2:1. Los controles
 ocupan una barra de 42,5 px sobre las patas y el gráfico se mantiene actualizado.
 Sin inspección visual por píxeles.
+
+### Patas compactas y días al vencimiento
+
+335 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y paquete aprobados.
+Las regresiones verifican días calendario, año bisiesto, fechas inválidas, signos,
+chips, edición manual y conservación de la VI en Análisis.
+
+La fixture confirmó por DOM **30d** después del selector y filas con **+ C 100**
+y **− P 90**, sin instrumento ni VI. Las filas conservan 34 px de alto y la tabla
+entra en el panel de 390 px. Al llevar el escenario al vencimiento, las patas
+siguen mostrando los días desde hoy. El editor de VI permanece en Análisis.

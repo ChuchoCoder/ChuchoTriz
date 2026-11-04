@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { addDays, curve, dateDay, Example, exampleLegs, expirySummary, initialSimulation, Leg, MAX_LEGS,
+import { addDays, curve, dateDay, daysToExpiry, Example, exampleLegs, expirySummary, initialSimulation, Leg, MAX_LEGS,
   newLeg, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, Strategy } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
-import { formatOptionAmount as fmt, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
+import { formatExpiryDays, formatOptionAmount as fmt, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { PremiumReference } from "./market";
 import { adjustStrategyQuantity, shiftStrategyStrikes, type StrikeMarket } from "./strategyAdjustments";
 
@@ -47,10 +47,11 @@ function Field({ label, value, onChange, type = "text", ...attributes }: {
     inputMode={type === "text" ? "decimal" : undefined} onChange={event => onChange(event.target.value)} {...attributes} /></label>;
 }
 
-function EditableLegValue({ label, value, onChange, options, references, className = "", formatValue = formatOptionNumber }: {
+function EditableLegValue({ label, value, onChange, options, references, className = "", formatValue = formatOptionNumber, valueDescription }: {
   label: string; value: string; onChange(value: string): void;
   options?: readonly (readonly [string, string])[]; references?: readonly (readonly [string, number])[]; className?: string;
   formatValue?(value: number): string;
+  valueDescription?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const control = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
@@ -101,8 +102,8 @@ function EditableLegValue({ label, value, onChange, options, references, classNa
       {options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
     </select> : <input ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={value} inputMode="decimal"
       onChange={event => onChange(event.target.value)} />
-      : <button ref={button} type="button" className="ct-sim-cell-value" aria-label={`Editar ${label}`} aria-description={`Valor actual: ${display}`}
-        title={`${label}: ${display} · Clic para editar`} onClick={() => { original.current = value; setEditing(true); }}>{display}</button>}
+      : <button ref={button} type="button" className="ct-sim-cell-value" aria-label={`Editar ${label}`} aria-description={`Valor actual: ${valueDescription ?? display}`}
+        title={`${label}: ${valueDescription ?? display} · Clic para editar`} onClick={() => { original.current = value; setEditing(true); }}>{display}</button>}
     {editing && !!references?.length && <div ref={referencePopup} popover="manual" data-ct-inline-editor className="ct-sim-premium-references" role="group" aria-label={`Referencias para ${label}`}>
       <span>Prima por unidad · referencia de mercado</span><div>{references.map(([name, price]) => <button key={name} type="button" aria-label={`Tomar ${name} para ${label}`}
         onMouseDown={event => event.preventDefault()} onClick={() => { onChange(String(price)); finish(true); }}>{name}<strong>{formatOptionNumber(price)}</strong></button>)}</div>
@@ -165,7 +166,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
     <div className="ct-sim-legend"><span><i className="ct-sim-expiry-key" /> Al vencimiento</span>
       {hasTheory && <span><i className="ct-sim-theory-key" /> Teórico · {scenarioDate}</span>}
       {deviations && deviations.move > 0 && <><span><i className="ct-sim-sigma-one-key" /> ±1σ</span><span><i className="ct-sim-sigma-two-key" /> ±2σ</span></>}</div>
-    {!hasTheory && <p role="status" className="ct-sim-hint">Teórico no disponible: completá la VI de cada pata. El resultado al vencimiento no necesita VI.</p>}
+    {!hasTheory && <p role="status" className="ct-sim-hint">Teórico no disponible: completá la VI de cada pata en Análisis → VI por pata. El resultado al vencimiento no necesita VI.</p>}
     <svg ref={svg} className="ct-sim-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Resultado de la estrategia según el precio del subyacente"
       onClick={event => onPriceChange(pointerPrice(event))}>
       <title>Resultado total en {currency}. Línea continua al vencimiento y línea punteada teórica.</title>
@@ -345,22 +346,26 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
             title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
               : "Una unidad de la proporción actual, sin cambiar las relaciones entre patas" : result.reason}>{direction < 0 ? "↓" : "↑"}</button>;
         })}</div></fieldset>)}</div>
-      <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con primas por unidad y VI anual">
-        <colgroup><col className="ct-sim-leg-side" /><col /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-premium" /><col className="ct-sim-leg-vi" /><col className="ct-sim-leg-remove" /></colgroup>
-        <thead><tr><th>Lado</th><th>Instrumento</th><th title="Contratos de la pata">Cant.</th><th>Prima</th><th>VI %</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
+      <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
+        <colgroup><col className="ct-sim-leg-side" /><col className="ct-sim-leg-kind" /><col /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-premium" /><col className="ct-sim-leg-days" /><col className="ct-sim-leg-remove" /></colgroup>
+        <thead><tr><th>Lado</th><th>Tipo</th><th>Strike</th><th title="Contratos de la pata">Cant.</th><th>Prima</th><th>Vto.</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
         <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
           <td><EditableLegValue label={`Sentido pata ${index + 1}`} value={leg.side} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}
-            options={[["buy", "Compra"], ["sell", "Venta"]]} onChange={value => updateLeg(leg.id, "side", value)} /></td>
-          <th scope="row" title={leg.symbol ? `${leg.symbol} · ${leg.kind === "call" ? "Call" : "Put"} ${leg.strike} · Elegí el instrumento desde la cadena` : `Pata manual ${index + 1}`}>
-            {leg.securityId ? <span className="ct-sim-leg-symbol">{leg.symbol}</span> : <span className="ct-sim-leg-instrument">
-              <EditableLegValue label={`Tipo pata ${index + 1}`} value={leg.kind} options={[["call", "Call"], ["put", "Put"]]} onChange={value => updateLeg(leg.id, "kind", value)} />
-              <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />
-            </span>}
+            options={[["buy", "+"], ["sell", "−"]]} valueDescription={leg.side === "buy" ? "Compra" : "Venta"} onChange={value => updateLeg(leg.id, "side", value)} /></td>
+          <td><span className={`ct-sim-kind-chip ct-sim-kind-${leg.kind}`}>
+            {leg.securityId ? <abbr title={leg.kind === "call" ? "Call" : "Put"}>{leg.kind === "call" ? "C" : "P"}</abbr>
+              : <EditableLegValue label={`Tipo pata ${index + 1}`} value={leg.kind} options={[["call", "C"], ["put", "P"]]}
+                valueDescription={leg.kind === "call" ? "Call" : "Put"} onChange={value => updateLeg(leg.id, "kind", value)} />}
+          </span></td>
+          <th scope="row">
+            {leg.securityId ? <span className="ct-sim-leg-strike" aria-label={`Strike pata ${index + 1}`}>{formatOptionNumber(numeric(leg.strike))}</span>
+              : <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />}
           </th>
-          {([ ["contracts", "Contratos"], ["premium", "Prima"], ["volatility", "VI"] ] as const).map(([key, label]) => <td key={key}>
-            <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]} formatValue={key === "volatility" ? formatOptionVolatility : undefined}
+          {([ ["contracts", "Contratos"], ["premium", "Prima"] ] as const).map(([key, label]) => <td key={key}>
+            <EditableLegValue label={`${label} pata ${index + 1}`} value={leg[key]}
               references={key === "premium" ? referencesFor(leg) : undefined} onChange={value => updateLeg(leg.id, key, value)} />
           </td>)}
+          <td className="ct-sim-leg-expiry" title={`Días calendario desde hoy · Vencimiento ${input.expiry}`}>{formatExpiryDays(daysToExpiry(input.expiry))}</td>
           <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
@@ -388,6 +393,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       ].map(option => ({ ...option, disabled: input.legs.some(leg => Number.isFinite(numeric(leg.volatility)) && (numeric(leg.volatility) + Number(option.value) < 0 || numeric(leg.volatility) + Number(option.value) > 500)) }))}
         onChange={value => update("volatilityShift", value)} />
       <Field label="Cambio de VI (puntos porcentuales)" value={input.volatilityShift} onChange={value => update("volatilityShift", value)} />
+      <details className="ct-sim-leg-volatilities"><summary>VI por pata</summary>{input.legs.map((leg, index) => <div key={leg.id}>
+        <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
+        <EditableLegValue label={`VI pata ${index + 1}`} value={leg.volatility} formatValue={formatOptionVolatility} onChange={value => updateLeg(leg.id, "volatility", value)} /><span>%</span>
+      </div>)}</details>
       <p className="ct-sim-hint">Se suma a la VI de cada pata. +5 lleva 40% a 45%.</p></div>
       <div className="ct-sim-scenario-group"><ScenarioButtons label="Fecha" value={input.scenarioDate} options={!baseDatesValid ? [] : days === 0 ? [
         { label: "Vencimiento", value: input.expiry, detail: "0 días" },
