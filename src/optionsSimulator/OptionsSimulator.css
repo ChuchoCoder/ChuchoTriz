@@ -64,6 +64,12 @@
 .ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
 .ct-sim-quick-results .ct-sim-inspect output, .ct-sim-quick-results .ct-sim-inspect strong { font-size: 14px; }
 .ct-sim-legs-card { padding: 12px; }
+.ct-sim-quick-adjustments { display: flex; gap: 8px; margin-bottom: 8px; }
+.ct-sim-quick-adjustments fieldset { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; }
+.ct-sim-quick-adjustments legend { width: 100%; padding: 0 0 3px; text-align: center; font-size: 10px; color: var(--sim-muted); }
+.ct-sim-quick-adjustments fieldset > div { display: flex; }
+.ct-sim .ct-sim-quick-adjustments button { flex: 1; min-height: 25px; padding: 1px 6px; border-radius: 3px 0 0 3px; font-size: 16px; line-height: 21px; }
+.ct-sim .ct-sim-quick-adjustments button + button { border-left: 0; border-radius: 0 3px 3px 0; }
 .ct-sim-legs-card table { min-width: 290px; font-size: 11px; }
 .ct-sim-legs-card th, .ct-sim-legs-card td { height: 34px; padding: 2px; vertical-align: middle; }
 .ct-sim-legs-card thead th { height: 26px; font-size: 10px; }

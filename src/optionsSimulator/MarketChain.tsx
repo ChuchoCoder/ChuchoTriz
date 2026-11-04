@@ -8,14 +8,16 @@ import { Leg, localDate, MAX_LEGS, newLeg, parseSimulation, Simulation, standard
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
+import type { StrikeMarket } from "./strategyAdjustments";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
 
-export default function MarketChain({ active, input, setInput, onPremiumReferences }: {
+export default function MarketChain({ active, input, setInput, onPremiumReferences, onStrikeMarket }: {
   active: boolean; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
   onPremiumReferences(references: Record<string, PremiumReference>): void;
+  onStrikeMarket(market: StrikeMarket | undefined): void;
 }) {
   const root = useRef<HTMLElement>(null);
   const grid = useRef<HTMLDivElement>(null);
@@ -62,6 +64,11 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     return matches.length === 1 ? matches[0] : undefined;
   };
   const comparable = !!underlying && selected.length > 0 && selected.every(contract => contract.strikeCurrency === underlying.currency);
+  useEffect(() => {
+    onStrikeMarket(active && comparable && underlying && data && !reading.issue ? {
+      underlying: underlying.symbol, currency: underlying.currency, expiry: expiryDate(expiration), contracts: selected, quotes: data.instruments,
+    } : undefined);
+  }, [active, catalog, data, underlyingId, expiration, market, reading.issue, onStrikeMarket]);
   const itmSpot = comparable ? spot : undefined;
   const parsed = useMemo(() => parseSimulation(input), [input]);
   const deviationReference = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);

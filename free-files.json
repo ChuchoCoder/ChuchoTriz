@@ -83,6 +83,8 @@
   "src/optionsSimulator/OptionsSimulator.css",
   "src/optionsSimulator/OptionsSimulator.test.tsx",
   "src/optionsSimulator/OptionsSimulator.tsx",
+  "src/optionsSimulator/strategyAdjustments.test.ts",
+  "src/optionsSimulator/strategyAdjustments.ts",
   "src/optionsSimulator/StrategyPicker.tsx",
   "src/optionsSimulator/strategyTemplates.test.ts",
   "src/optionsSimulator/strategyTemplates.ts",

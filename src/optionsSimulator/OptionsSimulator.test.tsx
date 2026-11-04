@@ -455,3 +455,42 @@ it("positions chain deviation lines on row boundaries without crossing quotes, a
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento (30 días)").click());
   await showBuild(); expect(markers()).toHaveLength(0);
 });
+
+it("adjusts all quantities proportionally and shifts the whole strategy to native neighboring strikes", async () => {
+  marketState.current.data!.instruments["call-110"] = { bid: { price: 8, size: 100 }, ask: { price: 9, size: 100 }, impliedVolatility: 50 };
+  marketState.current.data!.instruments["call-120"] = { bid: { price: 1, size: 100 }, ask: { price: 2, size: 100 }, impliedVolatility: 60 };
+  await mount();
+  const upQuantity = () => byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia");
+  const downQuantity = () => byLabel<HTMLButtonElement>("Bajar cantidades de toda la estrategia");
+  const upStrike = () => byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia");
+  expect(upQuantity().disabled).toBe(true); expect(upStrike().disabled).toBe(true);
+  await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => byLabel<HTMLButtonElement>("Aplicar Butterfly · Long Call").click());
+  expect(downQuantity().disabled).toBe(true);
+  await act(async () => { upQuantity().click(); upQuantity().click(); });
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["3", "6", "3"]);
+  await act(async () => downQuantity().click());
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["2", "4", "2"]);
+  await act(async () => upStrike().click());
+  expect([...container.querySelectorAll('.ct-sim-leg-symbol')].map(node => node.textContent)).toEqual(["CALL 100", "CALL 110", "CALL 120"]);
+  expect([1, 2, 3].map(index => byLabel(`Editar Prima pata ${index}`).textContent)).toEqual(["5", "8", "2"]);
+  expect([1, 2, 3].map(index => byLabel(`Editar VI pata ${index}`).textContent)).toEqual(["40,00", "50,00", "60,00"]);
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["2", "4", "2"]);
+  expect(upStrike().disabled).toBe(true);
+  expect(byLabel<HTMLButtonElement>("Comprar CALL 120 en simulación").getAttribute('aria-pressed')).toBe('true');
+  expect(container.querySelector('.ct-sim-quick-results .ct-sim-chart')).not.toBeNull();
+});
+
+it("disables a whole-strategy strike move when any destination quote is missing or the feed disconnects", async () => {
+  marketState.current.data!.instruments["call-120"].ask = undefined;
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => byLabel<HTMLButtonElement>("Aplicar Butterfly · Long Call").click());
+  expect(byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia").disabled).toBe(true);
+  expect(byLabel("Subir strikes de toda la estrategia").title).toContain("sin ASK");
+  expect([...container.querySelectorAll('.ct-sim-leg-symbol')].map(node => node.textContent)).toEqual(["CALL 90", "CALL 100", "CALL 110"]);
+  marketState.current = { catalog: marketState.current.catalog, issue: "Sin conexión" };
+  await act(async () => root.render(<OptionsSimulator />));
+  expect(byLabel<HTMLButtonElement>("Bajar strikes de toda la estrategia").disabled).toBe(true);
+  expect(byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia").disabled).toBe(false);
+});

@@ -36,6 +36,7 @@ export interface Strategy {
   rangeMin: number; rangeMax: number;
 }
 export const MAX_LEGS = 16;
+export const MAX_CONTRACTS = 1e10;
 const dayMs = 86_400_000;
 
 // Decimal comma and decimal point are accepted; grouping separators are deliberately rejected.
@@ -104,7 +105,7 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500) + shift;
     if (volatility < 0 || volatility > 500) errors.push(`${prefix}: la VI más el cambio debe estar entre 0% y 500%.`);
     return { kind: leg.kind, side: leg.side, strike: read(leg.strike, `${prefix}, strike`, .000001, 1e9),
-      premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, 1e10, true),
+      premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, true),
       volatility: volatility / 100 };
   });
   const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, rangeMax, leg.strike, leg.premium), costs);

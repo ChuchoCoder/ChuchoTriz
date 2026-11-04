@@ -68,6 +68,14 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    o VI para editar; Enter o salir del campo acepta, y Escape restaura el valor
    anterior. Las patas manuales permiten editar también tipo y strike.
    Ajustar la cantidad total de contratos, prima de entrada y VI de cada pata.
+   Los botones **Strike ↓/↑** desplazan todas las patas a la base contigua del
+   mismo tipo y vencimiento, copiando BID para ventas, ASK para compras y VI del
+   destino. El ajuste es completo o no se aplica: no salta bases con contratos
+   ambiguos, factores incompatibles o sin la punta requerida. En estrategias
+   totalmente manuales el paso de strike es un punto, conservando prima y VI;
+   no se mezcla este ajuste con patas de la cadena.
+   **Cantidad ↓/↑** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
+   3:6:3; bajar vuelve una unidad de esa proporción. No baja cantidades a cero.
    Las primas y VI copiadas quedan fijas. Al editar una prima aparecen
    Natural/MID/Opuesto para copiar esa referencia solamente a esa pata;
    una actualización de mercado no altera la posición
@@ -298,3 +306,15 @@ el precio calculado en la etiqueta, incluso si varios niveles comparten interval
 318 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y empaquetado aprobados;
 revisión independiente sin hallazgos. La fixture confirmó por DOM las cuatro
 líneas en límites de filas (70/80, 80/90, 110/120 y 120/130), sin cruzar sus centros.
+
+### Ajustes rápidos de toda la estrategia
+
+333 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y paquete aprobados.
+Las regresiones cubren proporciones, clics rápidos, límites, contratos contiguos,
+recopia de puntas/VI, cambios atómicos y desconexión. Revisión independiente sin
+hallazgos accionables.
+
+La fixture confirmó por DOM una Butterfly 1:2:1 que pasó a 2:4:2, movió sus strikes
+90/100/110 a 100/110/120 con primas/VI del destino y volvió a 1:2:1. Los controles
+ocupan una barra de 42,5 px sobre las patas y el gráfico se mantiene actualizado.
+Sin inspección visual por píxeles.

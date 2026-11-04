@@ -5,6 +5,7 @@ import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
 import { formatOptionAmount as fmt, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { PremiumReference } from "./market";
+import { adjustStrategyQuantity, shiftStrategyStrikes, type StrikeMarket } from "./strategyAdjustments";
 
 const storageKey = "OptionsSimulatorStrategiesV1";
 const examples: [Example, string][] = [["bull-call", "Bull call spread"], ["bear-put", "Bear put spread"],
@@ -229,6 +230,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [storageError, setStorageError] = useState("");
   const [status, setStatus] = useState("");
   const [premiumReferences, setPremiumReferences] = useState<Record<string, PremiumReference>>({});
+  const [strikeMarket, setStrikeMarket] = useState<StrikeMarket>();
   const menusId = useId();
   const nextId = useRef(3);
   const parsed = useMemo(() => parseSimulation(input), [input]);
@@ -264,6 +266,15 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   }
   function updateLeg(id: number, key: keyof Leg, value: string) {
     setStatus(""); setInput(current => ({ ...current, legs: current.legs.map(leg => leg.id === id ? { ...leg, [key]: value } : leg) }));
+  }
+  function adjust(kind: "strike" | "quantity", direction: -1 | 1) {
+    setInput(current => {
+      const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction);
+      return result.ok ? { ...current, legs: result.legs } : current;
+    });
+    setStatus(kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
+      : input.legs.some(leg => leg.securityId) ? "Strikes desplazados a bases contiguas. Primas y VI copiadas de esta lectura."
+      : "Strikes manuales desplazados un punto; primas y VI conservadas.");
   }
   async function save() {
     if (!parsed.ok || busy || loading || !name.trim()) return;
@@ -324,8 +335,16 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </div><p className="ct-sim-hint">Todas las patas comparten subyacente, moneda y vencimiento. Desde la cadena se copia el factor nativo: totalAmountFactor × contractMultiplier × roundLot. Las primas y VI quedan fijas al agregarlas; son referencias de simulación.</p></div></details></div>
     {storageError && <p className="ct-sim-error" role="alert">{storageError}</p>}
     {status && <p role="status" className="ct-sim-status">{status}</p>}
-    <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} input={input} setInput={setInput} onPremiumReferences={setPremiumReferences} />
+    <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} input={input} setInput={setInput} onPremiumReferences={setPremiumReferences} onStrikeMarket={setStrikeMarket} />
     <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-section-heading"><h3>Patas de la estrategia</h3><button type="button" onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar patas</button></div>
+      <div className="ct-sim-quick-adjustments" aria-label="Ajustar toda la estrategia">{([ ["strike", "Strike"], ["quantity", "Cantidad"] ] as const).map(([kind, label]) =>
+        <fieldset key={kind}><legend>{label}</legend><div>{([-1, 1] as const).map(direction => {
+          const result = kind === "strike" ? shiftStrategyStrikes(input, direction, strikeMarket) : adjustStrategyQuantity(input.legs, direction);
+          const action = `${direction < 0 ? "Bajar" : "Subir"} ${kind === "strike" ? "strikes" : "cantidades"} de toda la estrategia`;
+          return <button key={direction} type="button" aria-label={action} disabled={!result.ok} onClick={() => adjust(kind, direction)}
+            title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
+              : "Una unidad de la proporción actual, sin cambiar las relaciones entre patas" : result.reason}>{direction < 0 ? "↓" : "↑"}</button>;
+        })}</div></fieldset>)}</div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con primas por unidad y VI anual">
         <colgroup><col className="ct-sim-leg-side" /><col /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-premium" /><col className="ct-sim-leg-vi" /><col className="ct-sim-leg-remove" /></colgroup>
         <thead><tr><th>Lado</th><th>Instrumento</th><th title="Contratos de la pata">Cant.</th><th>Prima</th><th>VI %</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
