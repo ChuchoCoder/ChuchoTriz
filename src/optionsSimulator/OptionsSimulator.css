@@ -61,23 +61,26 @@
 .ct-sim-quick-results .ct-sim-selected-price { grid-column: 1 / -1; }
 .ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
 .ct-sim-quick-results .ct-sim-inspect output, .ct-sim-quick-results .ct-sim-inspect strong { font-size: 14px; }
-.ct-sim-legs-card { padding: 12px; }
-.ct-sim-quick-adjustments { display: flex; gap: 8px; margin-bottom: 8px; }
-.ct-sim-quick-adjustments fieldset { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; }
-.ct-sim-quick-adjustments legend { width: 100%; padding: 0 0 3px; text-align: center; font-size: 10px; color: var(--sim-muted); }
-.ct-sim-quick-adjustments fieldset > div { display: flex; }
-.ct-sim .ct-sim-quick-adjustments button { flex: 1; min-height: 25px; padding: 1px 6px; border-radius: 3px 0 0 3px; font-size: 16px; line-height: 21px; }
+.ct-sim-legs-card { padding: 10px; }
+.ct-sim-leg-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ct-sim-leg-toolbar h3 { margin: 0; font-size: 12px; }
+.ct-sim-quick-adjustments { display: flex; gap: 8px; margin-left: auto; }
+.ct-sim-adjustment-group { display: flex; align-items: center; gap: 4px; }
+.ct-sim-adjustment-group > span { font-size: 10px; color: var(--sim-muted); }
+.ct-sim-adjustment-group > div { display: flex; }
+.ct-sim .ct-sim-clear-legs { min-height: 24px; padding: 2px 5px; font-size: 10px; }
+.ct-sim .ct-sim-quick-adjustments button { width: 20px; min-height: 24px; padding: 0; border-radius: 3px 0 0 3px; font-size: 14px; line-height: 22px; }
 .ct-sim .ct-sim-quick-adjustments button + button { border-left: 0; border-radius: 0 3px 3px 0; }
 .ct-sim-legs-card table { min-width: 290px; font-size: 11px; }
-.ct-sim-legs-card th, .ct-sim-legs-card td { height: 34px; padding: 2px; vertical-align: middle; }
-.ct-sim-legs-card thead th { height: 26px; font-size: 10px; }
+.ct-sim-legs-card th, .ct-sim-legs-card td { height: 28px; padding: 1px 2px; vertical-align: middle; }
+.ct-sim-legs-card thead th { height: 22px; font-size: 10px; }
 .ct-sim-legs-card th:first-child, .ct-sim-legs-card th:last-child { width: auto; }
 .ct-sim-legs-card tbody th { color: var(--sim-text); font-weight: 500; }
 .ct-sim-leg-kind { width: 28px; }
 .ct-sim-leg-quantity { width: 80px; }
 .ct-sim-quantity-stepper { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .ct-sim-quantity-stepper > .ct-sim-editable { flex: 1; }
-.ct-sim-legs-card .ct-sim-quantity-step { width: 18px; flex: 0 0 18px; min-height: 24px; padding: 0; font-size: 14px; line-height: 22px; border-radius: 3px; }
+.ct-sim-legs-card .ct-sim-quantity-step { width: 18px; flex: 0 0 18px; min-height: 22px; padding: 0; font-size: 14px; line-height: 20px; border-radius: 3px; }
 .ct-sim-leg-date { width: 48px; }
 .ct-sim-leg-days { width: 42px; }
 .ct-sim-leg-remove { width: 22px; }
@@ -94,27 +97,28 @@
 .ct-sim-leg-prices { margin-top: 10px; font-size: 11px; }
 .ct-sim-leg-prices > div { display: grid; grid-template-columns: 1fr 100px; align-items: center; gap: 8px; padding-top: 4px; }
 .ct-sim .ct-sim-leg-prices .ct-sim-cell-value { min-height: 26px; padding: 2px 5px; font-size: 11px; }
-.ct-sim-strategy-price { border-top: 1px solid var(--sim-border); margin-top: 10px; padding-top: 10px; }
+.ct-sim-strategy-price { border-top: 1px solid var(--sim-border); margin-top: 6px; padding-top: 6px; }
 .ct-sim-strategy-price > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px; font-size: 11px; }
 .ct-sim-strategy-price > header > span { color: var(--sim-muted); }
-.ct-sim-strategy-price > input { margin: 8px 0 5px; }
+.ct-sim-strategy-price > input { height: 18px; margin: 4px 0; }
 .ct-sim-strategy-price-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-.ct-sim .ct-sim-strategy-price-points button { min-height: 38px; padding: 3px; font-size: 10px; white-space: normal; }
+.ct-sim .ct-sim-strategy-price-points button { min-height: 30px; padding: 2px; font-size: 10px; white-space: normal; }
 .ct-sim-strategy-price-points button[aria-pressed="true"] { border-color: var(--sim-accent); background: color-mix(in srgb, var(--sim-accent) 12%, var(--sim-field)); }
-.ct-sim-strategy-price-points small { display: block; margin-top: 2px; font-size: 9px; }
-.ct-sim-max-loss { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; font-size: 11px; }
+.ct-sim-strategy-price-points small { display: block; margin-top: 1px; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-sim-max-loss { display: flex; align-items: center; gap: 4px; font-size: 10px; }
 .ct-sim-max-loss > span { color: var(--sim-muted); }
 .ct-sim-max-loss > strong { color: var(--sim-loss); }
 .ct-sim-leg-volatilities summary { cursor: pointer; color: var(--sim-muted); }
 .ct-sim-leg-volatilities > div { display: grid; grid-template-columns: 1fr 72px 12px; align-items: center; gap: 5px; padding-top: 4px; }
 .ct-sim .ct-sim-leg-volatilities .ct-sim-cell-value { min-height: 26px; padding: 2px 5px; font-size: 11px; }
 .ct-sim-editable { display: block; min-width: 0; }
-.ct-sim-legs-card .ct-sim-cell-value { display: block; width: 100%; min-height: 26px; padding: 2px 3px; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; background: transparent; border-radius: 3px; font-size: 11px; color: inherit; text-align: left; font-variant-numeric: tabular-nums; }
+.ct-sim-legs-card .ct-sim-cell-value { display: block; width: 100%; min-height: 24px; padding: 1px 3px; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; background: transparent; border-radius: 3px; font-size: 11px; color: inherit; text-align: left; font-variant-numeric: tabular-nums; }
 .ct-sim-legs-card .ct-sim-cell-value:hover { background: var(--sim-field); border-color: var(--sim-border); }
-.ct-sim-legs-card .ct-sim-editable input, .ct-sim-legs-card .ct-sim-editable select { height: 26px; padding: 2px 3px; font-size: 11px; }
-.ct-sim-legs-card .ct-sim-remove-leg { width: 20px; min-height: 26px; padding: 0; font-size: 18px; border-color: transparent; background: transparent; color: var(--sim-muted); }
-.ct-sim-legs-footer { margin-top: 10px; }
-.ct-sim-legs-footer button { min-height: 28px; height: 28px; font-size: 12px; }
+.ct-sim-legs-card .ct-sim-editable input, .ct-sim-legs-card .ct-sim-editable select { height: 24px; padding: 1px 3px; font-size: 11px; }
+.ct-sim-legs-card .ct-sim-remove-leg { width: 20px; height: 24px; min-height: 24px; padding: 0; font-size: 18px; line-height: 22px; border-color: transparent; background: transparent; color: var(--sim-muted); }
+.ct-sim-legs-footer { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 5px; }
+.ct-sim-legs-footer button { min-height: 24px; height: 24px; padding: 2px 6px; font-size: 10px; }
+.ct-sim-legs-footer small { font-size: 9px; color: var(--sim-muted); }
 .ct-sim-legs-card .ct-sim-hint { font-size: 10px; }
 .ct-sim-legs-card .ct-sim-equilibria { margin: 10px 0; }
 .ct-sim-market { --ct-bg: var(--sim-bg); --ct-panel: var(--sim-card); --ct-input: var(--sim-field); --ct-text: var(--sim-text); --ct-muted: var(--sim-muted); --ct-border: var(--sim-border); --ct-accent: var(--sim-accent); padding: 0; gap: 0; overflow: visible; }
@@ -154,7 +158,10 @@
 .ct-sim .ct-sim-strategy-apply { min-height: 28px; padding: 2px; border-color: var(--sim-theory); color: var(--sim-theory); background: var(--sim-field); font-size: 17px; }
 .ct-sim-strategy-preview { padding: 12px 4px 2px; font-size: 11px; }
 .ct-sim-strategy-preview-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.ct-sim-strategy-preview-title svg { width: 72px; height: 44px; color: var(--sim-accent); }
+.ct-sim-strategy-picker .ct-sim-payoff-preview { display: block; width: 100%; height: 116px; margin: 4px 0; }
+.ct-sim-strategy-picker .ct-sim-payoff-zero { stroke: var(--sim-text); stroke-width: 1; opacity: .8; }
+.ct-sim-payoff-preview text { fill: var(--sim-muted); font: 9px system-ui, sans-serif; }
+.ct-sim-payoff-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; font-size: 10px; }
 .ct-sim-strategy-preview p { margin: 5px 0 8px; color: var(--sim-muted); }
 .ct-sim-strategy-preview ul { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; padding: 0; margin: 6px 0 10px; }
 .ct-sim-strategy-preview li { padding: 3px 6px; border: 1px solid var(--sim-border); border-radius: 3px; }
@@ -214,7 +221,8 @@
 .ct-sim-chart { display: block; width: 100%; height: auto; margin: 18px 0 12px; overflow: visible; cursor: crosshair; }
 .ct-sim-chart text { font: 12px system-ui, sans-serif; fill: var(--sim-muted); }
 .ct-sim-grid { stroke: var(--sim-border); stroke-width: .7; opacity: .5; }
-.ct-sim-zero { stroke: var(--sim-muted); stroke-width: 1; }
+.ct-sim-zero { stroke: var(--sim-text); stroke-width: 1.2; opacity: .8; }
+.ct-sim-chart .ct-sim-zero-label { fill: var(--sim-text); font-weight: 700; }
 .ct-sim-spot { stroke: var(--sim-muted); stroke-dasharray: 3 5; stroke-width: 1; }
 .ct-sim-expiry-line { fill: none; stroke-width: 2.7; }
 .ct-sim-theory-line { fill: none; stroke-width: 2.5; stroke-dasharray: 6 4; }

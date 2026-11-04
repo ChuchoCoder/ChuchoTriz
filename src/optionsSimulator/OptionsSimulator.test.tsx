@@ -135,7 +135,7 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("7,5");
   await showBuild();
   await fill("Contratos pata 1", "3");
-  await act(async () => button("Limpiar patas").focus());
+  await act(async () => byLabel("Limpiar patas").focus());
   expect(byLabel<HTMLButtonElement>("Editar Contratos pata 1").textContent).toBe("+3");
   expect(container.textContent).toContain("2.250 ARS");
 });
@@ -537,7 +537,7 @@ it("shows exact bounded maximum loss in the build and infinity for an uncovered 
   expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toContain("500 ARS");
   await fill("Contratos pata 1", "-1");
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-  expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toBe("Pérdida máxima∞");
+  expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toBe("Pérdida máx.∞");
   await showAnalysis();
   expect(container.querySelector('.ct-sim-metrics .ct-sim-loss')!.textContent).toBe('∞');
 });
@@ -587,4 +587,39 @@ it("colors both curves and the expiry fill on the zero axis and each marker by i
   await showAnalysis(); verifyGradient();
   await clickChartAt(.8);
   expect(container.querySelector('.ct-sim-expiry-dot')!.getAttribute('fill')).toBe('var(--sim-profit)');
+});
+
+it("shows both profit and loss around zero in the priced Iron Condor selector preview", async () => {
+  for (const [id, bid, ask] of [["put-80", 3.9, 4.1], ["put-90", 5.9, 6.1], ["call-110", 5.9, 6.1], ["call-120", 3.9, 4.1]] as const)
+    marketState.current.data!.instruments[id] = { ...marketState.current.data!.instruments[id], bid: { price: bid, size: 100 }, ask: { price: ask, size: 100 } };
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => container.querySelector<HTMLButtonElement>('[data-family-name="iron-condor"]')!.click());
+  const preview = byLabel("Vista previa de la estrategia");
+  expect(preview.textContent).toContain("Crédito por estructura: 360 ARS");
+  const svg = preview.querySelector('svg')!;
+  const axis = Number(svg.querySelector('line')!.getAttribute('y1'));
+  const ordinates = [...svg.querySelector('path')!.getAttribute('d')!.matchAll(/[ML][\d.]+,([\d.-]+)/g)].map(match => Number(match[1]));
+  expect(Math.min(...ordinates), 'Credit Condor must show a profitable central plateau above zero').toBeLessThan(axis);
+  expect(Math.max(...ordinates), 'Condor wings must show loss below zero').toBeGreaterThan(axis);
+  expect(preview.textContent).toContain("Ganancia máx. 360 ARS");
+  expect(preview.textContent).toContain("Pérdida máx. 640 ARS");
+  const gradient = svg.querySelector('linearGradient')!, stops = [...gradient.querySelectorAll('stop')];
+  expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
+  expect(stops.map(stop => stop.getAttribute('stop-color'))).toEqual(['var(--sim-profit)', 'var(--sim-profit)', 'var(--sim-loss)', 'var(--sim-loss)']);
+  const top = Number(gradient.getAttribute('y1')), bottom = Number(gradient.getAttribute('y2'));
+  expect(Number(stops[1].getAttribute('offset'))).toBeCloseTo((axis - top) / (bottom - top));
+  expect(stops[1].getAttribute('offset')).toBe(stops[2].getAttribute('offset'));
+  expect(svg.querySelector<SVGPathElement>('path')!.style.stroke.replaceAll('"', '')).toBe(`url(#${gradient.id})`);
+});
+
+it("confirms the same credit Iron Condor has a 360 profit plateau and 640 maximum loss in the result graph", async () => {
+  for (const [id, bid, ask] of [["put-80", 3.9, 4.1], ["put-90", 5.9, 6.1], ["call-110", 5.9, 6.1], ["call-120", 3.9, 4.1]] as const)
+    marketState.current.data!.instruments[id] = { ...marketState.current.data!.instruments[id], bid: { price: bid, size: 100 }, ask: { price: ask, size: 100 } };
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => byLabel<HTMLButtonElement>("Aplicar Iron Condor · Normal").click());
+  expect(container.querySelector('.ct-sim-inspect output')!.textContent).toBe("360 ARS");
+  expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toContain("640 ARS");
+  const svg = container.querySelector('.ct-sim-chart')!, axis = Number(svg.querySelector('.ct-sim-zero')!.getAttribute('y1'));
+  const ordinates = [...svg.querySelector('.ct-sim-expiry-line')!.getAttribute('d')!.matchAll(/[ML][\d.]+,([\d.-]+)/g)].map(match => Number(match[1]));
+  expect(Math.min(...ordinates)).toBeLessThan(axis); expect(Math.max(...ordinates)).toBeGreaterThan(axis);
 });

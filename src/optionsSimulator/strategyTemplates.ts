@@ -1,5 +1,5 @@
 import type { Contract, Quote } from "./market";
-import { intrinsic, type OptionKind, type Side } from "./model";
+import { expirySummary, intrinsic, resultAt, type OptionKind, type Side, type Strategy } from "./model";
 
 export type StrategyFamily = "option" | "vertical" | "butterfly" | "ratio" | "strangle" | "straddle" | "iron-condor" | "jade-lizard";
 export interface StrategyChoice { family: StrategyFamily; direction: "long" | "short"; kind: OptionKind; reversed: boolean }
@@ -88,6 +88,7 @@ export function strategyRecipe(choice: StrategyChoice, contracts: readonly Contr
 
 export function recipePrices(recipe: Recipe, quotes: Record<string, Quote> | undefined, currency: string | undefined): { ok: true; premiums: number[] } | { ok: false; reason: string } {
   if (!recipe.ok) return recipe;
+  if (!recipe.legs.length) return { ok: false, reason: "No hay patas para calcular el resultado." };
   const factor = recipe.legs[0].contract.factor;
   if (!Number.isFinite(factor) || factor! <= 0 || recipe.legs.some(item => item.contract.factor !== factor || item.contract.currency !== currency || item.contract.strikeCurrency !== currency))
     return { ok: false, reason: "Faltan factores compatibles o las monedas de prima, ejercicio y subyacente son diferentes." };
@@ -100,6 +101,32 @@ export function recipePrices(recipe: Recipe, quotes: Record<string, Quote> | und
     premiums.push(level.price);
   }
   return { ok: true, premiums };
+}
+
+/** Priced expiry P&L for one structure; shares the result engine used by the main chart. */
+export function recipePayoff(recipe: Recipe, quotes: Record<string, Quote> | undefined, spot: number | undefined, currency: string | undefined, costs = 0) {
+  if (!recipe.ok) return recipe;
+  if (!recipe.legs.length) return { ok: false as const, reason: "No hay patas para calcular el resultado." };
+  const prices = recipePrices(recipe, quotes, currency);
+  if (!prices.ok) return prices;
+  if (!Number.isFinite(spot) || spot! < .000001 || spot! > 1e9 || !Number.isFinite(costs) || costs < 0 || costs > 1e12)
+    return { ok: false as const, reason: "Revisá el precio de referencia y los gastos para calcular el resultado." };
+  const factor = recipe.legs[0].contract.factor!;
+  const legs = recipe.legs.map((item, index) => ({ kind: item.contract.kind, side: item.side, strike: item.contract.strike,
+    contracts: item.ratio, premium: prices.premiums[index], volatility: NaN }));
+  if (factor < .000001 || factor > 100000 || legs.some(leg => !Number.isInteger(leg.contracts) || leg.contracts <= 0 || !Number.isFinite(leg.strike) || leg.strike < .000001 || leg.strike > 1e9 || leg.premium > 1e9))
+    return { ok: false as const, reason: "Los contratos superan los límites del modelo." };
+  const exposure = (price: number) => legs.reduce((sum, leg) => sum + leg.contracts * factor * Math.max(price, leg.strike, leg.premium), costs);
+  if (exposure(spot!) > Number.MAX_SAFE_INTEGER) return { ok: false as const, reason: "El importe bruto supera la precisión admitida." };
+  const strategy: Strategy = { legs, multiplier: factor, costs, spot: spot!, years: 0, rate: 0, dividendYield: 0, rangeMin: 0, rangeMax: spot! };
+  const summary = expirySummary(strategy);
+  const anchors = [spot!, ...legs.map(leg => leg.strike), ...summary.equilibria.flatMap(point => [point.from, point.to]).filter(Number.isFinite)];
+  const min = Math.min(...anchors), max = Math.max(...anchors), width = Math.max(spot! * .2, max - min);
+  strategy.rangeMin = Math.max(0, min - width * .15); strategy.rangeMax = max + width * .15;
+  if (!Number.isFinite(strategy.rangeMax) || exposure(strategy.rangeMax) > Number.MAX_SAFE_INTEGER)
+    return { ok: false as const, reason: "El rango del resultado supera la precisión admitida." };
+  const points = [...new Set([strategy.rangeMin, ...anchors, strategy.rangeMax])].sort((a, b) => a - b).map(price => ({ price, result: resultAt(strategy, price, "expiry") }));
+  return { ok: true as const, strategy, summary, points };
 }
 
 /** Unit intrinsic shape, zeroed at spot: a glyph, not a priced P&L estimate. */

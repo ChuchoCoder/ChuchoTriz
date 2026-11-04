@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Contract, Quote } from "./market";
-import { expirySummary, initialSimulation, parseSimulation } from "./model";
-import { initialChoice, preferredOptionMarket, recipeGlyph, recipePrices, strategyFamilies, strategyGlyph, strategyRecipe, type StrategyChoice, type StrategyFamily } from "./strategyTemplates";
+import { expirySummary, initialSimulation, intrinsic, parseSimulation, resultAt } from "./model";
+import { initialChoice, preferredOptionMarket, recipeGlyph, recipePayoff, recipePrices, strategyFamilies, strategyGlyph, strategyRecipe, type StrategyChoice, type StrategyFamily } from "./strategyTemplates";
 
 const contracts: Contract[] = [80, 90, 100, 110, 120].flatMap(strike => (["call", "put"] as const).map(kind => ({
   id: `${kind}-${strike}`, symbol: `${kind} ${strike}`, kind, strike, underlyingId: "GGAL", expiration: "20261203",
@@ -98,4 +98,62 @@ it("automatically selects one compatible market and prefers 24h, without currenc
   expect(preferredOptionMarket(pool, "ARS")).toBe("ARS|2");
   expect(preferredOptionMarket(pool, "USD")).toBe("USD|2");
   expect(preferredOptionMarket(pool, undefined)).toBe("");
+});
+
+describe("priced strategy previews", () => {
+  const quotes = Object.fromEntries(contracts.map(contract => {
+    const premium = intrinsic(contract.kind, 100, contract.strike) + Math.max(2, 8 - Math.abs(contract.strike - 100) / 5);
+    return [contract.id, { bid: { price: premium - .1, size: 100 }, ask: { price: premium + .1, size: 100 } }];
+  })) as Record<string, Quote>;
+  it.each([
+    [choice("option"), -810, 810, Infinity],
+    [choice("option", { direction: "short", kind: "put" }), 790, 9210, 790],
+    [choice("vertical"), -220, 220, 780],
+    [choice("butterfly"), 360, 640, 360],
+    [choice("ratio"), -430, 1430, Infinity],
+    [choice("ratio", { direction: "short" }), 370, Infinity, 1370],
+    [choice("strangle"), -1220, 1220, Infinity],
+    [choice("straddle", { direction: "short" }), 1580, Infinity, 1580],
+    [choice("iron-condor"), 360, 640, 360],
+    [choice("iron-condor", { reversed: true }), -440, 440, 560],
+    [choice("jade-lizard"), 770, 8230, 770],
+    [choice("jade-lizard", { reversed: true }), 770, Infinity, 770],
+  ] as const)("prices %j with actual premiums, factor and exact global risk", (selection, atSpot, loss, profit) => {
+    const payoff = recipePayoff(strategyRecipe(selection, contracts, 100), quotes, 100, "ARS");
+    if (!payoff.ok) throw Error(payoff.reason);
+    expect(resultAt(payoff.strategy, 100, "expiry")).toBeCloseTo(atSpot);
+    if (loss === Infinity) expect(payoff.summary.maxLoss).toBe(Infinity);
+    else expect(payoff.summary.maxLoss).toBeCloseTo(loss);
+    if (profit === Infinity) expect(payoff.summary.maxProfit).toBe(Infinity);
+    else expect(payoff.summary.maxProfit).toBeCloseTo(profit);
+    for (const root of payoff.summary.equilibria.flatMap(point => [point.from, point.to]).filter(Number.isFinite)) {
+      expect(payoff.points.some(point => point.price === root)).toBe(true);
+      expect(resultAt(payoff.strategy, root, "expiry")).toBeCloseTo(0);
+    }
+  });
+  it("includes fees without rebasing the profitable plateau to zero", () => {
+    const payoff = recipePayoff(strategyRecipe(choice("iron-condor"), contracts, 100), quotes, 100, "ARS", 60);
+    if (!payoff.ok) throw Error(payoff.reason);
+    expect(payoff.summary.entry).toBeCloseTo(-300);
+    expect(payoff.summary.maxProfit).toBeCloseTo(300); expect(payoff.summary.maxLoss).toBeCloseTo(700);
+    expect(resultAt(payoff.strategy, 100, "expiry")).toBeCloseTo(300);
+    expect(payoff.summary.equilibria.map(point => point.from)).toEqual([87, 113]);
+  });
+  it("does not invent a profitable region for a debit Condor that loses everywhere", () => {
+    const uniform = Object.fromEntries(contracts.map(contract => [contract.id, { bid: { price: 4, size: 100 }, ask: { price: 5, size: 100 } }]));
+    const payoff = recipePayoff(strategyRecipe(choice("iron-condor"), contracts, 100), uniform, 100, "ARS");
+    if (!payoff.ok) throw Error(payoff.reason);
+    expect(payoff.summary.entry).toBe(200); expect(payoff.summary.maxProfit).toBe(0);
+    expect(payoff.points.every(point => point.result < 0)).toBe(true);
+  });
+  it("refuses unavailable prices, invalid fees and unsafe gross amounts before netting", () => {
+    const recipe = strategyRecipe(choice("iron-condor"), contracts, 100);
+    expect(recipePayoff(recipe, undefined, 100, "ARS").ok).toBe(false);
+    expect(recipePayoff({ ok: true, legs: [] }, quotes, 100, "ARS").ok).toBe(false);
+    expect(recipePayoff(recipe, quotes, 100, "ARS", NaN).ok).toBe(false);
+    expect(recipePayoff(recipe, quotes, 100, "ARS", -1).ok).toBe(false);
+    if (!recipe.ok) throw Error(recipe.reason);
+    const large = { ...recipe, legs: recipe.legs.map(leg => ({ ...leg, ratio: 1e10 })) };
+    expect(recipePayoff(large, quotes, 1e9, "ARS").ok).toBe(false);
+  });
 });

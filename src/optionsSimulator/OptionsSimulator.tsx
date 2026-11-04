@@ -57,8 +57,8 @@ function EditableLegValue({ label, value, onChange, options, className = "", for
   </span>;
 }
 
-function StrategyPriceControl({ input, market, entry, onChange }: {
-  input: Simulation; market?: StrikeMarket; entry?: number; onChange(position: number): void;
+function StrategyPriceControl({ input, market, entry, maxLoss, onChange }: {
+  input: Simulation; market?: StrikeMarket; entry?: number; maxLoss?: number; onChange(position: number): void;
 }) {
   const references = useMemo(() => strategyPriceReferences(input, market), [input, market]);
   const total = references.ok ? references.currentTotal : entry;
@@ -66,12 +66,14 @@ function StrategyPriceControl({ input, market, entry, onChange }: {
   const position = references.ok && total !== undefined && span > 0 ? (references.natural.total - total) / span : 0;
   const text = (amount: number | undefined) => amount === undefined ? "—" : `${amount < 0 ? "Crédito" : amount > 0 ? "Débito" : "Neutra"} ${fmt(Math.abs(amount))} ${input.currency}`;
   return <section className="ct-sim-strategy-price" aria-label="Precio total de entrada de la estrategia">
-    <header><span>Precio total de entrada</span><strong aria-label="Crédito o débito de la estrategia">{text(total)}</strong></header>
+    <header><strong aria-label="Crédito o débito de la estrategia" title="Precio total de entrada">{text(total)}</strong>
+      <div className="ct-sim-max-loss" aria-label="Pérdida máxima del armado al vencimiento"><span>Pérdida máx.</span><strong title={maxLoss === Infinity ? "Pérdida ilimitada" : "Pérdida máxima al vencimiento"}>
+        {maxLoss === undefined ? "—" : maxLoss === Infinity ? "∞" : `${fmt(maxLoss)} ${input.currency}`}</strong></div></header>
     <input type="range" aria-label="Precio de entrada de la estrategia" min="0" max="100" step="1" disabled={!references.ok || span <= 0}
       value={Math.max(0, Math.min(100, position * 100))} aria-valuetext={text(total)} onChange={event => onChange(Number(event.target.value) / 100)} />
     <div className="ct-sim-strategy-price-points">{([ ["natural", "Natural", 0], ["mid", "Mid", .5], ["opposite", "Opuesto", 1] ] as const).map(([key, label, value]) =>
       <button key={key} type="button" aria-label={`Tomar precio ${label} de la estrategia`} disabled={!references.ok} aria-pressed={references.ok && total !== undefined && Math.abs(position - value) < 1e-8}
-        onClick={() => onChange(value)}><span>{label}</span><small>{text(references.ok ? references[key].total : undefined)}</small></button>)}</div>
+        title={`${label}: ${text(references.ok ? references[key].total : undefined)}`} onClick={() => onChange(value)}><span>{label}</span><small>{text(references.ok ? references[key].total : undefined)}</small></button>)}</div>
     {!references.ok && <p className="ct-sim-hint" role="status">{references.reason}</p>}
     {references.ok && total !== undefined && (position < -1e-8 || position > 1 + 1e-8) && <p className="ct-sim-hint">La entrada fijada está fuera de las referencias actuales.</p>}
     {numeric(input.costs) > 0 && <p className="ct-sim-hint">Incluye gastos de entrada: {fmt(numeric(input.costs))} {input.currency}.</p>}
@@ -153,10 +155,11 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       {Array.from({ length: 5 }, (_, index) => {
         const value = low + (high - low) * index / 4;
         return <g key={index}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} className="ct-sim-grid" />
-          <text x={left - 10} y={y(value) + 4} textAnchor="end">{fmt(value)}</text></g>;
+          {Math.abs(y(value) - y(0)) > 12 && <text x={left - 10} y={y(value) + 4} textAnchor="end">{fmt(value)}</text>}</g>;
       })}
       <path d={area} fill={`url(#${gradientId})`} />
       <line x1={left} x2={width - right} y1={y(0)} y2={y(0)} className="ct-sim-zero" />
+      <text className="ct-sim-zero-label" x={left - 10} y={y(0) + 4} textAnchor="end">0</text>
       {deviations && deviations.move > 0 && deviations.levels.filter(level => level.price >= strategy.rangeMin && level.price <= strategy.rangeMax).map(level =>
         <g key={level.sigma} className={`ct-sim-sigma ct-sim-sigma-${Math.abs(level.sigma)}`} aria-label={`${level.sigma > 0 ? "+" : ""}${level.sigma}σ: ${fmt(level.price)} ${currency}`}>
           <title>{level.sigma > 0 ? "+" : ""}{level.sigma}σ: {fmt(level.price)} {currency}</title>
@@ -278,15 +281,16 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </div>
     {status && <p role="status" className="ct-sim-status">{status}</p>}
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} input={input} setInput={setInput} onStrikeMarket={setStrikeMarket} />
-    <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-section-heading"><h3>Patas de la estrategia</h3><button type="button" onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar patas</button></div>
+    <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-leg-toolbar"><h3>Patas</h3>
       <div className="ct-sim-quick-adjustments" aria-label="Ajustar toda la estrategia">{([ ["strike", "Strike"], ["quantity", "Cantidad"] ] as const).map(([kind, label]) =>
-        <fieldset key={kind}><legend>{label}</legend><div>{([-1, 1] as const).map(direction => {
+        <div key={kind} className="ct-sim-adjustment-group" role="group" aria-label={label}><span>{kind === "quantity" ? "Cant." : label}</span><div>{([-1, 1] as const).map(direction => {
           const result = kind === "strike" ? shiftStrategyStrikes(input, direction, strikeMarket) : adjustStrategyQuantity(input.legs, direction);
           const action = `${direction < 0 ? "Bajar" : "Subir"} ${kind === "strike" ? "strikes" : "cantidades"} de toda la estrategia`;
           return <button key={direction} type="button" aria-label={action} disabled={!result.ok} onClick={() => adjust(kind, direction)}
             title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
               : "Una unidad de la proporción actual, sin cambiar las relaciones entre patas" : result.reason}>{direction < 0 ? "↓" : "↑"}</button>;
-        })}</div></fieldset>)}</div>
+        })}</div></div>)}</div>
+      <button type="button" className="ct-sim-clear-legs" aria-label="Limpiar patas" onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
         <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-remove" /></colgroup>
         <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
@@ -317,11 +321,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
         setInput(current => ({ ...current, legs: [...current.legs, newLeg(Math.max(nextId.current++, ...current.legs.map(leg => leg.id + 1)), numeric(current.spot) > 0 ? numeric(current.spot) : 100)] })); setStatus("");
-      }}>+ Pata manual</button></div>
-      <p className="ct-sim-hint">Clic para editar · Enter o salir para aceptar · Esc para deshacer. Cantidad positiva = compra; negativa = venta.</p>
-      {!!input.legs.length && <StrategyPriceControl input={input} market={strikeMarket} entry={summary?.entry} onChange={changeEntryPrice} />}
-      {!!input.legs.length && <div className="ct-sim-max-loss" aria-label="Pérdida máxima del armado al vencimiento"><span>Pérdida máxima</span>
-        <strong title={summary?.maxLoss === Infinity ? "Pérdida ilimitada" : "Calculada para todo precio del subyacente al vencimiento"}>{summary ? summary.maxLoss === Infinity ? "∞" : money(summary.maxLoss) : "—"}</strong></div>}
+      }}>+ Pata manual</button><small>+ compra · − venta</small></div>
+      {!!input.legs.length && <StrategyPriceControl input={input} market={strikeMarket} entry={summary?.entry} maxLoss={summary?.maxLoss} onChange={changeEntryPrice} />}
     </section>
     {view === "build" && <section className="ct-sim-card ct-sim-quick-results" aria-label="Resultado rápido del armado">
       <div className="ct-sim-section-heading"><h3>Resultado rápido</h3><button type="button" onClick={() => changeView("analysis")}>Análisis →</button></div>

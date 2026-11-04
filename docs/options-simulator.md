@@ -168,8 +168,12 @@ compra dos más alejadas; Short invierte esos lados
 Jade Lizard Normal combina put vendida y call spread vendido; Reversed combina
 put spread vendido y call vendida (Twisted Sister), según la
 [guía de tastylive](https://assets.contentstack.io/v3/assets/blt40263f25ec36953f/blt094f33167a64ab9a/648c7f8b83c7fb90a25f4c77/tastylive-options-strategy-guide-2023.pdf).
-Los iconos muestran la forma del pago intrínseco, sin primas; el resultado monetario
-se calcula con las primas copiadas y editables, contratos de cada pata, factor y gastos.
+El selector muestra el resultado al vencimiento con primas de entrada (ASK para
+compras, BID para ventas), proporciones de cada pata, factor y gastos. Comparte
+el motor de resultados del gráfico principal; el eje horizontal marca resultado
+cero. Verde indica ganancia y rojo pérdida. Su vista previa incluye máximos
+globales de ganancia/pérdida. Sin precios disponibles, solo se conserva un icono
+esquemático sin eje y se deshabilita la aplicación de la estructura.
 
 `resultado = Σ sentido × contratosDeLaPata × factor × (valor − prima) − gastos`
 
@@ -409,3 +413,25 @@ en coordenadas del gráfico. Los marcadores usan el signo de su propio resultado
 las referencias σ son grises/púrpuras también en la cadena. La fixture confirmó
 por DOM venta −1 → −2 → −1, filas de 34 px, curva teórica punteada y colores
 computados rojo/verde. Sin inspección visual por píxeles.
+
+### Resultados con primas en el selector y armado compacto
+
+Se reprodujo el IC de crédito 360 ARS con una regresión que fallaba: la vista
+previa usaba el pago intrínseco normalizado al spot y dejaba la meseta central
+en cero. Una prueba separada confirmó que el gráfico principal ya calculaba
+ganancia 360 ARS y pérdida máxima 640 ARS. El selector ahora comparte
+`resultAt`/`expirySummary`, incluye primas ASK/BID, factor, proporciones y gastos,
+y dibuja los strikes y equilibrios exactos alrededor del eje cero. El gradiente
+en coordenadas del gráfico separa ganancia verde y pérdida roja; no se fuerza
+una zona rentable cuando las primas hacen que toda la estructura pierda.
+
+Las regresiones cubren las ocho familias, variantes, riesgos ilimitados,
+equilibrios, gastos, datos faltantes y precisión bruta. El panel de patas reúne
+título, strike, cantidades y limpiar en una sola fila. Reduce filas a 28 px,
+integra pérdida máxima junto al crédito/débito y compacta las referencias de
+entrada. La fixture confirmó por geometría DOM las cuatro filas de 28 px y los
+controles alineados, cantidades globales 1→2→1 y ajustes individuales.
+
+357 tests Vitest y 13 tests Node aprobados, junto a seguridad (10 tests), lint,
+TypeScript y empaquetado. Verificación del navegador compartido por DOM y
+colores computados; estaba oculto, sin inspección visual por píxeles.
