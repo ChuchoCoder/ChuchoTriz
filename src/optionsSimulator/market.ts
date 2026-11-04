@@ -12,7 +12,6 @@ export interface Quote {
   last?: number; referencePrice?: number; seq?: number; impliedVolatility?: number; delta?: number;
   nominalVolume?: number; changePercent?: number; lastTradeAt?: number;
 }
-export interface PremiumReference { bid: number; ask: number }
 export interface Snapshot {
   contextRevision: number; catalogRevision: number; underlyingId: string; capturedAt: number; instruments: Record<string, Quote>;
 }

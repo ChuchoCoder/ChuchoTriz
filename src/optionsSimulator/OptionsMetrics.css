@@ -11,7 +11,8 @@
 .ct-sim .ct-opt-metrics-legend strong{color:#83c7f1;font-size:9px}.ct-sim .ct-opt-metrics-legend.put strong{color:#cab4f3}
 .ct-sim .ct-opt-metrics-legend i{width:60px;height:6px;flex-shrink:0;border-radius:2px;background:linear-gradient(90deg,#6fd4a5,#ecda69,#f7a35c,#ef7888)}
 .ct-sim .ct-opt-volume-max{margin-left:auto}
-.ct-sim .ct-opt-chain.ct-opt-metrics-chain{--ct-opt-metric-strike:82px;min-width:1110px;font-size:11px}.ct-sim .ct-opt-chain.ct-opt-metrics-chain.single{min-width:620px}
+.ct-sim .ct-opt-chain.ct-opt-metrics-chain{--ct-opt-metric-strike:82px;min-width:1378px;font-size:11px}.ct-sim .ct-opt-chain.ct-opt-metrics-chain.single{min-width:620px}
+.ct-sim .ct-opt-metrics-chain col.theta{width:62px}.ct-sim .ct-opt-metrics-chain col.extrinsic{width:72px}
 .ct-sim .ct-opt-metrics-chain col.nominal{width:76px}.ct-sim .ct-opt-metrics-chain col.change{width:68px}.ct-sim .ct-opt-metrics-chain col.delta{width:58px}.ct-sim .ct-opt-metrics-chain col.iv{width:62px}.ct-sim .ct-opt-metrics-chain col.strike{width:var(--ct-opt-metric-strike)}
 .ct-sim .ct-opt-metrics-chain .ct-opt-strike{width:var(--ct-opt-metric-strike)}.ct-sim .ct-opt-metrics-chain td{height:36px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-itm-line{grid-template-columns:1fr var(--ct-opt-metric-strike) 1fr}

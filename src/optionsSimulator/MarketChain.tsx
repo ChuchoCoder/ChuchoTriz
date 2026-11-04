@@ -1,10 +1,10 @@
 import { Dispatch, Fragment, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
-import { Catalog, Contract, PremiumReference, Quote, useOptionMarket } from "./market";
+import { Catalog, Contract, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, parseSimulation, Simulation, standardDeviationLevels } from "./model";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSimulation, Simulation, standardDeviationLevels } from "./model";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, recipePrices, strategyLabel, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
@@ -14,9 +14,8 @@ const positive = (value: unknown): value is number => typeof value === "number" 
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
 
-export default function MarketChain({ active, input, setInput, onPremiumReferences, onStrikeMarket }: {
+export default function MarketChain({ active, input, setInput, onStrikeMarket }: {
   active: boolean; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
-  onPremiumReferences(references: Record<string, PremiumReference>): void;
   onStrikeMarket(market: StrikeMarket | undefined): void;
 }) {
   const root = useRef<HTMLElement>(null);
@@ -47,15 +46,6 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
   }, [expiration, market, expirations.join(), catalog, underlyingId]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
-  useEffect(() => {
-    const references: Record<string, PremiumReference> = {};
-    for (const contract of selected) {
-      const quote = data?.instruments[contract.id];
-      if (quote?.bid && quote.ask && positive(quote.bid.price) && positive(quote.ask.price) && quote.bid.price < quote.ask.price)
-        references[contract.id] = { bid: quote.bid.price, ask: quote.ask.price };
-    }
-    onPremiumReferences(references);
-  }, [data, onPremiumReferences, underlyingId, expiration, market]);
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
   const spot = positive(spotQuote?.last) ? spotQuote.last : undefined;
   const strikes = [...new Set(selected.map(contract => contract.strike))].sort((a, b) => a - b);
@@ -99,7 +89,8 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     observer.observe(container);
     return () => observer.disconnect();
   }, [active, strikes.join("|")]);
-  const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue });
+  const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue,
+    spot, currency: underlying?.currency, rate: numeric(input.rate) / 100, dividendYield: numeric(input.dividendYield) / 100 });
   useEffect(() => {
     const viewport = root.current?.closest<HTMLElement>(".ct-sim");
     const scroll = root.current?.querySelector<HTMLElement>(".ct-opt-chain-scroll");
@@ -153,7 +144,7 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     setNotice(`${strategyLabel(choice)} cargada. Primas y VI copiadas de esta lectura.`);
     return true;
   }
-  const metricCell = (contract: Contract | undefined, field: "volume" | "change" | "delta" | "iv", kind: "call" | "put") =>
+  const metricCell = (contract: Contract | undefined, field: "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic", kind: "call" | "put") =>
     <OptionMetricCell contract={contract} field={field} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />;
   const quoteCell = (contract: Contract | undefined, side: "buy" | "sell") => {
     const quote = contract && data?.instruments[contract.id], level = quote?.[side === "buy" ? "ask" : "bid"];
@@ -204,15 +195,15 @@ export default function MarketChain({ active, input, setInput, onPremiumReferenc
     </div>
     <div className="ct-table-scroll ct-opt-chain-scroll" style={chainHeight === undefined ? undefined : { maxHeight: chainHeight }} role="region" aria-label="Cadena de opciones" tabIndex={0}>
       <div ref={grid} className="ct-opt-chain-grid"><table className="ct-opt-chain ct-opt-metrics-chain">
-        <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
-        <thead><tr><th colSpan={6}>CALLS</th><th className="ct-opt-strike">Ejercicio</th><th colSpan={6}>PUTS</th></tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>VI</th><th className="ct-opt-strike">Strike</th><th>VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead>
+        <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col className="theta" /><col className="extrinsic" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="extrinsic" /><col className="theta" /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
+        <thead><tr><th colSpan={8}>CALLS</th><th className="ct-opt-strike">Ejercicio</th><th colSpan={8}>PUTS</th></tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th>VI</th><th className="ct-opt-strike">Strike</th><th>VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead>
         <tbody>{strikes.map((strike, index) => {
           const call = unique("call", strike), put = unique("put", strike);
           return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}>
-            {metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}
+            {metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{metricCell(call, "theta", "call")}{metricCell(call, "extrinsic", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}
             <th className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM · Subyacente</span>}</th>
-            {metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}
-          </tr>{itmSpot !== undefined && strike < itmSpot && strikes[index + 1] > itmSpot && <tr className="ct-opt-itm-boundary"><td colSpan={13}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span><span className="ct-opt-itm-spot">$ {fmt(itmSpot)}</span><span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
+            {metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "extrinsic", "put")}{metricCell(put, "theta", "put")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}
+          </tr>{itmSpot !== undefined && strike < itmSpot && strikes[index + 1] > itmSpot && <tr className="ct-opt-itm-boundary"><td colSpan={17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span><span className="ct-opt-itm-spot">$ {fmt(itmSpot)}</span><span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}

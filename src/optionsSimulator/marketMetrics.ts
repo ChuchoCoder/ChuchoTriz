@@ -1,13 +1,14 @@
 import type { Contract as OptionContract, Quote as OptionMarketMetrics, Snapshot as OptionsSnapshot } from "./market";
+import { dateDay, intrinsic, theoreticalTheta } from "./model";
 
 export const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const positive = (value: unknown): value is number => finiteMetric(value) && value > 0;
 const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 const day = (time: number) => dateFormat.format(time);
-export interface MetricCell extends OptionMarketMetrics { eligible: boolean; reason: string }
+export interface MetricCell extends OptionMarketMetrics { eligible: boolean; reason: string; theta?: number; extrinsic?: number }
 export interface MetricScale { min?: number; max?: number; volumeMax: number; included: number; total: number }
 export function deriveOptionMetrics(contracts: OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
-  settings: { now: number; minutes: string; enabled: boolean; available: boolean }) {
+  settings: { now: number; minutes: string; enabled: boolean; available: boolean; spot?: number; currency?: string; rate?: number; dividendYield?: number }) {
   const parsed = /^\d+$/.test(settings.minutes) ? Number(settings.minutes) : NaN;
   const windowValid = Number.isSafeInteger(parsed) && parsed > 0;
   const nowValid = finiteMetric(settings.now) && settings.now >= 0 && !Number.isNaN(new Date(settings.now).getTime());
@@ -20,6 +21,14 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
     const vi = finiteMetric(raw?.impliedVolatility) ? raw.impliedVolatility : undefined;
     const stamp = finiteMetric(raw?.lastTradeAt) && raw.lastTradeAt >= 0 && !Number.isNaN(new Date(raw.lastTradeAt).getTime()) ? raw.lastTradeAt : undefined;
     const volume = finiteMetric(raw?.nominalVolume) && raw.nominalVolume >= 0 ? raw.nominalVolume : undefined;
+    const comparable = settings.available && positive(settings.spot) && positive(contract.strike) && ["ARS", "USD"].includes(settings.currency ?? "")
+      && contract.currency === settings.currency && contract.strikeCurrency === settings.currency;
+    const years = nowValid ? (dateDay(contract.expiration.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3")) - dateDay(day(settings.now))) / 365 : NaN;
+    const modelValid = comparable && years > 0 && years <= 10 && positive(vi) && vi <= 500 && finiteMetric(settings.rate) && settings.rate >= -1 && settings.rate <= 10
+      && finiteMetric(settings.dividendYield) && settings.dividendYield >= 0 && settings.dividendYield <= 1;
+    const theta = modelValid ? theoreticalTheta(contract.kind, settings.spot!, contract.strike, years, vi! / 100, settings.rate!, settings.dividendYield!) : undefined;
+    const validBook = raw?.bid && raw.ask && positive(raw.bid.price) && positive(raw.ask.price) && positive(raw.bid.size) && positive(raw.ask.size) && raw.bid.price < raw.ask.price;
+    const extrinsic = comparable && validBook ? (raw!.bid!.price / 2 + raw!.ask!.price / 2) - intrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
     let reason = "", eligible = false;
     if (!settings.available || !nowValid) reason = "Sin lectura de mercado vigente";
     else if (!positive(vi)) reason = "VI no disponible o no válida";
@@ -35,7 +44,7 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
     }
     const cell: MetricCell = { impliedVolatility: vi, lastTradeAt: stamp, nominalVolume: volume,
       delta: finiteMetric(raw?.delta) ? raw.delta : undefined,
-      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, eligible, reason };
+      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, theta, extrinsic, eligible, reason };
     byId[contract.id] = cell;
     const scale = scales[contract.kind]; scale.total++;
     if (volume !== undefined && settings.available) scale.volumeMax = Math.max(scale.volumeMax, volume);

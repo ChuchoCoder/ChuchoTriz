@@ -20,18 +20,16 @@
 .ct-sim-view-tabs button { min-height: 27px; padding: 3px 12px; font-size: 12px; border-color: transparent; background: transparent; color: var(--sim-muted); }
 .ct-sim-view-tabs button[aria-selected="true"] { color: var(--sim-accent); border-color: var(--sim-accent); background: var(--sim-field); }
 .ct-sim-market-layout[hidden], .ct-sim-analysis-panel[hidden] { display: none; }
-.ct-sim-topbar > details > summary, .ct-sim-market-settings > summary { list-style: none; cursor: pointer; padding: 4px 9px; border: 1px solid var(--sim-border); border-radius: 4px; font-size: 11px; color: var(--sim-accent); background: var(--sim-field); }
-.ct-sim-topbar > details > summary::-webkit-details-marker, .ct-sim-market-settings > summary::-webkit-details-marker { display: none; }
-.ct-sim-topbar > details[open] > summary, .ct-sim-market-settings[open] > summary { border-color: var(--sim-accent); }
-.ct-sim-library-menu > .ct-sim-library, .ct-sim-setup-panel { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; right: 0; padding: 14px; border: 1px solid var(--sim-border); border-radius: 6px; background: var(--sim-card); box-shadow: 0 6px 20px #0005; }
+.ct-sim-market-settings > summary { list-style: none; cursor: pointer; padding: 4px 9px; border: 1px solid var(--sim-border); border-radius: 4px; font-size: 11px; color: var(--sim-accent); background: var(--sim-field); }
+.ct-sim-market-settings > summary::-webkit-details-marker { display: none; }
+.ct-sim-market-settings[open] > summary { border-color: var(--sim-accent); }
 .ct-sim label { color: inherit; font: inherit; margin: 0; }
 .ct-sim input, .ct-sim select { display: block; width: 100%; min-width: 0; height: 34px; border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-field); color: var(--sim-text); padding: 5px 9px; font: inherit; }
 .ct-sim input::placeholder { color: var(--sim-muted); opacity: 1; }
 .ct-sim button { min-height: 34px; border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-field); color: var(--sim-accent); padding: 6px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
 .ct-sim button:hover:enabled { border-color: var(--sim-accent); }
 .ct-sim button:disabled { opacity: .5; cursor: default; }
-.ct-sim-library { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 12px; align-items: end; }
-.ct-sim-library label, .ct-sim-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
+.ct-sim-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
 .ct-sim-status { color: var(--sim-muted); font-size: 11px; margin: 4px 0; }
 .ct-sim-card { padding: 18px; margin-bottom: 16px; border: 1px solid var(--sim-border); border-radius: 9px; background: var(--sim-card); min-width: 0; }
 .ct-sim h3 { font: 600 14px/1.4 "Lato", system-ui, sans-serif; color: inherit; margin: 0 0 16px; }
@@ -101,6 +99,9 @@
 .ct-sim .ct-sim-strategy-price-points button { min-height: 38px; padding: 3px; font-size: 10px; white-space: normal; }
 .ct-sim-strategy-price-points button[aria-pressed="true"] { border-color: var(--sim-accent); background: color-mix(in srgb, var(--sim-accent) 12%, var(--sim-field)); }
 .ct-sim-strategy-price-points small { display: block; margin-top: 2px; font-size: 9px; }
+.ct-sim-max-loss { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; font-size: 11px; }
+.ct-sim-max-loss > span { color: var(--sim-muted); }
+.ct-sim-max-loss > strong { color: var(--sim-loss); }
 .ct-sim-leg-volatilities summary { cursor: pointer; color: var(--sim-muted); }
 .ct-sim-leg-volatilities > div { display: grid; grid-template-columns: 1fr 72px 12px; align-items: center; gap: 5px; padding-top: 4px; }
 .ct-sim .ct-sim-leg-volatilities .ct-sim-cell-value { min-height: 26px; padding: 2px 5px; font-size: 11px; }
@@ -113,11 +114,6 @@
 .ct-sim-legs-footer button { min-height: 28px; height: 28px; font-size: 12px; }
 .ct-sim-legs-card .ct-sim-hint { font-size: 10px; }
 .ct-sim-legs-card .ct-sim-equilibria { margin: 10px 0; }
-.ct-sim-premium-references { position: fixed; inset: auto; margin: 0; width: 260px; padding: 8px; color: var(--sim-text); border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-card); box-shadow: 0 4px 16px #0005; }
-.ct-sim-premium-references > span { display: block; font-size: 10px; color: var(--sim-muted); margin-bottom: 4px; }
-.ct-sim-premium-references > div { display: flex; gap: 4px; }
-.ct-sim .ct-sim-premium-references button { width: auto; flex: 1; min-height: 36px; padding: 3px 6px; font-size: 10px; }
-.ct-sim-premium-references strong { display: block; font-size: 11px; font-weight: 600; }
 .ct-sim-market { --ct-bg: var(--sim-bg); --ct-panel: var(--sim-card); --ct-input: var(--sim-field); --ct-text: var(--sim-text); --ct-muted: var(--sim-muted); --ct-border: var(--sim-border); --ct-accent: var(--sim-accent); padding: 0; gap: 0; overflow: visible; }
 .ct-sim .ct-sim-market.ct-options { gap: 0; }
 .ct-sim .ct-sim-market .ct-opt-controls { position: relative; padding: 4px 6px; gap: 6px 10px; align-items: center; }
@@ -232,7 +228,6 @@
 .ct-free-settings-panel[data-color-scheme="light"] .ct-sim { color-scheme: light; --sim-bg: #f3f5fa; --sim-card: #ffffff; --sim-field: #f5f7fb; --sim-text: #202b3d; --sim-muted: #526077; --sim-border: #7b879b; --sim-accent: #6235a5; --sim-theory: #006c87; --sim-profit: #087744; --sim-loss: #b42743; }
 @container (max-width: 1050px) {
   .ct-sim-market-layout { grid-template-columns: 1fr; }
-  .ct-sim-library { grid-template-columns: 1fr 1fr; }
   .ct-sim-analysis { grid-template-columns: 1fr; }
   .ct-sim-scenario { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .ct-sim-scenario h3, .ct-sim-scenario h4, .ct-sim-scenario .ct-sim-hint { grid-column: 1 / -1; margin: 0; }

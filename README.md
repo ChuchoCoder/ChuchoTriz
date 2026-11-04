@@ -32,11 +32,11 @@ simulados y sin conexión a un broker. La apariencia de Matriz puede variar.*
 | **Editor visual** | Buscar, agregar y quitar instrumentos; editar y reordenar presets con vista previa de los botones. |
 | **Modo RAW** | Editar todos los instrumentos como texto, con una línea por ticker. |
 | **Preferencias locales** | Guardar la configuración en el perfil de Chrome y actualizarla entre vistas. |
-| **Simulador de opciones** | Armar patas desde una cadena con calls/puts y VI, simular resultados al vencimiento y teóricos, y guardar estrategias localmente. |
+| **Simulador de opciones** | Armar patas desde una cadena con calls/puts, VI, Theta teórico y Extrínseco; simular resultados y consultar la pérdida máxima al vencimiento. |
 
 El **Simulador de opciones** está disponible en una pestaña dentro de Configuración.
 Conserva la cadena de Premium, con calls a la izquierda y puts a la derecha.
-Seleccioná BID/ASK para incorporar patas simuladas, ajustá contratos y primas, y
+Seleccioná BID/ASK para incorporar patas simuladas, ajustá cantidades con signo y precio total, y
 explorá el gráfico con distintos precios, fechas y VI. No envía órdenes al mercado.
 Ver [uso, fuentes y supuestos del simulador](docs/options-simulator.md).
 

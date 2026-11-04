@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curve, dateDay, daysToExpiry, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice } from "./model";
+import { curve, dateDay, daysToExpiry, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice, theoreticalTheta } from "./model";
 
 function strategy(change: Partial<Simulation> = {}) {
   const parsed = parseSimulation({ ...initialSimulation("2026-11-03"), ...change });
@@ -46,6 +46,17 @@ describe("total profit and loss at expiry", () => {
   });
 });
 describe("European theoretical prices", () => {
+  it("computes daily analytical theta and matches independent time differences for calls and puts", () => {
+    expect(theoreticalTheta("call", 100, 100, 1, .2, .05, 0)).toBeCloseTo(-6.4140275 / 365, 8);
+    for (const kind of ["call", "put"] as const) {
+      const dt = 1e-5;
+      const difference = (theoreticalPrice(kind, 93, 107, .7 - dt, .35, .2, .03) - theoreticalPrice(kind, 93, 107, .7 + dt, .35, .2, .03)) / (2 * dt * 365);
+      expect(theoreticalTheta(kind, 93, 107, .7, .35, .2, .03)).toBeCloseTo(difference, 6);
+    }
+    expect(theoreticalTheta("call", 100, 100, 0, .2, 0, 0)).toBeUndefined();
+    expect(theoreticalTheta("call", 100, 100, 1, 0, 0, 0)).toBeUndefined();
+    expect(theoreticalTheta("call", 100, 100, 1, NaN, 0, 0)).toBeUndefined();
+  });
   it("matches the standard S=K=100, r=5%, sigma=20%, T=1 benchmark", () => {
     expect(theoreticalPrice("call", 100, 100, 1, .2, .05, 0)).toBeCloseTo(10.45058, 4);
     expect(theoreticalPrice("put", 100, 100, 1, .2, .05, 0)).toBeCloseTo(5.573526, 4);

@@ -158,6 +158,17 @@ export function theoreticalPrice(kind: OptionKind, spot: number, strike: number,
   return Math.max(0, kind === "call" ? discountedSpot * normalCdf(d1) - discountedStrike * normalCdf(d2)
     : discountedStrike * normalCdf(-d2) - discountedSpot * normalCdf(-d1));
 }
+/** European BSM theta per calendar day and premium unit; undefined at expiry/zero VI. */
+export function theoreticalTheta(kind: OptionKind, spot: number, strike: number, years: number, volatility: number, rate: number, dividendYield: number): number | undefined {
+  if (![spot, strike, years, volatility, rate, dividendYield].every(Number.isFinite) || spot <= 0 || strike <= 0 || years <= 0 || volatility <= 0) return;
+  const sqrt = Math.sqrt(years), d1 = (Math.log(spot / strike) + (rate - dividendYield + volatility * volatility / 2) * years) / (volatility * sqrt);
+  const d2 = d1 - volatility * sqrt, sign = kind === "call" ? 1 : -1;
+  const discountedSpot = spot * Math.exp(-dividendYield * years), discountedStrike = strike * Math.exp(-rate * years);
+  const density = Math.exp(-.5 * d1 * d1) / Math.sqrt(2 * Math.PI);
+  const theta = (-discountedSpot * density * volatility / (2 * sqrt) + sign * dividendYield * discountedSpot * normalCdf(sign * d1)
+    - sign * rate * discountedStrike * normalCdf(sign * d2)) / 365;
+  return Number.isFinite(theta) ? theta : undefined;
+}
 const direction = (leg: ParsedLeg) => leg.side === "buy" ? 1 : -1;
 export function entryCost(strategy: Strategy): number {
   return strategy.costs + strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier * leg.premium, 0);

@@ -2,13 +2,15 @@
 
 El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulador de
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
-central y puts a la derecha, con BID/ASK, cantidades, VI, delta, variación y volumen
-nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
+central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
+Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
 ni órdenes propias.
 
 La barra de mercado usa etiquetas y selectores en una sola fila. El engranaje **⚙ VI**
-abre el filtro de antigüedad sin desplazar la tabla. **Mis estrategias** reúne ejemplos,
-guardado y carga; **Entrada** reúne los datos de entrada y gastos. La cadena
+abre el filtro de antigüedad sin desplazar la tabla. La barra superior contiene
+únicamente **Armado / Análisis**. Se retiraron **Mis estrategias** y **Entrada**;
+el simulador no lee ni sobrescribe las estrategias guardadas anteriormente. Los
+parámetros editables quedan en **Análisis → Más supuestos y rango**. La cadena
 usa la altura disponible de la ventana y permite recorrer sus filas internamente.
 Después del selector de vencimiento se muestran los días calendario desde hoy,
 por ejemplo **23d**. Las patas usan el mismo criterio, independientemente de la
@@ -23,7 +25,7 @@ probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha d
 entrada/mitad del plazo/vencimiento. Los campos manuales siguen disponibles.
 El precio del escenario se evalúa independientemente del precio de entrada.
 
-La VI se presenta con dos decimales en cadena, patas y leyendas; el cálculo y la
+La VI se presenta con dos decimales en cadena, editor de Análisis y leyendas; el cálculo y la
 edición conservan la precisión original. Ambos gráficos incluyen líneas verticales
 −2σ, −1σ, +1σ y +2σ con la aproximación de movimiento esperado
 `precio de referencia ± n × precio de referencia × VI de referencia × √(días/365)`.
@@ -91,8 +93,9 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    conserva cantidades, sentido y VI. Cotizaciones nuevas actualizan las
    referencias sin modificar la entrada fijada; si esta queda fuera, se informa.
    Si falta una punta válida o no coincide el contexto, el control se deshabilita.
-   Los precios individuales/manuales siguen en **Entrada → Precios de entrada por
-   pata**. Las estrategias se pueden guardar con nombre en el perfil de Chrome.
+   Los precios individuales/manuales siguen en **Análisis → Más supuestos y rango →
+   Precios de entrada por pata**. Debajo de las patas también se muestra la pérdida
+   máxima global al vencimiento, con **∞** cuando es ilimitada.
 4. Entrar en **Análisis** para consultar el gráfico al vencimiento y el teórico;
    usar los toggles o modificar manualmente precio del escenario, fecha objetivo,
    cambio de VI en puntos porcentuales, tasa y dividendos. Clic o toque en el gráfico
@@ -100,9 +103,9 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    permite ingresarlo con teclado. Debajo del gráfico se muestran el precio fijado
    y ambos resultados, sin slider de precio.
 
-Las simulaciones guardadas incluyen primas, contratos, VI, fechas, moneda, factor,
-gastos y parámetros del modelo. No son órdenes ni se guardan en Matriz. No hay
-sincronización entre dispositivos. La configuración de cantidades sigue en su
+El armado y los supuestos se conservan mientras el componente permanece abierto;
+el guardado de estrategias está retirado de esta versión de la interfaz.
+La configuración de cantidades sigue en su
 pestaña y conserva su borrador al alternar con el simulador.
 
 ## Datos nativos y aislamiento
@@ -137,6 +140,20 @@ un mismo strike y tipo no se eligen arbitrariamente.
 
 ## Modelo de resultados
 
+La cadena muestra **Theta teórico** BSM europeo por unidad de prima y día
+calendario, usando spot actual, VI nativa, días desde hoy al vencimiento y
+tasa/dividendos configurados en Análisis. No usa el precio ni la fecha del
+escenario y no se presenta como una métrica nativa del broker. No se calcula con
+VI ausente/cero, al vencimiento ni con datos incompatibles. La antigüedad de la VI
+se informa en su columna. Como referencia de interpretación diaria, ver
+[Theta de OIC](https://prd-web.optionseducation.org/advancedconcepts/theta).
+
+**Extrínseco Mid** es el promedio BID/ASK menos el valor intrínseco, por unidad,
+con spot y monedas compatibles. Exige ambas puntas válidas, tamaños positivos y
+libro sin cruce; no reemplaza información faltante con cero ni recorta valores
+negativos. La descomposición prima/intrínseco/valor temporal se explica en
+[Options Pricing de OIC](https://prd-web.optionseducation.org/optionsoverview/options-pricing).
+
 Las plantillas usan strikes únicos del mismo vencimiento. Butterfly exige alas
 simétricas 1:2:1. Ratio Spread Long es un backspread: vende una opción cercana y
 compra dos más alejadas; Short invierte esos lados
@@ -149,10 +166,8 @@ se calcula con las primas copiadas y editables, contratos de cada pata, factor y
 
 `resultado = Σ sentido × contratosDeLaPata × factor × (valor − prima) − gastos`
 
-No hay multiplicador global de combos. Las estrategias guardadas en el formato
-anterior convierten sus contratos por combo en cantidades totales al cargarse,
-conservando la exposición y el resultado. Al guardarlas nuevamente se usa el
-formato de cantidades totales.
+No hay multiplicador global de combos. La cantidad de cada pata es su total de
+contratos; su signo en la interfaz indica compra o venta.
 
 Compra tiene sentido +1 y venta −1. Al vencimiento, valor es el intrínseco.
 Máximos y equilibrios se calculan sobre todos los tramos lineales desde 0 hasta
@@ -180,7 +195,8 @@ Se adaptaron los componentes puros de métricas y cotizaciones y el estilo de la
 cadena; la lectura de Free tiene una API independiente de solo dos métodos.
 
 `npm test` verifica resultados de spreads, straddle, mariposa, condor, cantidades,
-costos, colas, equilibrios, Black–Scholes y paridad, validación, cadena y guardado.
+costos, colas, equilibrios, Black–Scholes y paridad, Theta, Extrínseco, validación y
+cadena. También verifica la retirada de menús sin acceder al guardado anterior.
 El lector real se ejecuta también en VM con stores controlados para verificar su
 protocolo, exclusión, cambios de contexto y rechazo de métodos ajenos al mercado.
 `npm run security:check` y `npm run package:free` verifican lint, políticas,
@@ -359,3 +375,17 @@ sin hallazgos pendientes.
 La fixture confirmó por DOM patas sin columna de prima, filas de 34 px y un Iron
 Condor con créditos Natural 360, Mid 400 y Opuesto 440 ARS. Los controles cambiaron
 las primas de entrada y editar −1 cambió el sentido. Sin QA por píxeles.
+
+### Interfaz simplificada, métricas de cadena y pérdida máxima
+
+338 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y empaquetado aprobados;
+revisión independiente sin hallazgos de código. Se retiraron pruebas de la
+biblioteca y referencias individuales que ya no forman parte de la interfaz;
+se agregaron casos de Theta analítico contra diferencias temporales, Extrínseco,
+datos faltantes, retiro de storage y máximo de pérdida acotado/ilimitado.
+
+La fixture confirmó por DOM cero menús en la barra superior, 17 columnas de
+cadena con Theta y Extrínseco en calls y puts, y el panel de patas sin esas
+columnas. Para una call ATM, Extrínseco fue 8 ARS por unidad; la pérdida máxima
+pasó de 810 ARS en compra a ∞ en venta. Tabla y overlay midieron 1378 px de ancho.
+Sin inspección visual por píxeles ni afirmación de datos bursátiles vivos.

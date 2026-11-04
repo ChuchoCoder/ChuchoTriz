@@ -4,7 +4,7 @@ import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OptionsSimulator from "./OptionsSimulator";
 import { Catalog, Quote, Snapshot } from "./market";
-import { addDays, initialSimulation, localDate, Simulation } from "./model";
+import { addDays, localDate } from "./model";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string } }));
 vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
@@ -100,23 +100,8 @@ it("rejects incoherent currencies or native factors rather than assuming a lot o
   expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(0);
   expect(container.textContent).toContain("faltan factores");
 });
-it("saves simulation data locally and reports storage errors", async () => {
-  await mount();
-  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
-  await fill("Nombre de la estrategia", "Call de prueba");
-  await act(async () => button("Guardar estrategia").click());
-  expect(write).toHaveBeenCalledTimes(1);
-  const saved = (stored.OptionsSimulatorStrategiesV1 as { name: string; simulation: { legs: unknown[] } }[])[0];
-  expect(saved.name).toBe("Call de prueba"); expect(saved.simulation.legs).toHaveLength(1);
-  expect(container.textContent).toContain("Estrategia guardada");
-  write.mockRejectedValueOnce(Error("Sin espacio"));
-  await act(async () => button("Actualizar guardada").click()); expect(container.textContent).toContain("Sin espacio");
-});
-it("contains malformed stored data without breaking the chain", async () => {
-  stored.OptionsSimulatorStrategiesV1 = [{ name: "malformed", simulation: null }];
-  await mount(); expect(container.textContent).toContain("No se pudieron leer");
-  expect(byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").disabled).toBe(false);
-});
+
+
 
 it("uses each leg's total contracts without a global multiplier in either view", async () => {
   await mount();
@@ -126,41 +111,18 @@ it("uses each leg's total contracts without a global multiplier in either view",
   expect(container.textContent?.toLowerCase()).not.toContain("combo");
   expect(byLabel("Patas analizadas").textContent).toContain("Compra 3× CALL 100");
   expect(container.querySelector('.ct-sim-metrics')!.textContent).toContain("1.500 ARS");
-  await showBuild(); await fill("Nombre de la estrategia", "Tres contratos");
-  await act(async () => button("Guardar estrategia").click());
-  const saved = (stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation;
-  expect(saved.legs[0].contracts).toBe("3");
-  expect(saved).not.toHaveProperty("combos");
+
 });
 
-it("converts saved legacy combos into total quantities exactly once without changing profit or loss", async () => {
-  stored.OptionsSimulatorStrategiesV1 = [{ name: "Anterior", simulation: { ...initialSimulation(localDate()), combos: "3" } }];
-  await mount();
-  await act(async () => {
-    const select = byLabel<HTMLSelectElement>("Cargar estrategia guardada");
-    select.value = "Anterior"; select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  expect([1, 2].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+3", "−3"]);
-  await showAnalysis();
-  expect(container.querySelector('.ct-sim-metrics')!.textContent).toContain("1.200 ARS");
-  expect(container.querySelector('.ct-sim-metrics')!.textContent).toContain("1.800 ARS");
-  await showBuild(); await act(async () => button("Actualizar guardada").click());
-  const saved = (stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation;
-  expect(saved).not.toHaveProperty("combos");
-  expect(saved.legs.map(leg => leg.contracts)).toEqual(["3", "3"]);
-  await act(async () => button("Actualizar guardada").click());
-  expect((stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation.legs.map(leg => leg.contracts)).toEqual(["3", "3"]);
-});
 
-it.each(["1.5", "0", "100001", "bad"])("rejects invalid legacy multiplier %s before migration", async combos => {
-  stored.OptionsSimulatorStrategiesV1 = [{ name: "Inválida", simulation: { ...initialSimulation(localDate()), combos } }];
-  await mount(); expect(container.textContent).toContain("No se pudieron leer");
-});
+
+
 
 it("edits compact cells on click, accepts on Enter or blur, and restores the original value on Escape", async () => {
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(container.querySelectorAll('.ct-sim-legs-card tbody input, .ct-sim-legs-card tbody select')).toHaveLength(0);
+  await showAnalysis();
   await fill("Prima pata 1", "7,5");
   const premium = byLabel<HTMLInputElement>("Prima pata 1");
   expect(document.activeElement).toBe(premium);
@@ -171,48 +133,24 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
   await fill("Prima pata 1", "60");
   await act(async () => byLabel<HTMLInputElement>("Prima pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("7,5");
+  await showBuild();
   await fill("Contratos pata 1", "3");
-  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").focus());
+  await act(async () => button("Limpiar patas").focus());
   expect(byLabel<HTMLButtonElement>("Editar Contratos pata 1").textContent).toBe("+3");
   expect(container.textContent).toContain("2.250 ARS");
 });
 
-it("offers Natural/MID/Opuesto only while editing one premium, using that leg's side", async () => {
-  await mount();
-  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
-  await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
-  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
-  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").click());
-  expect(byLabel<HTMLButtonElement>("Tomar Natural para Prima pata 1").textContent).toBe("Natural5");
-  expect(byLabel<HTMLButtonElement>("Tomar Opuesto para Prima pata 1").textContent).toBe("Opuesto4");
-  await act(async () => byLabel<HTMLButtonElement>("Tomar MID para Prima pata 1").click());
-  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("4,5");
-  expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("4");
-  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 2").click());
-  expect(byLabel<HTMLButtonElement>("Tomar Natural para Prima pata 2").textContent).toBe("Natural4");
-  await act(async () => byLabel<HTMLButtonElement>("Tomar Opuesto para Prima pata 2").click());
-  expect(byLabel<HTMLButtonElement>("Editar Prima pata 2").textContent).toBe("5");
-  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
-  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").click());
-  const natural = byLabel<HTMLButtonElement>("Tomar Natural para Prima pata 1");
-  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-  await act(async () => { natural.focus(); natural.dispatchEvent(enter); });
-  expect(enter.defaultPrevented, "Enter must preserve the reference button's native activation").toBe(false);
-  expect(container.querySelector('.ct-sim-premium-references')).not.toBeNull();
-  await act(async () => natural.click());
-  expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("5");
-});
+
 
 it("removes market references during a disconnect and keeps the VI controls folded initially", async () => {
   await mount();
   expect(byLabel("Configurar filtro de VI").closest("details")!.open).toBe(false);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
-  await act(async () => byLabel<HTMLButtonElement>("Editar Prima pata 1").click());
-  expect(container.querySelector('.ct-sim-premium-references')).not.toBeNull();
+  expect(byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").disabled).toBe(false);
   marketState.current = { catalog: marketState.current.catalog, issue: "Disconnected" };
   await act(async () => root.render(<OptionsSimulator />));
-  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
-  expect(byLabel<HTMLInputElement>("Prima pata 1").value).toBe("5");
+  expect(byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").disabled).toBe(true);
+  expect(byLabel("Editar Prima pata 1").textContent).toBe("5");
 });
 
 it("separates build and analysis while preserving legs, market selection and scenario assumptions", async () => {
@@ -222,7 +160,6 @@ it("separates build and analysis while preserving legs, market selection and sce
   await showAnalysis();
   const panels = container.querySelectorAll<HTMLElement>('[role="tabpanel"]');
   expect(panels[0].hidden).toBe(true); expect(panels[1].hidden).toBe(false);
-  expect(container.querySelector('.ct-sim-premium-references')).toBeNull();
   expect(byLabel("Patas analizadas").textContent).toContain("Compra 1× CALL 100");
   await act(async () => byLabel<HTMLButtonElement>("Precio Sube (+10 %)").click());
   await act(async () => byLabel<HTMLButtonElement>("VI Sube (+5 pp)").click());
@@ -540,8 +477,6 @@ it("edits quantity signs as buy/sell, preserves partial drafts and restores both
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   expect(byLabel("Editar Contratos pata 1").textContent).toBe("−3");
   expect(byLabel("Vender CALL 100 en simulación").getAttribute('aria-pressed')).toBe('true');
-  await fill("Nombre de la estrategia", "Venta firmada"); await act(async () => button("Guardar estrategia").click());
-  expect((stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation.legs[0]).toMatchObject({ contracts: "3", side: "sell" });
   await fill("Contratos pata 1", "");
   expect(byLabel<HTMLInputElement>("Contratos pata 1").value).toBe("");
   await fill("Contratos pata 1", "-");
@@ -571,13 +506,38 @@ it("replaces per-leg prices with a total-price slider showing Natural, Mid and O
   expect(byLabel("Crédito o débito de la estrategia").textContent).toBe("Débito 50 ARS");
   await act(async () => byLabel<HTMLButtonElement>("Tomar precio Opuesto de la estrategia").click());
   expect(byLabel("Crédito o débito de la estrategia").textContent).toBe("Crédito 100 ARS");
-  await fill("Nombre de la estrategia", "Precio opuesto"); await act(async () => button("Guardar estrategia").click());
-  const saved = (stored.OptionsSimulatorStrategiesV1 as { simulation: Simulation }[])[0].simulation;
-  expect(saved.legs.map(leg => leg.premium)).toEqual(["4", "5"]);
-  expect(saved.legs.map(leg => leg.volatility)).toEqual(["40", "40"]);
+  expect(byLabel("Editar Prima pata 1").textContent).toBe("4");
+  expect(byLabel("Editar Prima pata 2").textContent).toBe("5");
+  expect(byLabel("Editar VI pata 1").textContent).toBe("40,00");
   marketState.current.data = { ...marketState.current.data!, instruments: { ...marketState.current.data!.instruments,
     "call-100": { bid: { price: 10, size: 100 }, ask: { price: 11, size: 100 } } } };
   await act(async () => root.render(<OptionsSimulator />));
   expect(byLabel("Crédito o débito de la estrategia").textContent).toBe("Crédito 100 ARS");
   expect(panel.textContent).toContain("fuera de las referencias actuales");
+});
+
+it("removes the library and entry menus without reading or overwriting saved strategies, and adds metrics only to the chain", async () => {
+  stored.OptionsSimulatorStrategiesV1 = [{ name: "Conservar", simulation: { original: true } }];
+  await mount();
+  expect(container.querySelector('.ct-sim-library-menu')).toBeNull();
+  expect(container.querySelector('.ct-sim-setup-menu')).toBeNull();
+  expect(container.querySelector('[aria-label="Cargar ejemplo"]')).toBeNull();
+  expect(chrome.storage.local.get).not.toHaveBeenCalled(); expect(write).not.toHaveBeenCalled();
+  expect(stored.OptionsSimulatorStrategiesV1).toEqual([{ name: "Conservar", simulation: { original: true } }]);
+  expect(byLabel("Theta teórico CALL 100").textContent).not.toBe("—");
+  expect(byLabel("Extrínseco CALL 100").textContent).toBe("4,5");
+  expect(byLabel("Extrínseco PUT 100").textContent).toBe("4,5");
+  expect(container.querySelector('.ct-opt-chain thead th')?.getAttribute('colspan')).toBe('8');
+  const headers = [...container.querySelectorAll('.ct-sim-legs-card thead th')].map(node => node.textContent);
+  expect(headers).not.toContain('Theta'); expect(headers).not.toContain('Extrínseco');
+});
+
+it("shows exact bounded maximum loss in the build and infinity for an uncovered short call", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toContain("500 ARS");
+  await fill("Contratos pata 1", "-1");
+  await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+  expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toBe("Pérdida máxima∞");
+  await showAnalysis();
+  expect(container.querySelector('.ct-sim-metrics .ct-sim-loss')!.textContent).toBe('∞');
 });

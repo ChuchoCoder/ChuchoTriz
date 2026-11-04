@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { formatOptionNumber, formatOptionVolatility } from "./format";
+import { formatOptionAmount, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { MetricCell, MetricScale } from "./marketMetrics";
 import { viGradeColor } from "./marketMetrics";
 import type { Contract as OptionContract } from "./market";
@@ -8,9 +8,17 @@ const tradeTimeFormat = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Ar
 const fmt = (value: number, precision?: number) => formatOptionNumber(value === 0 ? 0 : value, precision);
 
 export function OptionMetricCell({ contract, field, cell, scale }: {
-  contract?: OptionContract; field: "volume" | "change" | "delta" | "iv"; cell?: MetricCell; scale: MetricScale;
+  contract?: OptionContract; field: "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic"; cell?: MetricCell; scale: MetricScale;
 }) {
   const symbol = contract?.symbol ?? "Contrato no disponible";
+  if (field === "theta" || field === "extrinsic") {
+    const value = cell?.[field], label = field === "theta" ? "Theta teórico" : "Extrínseco";
+    const explanation = field === "theta" ? "Theta BSM europeo por unidad de prima y día calendario. Usa VI nativa, fecha de hoy y tasa/dividendos de Análisis. La antigüedad de la VI se consulta en su columna."
+      : "Precio Mid (BID/ASK) menos valor intrínseco, por unidad de prima. Los valores negativos no se recortan.";
+    return <td className="ct-opt-metric" aria-label={`${label} ${symbol}`} title={`${explanation}${value === undefined ? " Sin datos compatibles suficientes." : ""}`}>
+      {value === undefined ? "—" : formatOptionAmount(value)}
+    </td>;
+  }
   if (field === "iv") {
     const color = viGradeColor(cell, scale), value = cell?.impliedVolatility;
     const reason = cell?.eligible && !color ? "Sin rango suficiente para una escala comparativa" : cell?.reason ?? "Sin datos";

@@ -35,3 +35,25 @@ it("keeps genuine zero metrics, rejects an invalid window and invents no range f
   const one = deriveOptionMetrics(contracts.slice(0, 1), sample(), settings);
   expect(viGradeColor(one.byId["call-90"], one.scales.call)).toBeUndefined();
 });
+
+it("derives per-unit theta and Mid extrinsic only with compatible inputs, retaining zero/negative extrinsic", () => {
+  const pool = contracts.map(contract => ({ ...contract, strikeCurrency: "ARS" }));
+  const data = sample();
+  for (const quote of Object.values(data)) { quote.bid = { price: 9, size: 10 }; quote.ask = { price: 11, size: 10 }; }
+  const context = { ...settings, spot: 100, currency: "ARS", rate: 0, dividendYield: 0 };
+  const result = deriveOptionMetrics(pool, data, context);
+  expect(result.byId['call-90'].extrinsic).toBe(0);
+  expect(result.byId['put-110'].extrinsic).toBe(0);
+  expect(result.byId['call-100'].extrinsic).toBe(10);
+  expect(result.byId['call-100'].theta).toBeLessThan(0);
+  data['call-90'].bid!.price = 8; data['call-90'].ask!.price = 10;
+  expect(deriveOptionMetrics(pool, data, context).byId['call-90'].extrinsic).toBe(-1);
+  data['call-100'].impliedVolatility = undefined;
+  const missing = deriveOptionMetrics(pool, data, context).byId['call-100'];
+  expect(missing.theta).toBeUndefined(); expect(missing.extrinsic).toBe(10);
+  data['call-100'].ask = undefined;
+  expect(deriveOptionMetrics(pool, data, context).byId['call-100'].extrinsic).toBeUndefined();
+  expect(deriveOptionMetrics(pool, data, { ...context, currency: "USD" }).byId['call-90'].extrinsic).toBeUndefined();
+  expect(deriveOptionMetrics(pool, data, { ...context, available: false }).byId['call-90'].theta).toBeUndefined();
+  expect(deriveOptionMetrics(pool, data, { ...context, now: Date.parse('2026-11-20T18:00:00Z') }).byId['call-90'].theta).toBeUndefined();
+});
