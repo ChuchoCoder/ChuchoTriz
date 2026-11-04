@@ -194,7 +194,7 @@ it("shows a live chart below the legs and shares its scenario with the full anal
   const scenarioResults = outputs();
   await showBuild();
   expect(outputs()).toEqual(scenarioResults);
-  expect(byLabel("Resultado rápido del armado").textContent).toContain("VI 5,00 pp");
+  expect(byLabel("Resultado rápido del armado").querySelector('button')!.title).toContain("VI 5,00 pp");
   await fill("Contratos pata 1", "2");
   expect(outputs()).toEqual(["500 ARS", "500 ARS"]);
   await clickChartAt(.6);
@@ -347,8 +347,8 @@ it("draws four standard-deviation references in both charts and updates them wit
   const labels = () => Array.from(container.querySelectorAll('.ct-sim-sigma')).map(node => node.getAttribute('aria-label'));
   expect(labels()).toHaveLength(4);
   expect(labels()[0]).toMatch(/^-2σ/); expect(labels()[3]).toMatch(/^\+2σ/);
-  expect(byLabel("Referencias de desvío estándar").textContent).toContain("VI ref. 40,00 % · 30 días");
   const initial = labels(); await showAnalysis(); expect(labels()).toEqual(initial);
+  expect(byLabel("Referencias de desvío estándar").textContent).toContain("VI ref. 40,00 % · 30 días");
   await act(async () => byLabel<HTMLButtonElement>("VI Sube (+5 pp)").click());
   expect(labels()).not.toEqual(initial);
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("VI ref. 45,00 %");
@@ -535,9 +535,11 @@ it("removes the library and entry menus without reading or overwriting saved str
 it("shows exact bounded maximum loss in the build and infinity for an uncovered short call", async () => {
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toContain("500 ARS");
+  expect(byLabel("Ganancia máxima del armado al vencimiento").textContent).toBe("Ganancia máx.∞");
   await fill("Contratos pata 1", "-1");
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toBe("Pérdida máx.∞");
+  expect(byLabel("Ganancia máxima del armado al vencimiento").textContent).toContain("500 ARS");
   await showAnalysis();
   expect(container.querySelector('.ct-sim-metrics .ct-sim-loss')!.textContent).toBe('∞');
 });
@@ -647,6 +649,7 @@ it("confirms the same credit Iron Condor has a 360 profit plateau and 640 maximu
   await act(async () => byLabel<HTMLButtonElement>("Aplicar Iron Condor · Normal").click());
   expect(container.querySelector('.ct-sim-inspect output')!.textContent).toBe("360 ARS");
   expect(byLabel("Pérdida máxima del armado al vencimiento").textContent).toContain("640 ARS");
+  expect(byLabel("Ganancia máxima del armado al vencimiento").textContent).toContain("360 ARS");
   const svg = container.querySelector('.ct-sim-chart')!, axis = Number(svg.querySelector('.ct-sim-zero')!.getAttribute('y1'));
   const ordinates = [...svg.querySelector('.ct-sim-expiry-line')!.getAttribute('d')!.matchAll(/[ML][\d.]+,([\d.-]+)/g)].map(match => Number(match[1]));
   expect(Math.min(...ordinates)).toBeLessThan(axis); expect(Math.max(...ordinates)).toBeGreaterThan(axis);

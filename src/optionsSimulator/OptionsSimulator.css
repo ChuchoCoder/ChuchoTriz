@@ -51,16 +51,18 @@
 .ct-sim-assumption-fields { margin-top: 16px; }
 .ct-sim-market-layout { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; align-items: start; }
 .ct-sim-build-summary { min-width: 0; }
-.ct-sim-quick-results { padding: 12px; }
-.ct-sim-quick-results .ct-sim-section-heading { margin-bottom: 6px; }
+.ct-sim-quick-results { padding: 10px; }
+.ct-sim-quick-results .ct-sim-section-heading { margin-bottom: 4px; }
+.ct-sim-quick-results h3 { font-size: 12px; }
 .ct-sim-quick-results .ct-sim-section-heading button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
 .ct-sim-quick-results .ct-sim-hint { font-size: 10px; margin: 6px 0 10px; }
 .ct-sim-quick-results .ct-sim-legend { gap: 8px 14px; font-size: 10px; }
-.ct-sim-quick-results .ct-sim-chart { margin: 10px 0; }
-.ct-sim-quick-results .ct-sim-inspect { grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 8px; }
-.ct-sim-quick-results .ct-sim-selected-price { grid-column: 1 / -1; }
+.ct-sim-quick-results .ct-sim-chart { margin: 4px 0; }
+.ct-sim-quick-results .ct-sim-chart text { font-size: 10px; }
+.ct-sim-quick-results .ct-sim-inspect { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding-top: 5px; }
+.ct-sim-quick-results .ct-sim-selected-price { grid-column: auto; }
 .ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
-.ct-sim-quick-results .ct-sim-inspect output, .ct-sim-quick-results .ct-sim-inspect strong { font-size: 14px; }
+.ct-sim-quick-results .ct-sim-inspect output, .ct-sim-quick-results .ct-sim-inspect strong { margin-top: 2px; font-size: 12px; overflow-wrap: anywhere; }
 .ct-sim-legs-card { padding: 10px; }
 .ct-sim-leg-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .ct-sim-leg-toolbar h3 { margin: 0; font-size: 12px; }
@@ -98,7 +100,8 @@
 .ct-sim-leg-prices > div { display: grid; grid-template-columns: 1fr 100px; align-items: center; gap: 8px; padding-top: 4px; }
 .ct-sim .ct-sim-leg-prices .ct-sim-cell-value { min-height: 26px; padding: 2px 5px; font-size: 11px; }
 .ct-sim-strategy-price { border-top: 1px solid var(--sim-border); margin-top: 6px; padding-top: 6px; }
-.ct-sim-strategy-price > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px; font-size: 11px; }
+.ct-sim-strategy-price > header { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; overflow-x: auto; scrollbar-width: thin; font-size: 10px; white-space: nowrap; }
+.ct-sim-strategy-price > header > * { flex-shrink: 0; }
 .ct-sim-strategy-price > header > span { color: var(--sim-muted); }
 .ct-sim-price-bar { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 5px; height: 54px; }
 .ct-sim-price-rail { position: absolute; top: 25px; left: 4px; right: 4px; height: 4px; border-radius: 2px; background: var(--sim-border); }
@@ -121,9 +124,10 @@
 .ct-sim-price-bar > button > strong { font-size: 12px; font-variant-numeric: tabular-nums; }
 .ct-sim-price-bar > button[aria-pressed="true"] > strong { color: var(--ct-entry-color); }
 .ct-sim-price-bar > button:hover:enabled { color: var(--sim-text); }
-.ct-sim-max-loss { display: flex; align-items: center; gap: 4px; font-size: 10px; }
-.ct-sim-max-loss > span { color: var(--sim-muted); }
+.ct-sim-max-loss, .ct-sim-max-profit { display: flex; align-items: center; gap: 4px; font-size: 10px; }
+.ct-sim-max-loss > span, .ct-sim-max-profit > span { color: var(--sim-muted); }
 .ct-sim-max-loss > strong { color: var(--sim-loss); }
+.ct-sim-max-profit > strong { color: var(--sim-profit); }
 .ct-sim-leg-volatilities summary { cursor: pointer; color: var(--sim-muted); }
 .ct-sim-leg-volatilities > div { display: grid; grid-template-columns: 1fr 72px 12px; align-items: center; gap: 5px; padding-top: 4px; }
 .ct-sim .ct-sim-leg-volatilities .ct-sim-cell-value { min-height: 26px; padding: 2px 5px; font-size: 11px; }

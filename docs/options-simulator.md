@@ -465,3 +465,21 @@ cubren los eventos click/click/dblclick completos, límites y ambos controles.
 La fixture confirmó las secuencias por eventos DOM y las etiquetas `−`/`+`.
 El navegador compartido estaba oculto; los intentos con mouse no entregaron
 eventos y no se consideran validación de interacción física.
+
+### Máximos del armado y resultado rápido reducido
+
+La cabecera del precio de entrada reúne crédito/débito, ganancia máxima y pérdida
+máxima en una sola fila. Usa los extremos globales de `expirySummary` (incluye
+primas y gastos), con `∞` en resultados ilimitados. Los importes extensos se
+pueden recorrer horizontalmente sin partir la fila ni ocultar valores.
+
+El gráfico rápido mide 190 px de alto. Conserva eje cero, colores por signo,
+curvas, referencias σ y fijación de precio; quita el texto repetido de supuestos,
+el desglose σ y la instrucción inferior. Precio y resultados quedan en una fila.
+Las fechas y supuestos siguen disponibles en títulos y en Análisis, que conserva
+el gráfico completo de 340 px y sus explicaciones.
+
+33 pruebas de interfaz, lint, TypeScript y empaquetado aprobados. La fixture
+confirmó por geometría y captura visible IC 360/360/640 ARS en una sola fila sin
+desborde, panel rápido de 304 px y resultados alineados. Las regresiones verifican
+ganancia ilimitada de la call comprada y pérdida ilimitada de la call vendida.

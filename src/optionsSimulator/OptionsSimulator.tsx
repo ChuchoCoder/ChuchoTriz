@@ -60,8 +60,8 @@ function EditableLegValue({ label, value, onChange, options, className = "", for
   </span>;
 }
 
-function StrategyPriceControl({ input, market, entry, maxLoss, onChange }: {
-  input: Simulation; market?: StrikeMarket; entry?: number; maxLoss?: number; onChange(position: number): void;
+function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChange }: {
+  input: Simulation; market?: StrikeMarket; entry?: number; maxProfit?: number; maxLoss?: number; onChange(position: number): void;
 }) {
   const references = useMemo(() => strategyPriceReferences(input, market), [input, market]);
   const total = references.ok ? references.currentTotal : entry;
@@ -76,8 +76,10 @@ function StrategyPriceControl({ input, market, entry, maxLoss, onChange }: {
   const debit = references.ok && references.natural.total - costs > 0 && references.opposite.total - costs > 0;
   return <section className="ct-sim-strategy-price" aria-label="Precio total de entrada de la estrategia">
     <header><strong aria-label="Crédito o débito de la estrategia" title="Precio total de entrada">{text(total)}</strong>
-      <div className="ct-sim-max-loss" aria-label="Pérdida máxima del armado al vencimiento"><span>Pérdida máx.</span><strong title={maxLoss === Infinity ? "Pérdida ilimitada" : "Pérdida máxima al vencimiento"}>
-        {maxLoss === undefined ? "—" : maxLoss === Infinity ? "∞" : `${fmt(maxLoss)} ${input.currency}`}</strong></div></header>
+      {([ ["profit", "Ganancia", maxProfit], ["loss", "Pérdida", maxLoss] ] as const).map(([kind, label, amount]) =>
+        <div key={kind} className={`ct-sim-max-${kind}`} aria-label={`${label} máxima del armado al vencimiento`}><span>{label} máx.</span>
+          <strong title={amount === Infinity ? `${label} ilimitada` : `${label} máxima al vencimiento`}>
+            {amount === undefined ? "—" : amount === Infinity ? "∞" : `${fmt(amount)} ${input.currency}`}</strong></div>)}</header>
     <div className="ct-sim-price-bar" style={{ "--ct-entry-color": tone } as React.CSSProperties}>
       <div className="ct-sim-price-rail" aria-hidden="true"><i style={{ left: `${Math.min(50, marker)}%`, width: `${total === undefined || !references.ok ? 0 : Math.abs(marker - 50)}%` }} />
         <b /><b /><b /></div>
@@ -132,7 +134,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   const clamp = (value: number) => Math.max(strategy.rangeMin, Math.min(strategy.rangeMax, value));
   const price = selectedPrice;
   const cursorVisible = price >= strategy.rangeMin && price <= strategy.rangeMax;
-  const height = compact ? 240 : 340, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = 26, bottom = 48;
+  const height = compact ? 190 : 340, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = compact ? 20 : 26, bottom = compact ? 26 : 48;
   const hasTheory = strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
   const values = points.flatMap(point => hasTheory ? [point.expiry, point.theoretical] : [point.expiry]);
   const expiryResult = resultAt(strategy, price, "expiry"), theoreticalResult = resultAt(strategy, price, "theoretical");
@@ -152,10 +154,10 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
     return clamp(strategy.rangeMin + ((event.clientX - rect.left) / rect.width * width - left) / (width - left - right) * (strategy.rangeMax - strategy.rangeMin));
   };
   return <>
-    <div className="ct-sim-legend"><span><i className="ct-sim-expiry-key" /> Al vencimiento</span>
-      {hasTheory && <span><i className="ct-sim-theory-key" /> Teórico · {scenarioDate}</span>}
-      {deviations && deviations.move > 0 && <><span><i className="ct-sim-sigma-one-key" /> ±1σ</span><span><i className="ct-sim-sigma-two-key" /> ±2σ</span></>}</div>
-    {!hasTheory && <p role="status" className="ct-sim-hint">Teórico no disponible: completá la VI de cada pata en Análisis → VI por pata. El resultado al vencimiento no necesita VI.</p>}
+    <div className="ct-sim-legend"><span><i className="ct-sim-expiry-key" /> {compact ? "Vencimiento" : "Al vencimiento"}</span>
+      {hasTheory && <span title={`Teórico · ${scenarioDate}`}><i className="ct-sim-theory-key" /> {compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span>}
+      {!compact && deviations && deviations.move > 0 && <><span><i className="ct-sim-sigma-one-key" /> ±1σ</span><span><i className="ct-sim-sigma-two-key" /> ±2σ</span></>}</div>
+    {!hasTheory && <p role="status" className="ct-sim-hint">{compact ? "Teórico no disponible: falta VI." : "Teórico no disponible: completá la VI de cada pata en Análisis → VI por pata. El resultado al vencimiento no necesita VI."}</p>}
     <svg ref={svg} className="ct-sim-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Resultado de la estrategia según el precio del subyacente"
       onClick={event => onPriceChange(pointerPrice(event))}>
       <title>Resultado total en {currency}. Línea continua al vencimiento y línea punteada teórica.</title>
@@ -187,17 +189,17 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       {strategy.spot >= strategy.rangeMin && strategy.spot <= strategy.rangeMax && <line x1={x(strategy.spot)} x2={x(strategy.spot)} y1={top} y2={height - bottom} className="ct-sim-spot" />}
       {Array.from({ length: 5 }, (_, index) => {
         const value = strategy.rangeMin + (strategy.rangeMax - strategy.rangeMin) * index / 4;
-        return <text key={index} x={x(value)} y={height - 24} textAnchor="middle">{fmt(value)}</text>;
+        return <text key={index} x={x(value)} y={height - (compact ? 7 : 24)} textAnchor="middle">{fmt(value)}</text>;
       })}
       <path d={path("expiry")} className="ct-sim-expiry-line" stroke={`url(#${pnlGradientId})`} />
       {hasTheory && <path d={path("theoretical")} className="ct-sim-theory-line" stroke={`url(#${pnlGradientId})`} />}
       {cursorVisible && <><line x1={x(price)} x2={x(price)} y1={top} y2={height - bottom} className="ct-sim-cursor" />
       <circle cx={x(price)} cy={y(expiryResult)} r="4" className="ct-sim-expiry-dot" fill={expiryResult >= 0 ? "var(--sim-profit)" : "var(--sim-loss)"} />
       {hasTheory && <circle cx={x(price)} cy={y(theoreticalResult)} r="4" className="ct-sim-theory-dot" fill={theoreticalResult >= 0 ? "var(--sim-profit)" : "var(--sim-loss)"} />}</>}
-      <text x={left} y="14">Resultado · {currency}</text>
-      <text x={(width + left - right) / 2} y={height - 3} textAnchor="middle">Precio del subyacente · {currency}</text>
+      <text x={left} y="14">{compact ? currency : `Resultado · ${currency}`}</text>
+      {!compact && <text x={(width + left - right) / 2} y={height - 3} textAnchor="middle">Precio del subyacente · {currency}</text>}
     </svg>
-    <div className="ct-sim-deviations" aria-label="Referencias de desvío estándar">
+    {!compact && <div className="ct-sim-deviations" aria-label="Referencias de desvío estándar">
       {!deviations ? <span>Desvíos no disponibles: completá la VI de las patas más cercanas al subyacente.</span> : <>
         <span title={`VI promedio por tipo y strike entre las patas más cercanas: ${deviations.strikes.map(fmt).join(" / ")}. Incluye el cambio de VI del escenario. Aproximación: precio de referencia × VI × raíz(días/365).`}>
           Desvíos aprox. · VI ref. {formatOptionVolatility(deviations.volatility * 100)} % · {Math.round(strategy.years * 365)} días restantes</span>
@@ -205,14 +207,14 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
         {deviations.move === 0 && <span>Los niveles coinciden con el precio de referencia.</span>}
         {deviations.levels.some(level => level.price < strategy.rangeMin || level.price > strategy.rangeMax) && <span>Hay niveles σ fuera del rango visible.</span>}
       </>}
-    </div>
+    </div>}
     <div className="ct-sim-inspect">
-      <div className="ct-sim-selected-price"><span>Precio fijado</span><strong aria-label="Precio fijado">{fmt(price)} {currency}</strong></div>
+      <div className="ct-sim-selected-price"><span>{compact ? "Precio" : "Precio fijado"}</span><strong aria-label="Precio fijado">{fmt(price)} {currency}</strong></div>
       <div><span>Al vencimiento</span><output className={expiryResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{fmt(expiryResult)} {currency}</output></div>
-      <div><span>Teórico · {scenarioDate}</span><output className={theoreticalResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{hasTheory ? `${fmt(theoreticalResult)} ${currency}` : "Sin VI"}</output></div>
+      <div title={`Teórico · ${scenarioDate}`}><span>{compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span><output className={theoreticalResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{hasTheory ? `${fmt(theoreticalResult)} ${currency}` : "Sin VI"}</output></div>
     </div>
     {!cursorVisible && <p className="ct-sim-hint">El precio evaluado está fuera del rango visible. Ampliá el rango para ubicarlo en el gráfico.</p>}
-    <p className="ct-sim-hint">Hacé clic o tocá el gráfico para fijar otro precio. La línea vertical punteada marca el precio de referencia.</p>
+    {!compact && <p className="ct-sim-hint">Hacé clic o tocá el gráfico para fijar otro precio. La línea vertical punteada marca el precio de referencia.</p>}
   </>;
 }
 
@@ -340,11 +342,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
         setInput(current => ({ ...current, legs: [...current.legs, newLeg(Math.max(nextId.current++, ...current.legs.map(leg => leg.id + 1)), numeric(current.spot) > 0 ? numeric(current.spot) : 100)] })); setStatus("");
       }}>+ Pata manual</button><small>+ compra · − venta</small></div>
-      {!!input.legs.length && <StrategyPriceControl input={input} market={strikeMarket} entry={summary?.entry} maxLoss={summary?.maxLoss} onChange={changeEntryPrice} />}
+      {!!input.legs.length && <StrategyPriceControl input={input} market={strikeMarket} entry={summary?.entry} maxProfit={summary?.maxProfit} maxLoss={summary?.maxLoss} onChange={changeEntryPrice} />}
     </section>
     {view === "build" && <section className="ct-sim-card ct-sim-quick-results" aria-label="Resultado rápido del armado">
-      <div className="ct-sim-section-heading"><h3>Resultado rápido</h3><button type="button" onClick={() => changeView("analysis")}>Análisis →</button></div>
-      <p className="ct-sim-hint">Comparte los supuestos de Análisis · Cambio de VI {formatOptionVolatility(numeric(input.volatilityShift))} pp.</p>
+      <div className="ct-sim-section-heading"><h3>Resultado rápido</h3><button type="button" title={`Supuestos: ${input.scenarioDate} · Cambio de VI ${formatOptionVolatility(numeric(input.volatilityShift))} pp`} onClick={() => changeView("analysis")}>Análisis →</button></div>
       {chart}
     </section>}</div></div>
     <div id={`${menusId}-analysis-panel`} role="tabpanel" aria-labelledby={`${menusId}-analysis-tab`} hidden={view !== "analysis"} className="ct-sim-analysis-panel">
