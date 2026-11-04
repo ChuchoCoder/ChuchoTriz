@@ -26,8 +26,10 @@ referencias σ usan colores distintos para no confundirlas con ganancia/pérdida
 Las patas, primas y escenarios se conservan al alternar. En Análisis se pausa la
 observación de mercado y se muestra un resumen de las patas. Los toggles permiten
 probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha de
-entrada/mitad del plazo/vencimiento. También se puede indicar un precio, un cambio
-de VI o una fecha específicos. La fecha de entrada se toma del día del armado.
+entrada/mitad del plazo/vencimiento. Los deslizadores recorren el eje de precios
+visible, el cambio de VI hasta ±50 puntos porcentuales según la VI de las patas,
+y los días desde la entrada hasta el vencimiento. Los campos junto a ellos permiten
+ingresar valores exactos. La fecha de entrada se toma del día del armado.
 La cadena aporta el subyacente, el precio de referencia, el vencimiento y el factor.
 El vencimiento y el factor son editables cuando todas las patas son manuales. El
 precio de referencia también se puede ingresar si la cadena no aporta uno.

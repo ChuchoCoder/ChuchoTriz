@@ -261,6 +261,33 @@ it("consolidates useful market information into one legend without repeated book
   expect(container.querySelector('.ct-opt-chain-footer')).toBeNull();
 });
 
+it("synchronizes scenario sliders with the chart, exact fields and presets", async () => {
+  marketState.current.data!.instruments["call-100"].impliedVolatility = 2;
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  const price = byLabel<HTMLInputElement>("Deslizar precio del escenario");
+  const volatility = byLabel<HTMLInputElement>("Deslizar cambio de VI");
+  const date = byLabel<HTMLInputElement>("Deslizar fecha teórica");
+  expect(volatility.min).toBe("-2");
+  expect(date.max).toBe("30");
+  await fill("Deslizar precio del escenario", "200");
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("125");
+  expect(byLabel("Precio fijado").textContent).toBe("125 ARS");
+  await fill("Precio del escenario", "100.125");
+  await act(async () => byLabel<HTMLButtonElement>("Ampliar rango de precios").click());
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("100.125");
+  await act(async () => byLabel<HTMLButtonElement>("Precio 0%").click());
+  expect(price.value).toBe("100");
+  await fill("Deslizar cambio de VI", "-2");
+  expect(byLabel<HTMLInputElement>("Cambio de VI (pp)").value).toBe("-2");
+  await act(async () => byLabel<HTMLButtonElement>("VI +5 pp").click());
+  expect(volatility.value).toBe("5");
+  await fill("Deslizar fecha teórica", "7");
+  expect(byLabel<HTMLInputElement>("Fecha teórica").value).toBe(addDays(localDate(), 7));
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
+  expect(date.value).toBe("30");
+});
+
 it("validates a custom scenario price and never clamps its reported profit to the plotted range", async () => {
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   await showAnalysis(); await fill("Precio del escenario", "1000");

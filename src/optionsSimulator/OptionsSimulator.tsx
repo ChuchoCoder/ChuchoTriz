@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_LEGS,
   newLeg, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, Strategy } from "./model";
 import "./OptionsSimulator.css";
@@ -8,12 +8,25 @@ import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strateg
 
 // A native double click delivers two click events: 1 + 9 makes ten in total.
 const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 9 : 1;
+const PRICE_SLIDER_STEPS = 200;
 
-function Field({ label, value, onChange, type = "number", ...attributes }: {
-  label: string; value: string; onChange(value: string): void; type?: "number" | "date"; min?: string; max?: string;
+function Field({ label, value, onChange, type = "number", slider, ...attributes }: {
+  label: string; value: string; onChange(value: string): void; type?: "number" | "date"; min?: string; max?: string; slider?: ReactNode;
 }) {
-  return <label className="ct-sim-field"><span>{label}</span><input aria-label={label} type={type} value={value}
-    step={type === "number" ? "any" : undefined} onChange={event => onChange(event.target.value)} {...attributes} /></label>;
+  const id = useId();
+  const field = <input id={id} aria-label={label} type={type} value={value}
+    step={type === "number" ? "any" : undefined} onChange={event => onChange(event.target.value)} {...attributes} />;
+  return <div className="ct-sim-field"><label htmlFor={id}>{label}</label>
+    {slider ? <div className="ct-sim-field-with-slider">{slider}{field}</div> : field}
+  </div>;
+}
+
+function ScenarioSlider({ label, min, max, value, format, onChange }: {
+  label: string; min: number; max: number; value: number; format(value: number): string; onChange(value: number): void;
+}) {
+  const position = Math.min(max, Math.max(min, Math.round(Number.isFinite(value) ? value : 0)));
+  return <input type="range" aria-label={label} aria-valuetext={format(position)} min={min} max={max} step={1}
+    value={position} disabled={max === min} onChange={event => onChange(event.target.valueAsNumber)} />;
 }
 
 function EditableLegValue({ label, value, onChange, options, className = "", formatValue = formatOptionNumber, valueDescription, inputMode = "decimal" }: {
@@ -264,6 +277,15 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const priceTarget = (factor: number) => Number((spot * factor).toPrecision(15));
   const scenarioPriceValid = Number.isFinite(selectedPrice) && selectedPrice >= 0 && selectedPrice <= 1e9;
   const setScenarioPrice = (price: string) => setScenarioPoint({ context: scenarioContext, price });
+  const priceMin = chartView?.strategy.rangeMin ?? 0;
+  const priceSpan = chartView ? chartView.strategy.rangeMax - priceMin : 0;
+  const priceSliderSteps = priceSpan > 0 ? PRICE_SLIDER_STEPS : 0;
+  const sliderPrice = (position: number) => priceMin + priceSpan * position / PRICE_SLIDER_STEPS;
+  const legVolatilities = input.legs.map(leg => numeric(leg.volatility)).filter(Number.isFinite);
+  const minVolatilityShift = Math.ceil(Math.max(-50, ...legVolatilities.map(volatility => -volatility)));
+  const maxVolatilityShift = Math.floor(Math.min(50, ...legVolatilities.map(volatility => 500 - volatility)));
+  const viableVolatilityRange = minVolatilityShift <= maxVolatilityShift;
+  const scenarioDay = dateDay(input.scenarioDate) - dateDay(input.valuationDate);
   function changeView(next: "build" | "analysis") {
     setView(next);
     if (viewport.current) {
@@ -393,13 +415,20 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         { label: "0%", value: input.spot, disabled: !Number.isFinite(spot) || spot <= 0 },
         { label: "+10%", value: formatOptionInput(priceTarget(1.1)), disabled: !Number.isFinite(spot) || spot <= 0 || priceTarget(1.1) > 1e9 },
       ]} onChange={setScenarioPrice} />
-      <Field label="Precio del escenario" min="0" max="1000000000" value={scenarioPrice} onChange={setScenarioPrice} />
+      <Field label="Precio del escenario" min="0" max="1000000000" value={scenarioPrice} onChange={setScenarioPrice}
+        slider={<ScenarioSlider label="Deslizar precio del escenario" min={0} max={priceSliderSteps}
+          value={priceSpan > 0 ? ((scenarioPriceValid ? selectedPrice : spot) - priceMin) / priceSpan * priceSliderSteps : 0}
+          format={position => priceSpan > 0 ? `${fmt(sliderPrice(position))} ${input.currency}` : "Rango no disponible"}
+          onChange={position => setScenarioPrice(formatOptionInput(sliderPrice(position)))} />} />
       {input.marketSpotMissing && <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />}</div>
       <div className="ct-sim-scenario-group"><ScenarioButtons label="VI" value={input.volatilityShift} numericValues options={[
         { label: "−5 pp", value: "-5" }, { label: "0 pp", value: "0" }, { label: "+5 pp", value: "5" },
       ].map(option => ({ ...option, disabled: input.legs.some(leg => Number.isFinite(numeric(leg.volatility)) && (numeric(leg.volatility) + Number(option.value) < 0 || numeric(leg.volatility) + Number(option.value) > 500)) }))}
         onChange={value => update("volatilityShift", value)} />
-      <Field label="Cambio de VI (pp)" value={input.volatilityShift} onChange={value => update("volatilityShift", value)} />
+      <Field label="Cambio de VI (pp)" value={input.volatilityShift} onChange={value => update("volatilityShift", value)}
+        slider={<ScenarioSlider label="Deslizar cambio de VI" min={viableVolatilityRange ? minVolatilityShift : 0}
+          max={viableVolatilityRange ? maxVolatilityShift : 0} value={numeric(input.volatilityShift)}
+          format={value => `${value > 0 ? "+" : ""}${value} pp`} onChange={value => update("volatilityShift", String(value))} />} />
       <details className="ct-sim-leg-volatilities"><summary>VI por pata</summary>{input.legs.map((leg, index) => <div key={leg.id}>
         <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
         <EditableLegValue label={`VI pata ${index + 1}`} value={leg.volatility} formatValue={formatOptionVolatility} onChange={value => updateLeg(leg.id, "volatility", value)} /><span>%</span>
@@ -410,7 +439,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         ...(days > 1 ? [{ label: midpointDays === 1 ? "1 día" : `${midpointDays} días`, value: addDays(input.valuationDate, midpointDays) }] : []),
         { label: "Vencimiento", value: input.expiry },
       ]} onChange={value => update("scenarioDate", value)} />
-      <Field label="Fecha teórica" type="date" value={input.scenarioDate} min={input.valuationDate} max={input.expiry} onChange={value => update("scenarioDate", value)} />
+      <Field label="Fecha teórica" type="date" value={input.scenarioDate} min={input.valuationDate} max={input.expiry} onChange={value => update("scenarioDate", value)}
+        slider={<ScenarioSlider label="Deslizar fecha teórica" min={0} max={baseDatesValid ? days : 0} value={scenarioDay}
+          format={offset => baseDatesValid ? formatOptionExpiry(addDays(input.valuationDate, offset)) : "Fecha no disponible"}
+          onChange={offset => update("scenarioDate", addDays(input.valuationDate, offset))} />} />
       </div>
       <details className="ct-sim-scenario-advanced"><summary>Supuestos de valuación</summary>
       {manualStrategy && <>
