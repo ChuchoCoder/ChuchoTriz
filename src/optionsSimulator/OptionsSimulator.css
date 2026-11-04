@@ -113,9 +113,10 @@
 .ct-sim-price-bar > input::-moz-range-track { height: 4px; background: transparent; }
 .ct-sim-price-bar > input::-moz-range-thumb { width: 6px; height: 6px; border: 1px solid var(--sim-card); border-radius: 50%; background: var(--ct-entry-color); }
 .ct-sim-price-bar > input:disabled { opacity: .35; cursor: default; }
-.ct-sim .ct-sim-price-bar > button { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--sim-muted); font-size: 10px; text-align: center; }
-.ct-sim-price-bar > button:first-of-type { text-align: left; align-items: flex-start; }
-.ct-sim-price-bar > button:last-of-type { text-align: right; align-items: flex-end; }
+.ct-sim .ct-sim-price-bar > button { position: relative; z-index: 1; align-self: end; height: 18px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--sim-muted); font-size: 10px; text-align: center; }
+.ct-sim-price-bar > button:first-of-type { text-align: left; }
+.ct-sim-price-bar > button:last-of-type { text-align: right; }
+.ct-sim-price-bar > button > span { position: absolute; top: -36px; left: 0; }
 .ct-sim-price-bar > button > span, .ct-sim-price-bar > button > strong { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ct-sim-price-bar > button > strong { font-size: 12px; font-variant-numeric: tabular-nums; }
 .ct-sim-price-bar > button[aria-pressed="true"] > strong { color: var(--ct-entry-color); }
