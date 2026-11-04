@@ -228,6 +228,41 @@ it("separates build and analysis while preserving legs, market selection and sce
   expect(byLabel<HTMLInputElement>("Cambio de VI (puntos porcentuales)").value).toBe("5");
 });
 
+it("shows a live chart below the legs and shares its scenario with the full analysis chart", async () => {
+  await mount();
+  const quick = byLabel("Resultado rápido del armado");
+  expect(quick.textContent).toContain("Armá una estrategia");
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  expect(quick.querySelector('.ct-sim-chart')).not.toBeNull();
+  expect(container.querySelectorAll('.ct-sim-chart')).toHaveLength(1);
+  const outputs = () => Array.from(container.querySelectorAll('.ct-sim-inspect output')).map(output => output.textContent);
+  expect(outputs()[0]).toBe("-500 ARS");
+  await fill("Prima pata 1", "7,5");
+  expect(outputs()[0]).toBe("-750 ARS");
+  const buildResults = outputs();
+  await act(async () => button("Análisis →").click());
+  expect(container.querySelectorAll('.ct-sim-chart')).toHaveLength(1);
+  expect(container.querySelector('.ct-sim-results .ct-sim-chart')).not.toBeNull();
+  expect(outputs()).toEqual(buildResults);
+  await act(async () => byLabel<HTMLButtonElement>("VI Sube (+5 pp)").click());
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento (30 días)").click());
+  await act(async () => byLabel<HTMLButtonElement>("Precio Sube (+10 %)").click());
+  const scenarioResults = outputs();
+  await showBuild();
+  expect(outputs()).toEqual(scenarioResults);
+  expect(byLabel("Resultado rápido del armado").textContent).toContain("VI 5 pp");
+  await fill("Contratos pata 1", "2");
+  expect(outputs()).toEqual(["500 ARS", "500 ARS"]);
+  await fill("Precio a evaluar", "105");
+  expect(outputs()).toEqual(["-500 ARS", "-500 ARS"]);
+  await showAnalysis();
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("105");
+  expect(outputs()).toEqual(["-500 ARS", "-500 ARS"]);
+  await showBuild(); await fill("Contratos pata 1", "0");
+  expect(container.querySelector('.ct-sim-chart')).toBeNull();
+  expect(byLabel("Resultado rápido del armado").textContent).toContain("Revisá los datos");
+});
+
 it("scenario toggles change only the hypothetical price, VI and date, and coincide at expiry", async () => {
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());

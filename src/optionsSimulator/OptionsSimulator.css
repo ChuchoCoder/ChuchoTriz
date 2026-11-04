@@ -52,6 +52,17 @@
 .ct-sim .ct-sim-sell { color: var(--sim-loss); }
 .ct-sim-assumption-fields { margin-top: 16px; }
 .ct-sim-market-layout { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; align-items: start; }
+.ct-sim-build-summary { min-width: 0; }
+.ct-sim-quick-results { padding: 12px; }
+.ct-sim-quick-results .ct-sim-section-heading { margin-bottom: 6px; }
+.ct-sim-quick-results .ct-sim-section-heading button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
+.ct-sim-quick-results .ct-sim-hint { font-size: 10px; margin: 6px 0 10px; }
+.ct-sim-quick-results .ct-sim-legend { gap: 8px 14px; font-size: 10px; }
+.ct-sim-quick-results .ct-sim-chart { margin: 10px 0; }
+.ct-sim-quick-results .ct-sim-inspect { grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 8px; }
+.ct-sim-quick-results .ct-sim-inspect > label { grid-column: 1 / -1; }
+.ct-sim-quick-results .ct-sim-inspect label, .ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
+.ct-sim-quick-results .ct-sim-inspect output { font-size: 14px; }
 .ct-sim-legs-card { padding: 12px; }
 .ct-sim-legs-card table { min-width: 290px; font-size: 11px; }
 .ct-sim-legs-card th, .ct-sim-legs-card td { height: 34px; padding: 2px; vertical-align: middle; }
@@ -80,7 +91,6 @@
 .ct-sim-premium-references > div { display: flex; gap: 4px; }
 .ct-sim .ct-sim-premium-references button { width: auto; flex: 1; min-height: 36px; padding: 3px 6px; font-size: 10px; }
 .ct-sim-premium-references strong { display: block; font-size: 11px; font-weight: 600; }
-.ct-sim-results-link { color: var(--sim-accent); display: block; margin-top: 16px; }
 .ct-sim-market { --ct-bg: var(--sim-bg); --ct-panel: var(--sim-card); --ct-input: var(--sim-field); --ct-text: var(--sim-text); --ct-muted: var(--sim-muted); --ct-border: var(--sim-border); --ct-accent: var(--sim-accent); padding: 0; gap: 0; overflow: visible; }
 .ct-sim .ct-sim-market.ct-options { gap: 0; }
 .ct-sim .ct-sim-market .ct-opt-controls { position: relative; padding: 4px 6px; gap: 6px 10px; align-items: center; }

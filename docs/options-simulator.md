@@ -11,7 +11,9 @@ abre el filtro de antigüedad sin desplazar la tabla. **Mis estrategias** reúne
 guardado y carga; **Entrada** reúne los datos de entrada y gastos. La cadena
 usa la altura disponible de la ventana y permite recorrer sus filas internamente.
 
-**Armado** contiene cadena y patas; **Análisis** contiene gráfico y escenarios.
+**Armado** contiene cadena, patas y un gráfico compacto debajo de las patas;
+**Análisis** conserva el gráfico completo y los escenarios. Ambos gráficos usan
+las mismas patas, precio evaluado y supuestos, y se actualizan al editar el armado.
 Las patas, primas y escenarios se conservan al alternar. En Análisis se pausa la
 observación de mercado y se muestra un resumen de las patas. Los toggles permiten
 probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha de
@@ -216,3 +218,15 @@ Las regresiones verifican cantidades directas, migración de guardados sin alter
 el P&L y sin multiplicarlos nuevamente al guardar. Revisión independiente sin
 hallazgos. La fixture confirmó por DOM tres contratos de una call, su débito total
 y el gráfico disponible, sin referencias a combos en Armado ni Análisis.
+
+### Gráfico rápido en el armado
+
+El gráfico compacto queda debajo de las patas, conservando el espacio de la cadena;
+usa las curvas, validaciones y supuestos del gráfico completo de Análisis. Se monta
+únicamente el gráfico de la pestaña activa, con precio evaluado compartido.
+
+310 tests Vitest, 13 tests Node, seguridad, TypeScript, lint y empaquetado aprobados.
+La regresión verifica edición inmediata, escenarios compartidos y datos inválidos.
+Revisión independiente sin hallazgos. La fixture confirmó por DOM resultados
+idénticos entre vistas, conservación del cambio de VI y alturas de 240/340 px para
+los gráficos compacto/completo. El navegador seguía oculto; sin QA por píxeles.
