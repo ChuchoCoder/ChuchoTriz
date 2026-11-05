@@ -122,10 +122,9 @@ export function SettingsMenu() {
         if (event.target instanceof HTMLInputElement && event.target.getAttribute("role") === "searchbox" && event.target.value) return;
         event.preventDefault(); event.stopPropagation(); close();
       }}>
-      <header className="ct-free-settings-header"><h1>ChuchoTriz · Configuración</h1>
+      <ChuchoTrizTools embedded active={open} headerAction={
         <button ref={closeButton} type="button" aria-label="Volver a Matriz" onClick={close}>×</button>
-      </header>
-      <ChuchoTrizTools embedded active={open} />
+      } />
     </section>}
   </>;
 }

@@ -6,11 +6,12 @@ central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
 Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
 ni órdenes propias.
 
-La barra de mercado usa etiquetas y selectores en una sola fila. El engranaje **⚙ VI**
-abre el filtro de antigüedad sin desplazar la tabla. La barra superior contiene
-únicamente **Armado / Análisis**. Se retiraron **Mis estrategias** y **Entrada**;
+La cabecera **ChuchoTriz** reúne las dos herramientas y abre primero el simulador.
+Subyacente, vencimiento, estrategia, conteos y **Armado / Análisis** comparten
+la barra de mercado. El filtro **⚙ VI** se abre desde el centro del encabezado.
+Se retiraron **Mis estrategias** y **Entrada**;
 el simulador no lee ni sobrescribe las estrategias guardadas anteriormente. Los
-parámetros editables quedan en **Análisis → Más supuestos y rango**. La cadena
+supuestos opcionales quedan en **Análisis → Supuestos de valuación**. La cadena
 usa la altura disponible de la ventana y permite recorrer sus filas internamente.
 Después del selector de vencimiento se muestran los días calendario desde hoy,
 por ejemplo **23d**. Las patas usan el mismo criterio, independientemente de la
@@ -25,7 +26,15 @@ referencias σ usan colores distintos para no confundirlas con ganancia/pérdida
 Las patas, primas y escenarios se conservan al alternar. En Análisis se pausa la
 observación de mercado y se muestra un resumen de las patas. Los toggles permiten
 probar precio −10%/sin cambio/+10%, VI −5/0/+5 puntos porcentuales y fecha de
-entrada/mitad del plazo/vencimiento. Los campos manuales siguen disponibles.
+entrada/mitad del plazo/vencimiento. Los deslizadores recorren el eje de precios
+visible, el cambio de VI hasta ±50 puntos porcentuales según la VI de las patas,
+y los días desde la entrada hasta el vencimiento. Los campos junto a ellos permiten
+ingresar valores exactos. La fecha de entrada se toma del día del armado.
+La cadena aporta el subyacente, el precio de referencia, el vencimiento y el factor.
+El vencimiento y el factor son editables cuando todas las patas son manuales. El
+precio de referencia también se puede ingresar si la cadena no aporta uno.
+Los botones **−** y **+** amplían o acercan el eje de precios en ambos gráficos.
+**Ajustar** vuelve al rango automático que abarca strikes y puntos de equilibrio.
 El precio del escenario se evalúa independientemente del precio de entrada.
 
 La VI se presenta con dos decimales en cadena, editor de Análisis y leyendas; el cálculo y la
@@ -53,8 +62,10 @@ no alteran las puntas ni sus clics. Se muestran cuando el subyacente, vencimient
 y moneda del armado coinciden con la cadena. Los niveles fuera de los strikes
 disponibles no se fijan artificialmente al borde.
 
-La leyenda de la cadena ocupa una fila: subyacente y precio, rangos de VI de
-Calls/Puts y cantidad de ejercicios. La cobertura y antigüedad de la escala quedan
+El encabezado Calls/VI/Puts incorpora los rangos de VI y desvíos. La marca
+central del subyacente combina precio y variación diaria
+cuando está disponible. Los desvíos llevan etiquetas centrales en negrita.
+La cobertura y antigüedad de la escala quedan
 en los tooltips. Solo aparece la advertencia de contratos incompletos si hay alguno;
 se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repetidas.
 
@@ -69,11 +80,11 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
    Cada fila permite alternar Long/Short y Call/Put cuando corresponde, o
    Normal/Reversed. El dibujo y las patas se previsualizan sin modificar el armado.
-   La flecha reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
+   **Armar** reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
    Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
    se explica el motivo. No incluye Calendar, Covered ni Futures.
 3. Las patas se muestran en este orden: chip **C / P**, cantidad con signo,
-   fecha de vencimiento (**Dic 13**), días (**17d**) y strike. Una cantidad positiva
+   fecha de vencimiento (**Diciembre 13**), días (**17d**) y strike. Una cantidad positiva
    representa compra; una negativa representa venta. No hay columna de lado,
    instrumento, prima ni VI.
    Hacer clic en cantidad para editar número y sentido juntos; Enter o salir del campo acepta, y Escape restaura el valor
@@ -101,7 +112,7 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    conserva cantidades, sentido y VI. Cotizaciones nuevas actualizan las
    referencias sin modificar la entrada fijada; si esta queda fuera, se informa.
    Si falta una punta válida o no coincide el contexto, el control se deshabilita.
-   Los precios individuales/manuales siguen en **Análisis → Más supuestos y rango →
+   Los precios individuales/manuales siguen en **Análisis → Supuestos de valuación →
    Precios de entrada por pata**. Crédito/débito, ganancia y pérdida máximas
    globales al vencimiento se muestran en una sola fila, con **∞** cuando son
    ilimitadas. La moneda se toma del mercado; no hay selector de moneda o plazo.
@@ -112,6 +123,8 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    permite ingresarlo con teclado. Debajo del gráfico se muestran el precio fijado
    y ambos resultados, sin slider de precio.
 
+El subyacente y vencimiento elegidos se recuerdan por sitio de Matriz dentro del
+perfil de Chrome. Si el catálogo ya no incluye esa selección, se usa una disponible.
 El armado y los supuestos se conservan mientras el componente permanece abierto;
 el guardado de estrategias está retirado de esta versión de la interfaz.
 La configuración de cantidades sigue en su

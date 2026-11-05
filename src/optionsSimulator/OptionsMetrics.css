@@ -11,7 +11,7 @@
 .ct-sim .ct-opt-metrics-legend strong{color:#83c7f1;font-size:9px}.ct-sim .ct-opt-metrics-legend.put strong{color:#cab4f3}
 .ct-sim .ct-opt-metrics-legend i{width:60px;height:6px;flex-shrink:0;border-radius:2px;background:linear-gradient(90deg,#6fd4a5,#ecda69,#f7a35c,#ef7888)}
 .ct-sim .ct-opt-volume-max{margin-left:auto}
-.ct-sim .ct-opt-chain.ct-opt-metrics-chain{--ct-opt-metric-strike:82px;min-width:1378px;font-size:11px}.ct-sim .ct-opt-chain.ct-opt-metrics-chain.single{min-width:620px}
+.ct-sim .ct-opt-chain.ct-opt-metrics-chain{--ct-opt-metric-strike:104px;min-width:1378px;font-size:11px}.ct-sim .ct-opt-chain.ct-opt-metrics-chain.single{min-width:620px}
 .ct-sim .ct-opt-metrics-chain col.theta{width:62px}.ct-sim .ct-opt-metrics-chain col.extrinsic{width:72px}
 .ct-sim .ct-opt-metrics-chain col.nominal{width:76px}.ct-sim .ct-opt-metrics-chain col.change{width:68px}.ct-sim .ct-opt-metrics-chain col.delta{width:58px}.ct-sim .ct-opt-metrics-chain col.iv{width:62px}.ct-sim .ct-opt-metrics-chain col.strike{width:var(--ct-opt-metric-strike)}
 .ct-sim .ct-opt-metrics-chain .ct-opt-strike{width:var(--ct-opt-metric-strike)}.ct-sim .ct-opt-metrics-chain td{height:36px}
@@ -24,7 +24,7 @@
 .ct-sim .ct-opt-nominal{--ct-volume:#2e99d0;font-weight:600}.ct-sim .ct-opt-nominal.put{--ct-volume:#a37edc}
 .ct-sim .ct-opt-volume-track{display:block;height:4px;margin-top:4px;width:100%;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--ct-volume) 16%,transparent)}
 .ct-sim .ct-opt-volume-fill{display:block;height:100%;border-radius:2px;background:var(--ct-volume)}
-.ct-sim .ct-options .ct-opt-metric.ct-opt-up{color:#78ddb0}.ct-sim .ct-options .ct-opt-metric.ct-opt-down{color:#f19aad}
+.ct-sim .ct-opt-up{color:var(--sim-profit)}.ct-sim .ct-opt-down{color:var(--sim-loss)}
 /* Preserve quantity/price mirror and the existing quote pulse with compact markers. */
 .ct-sim .ct-opt-metrics-chain .ct-opt-price button{position:relative;height:36px;padding:2px 6px 8px;grid-template-columns:0 minmax(20px,.6fr) minmax(55px,1fr);gap:4px;font-size:11px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-price.buy button{grid-template-columns:minmax(55px,1fr) minmax(20px,.6fr) 0}

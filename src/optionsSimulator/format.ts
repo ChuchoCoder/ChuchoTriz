@@ -21,7 +21,8 @@ export function formatOptionExpiry(expiry: string): string {
   const day = dateDay(expiry);
   if (!Number.isFinite(day)) return "—";
   const date = new Date(day * 86_400_000);
-  return `${["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][date.getUTCMonth()]} ${date.getUTCDate()}`;
+  const month = date.toLocaleString("es-AR", { month: "long", timeZone: "UTC" });
+  return `${month[0].toUpperCase()}${month.slice(1)} ${date.getUTCDate()}`;
 }
 
 /** Editable numeric fields accept ordinary decimals, including very small prices. */

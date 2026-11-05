@@ -83,7 +83,7 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
   const cash = current.payoff.ok ? current.payoff.summary.entry : undefined;
   return <>
     <button ref={trigger} className="ct-sim-strategy-trigger" type="button" aria-label="Elegir estrategia" aria-haspopup="dialog" aria-controls={panelId} aria-expanded={open}
-      onClick={() => open ? close(true) : setOpen(true)}>Estrategia <span aria-hidden="true">⌄</span></button>
+      onClick={() => open ? close(true) : setOpen(true)}>Estrategia <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
     {open && <div ref={panel} id={panelId} popover="manual" role="dialog" aria-label="Selector visual de estrategias" data-ct-inline-editor className="ct-sim-strategy-picker"
       onKeyDown={event => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); return; }
@@ -104,8 +104,8 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
           {row.kinds ? <button type="button" className={`ct-sim-strategy-variant ${row.choice.kind}`} aria-label={`Alternar Call/Put de ${row.label}`}
             aria-description={row.choice.kind === "call" ? "Call" : "Put"} onFocus={() => setSelected(row.id)} onClick={() => vary(row.id, "kind")}>{row.choice.kind === "call" ? "Call" : "Put"}</button>
             : <span className="ct-sim-strategy-both">C + P</span>}
-          <button type="button" className="ct-sim-strategy-apply" aria-label={`Aplicar ${strategyLabel(row.choice)}`} disabled={!row.payoff.ok} title={row.payoff.ok ? "Reemplazar las patas por esta estructura simulada" : row.payoff.reason}
-            onFocus={() => setSelected(row.id)} onClick={() => apply(row.id)}>↳</button>
+          <button type="button" className="ct-sim-strategy-apply" aria-label={`Armar ${strategyLabel(row.choice)}`} disabled={!row.payoff.ok} title={row.payoff.ok ? "Reemplazar las patas por esta estructura simulada" : row.payoff.reason}
+            onFocus={() => setSelected(row.id)} onClick={() => apply(row.id)}>Armar <span aria-hidden="true">↳</span></button>
         </div>)}
       </div>
       <section className="ct-sim-strategy-preview" aria-label="Vista previa de la estrategia">
@@ -119,7 +119,7 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
         </li>)}</ul>}
         {cash !== undefined && <strong>{cash < 0 ? "Crédito" : cash > 0 ? "Débito" : "Neutra"}{costs ? " neto" : ""} por estructura: {formatOptionAmount(Math.abs(cash))} {currency}</strong>}
         {!current.payoff.ok && <p className="ct-sim-strategy-unavailable" role="status">{current.payoff.reason}</p>}
-        <small>Resultado al vencimiento por estructura, con primas{costs ? " y gastos" : ""}. Verde: ganancia; rojo: pérdida. La flecha carga las patas.</small>
+        <small>Resultado al vencimiento por estructura, con primas{costs ? " y gastos" : ""}. Verde: ganancia. Rojo: pérdida. Armar carga las patas.</small>
       </section>
     </div>}
   </>;

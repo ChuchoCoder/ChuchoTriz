@@ -15,6 +15,7 @@ export interface Simulation {
   underlying: string;
   currency: "ARS" | "USD";
   spot: string;
+  marketSpotMissing?: boolean;
   valuationDate: string;
   expiry: string;
   scenarioDate: string;
@@ -23,8 +24,8 @@ export interface Simulation {
   multiplier: string;
   costs: string;
   volatilityShift: string;
-  rangeMin: string;
-  rangeMax: string;
+  rangeMin?: string;
+  rangeMax?: string;
   legs: Leg[];
 }
 export interface ParsedLeg {
@@ -79,6 +80,11 @@ export function initialSimulation(today = localDate()): Simulation {
     volatilityShift: "0", rangeMin: "60", rangeMax: "140", legs: exampleLegs("bull-call") };
 }
 
+function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number) {
+  const contracts = legs.reduce((sum, leg) => sum + leg.contracts, 0);
+  return Math.min(1e9, (Number.MAX_SAFE_INTEGER - costs) / (contracts * multiplier));
+}
+
 export function parseSimulation(input: Simulation): { ok: true; strategy: Strategy } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const read = (value: string, label: string, min: number, max: number, integer = false) => {
@@ -93,9 +99,8 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
   const shift = read(input.volatilityShift, "Cambio de VI", -500, 500);
-  const rangeMin = read(input.rangeMin, "Precio mínimo del gráfico", 0, 1e9);
-  const rangeMax = read(input.rangeMax, "Precio máximo del gráfico", .000001, 1e9);
-  if (rangeMin >= rangeMax) errors.push("El precio máximo del gráfico debe superar al mínimo.");
+  const rangeMin = input.rangeMin === undefined ? spot * .75 : read(input.rangeMin, "Precio mínimo del gráfico", 0, 1e9);
+  const explicitMax = input.rangeMax === undefined ? undefined : read(input.rangeMax, "Precio máximo del gráfico", .000001, 1e9);
   const valuation = dateDay(input.valuationDate), expiry = dateDay(input.expiry), scenario = dateDay(input.scenarioDate);
   if (![valuation, expiry, scenario].every(Number.isFinite)) errors.push("Completá las tres fechas con días válidos.");
   else if (expiry < valuation || scenario < valuation || scenario > expiry || expiry - valuation > 3650)
@@ -112,8 +117,10 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
       premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, true),
       volatility: volatility / 100 };
   });
-  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, rangeMax, leg.strike, leg.premium), costs);
+  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs);
   if (exposure > Number.MAX_SAFE_INTEGER) errors.push("Reducí precios o cantidades: el importe total supera la precisión admitida.");
+  const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs), spot * 1.25);
+  if (rangeMin >= rangeMax) errors.push("El precio máximo del gráfico debe superar al mínimo.");
   return errors.length ? { ok: false, errors } : { ok: true, strategy: { legs, multiplier, costs, spot,
     years: (expiry - scenario) / 365, rate, dividendYield, rangeMin, rangeMax } };
 }
@@ -209,6 +216,18 @@ export function expirySummary(strategy: Strategy) {
   }
   return { entry: entryCost(strategy), maxProfit: slope > 0 ? Infinity : Math.max(0, ...values),
     maxLoss: slope < 0 ? Infinity : Math.max(0, ...values.map(value => -value)), equilibria };
+}
+export function chartPriceRange(strategy: Strategy, equilibria: Equilibrium[], zoom: number) {
+  const limit = maximumChartPrice(strategy.legs, strategy.multiplier, strategy.costs);
+  const anchors = [strategy.spot, ...strategy.legs.map(leg => leg.strike),
+    ...equilibria.flatMap(({ from, to }) => Number.isFinite(to) ? [from, to] : [from])];
+  const low = Math.min(...anchors), high = Math.max(...anchors);
+  const padding = (strategy.rangeMax - strategy.rangeMin) * .1;
+  const min = Math.max(0, Math.min(strategy.rangeMin, low - padding));
+  const max = Math.min(limit, Math.max(strategy.rangeMax, high + padding));
+  const span = Math.min(limit, (max - min) * 2 ** zoom);
+  const rangeMin = Math.min(limit - span, Math.max(0, (min + max - span) / 2));
+  return { rangeMin, rangeMax: rangeMin + span, full: span === limit };
 }
 export function curve(strategy: Strategy) {
   const prices = [...new Set([strategy.rangeMin, strategy.rangeMax, strategy.spot,
