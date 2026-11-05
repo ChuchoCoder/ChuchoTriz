@@ -14,11 +14,15 @@ El simulador de opciones lee el catálogo y las cotizaciones de mercado de Matri
 para mostrar calls/puts, VI y otras métricas. Al pulsar **Cargar posición**, consulta
 el reporte de posición de la cuenta activa y copia únicamente los identificadores
 y cantidades de las opciones de la cadena elegida, junto con la fecha del reporte.
-Los datos de cuenta se usan dentro de Matriz para verificar el contexto y no se
-copian al simulador. Las primas históricas, gastos y realizado se ingresan
-manualmente y se mantienen en memoria junto con la posición y sus ajustes.
+El identificador de cuenta se usa dentro de Matriz y no se copia al simulador.
+Se deriva una clave opaca con una semilla aleatoria de este perfil y sitio para
+separar el guardado entre cuentas. Las primas históricas, VI por pata, gastos y
+realizado se guardan automáticamente en `chrome.storage.local`, junto con los
+identificadores y cantidades de la posición necesarios para detectar cambios.
+Son datos financieros locales; no se sincronizan con otros perfiles ni se envían
+a servidores de la extensión. Si cambia una cantidad, se solicita revisar su prima.
 El simulador no envía operaciones. La selección de subyacente y vencimiento se guarda
-localmente por sitio de Matriz. El armado y sus supuestos se mantienen en memoria
+localmente por sitio de Matriz. Los ajustes propuestos y sus supuestos se mantienen en memoria
 mientras el simulador permanece abierto. El guardado de estrategias está retirado
 de la interfaz; el simulador no lee ni sobrescribe datos guardados por versiones
 anteriores.

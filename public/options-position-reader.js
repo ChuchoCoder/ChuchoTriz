@@ -3,8 +3,8 @@
 (() => {
   const channel = document.currentScript?.dataset.channel;
   if (!channel) return;
-  if (window.__chuchotrizOptionsPositionReader) {
-    window.__chuchotrizOptionsPositionReader.attach(channel); return;
+  if (window.__chuchotrizOptionsPositionReaderV2) {
+    window.__chuchotrizOptionsPositionReaderV2.attach(channel); return;
   }
   const channels = new Set([channel]);
   let active, previousContext, contextId;
@@ -29,10 +29,15 @@
     check(Object.keys(operation.context).every(key => current[key] === operation.context[key]), "Cambió la cuenta o el contexto durante la lectura. Volvé a cargar la posición.");
   }
   async function read(params, operation) {
+    check(typeof params.storageSalt === "string" && /^[a-f0-9]{64}$/.test(params.storageSalt), "Guardado local de posición no disponible.");
     check(Array.isArray(params.ids) && params.ids.length > 0 && params.ids.length <= 160 &&
       new Set(params.ids).size === params.ids.length && params.ids.every(id => typeof id === "string"),
     "Selección de contratos inválida.");
     const { portfolio, securities, account, collateral } = operation.context;
+    // Stable only in this local profile and site. The raw account never leaves Matriz.
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([params.storageSalt, location.origin, account])));
+    const storageScope = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    assertCurrent(operation);
     // This is the same read-only refresh used by the native Matriz position view.
     const report = await portfolio.getDetailedPositionReport(account, collateral);
     assertCurrent(operation);
@@ -77,7 +82,7 @@
       }
     }
     assertCurrent(operation);
-    return { contextId: operation.context.contextId, capturedAt: Date.now(), reportedAt, version: operation.context.version,
+    return { contextId: operation.context.contextId, storageScope, capturedAt: Date.now(), reportedAt, version: operation.context.version,
       positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })) };
   }
   window.addEventListener("message", async event => {
@@ -96,6 +101,10 @@
     const reply = payload => { if (channels.has(msg.channel)) window.postMessage({ channel: msg.channel, kind: "response", id: msg.id, ...payload }, location.origin); };
     let operation;
     try {
+      if (msg.method === "verifyPositionContext") {
+        check(msg.params?.contextId === context().contextId, "Cambió la cuenta o el contexto durante la lectura. Volvé a cargar la posición.");
+        reply({ result: true }); return;
+      }
       check(msg.method === "positions", "Método no permitido por el lector de posición.");
       check(!active, "Hay una lectura de posición pendiente.");
       operation = { id: msg.id, channel: msg.channel, context: context(), deadline: Date.now() + 14000 };
@@ -108,5 +117,5 @@
       if (operation && active === operation) active = undefined;
     }
   });
-  window.__chuchotrizOptionsPositionReader = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };
+  window.__chuchotrizOptionsPositionReaderV2 = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };
 })();

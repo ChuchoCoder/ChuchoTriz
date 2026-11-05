@@ -75,6 +75,8 @@
   "src/optionsSimulator/market.ts",
   "src/optionsSimulator/positions.ts",
   "src/optionsSimulator/positions.test.ts",
+  "src/optionsSimulator/positionStorage.ts",
+  "src/optionsSimulator/positionStorage.test.ts",
   "src/optionsSimulator/MarketChain.css",
   "src/optionsSimulator/MarketChain.tsx",
   "src/optionsSimulator/marketMetrics.test.ts",

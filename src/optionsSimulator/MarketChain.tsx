@@ -166,12 +166,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     positionRequest.current = request;
     setLoadingPosition(true); setNotice("");
     try {
-      const snapshot = await readPositionSnapshot(selected, request.signal);
+      const { snapshot, saved } = await readPositionSnapshot(selected, request.signal);
       if (request.signal.aborted) return;
-      const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot);
+      const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot, saved);
       onNewStrategy();
       setInput(next);
-      setNotice("Posición cargada. Completá las primas históricas y agregá ajustes desde la grilla.");
+      setNotice("Posición cargada. Revisá las primas históricas y agregá ajustes desde la grilla.");
     } catch (error) {
       if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "No se pudo cargar la posición.");
     } finally {

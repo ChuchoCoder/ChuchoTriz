@@ -10,7 +10,11 @@ export interface Leg {
   premium: string;
   contracts: string;
   volatility: string;
+  /** Signed native quantity when the user last reviewed the historical premium. */
+  premiumQuantity?: string;
+  premiumReviewPending?: boolean;
 }
+export interface PositionStorageSession { key: string; revision?: string }
 export interface Simulation {
   underlying: string;
   currency: "ARS" | "USD";
@@ -24,7 +28,7 @@ export interface Simulation {
   multiplier: string;
   costs: string;
   realized?: string;
-  position?: { legs: Leg[]; capturedAt: number; reportedAt: number; contextId: string };
+  position?: { legs: Leg[]; capturedAt: number; reportedAt: number; contextId: string; storage?: PositionStorageSession };
   volatilityShift: string;
   rangeMin?: string;
   rangeMax?: string;

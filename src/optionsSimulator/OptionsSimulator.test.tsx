@@ -3,14 +3,20 @@ import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OptionsSimulator from "./OptionsSimulator";
-import { Catalog, Quote, Snapshot } from "./market";
+import { Catalog, Contract, Quote, Snapshot } from "./market";
+import { positionStorageKey, readPositionAccounting } from "./positionStorage";
 import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string } }));
 vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
 const readPosition = vi.hoisted(() => vi.fn());
-vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(), readPositionSnapshot: readPosition }));
+vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
+  readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
+    const snapshot = await readPosition(contracts, signal);
+    return { snapshot, saved: signal.aborted ? undefined : await readPositionAccounting(positionStorageKey(snapshot.storageScope, contracts[0])) };
+  },
+}));
 let root: Root, container: HTMLDivElement;
 let stored: Record<string, unknown>, write: ReturnType<typeof vi.fn>;
 const expiry = addDays(localDate(), 30);
@@ -19,7 +25,7 @@ beforeEach(() => {
   stored = {};
   write = vi.fn(async value => { Object.assign(stored, value); });
   readPosition.mockReset();
-  readPosition.mockResolvedValue({ contextId: "demo-context", capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
   vi.stubGlobal("chrome", { storage: { local: { get: vi.fn(async () => stored), set: write } } });
   const contracts: Catalog["contracts"] = [80, 90, 100, 110, 120].flatMap(strike => (["call", "put"] as const).map(kind => ({
     id: `${kind}-${strike}`, symbol: `${kind.toUpperCase()} ${strike}`, underlyingId: "GGAL", kind, strike,
@@ -121,9 +127,49 @@ it("imports a historical position and preserves its premiums and accounting thro
   expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
   expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("200");
   expect(container.querySelectorAll('.ct-sim-position')).toHaveLength(1);
-  expect(write).not.toHaveBeenCalled();
+  expect(write).toHaveBeenCalled();
   await act(async () => button("Nueva simulación").click());
   expect(container.querySelector('.ct-sim-position')).toBeNull();
+});
+it("restores saved accounting after resetting the draft and remounting the simulator", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica pata 1", "8.25"); await fill("Gastos de la posición", "40"); await fill("Resultado realizado neto", "-200");
+  await act(async () => button("Nueva simulación").click());
+  await act(async () => root.render(<OptionsSimulator key="new-session" />));
+  readPosition.mockResolvedValueOnce({ contextId: "new-session", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8.25");
+  expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
+  expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("-200");
+  expect(byLabel("Guardado de datos históricos").textContent).toContain("Guardado en este perfil");
+});
+it("warns on quantity changes until the user confirms or edits the premium, including on later imports", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica pata 1", "8");
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 3 }] });
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  expect(container.querySelector('.ct-sim-premium-warning')?.textContent).toContain("Cambió la cantidad de 2 a 3");
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Confirmar prima histórica pata 1").click());
+  expect(container.querySelector('.ct-sim-premium-warning')).toBeNull();
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 4 }] });
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
+  await fill("Prima histórica pata 1", "-1");
+  expect(container.querySelector('.ct-sim-premium-warning button')).toBeNull();
+  expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
+  await fill("Prima histórica pata 1", "8.50");
+  expect(container.querySelector('.ct-sim-premium-warning')).toBeNull();
+});
+it("shows an error if historical accounting cannot be saved", async () => {
+  await mount(); await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  write.mockRejectedValueOnce(Error("storage unavailable"));
+  await fill("Prima histórica pata 1", "8");
+  expect(byLabel("Guardado de datos históricos").textContent).toContain("No se pudo guardar");
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
 });
 it("cancels an in-flight import when leaving Armado and never overwrites the draft with its late response", async () => {
   let resolve!: (value: unknown) => void;

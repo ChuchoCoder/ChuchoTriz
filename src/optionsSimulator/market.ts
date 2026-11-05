@@ -41,7 +41,7 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "positions", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "positions" | "verifyPositionContext", params = {}): Promise<T> {
     await this.ready;
     if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {

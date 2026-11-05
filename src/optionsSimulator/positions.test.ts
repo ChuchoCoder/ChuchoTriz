@@ -9,7 +9,7 @@ const contracts: Contract[] = [90, 100, 110].map(strike => ({ id:`C${strike}`,sy
   strike,expiration:expiry.replaceAll("-", ""),currency:"ARS",strikeCurrency:"ARS",settlement:"2",factor:100 }));
 const quotes = Object.fromEntries(contracts.map(contract=>[contract.id,{bid:{price:5,size:100},ask:{price:6,size:100},impliedVolatility:40}]));
 const market: StrikeMarket = { underlying:"DEMO",currency:"ARS",expiry,contracts,quotes };
-const snapshot = (): PositionSnapshot => ({contextId:"demo-context",capturedAt:Date.now(),reportedAt:Date.now(),positions:[{securityId:"C100",quantity:2}]});
+const snapshot = (): PositionSnapshot => ({contextId:"demo-context",storageScope:"a".repeat(64),capturedAt:Date.now(),reportedAt:Date.now(),positions:[{securityId:"C100",quantity:2}]});
 const load = () => importPosition(snapshot(),contracts,quotes,{...initialSimulation(),legs:[]},"DEMO",100);
 function strategy(input: Simulation) {
   const result=parseSimulation(input);
@@ -47,20 +47,24 @@ it("preserves historical premiums, expenses and realized results through price, 
   expect(expirySummary(position).entry).toBe(1140);
   expect(resultAt(strategy({...input,legs:[]}),110,"expiry")).toBe(560);
 });
-it("preserves costs on same-quantity refresh and requires re-entering cost after a quantity or side change",()=>{
+it("preserves premium on quantity changes and keeps its reviewed quantity until acknowledged",()=>{
   const input=load();
   input.position!.legs[0].premium="8";input.costs="25";input.realized="-10";
   const next=importPosition(snapshot(),contracts,quotes,input,"DEMO",100);
   expect(next.position?.legs[0].premium).toBe("8");
   expect(next.costs).toBe("25");expect(next.realized).toBe("-10");
   const changed=importPosition({...snapshot(),positions:[{securityId:"C100",quantity:3}]},contracts,quotes,next,"DEMO",100);
-  expect(changed.position?.legs[0].premium).toBe("");
+  expect(changed.position?.legs[0]).toMatchObject({premium:"8",contracts:"3",premiumQuantity:"2"});
+  const refreshed=importPosition({...snapshot(),positions:[{securityId:"C100",quantity:3}]},contracts,quotes,changed,"DEMO",100);
+  expect(refreshed.position?.legs[0].premiumQuantity).toBe("2");
+  const reversed=importPosition({...snapshot(),positions:[{securityId:"C100",quantity:-3}]},contracts,quotes,changed,"DEMO",100);
+  expect(reversed.position?.legs[0]).toMatchObject({premium:"",premiumQuantity:"2"});
 });
 it("resets all historical accounting when another account has the same chain and quantities",()=>{
   const input=load();
   input.position!.legs[0].premium="8";input.costs="25";input.realized="-10";
   input.legs=[{...input.position!.legs[0],id:1,side:"sell",premium:"5"}];
-  const next=importPosition({...snapshot(),contextId:"another-context"},contracts,quotes,input,"DEMO",100);
+  const next=importPosition({...snapshot(),contextId:"another-context",storageScope:"b".repeat(64)},contracts,quotes,input,"DEMO",100);
   expect(next.position?.legs[0].premium).toBe("");
   expect(next.costs).toBe("0");expect(next.realized).toBe("");expect(next.legs).toEqual([]);
 });

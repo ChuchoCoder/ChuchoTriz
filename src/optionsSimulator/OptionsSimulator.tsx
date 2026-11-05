@@ -5,6 +5,7 @@ import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
 import { formatExpiryDays, formatOptionAmount as fmt, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
+import { PositionAccountingConflict, premiumNeedsReview, savePositionAccounting, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 
 // A native double click delivers two click events: 1 + 9 makes ten in total.
 const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 9 : 1;
@@ -114,9 +115,10 @@ function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChan
   </section>;
 }
 
-function PositionCosts({ input, onLegChange, onCosts, onRealized, onReset }: {
+function PositionCosts({ input, onLegChange, onCosts, onRealized, onReset, onReview, saveStatus }: {
   input: Simulation; onLegChange(id: number, value: string): void;
   onCosts(value: string): void; onRealized(value: string): void; onReset(): void;
+  onReview(id: number): void; saveStatus: string;
 }) {
   if (!input.position) return null;
   return <section className="ct-sim-card ct-sim-position" aria-label="Posición actual y costos históricos">
@@ -128,7 +130,14 @@ function PositionCosts({ input, onLegChange, onCosts, onRealized, onReset }: {
           <td className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>{leg.side === "buy" ? "+" : "−"}{formatOptionNumber(numeric(leg.contracts))}</td>
           <th scope="row" title={leg.symbol}>{formatOptionNumber(numeric(leg.strike))}</th>
           <td><input type="number" min="0" max="1000000000" step="any" aria-label={`Prima histórica pata ${index + 1}`}
-            value={leg.premium} placeholder="Completar" onChange={event => onLegChange(leg.id, event.target.value)} /></td>
+            value={leg.premium} placeholder="Completar" aria-describedby={premiumNeedsReview(leg) ? `ct-premium-review-${leg.id}` : undefined}
+            onChange={event => onLegChange(leg.id, event.target.value)} />
+            {premiumNeedsReview(leg) && <div className="ct-sim-premium-warning" id={`ct-premium-review-${leg.id}`} role="alert">
+              {leg.premiumQuantity !== signedPositionQuantity(leg) ? `Cambió la cantidad de ${leg.premiumQuantity} a ${signedPositionQuantity(leg)}.`
+                : "La cantidad cambió desde la última revisión."} Revisá la prima histórica.
+              {validHistoricalPremium(leg.premium) && <button type="button" aria-label={`Confirmar prima histórica pata ${index + 1}`}
+                onClick={() => onReview(leg.id)}>Prima revisada</button>}
+            </div>}</td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -138,6 +147,7 @@ function PositionCosts({ input, onLegChange, onCosts, onRealized, onReset }: {
     </div>
     <p className="ct-sim-hint">Gastos adicionales al costo. Realizado neto de sus gastos, positivo o negativo.</p>
     <small title={new Date(input.position.reportedAt).toLocaleString("es-AR")}>Reporte de Matriz · {new Date(input.position.reportedAt).toLocaleString("es-AR")}</small>
+    <small role="status" aria-label="Guardado de datos históricos">{saveStatus}</small>
     {!input.realized?.trim() && <p className="ct-sim-hint">Realizado sin informar. El gráfico muestra el resultado abierto y los ajustes.</p>}
   </section>;
 }
@@ -286,6 +296,20 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const allLegs = useMemo(() => simulationLegs(input), [input]);
   const [chartZoom, setChartZoom] = useState<{ context: string; level: number }>();
   const [status, setStatus] = useState("");
+  const [saveStatus, setSaveStatus] = useState("");
+  const accountingLegs = input.position?.legs, accountingStorage = input.position?.storage;
+  const { costs, realized } = input;
+  useEffect(() => {
+    if (!accountingStorage || !accountingLegs) { setSaveStatus(""); return; }
+    let current = true;
+    setSaveStatus("Guardando…");
+    void savePositionAccounting(accountingStorage, accountingLegs, costs, realized).then(() => { if (current) setSaveStatus("Guardado en este perfil · cuenta y vencimiento"); },
+      error => { if (current) setSaveStatus(error instanceof PositionAccountingConflict
+        ? "Otra pestaña guardó cambios. Tus ediciones siguen en este borrador. Usá Nueva simulación y volvé a cargar para recuperar el guardado."
+        : "No se pudo guardar. Revisá los valores y el almacenamiento local antes de cerrar."); });
+    return () => { current = false; };
+    // Scenarios and proposed adjustments do not change historical accounting.
+  }, [accountingStorage, accountingLegs, costs, realized]);
   const [strikeMarket, setStrikeMarket] = useState<StrikeMarket>();
   const menusId = useId();
   const nextId = useRef(3);
@@ -328,7 +352,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   }
   function updateLeg(id: number, key: keyof Leg, value: string) {
     setStatus(""); setInput(current => id < 0 && current.position ? { ...current,
-      position: { ...current.position, legs: current.position.legs.map(leg => leg.id === id ? { ...leg, [key]: value } : leg) } }
+      position: { ...current.position, legs: current.position.legs.map(leg => leg.id === id ? { ...leg, [key]: value,
+        ...(key === "premium" && validHistoricalPremium(value) ? { premiumQuantity: signedPositionQuantity(leg), premiumReviewPending: false } : {}) } : leg) } }
       : { ...current, legs: current.legs.map(leg => leg.id === id ? { ...leg, [key]: value } : leg) });
   }
   function updateQuantity(id: number, value: string) {
@@ -366,6 +391,9 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const money = (value: number) => `${fmt(value)} ${input.currency}`;
   const historicalCosts = <PositionCosts input={input} onLegChange={(id, value) => updateLeg(id, "premium", value)}
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
+    saveStatus={saveStatus} onReview={id => setInput(current => current.position ? { ...current, position: { ...current.position,
+      legs: current.position.legs.map(leg => leg.id === id && validHistoricalPremium(leg.premium)
+        ? { ...leg, premiumQuantity: signedPositionQuantity(leg), premiumReviewPending: false } : leg) } } : current)}
     onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setChartZoom(undefined); setStatus(""); }} />;
   const chart = !allLegs.length ? <p>Armá una estrategia para ver su resultado al vencimiento y teórico.</p>
     : !parsed.ok ? <div className="ct-sim-errors" role="alert"><p>Revisá los datos para calcular:</p><ul>{parsed.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>

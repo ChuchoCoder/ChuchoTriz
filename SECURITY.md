@@ -31,7 +31,10 @@ issues públicos. Usar el canal privado habitual con el propietario.
   para el simulador. Un segundo lector acotado importa, sólo a pedido del usuario,
   cantidades de opciones de la cuenta activa mediante el reporte nativo de Matriz.
   Exporta únicamente identificadores de contrato, cantidades, fechas y un token
-  opaco de contexto. Las pruebas verifican cancelación, cambios de cuenta,
+  opaco de contexto y una clave de cuenta derivada mediante SHA-256 con semilla
+  aleatoria local por sitio. El identificador de cuenta nunca se exporta ni guarda.
+  La contabilidad histórica se guarda localmente por esa clave, cadena y factor;
+  no se sobrescribe con los ajustes propuestos. Las pruebas verifican cancelación, cambios de cuenta,
   serialización, datos incompletos y ausencia de cuerpos o errores privados.
   Se revisan CSP, frames y exposición a otras extensiones.
   La ausencia de CSP conserva los valores predeterminados de Chrome MV3.

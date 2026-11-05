@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { webcrypto } from 'node:crypto';
 
 const source = readFileSync(new URL('../public/options-position-reader.js', import.meta.url), 'utf8');
 function fixture() {
@@ -21,8 +22,8 @@ function fixture() {
   const window = {mainStore:store,addEventListener:(_name,listener)=>listeners.push(listener),postMessage:msg=>replies.push(msg)};
   const document = {currentScript:{dataset:{channel:'position-test'}},body:{innerText:'Versión: 4.24.4'}};
   let uuid=0;
-  runInNewContext(source,{window,document,Date,crypto:{randomUUID:()=>`context-${++uuid}`},location:{origin:'https://fixture.test'}});
-  const params = {ids:options.map(sec=>sec.id),underlyingId:'DEMO',expiration:'20261218',currency:'ARS',settlement:'2'};
+  runInNewContext(source,{window,document,Date,TextEncoder,crypto:{randomUUID:()=>`context-${++uuid}`,subtle:webcrypto.subtle},location:{origin:'https://fixture.test'}});
+  const params = {ids:options.map(sec=>sec.id),underlyingId:'DEMO',expiration:'20261218',currency:'ARS',settlement:'2',storageSalt:'a'.repeat(64)};
   let id = 0;
   async function call(method='positions', selected=params) {
     const request=++id;
@@ -39,7 +40,7 @@ test('reads only after explicit request and exports only selected signed quantit
   assert.deepEqual(f.calls[0],['PRIVATE_ACCOUNT',true]);
   assert.deepEqual(JSON.parse(JSON.stringify(result.positions)),[{securityId:'option-0',quantity:2},{securityId:'option-1',quantity:-3}]);
   assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
-  assert.deepEqual(Object.keys(result).sort(),['capturedAt','contextId','positions','reportedAt','version']);
+  assert.deepEqual(Object.keys(result).sort(),['capturedAt','contextId','positions','reportedAt','storageScope','version']);
 });
 test('filters the selected chain and never interprets native prices as historical premiums',async()=>{
   const f=fixture();
@@ -67,12 +68,32 @@ test('changes the opaque context token when the active account changes between i
   f.store.profileStore.activeAccount='OTHER';
   const second=(await f.call()).result;
   assert.notEqual(first.contextId,second.contextId);
+  assert.notEqual(first.storageScope,second.storageScope);
   assert.equal(JSON.stringify(second).includes('OTHER'),false);
+});
+test('uses a stable salted local account scope across page contexts and separates profiles',async()=>{
+  const first=(await fixture().call()).result;
+  const second=(await fixture().call()).result;
+  assert.equal(first.storageScope,second.storageScope);
+  assert.match(first.storageScope,/^[a-f0-9]{64}$/);
+  const f=fixture();
+  const other=(await f.call('positions',{...f.params,storageSalt:'b'.repeat(64)})).result;
+  assert.notEqual(first.storageScope,other.storageScope);
+  assert.ok((await f.call('positions',{...f.params,storageSalt:''})).error);
+});
+test('rechecks the opaque context without requesting another report after reading local storage',async()=>{
+  const f=fixture();
+  const {contextId}=(await f.call()).result;
+  assert.equal((await f.call('verifyPositionContext',{contextId})).result,true);
+  f.store.profileStore.activeAccount='OTHER';
+  assert.match((await f.call('verifyPositionContext',{contextId})).error,/Cambió la cuenta/);
+  assert.equal(f.calls.length,1);
 });
 test('serializes native requests and retains the lock after the client retires',async()=>{
   const f=fixture();let release;
   f.store.portfolioStore.getDetailedPositionReport=()=>new Promise(resolve=>{release=()=>resolve(f.report);});
   const first=f.call();
+  while(!release) await new Promise(resolve=>setTimeout(resolve,0));
   assert.match((await f.call()).error,/pendiente/);
   await f.listeners[0]({source:f.window,data:{channel:'position-test',kind:'retire',id:1}});
   assert.match((await f.call()).error,/pendiente/);
