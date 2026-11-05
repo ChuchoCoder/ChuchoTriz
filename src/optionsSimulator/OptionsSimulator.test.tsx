@@ -9,6 +9,8 @@ import { formatOptionExpiry } from "./format";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string } }));
 vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
+const readPosition = vi.hoisted(() => vi.fn());
+vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(), readPositionSnapshot: readPosition }));
 let root: Root, container: HTMLDivElement;
 let stored: Record<string, unknown>, write: ReturnType<typeof vi.fn>;
 const expiry = addDays(localDate(), 30);
@@ -16,6 +18,8 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   stored = {};
   write = vi.fn(async value => { Object.assign(stored, value); });
+  readPosition.mockReset();
+  readPosition.mockResolvedValue({ contextId: "demo-context", capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
   vi.stubGlobal("chrome", { storage: { local: { get: vi.fn(async () => stored), set: write } } });
   const contracts: Catalog["contracts"] = [80, 90, 100, 110, 120].flatMap(strike => (["call", "put"] as const).map(kind => ({
     id: `${kind}-${strike}`, symbol: `${kind.toUpperCase()} ${strike}`, underlyingId: "GGAL", kind, strike,
@@ -87,6 +91,50 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
   await fill("VI pata 1", "45");
   expect(container.querySelector(".ct-sim-theory-line")).not.toBeNull();
+});
+it("imports a historical position and preserves its premiums and accounting through every adjustment control", async () => {
+  await mount();
+  expect(readPosition).not.toHaveBeenCalled();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(container.querySelector('.ct-sim-position')).not.toBeNull();
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("");
+  expect(container.querySelector('.ct-sim-chart')).toBeNull();
+  await fill("Prima histórica pata 1", "8");
+  await fill("Gastos de la posición", "40");
+  await fill("Resultado realizado neto", "200");
+  const baseResults = [...container.querySelectorAll('.ct-sim-inspect output')].map(node => node.textContent);
+  await act(async () => byLabel<HTMLButtonElement>("Vender CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia").click());
+  await act(async () => byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia").click());
+  await act(async () => byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
+  expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("200");
+  expect(container.querySelector('.ct-sim-position table tbody')?.textContent).toContain("+2");
+  expect(byLabel<HTMLSelectElement>("Subyacente de opciones").disabled).toBe(true);
+  await act(async () => byLabel<HTMLButtonElement>("Limpiar ajustes").click());
+  expect([...container.querySelectorAll('.ct-sim-inspect output')].map(node => node.textContent)).toEqual(baseResults);
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  await showAnalysis();
+  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
+  expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("200");
+  expect(container.querySelectorAll('.ct-sim-position')).toHaveLength(1);
+  expect(write).not.toHaveBeenCalled();
+  await act(async () => button("Nueva simulación").click());
+  expect(container.querySelector('.ct-sim-position')).toBeNull();
+});
+it("cancels an in-flight import when leaving Armado and never overwrites the draft with its late response", async () => {
+  let resolve!: (value: unknown) => void;
+  readPosition.mockImplementation(() => new Promise(done => { resolve = done; }));
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  const signal = readPosition.mock.calls[0][1] as AbortSignal;
+  await showAnalysis();
+  expect(signal.aborted).toBe(true);
+  await act(async () => resolve({ contextId: "demo-context", capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] }));
+  expect(container.querySelector('.ct-sim-position')).toBeNull();
 });
 it("selecting a marked quote removes the leg; no execution controls are present", async () => {
   await mount();

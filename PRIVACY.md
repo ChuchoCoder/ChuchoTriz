@@ -11,8 +11,13 @@ Los presets por instrumento y la preferencia de autocompletar se guardan en
 por instrumento se mantiene en memoria durante la sesión del formulario.
 
 El simulador de opciones lee el catálogo y las cotizaciones de mercado de Matriz
-para mostrar calls/puts, VI y otras métricas. No lee órdenes propias, tenencias ni
-saldos y no envía operaciones. La selección de subyacente y vencimiento se guarda
+para mostrar calls/puts, VI y otras métricas. Al pulsar **Cargar posición**, consulta
+el reporte de posición de la cuenta activa y copia únicamente los identificadores
+y cantidades de las opciones de la cadena elegida, junto con la fecha del reporte.
+Los datos de cuenta se usan dentro de Matriz para verificar el contexto y no se
+copian al simulador. Las primas históricas, gastos y realizado se ingresan
+manualmente y se mantienen en memoria junto con la posición y sus ajustes.
+El simulador no envía operaciones. La selección de subyacente y vencimiento se guarda
 localmente por sitio de Matriz. El armado y sus supuestos se mantienen en memoria
 mientras el simulador permanece abierto. El guardado de estrategias está retirado
 de la interfaz; el simulador no lee ni sobrescribe datos guardados por versiones

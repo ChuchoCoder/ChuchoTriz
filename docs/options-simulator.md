@@ -3,8 +3,31 @@
 El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulador de
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
-Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
-ni órdenes propias.
+Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes.
+**Cargar posición** consulta, a pedido del usuario, las cantidades de opciones de
+la cuenta activa correspondientes al subyacente y vencimiento seleccionados.
+
+La posición se muestra en un bloque separado, con cantidad firmada y prima
+histórica editable por unidad. La prima empieza vacía y debe completarse para
+calcular resultados desde el costo. Cero es un valor válido cuando se ingresa
+explícitamente. **Gastos de la posición** corresponde a cargos que todavía no están
+incluidos en las primas. **Resultado realizado neto** permite sumar ganancias o
+pérdidas de cierres anteriores, ya netas de sus propios gastos.
+
+Las patas agregadas desde la grilla forman **Ajustes simulados**. Cantidades,
+strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
+Las primas históricas, gastos y realizado permanecen en la posición original.
+**Limpiar ajustes** vuelve a la posición sin esas operaciones hipotéticas.
+**Nueva simulación** elimina el borrador completo y habilita otro contexto.
+
+El resultado suma los valores menos primas de la posición y los ajustes, resta
+los gastos de la posición y agrega el realizado informado. Sin realizado se
+muestra el resultado abierto con los ajustes. La fecha del reporte de Matriz queda
+visible. Cada importación actualiza el reporte nativo. Una actualización conserva
+costos sólo si la cuenta/contexto y las cantidades de cada contrato coinciden;
+una cantidad o sentido cambiado requiere revisar la prima histórica.
+Los saldos ambiguos o en garantía que no puedan reconciliarse se informan para
+revisión, sin truncar la posición ni asignarles un costo supuesto.
 
 La cabecera **ChuchoTriz** reúne las dos herramientas y abre primero el simulador.
 Subyacente, vencimiento, estrategia, conteos y **Armado / Análisis** comparten

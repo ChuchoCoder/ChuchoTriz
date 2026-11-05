@@ -46,8 +46,9 @@ export function assertManifest(manifest, built = false) {
   if (!built) {
     assert(same(script.js, ['src/main.tsx']), 'Unexpected content-script entry');
     if (manifest.web_accessible_resources !== undefined) {
-      assert(same(manifest.web_accessible_resources, [{ resources: ['options-market-reader.js'], matches: hosts }]),
-        'Only the options market reader may be exposed by the source manifest');
+      assert([['options-market-reader.js'], ['options-market-reader.js', 'options-position-reader.js']].some(resources =>
+        same(manifest.web_accessible_resources, [{ resources, matches: hosts }])),
+        'Only the reviewed options readers may be exposed by the source manifest');
     }
   } else {
     assert(/^assets\/main\.tsx-loader-[\w-]+\.js$/.test(script.js[0]), 'Unexpected content loader');
@@ -55,7 +56,7 @@ export function assertManifest(manifest, built = false) {
       assert(!('extension_ids' in resource), 'Resource exposure to other extensions is not allowed');
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
-        assert(path === 'options-market-reader.js' || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
+        assert(['options-market-reader.js', 'options-position-reader.js'].includes(path) || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
       }
     }
   }

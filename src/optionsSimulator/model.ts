@@ -23,6 +23,8 @@ export interface Simulation {
   dividendYield: string;
   multiplier: string;
   costs: string;
+  realized?: string;
+  position?: { legs: Leg[]; capturedAt: number; reportedAt: number; contextId: string };
   volatilityShift: string;
   rangeMin?: string;
   rangeMax?: string;
@@ -35,6 +37,11 @@ export interface Strategy {
   legs: ParsedLeg[];
   multiplier: number; costs: number; spot: number; years: number; rate: number; dividendYield: number;
   rangeMin: number; rangeMax: number;
+  realized?: number;
+}
+/** Historical position and prospective trades remain separate in the draft. */
+export function simulationLegs(input: Simulation): Leg[] {
+  return [...(input.position?.legs ?? []), ...input.legs];
 }
 export const MAX_LEGS = 16;
 export const MAX_CONTRACTS = 1e10;
@@ -80,9 +87,9 @@ export function initialSimulation(today = localDate()): Simulation {
     volatilityShift: "0", rangeMin: "60", rangeMax: "140", legs: exampleLegs("bull-call") };
 }
 
-function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number) {
+function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number, realized = 0) {
   const contracts = legs.reduce((sum, leg) => sum + leg.contracts, 0);
-  return Math.min(1e9, (Number.MAX_SAFE_INTEGER - costs) / (contracts * multiplier));
+  return Math.min(1e9, (Number.MAX_SAFE_INTEGER - costs - Math.abs(realized)) / (contracts * multiplier));
 }
 
 export function parseSimulation(input: Simulation): { ok: true; strategy: Strategy } | { ok: false; errors: string[] } {
@@ -96,6 +103,7 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   const spot = read(input.spot, "Precio del subyacente", .000001, 1e9);
   const multiplier = read(input.multiplier, "Factor monetario por contrato", .000001, 100000);
   const costs = read(input.costs, "Gastos de entrada", 0, 1e12);
+  const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12);
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
   const shift = read(input.volatilityShift, "Cambio de VI", -500, 500);
@@ -106,9 +114,12 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   else if (expiry < valuation || scenario < valuation || scenario > expiry || expiry - valuation > 3650)
     errors.push("La fecha teórica debe estar entre la fecha de entrada y el vencimiento (hasta 10 años).");
   if (!input.underlying.trim()) errors.push("Indicá un subyacente común para todas las patas.");
-  if (!input.legs.length || input.legs.length > MAX_LEGS) errors.push(`Armá una estrategia de 1 a ${MAX_LEGS} patas.`);
-  const legs = input.legs.map((leg, index): ParsedLeg => {
-    const prefix = `Pata ${index + 1}`;
+  const allLegs = simulationLegs(input);
+  if (!allLegs.length || input.legs.length > MAX_LEGS || (input.position?.legs.length ?? 0) > MAX_LEGS)
+    errors.push(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`);
+  const legs = allLegs.map((leg, index): ParsedLeg => {
+    const historical = index < (input.position?.legs.length ?? 0);
+    const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - (input.position?.legs.length ?? 0)}`;
     if (!["call", "put"].includes(leg.kind) || !["buy", "sell"].includes(leg.side)) errors.push(`${prefix}: elegí tipo y sentido válidos.`);
     // Missing native VI blocks the theoretical curve, but expiry needs no volatility.
     const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500) + shift;
@@ -117,12 +128,12 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
       premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, true),
       volatility: volatility / 100 };
   });
-  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs);
+  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs + Math.abs(realized));
   if (exposure > Number.MAX_SAFE_INTEGER) errors.push("Reducí precios o cantidades: el importe total supera la precisión admitida.");
-  const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs), spot * 1.25);
+  const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs, realized), spot * 1.25);
   if (rangeMin >= rangeMax) errors.push("El precio máximo del gráfico debe superar al mínimo.");
   return errors.length ? { ok: false, errors } : { ok: true, strategy: { legs, multiplier, costs, spot,
-    years: (expiry - scenario) / 365, rate, dividendYield, rangeMin, rangeMax } };
+    years: (expiry - scenario) / 365, rate, dividendYield, rangeMin, rangeMax, realized } };
 }
 
 export function intrinsic(kind: OptionKind, spot: number, strike: number): number {
@@ -182,7 +193,7 @@ export function entryCost(strategy: Strategy): number {
 }
 export function resultAt(strategy: Strategy, spot: number, mode: "expiry" | "theoretical"): number {
   return strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier *
-    (mode === "expiry" ? intrinsic(leg.kind, spot, leg.strike) : theoreticalPrice(leg.kind, spot, leg.strike, strategy.years, leg.volatility, strategy.rate, strategy.dividendYield)), -entryCost(strategy));
+    (mode === "expiry" ? intrinsic(leg.kind, spot, leg.strike) : theoreticalPrice(leg.kind, spot, leg.strike, strategy.years, leg.volatility, strategy.rate, strategy.dividendYield)), (strategy.realized ?? 0) - entryCost(strategy));
 }
 export interface Equilibrium { from: number; to: number }
 export function expirySummary(strategy: Strategy) {
@@ -192,7 +203,7 @@ export function expirySummary(strategy: Strategy) {
   const slope = strategy.legs.filter(leg => leg.kind === "call").reduce((sum, leg) => sum + direction(leg) * leg.contracts, 0) * strategy.multiplier;
   // Bound rounding relative to the actual terms, so tiny valid losses remain losses.
   const zeros = values.map((value, index) => Math.abs(value) <= Number.EPSILON * 32 * (Math.abs(strategy.costs) + strategy.legs.reduce((sum, leg) =>
-    sum + leg.contracts * strategy.multiplier * (intrinsic(leg.kind, knots[index], leg.strike) + leg.premium), 0)));
+    sum + leg.contracts * strategy.multiplier * (intrinsic(leg.kind, knots[index], leg.strike) + leg.premium), Math.abs(strategy.realized ?? 0))));
   const equilibria: Equilibrium[] = [];
   const add = (from: number, to = from) => {
     const last = equilibria.at(-1);
@@ -218,7 +229,7 @@ export function expirySummary(strategy: Strategy) {
     maxLoss: slope < 0 ? Infinity : Math.max(0, ...values.map(value => -value)), equilibria };
 }
 export function chartPriceRange(strategy: Strategy, equilibria: Equilibrium[], zoom: number) {
-  const limit = maximumChartPrice(strategy.legs, strategy.multiplier, strategy.costs);
+  const limit = maximumChartPrice(strategy.legs, strategy.multiplier, strategy.costs, strategy.realized);
   const anchors = [strategy.spot, ...strategy.legs.map(leg => leg.strike),
     ...equilibria.flatMap(({ from, to }) => Number.isFinite(to) ? [from, to] : [from])];
   const low = Math.min(...anchors), high = Math.max(...anchors);

@@ -2,7 +2,7 @@
   "name": "ChuchoTriz",
   "short_name": "ChuchoTriz",
   "description": "Presets de cantidad y simulador de estrategias de opciones con cadena de Matriz y gráficos de resultados.",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "author": "Chucho Trader",
   "homepage_url": "https://x.com/chuchotrader",
   "manifest_version": 3,
@@ -29,7 +29,7 @@
     }
   ],
   "web_accessible_resources": [{
-    "resources": ["options-market-reader.js"],
+    "resources": ["options-market-reader.js", "options-position-reader.js"],
     "matches": ["https://*.xoms.com.ar/*", "https://remarkets.matriz.com.ar/*"]
   }],
   "permissions": [
