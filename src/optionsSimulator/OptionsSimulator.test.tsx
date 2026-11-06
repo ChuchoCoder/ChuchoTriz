@@ -327,13 +327,15 @@ it("warns on quantity changes until the user confirms or edits the premium, incl
   expect(container.querySelector('.ct-sim-premium-warning')?.textContent).toContain("Cambió la cantidad de 2 a 3");
   await act(async () => button("Recargar tenencia").click());
   expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Ver aviso de prima histórica CALL 100").click());
+  expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
   await act(async () => byLabel<HTMLButtonElement>("Confirmar prima histórica CALL 100").click());
   expect(container.querySelector('.ct-sim-premium-warning')).toBeNull();
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 4 }] });
   await act(async () => button("Recargar tenencia").click());
   expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
   await fill("Prima histórica CALL 100", "-1");
-  expect(container.querySelector('.ct-sim-premium-warning button')).toBeNull();
+  expect(container.querySelector('.ct-opt-premium-review button')).toBeNull();
   expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
   await fill("Prima histórica CALL 100", "8.50");
   expect(container.querySelector('.ct-sim-premium-warning')).toBeNull();

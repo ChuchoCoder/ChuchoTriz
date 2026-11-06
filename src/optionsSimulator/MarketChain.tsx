@@ -42,19 +42,23 @@ function PositionPremium({ label, leg, disabled, onChange, onReview }: {
   label: string; leg?: Leg; disabled: boolean; onChange(id: number, value: string): void; onReview(id: number): void;
 }) {
   const warningId = useId();
+  const input = useRef<HTMLInputElement>(null);
   const warning = leg && premiumNeedsReview(leg) ?
     `${numeric(leg.premiumQuantity ?? "") !== numeric(signedPositionQuantity(leg))
       ? `Cambió la cantidad de ${leg.premiumQuantity} a ${signedPositionQuantity(leg)}.` : "La cantidad cambió desde la última revisión."} Revisá la prima histórica.` : undefined;
   return <>
-    <input type="number" min="0" max="1000000000" step="any" aria-label={`Prima histórica ${label}`} readOnly={!leg} disabled={disabled}
+    <input ref={input} type="number" min="0" max="1000000000" step="any" aria-label={`Prima histórica ${label}`} readOnly={!leg} disabled={disabled}
       value={leg?.premium ?? ""} placeholder={leg ? "Completar" : "—"} aria-describedby={warning ? warningId : undefined}
       title={warning ?? "Prima histórica por unidad"}
       onChange={event => { if (leg) onChange(leg.id, event.target.value); }} />
-    {leg && warning && <div className="ct-sim-premium-warning" title={warning}>
-      <span className="ct-sim-sr" id={warningId} role="status">{warning}</span>
-      {validHistoricalPremium(leg.premium) && <button type="button" disabled={disabled} aria-label={`Confirmar prima histórica ${label}`}
-        aria-describedby={warningId} title={`${warning} Clic para confirmar la prima.`} onClick={() => onReview(leg.id)}>!</button>}
-      {!validHistoricalPremium(leg.premium) && <span aria-hidden="true">!</span>}
+    {leg && warning && <div className="ct-sim-premium-warning">
+      <button type="button" className="ct-opt-premium-alert" data-ct-inline-editor disabled={disabled}
+        aria-label={`Ver aviso de prima histórica ${label}`} title={warning} popoverTarget={`${warningId}-details`}>!</button>
+      <div id={`${warningId}-details`} popover="auto" data-ct-inline-editor className="ct-opt-premium-review">
+        <p id={warningId}>{warning}</p>
+        {validHistoricalPremium(leg.premium) && <button type="button" disabled={disabled} aria-label={`Confirmar prima histórica ${label}`}
+          onClick={() => { onReview(leg.id); input.current?.focus(); }}>Prima revisada</button>}
+      </div>
     </div>}
   </>;
 }
