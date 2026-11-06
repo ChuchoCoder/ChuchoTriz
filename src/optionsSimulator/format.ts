@@ -9,7 +9,8 @@ export function formatOptionVolatility(value: number): string {
   return Number.isFinite(value) ? value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
 }
 
-export function formatOptionAmount(value: number): string {
+export function formatOptionAmount(value: number, currency?: string): string {
+  if (currency === "ARS" && Math.abs(value) >= 1000) return formatOptionNumber(value, 0);
   return value.toLocaleString("es-AR", value !== 0 && Math.abs(value) < .01 ? { maximumSignificantDigits: 4 } : { maximumFractionDigits: 2 });
 }
 

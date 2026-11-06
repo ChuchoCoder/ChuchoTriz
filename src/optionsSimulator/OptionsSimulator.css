@@ -225,9 +225,9 @@
 .ct-sim-scenario-advanced > .ct-sim-field + .ct-sim-field { margin-top: 5px; }
 .ct-sim-scenario .ct-sim-leg-volatilities, .ct-sim-scenario .ct-sim-hint { margin: 0; font-size: 11px; }
 .ct-sim-results, .ct-sim-assumptions { padding: 12px; margin-bottom: 8px; }
-.ct-sim-results .ct-sim-section-heading { margin-bottom: 6px; }
+.ct-sim-results .ct-sim-section-heading { margin: 8px 0 6px; }
 .ct-sim-results .ct-sim-section-heading button { min-height: 26px; padding: 2px 8px; font-size: 11px; }
-.ct-sim-strategy-summary { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.ct-sim-strategy-summary { display: flex; flex-wrap: wrap; gap: 4px; }
 .ct-sim-strategy-summary > span { border: 1px solid var(--sim-border); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 .ct-sim-scenario .ct-sim-field input { height: 28px; padding: 2px 6px; }
 .ct-sim-scenario .ct-sim-field input[type="range"] { height: 24px; padding: 0; }

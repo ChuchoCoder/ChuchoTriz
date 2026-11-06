@@ -302,7 +302,10 @@ it("shows a live chart below the legs and shares its scenario with the full anal
   const buildResults = outputs();
   await act(async () => button("Análisis →").click());
   expect(container.querySelectorAll('.ct-sim-chart')).toHaveLength(1);
-  expect(container.querySelector('.ct-sim-results .ct-sim-chart')).not.toBeNull();
+  const results = byLabel("Resultados de la simulación");
+  const analysisChart = results.querySelector('.ct-sim-chart')!;
+  expect(analysisChart.compareDocumentPosition(results.querySelector('h3')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(analysisChart.compareDocumentPosition(byLabel("Patas analizadas"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(outputs()).toEqual(buildResults);
   await act(async () => byLabel<HTMLButtonElement>("VI +5 pp").click());
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
@@ -392,6 +395,30 @@ it("validates a custom scenario price and never clamps its reported profit to th
   expect(container.querySelector('.ct-sim-chart')).toBeNull();
   await act(async () => byLabel<HTMLButtonElement>("Precio 0%").click());
   expect(container.querySelector('.ct-sim-chart')).not.toBeNull();
+});
+
+it.each([
+  ["ARS", "5.374 ARS", "4.457 ARS", "5.329 ARS"],
+  ["USD", "5.373,75 USD", "4.456,64 USD", "5.329,18 USD"],
+] as const)("formats large %s chart amounts without changing the scenario calculation", async (currency, price, result, equilibrium) => {
+  const { catalog, data } = marketState.current;
+  catalog!.underlyings[0].currency = currency;
+  for (const contract of catalog!.contracts) {
+    contract.currency = currency;
+    contract.strikeCurrency = currency;
+  }
+  catalog!.contracts.find(contract => contract.id === "call-100")!.strike = 5000;
+  data!.instruments.GGAL.last = 5000;
+  data!.instruments["call-100"].ask!.price = 329.1836;
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
+  await fill("Precio del escenario", "5373.75");
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("5373.75");
+  expect(byLabel("Precio fijado").textContent).toBe(price);
+  expect([...container.querySelectorAll('.ct-sim-inspect output')].map(output => output.textContent)).toEqual([result, result]);
+  expect(container.querySelector('.ct-sim-equilibria')?.textContent).toContain(equilibrium);
 });
 
 it("accepts a reference price when the chain provides a leg quote but no underlying price", async () => {
@@ -526,9 +553,12 @@ it("draws four standard-deviation references in both charts and updates them wit
 });
 
 it("positions chain deviation lines on row boundaries without crossing quotes, adding rows or mixing contexts", async () => {
+  const priceScale = 100;
+  for (const contract of marketState.current.catalog!.contracts) contract.strike *= priceScale;
+  marketState.current.data!.instruments.GGAL.last = 100 * priceScale;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
     const strike = this.dataset.optionStrike;
-    return strike === undefined ? new DOMRect(0, 0, 750, 212) : new DOMRect(0, 52 + (Number(strike) - 80) / 10 * 32, 750, 32);
+    return strike === undefined ? new DOMRect(0, 0, 750, 212) : new DOMRect(0, 52 + (Number(strike) / priceScale - 80) / 10 * 32, 750, 32);
   });
   await mount();
   const markers = () => [...container.querySelectorAll<HTMLElement>('.ct-opt-sigma-line')];
@@ -548,6 +578,8 @@ it("positions chain deviation lines on row boundaries without crossing quotes, a
   expect(markers().map(node => parseFloat(node.style.top))).toEqual([116, 116, 148, 148]);
   const chartLabels = [...container.querySelectorAll('.ct-sim-sigma')].map(node => node.getAttribute('aria-label'));
   expect(markers().map(node => node.getAttribute('aria-label')?.replace(' en cadena', ''))).toEqual(chartLabels);
+  expect(chartLabels.every(label => /σ: [\d.]+ ARS$/.test(label ?? ""))).toBe(true);
+  expect(markers().flatMap(node => [...node.querySelectorAll('.ct-opt-sigma-center span')]).every(node => !node.textContent?.includes(','))).toBe(true);
   await fill("Fecha teórica", addDays(expiry, 1));
   expect(markers()).toHaveLength(0);
   await fill("Fecha teórica", localDate());
@@ -840,19 +872,20 @@ it("colors both curves and the expiry fill on the zero axis and each marker by i
 });
 
 it("shows both profit and loss around zero in the priced Iron Condor selector preview", async () => {
-  for (const [id, bid, ask] of [["put-80", 3.9, 4.1], ["put-90", 5.9, 6.1], ["call-110", 5.9, 6.1], ["call-120", 3.9, 4.1]] as const)
+  for (const contract of marketState.current.catalog!.contracts) contract.factor = 1000;
+  for (const [id, bid, ask] of [["put-80", 3.9, 4.1], ["put-90", 5.90018, 6.1], ["call-110", 5.9, 6.1], ["call-120", 3.9, 4.1]] as const)
     marketState.current.data!.instruments[id] = { ...marketState.current.data!.instruments[id], bid: { price: bid, size: 100 }, ask: { price: ask, size: 100 } };
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   await act(async () => container.querySelector<HTMLButtonElement>('[data-family-name="iron-condor"]')!.click());
   const preview = byLabel("Vista previa de la estrategia");
-  expect(preview.textContent).toContain("Crédito por estructura: 360 ARS");
+  expect(preview.textContent).toContain("Crédito por estructura: 3.600 ARS");
   const svg = preview.querySelector('svg')!;
   const axis = Number(svg.querySelector('line')!.getAttribute('y1'));
   const ordinates = [...svg.querySelector('path')!.getAttribute('d')!.matchAll(/[ML][\d.]+,([\d.-]+)/g)].map(match => Number(match[1]));
   expect(Math.min(...ordinates), 'Credit Condor must show a profitable central plateau above zero').toBeLessThan(axis);
   expect(Math.max(...ordinates), 'Condor wings must show loss below zero').toBeGreaterThan(axis);
-  expect(preview.textContent).toContain("Ganancia máx. 360 ARS");
-  expect(preview.textContent).toContain("Pérdida máx. 640 ARS");
+  expect(preview.textContent).toContain("Ganancia máx. 3.600 ARS");
+  expect(preview.textContent).toContain("Pérdida máx. 6.400 ARS");
   const gradient = svg.querySelector('linearGradient')!, stops = [...gradient.querySelectorAll('stop')];
   expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
   expect(stops.map(stop => stop.getAttribute('stop-color'))).toEqual(['var(--sim-profit)', 'var(--sim-profit)', 'var(--sim-loss)', 'var(--sim-loss)']);
