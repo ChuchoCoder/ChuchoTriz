@@ -91,6 +91,38 @@ function deferred<T>() {
 }
 
 describe("Preset session", () => {
+  it("retries a read-only lookup discarded when the ticket changed during loading", async () => {
+    const page = fakeMiniOrderForm(al30);
+    const lookup = deferred<IInstrumentPreset[]>();
+    const presetsFor = vi.fn().mockReturnValueOnce(lookup.promise).mockResolvedValue([big]);
+    const session = createPresetSession(page.form, { presetsFor, autocompletar: async () => true });
+
+    const refresh = session.refresh();
+    page.type({ instrumento: "GD30 (CI)", ticker: "GD30" });
+    lookup.resolve([big]);
+    await refresh;
+    expect(session.presets()).toEqual([]);
+
+    page.type(al30);
+    await session.refresh();
+    expect(session.presets()).toEqual([big]);
+    expect(page.state.ticket.cantidad).toBe("");
+  });
+
+  it("keeps an in-flight focus lookup when the same ticket is refreshed", async () => {
+    const page = fakeMiniOrderForm(al30);
+    const lookup = deferred<IInstrumentPreset[]>();
+    const presetsFor = vi.fn().mockReturnValueOnce(lookup.promise).mockResolvedValue([big]);
+    const session = createPresetSession(page.form, { presetsFor, autocompletar: async () => true });
+
+    const focus = page.focus("precio");
+    await session.refresh();
+    lookup.resolve([big]);
+    await focus;
+    expect(presetsFor).toHaveBeenCalledTimes(1);
+    expect(page.state.ticket.cantidad).toBe("200000");
+  });
+
   it("draws on each application including last-used autocomplete, but not focus or manual edits", async () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0);
     const preset = { cantidad: 100000, mostrar: "R5" } as const;
