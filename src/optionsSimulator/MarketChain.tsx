@@ -17,7 +17,6 @@ const marketKey = (contract: Contract) => `${contract.currency}|${contract.settl
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
 const quantityPresets = [1, 10, 25, 50, 100];
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
-type QuantityChange = { before: string; after: Leg };
 function defaultExpiration(dates: string[]) {
   const today = localDate().replaceAll("-", "");
   return dates.find(date => date >= today) ?? dates[0] ?? "";
@@ -37,8 +36,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState("");
   const [openQuote, setOpenQuote] = useState<string>();
-  const [lastQuantityChange, setLastQuantityChange] = useState<QuantityChange>();
-  const pendingQuantity = useRef<{ leg: Leg; next: Leg; change?: QuantityChange }>(undefined);
+  const pendingQuantity = useRef<{ leg: Leg; next: Leg }>(undefined);
   const quantityBar = useRef<HTMLDivElement>(null);
   const [loadingPosition, setLoadingPosition] = useState(false);
   const positionRequest = useRef<AbortController | null>(null);
@@ -89,8 +87,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const shownQuote = openLeg ? openQuote : undefined;
   useEffect(() => {
     if (!shownQuote) setOpenQuote(undefined);
-    if (lastQuantityChange && !input.legs.includes(lastQuantityChange.after)) setLastQuantityChange(undefined);
-  }, [shownQuote, input.legs, lastQuantityChange]);
+  }, [shownQuote]);
   useLayoutEffect(() => {
     const bar = quantityBar.current, cell = bar?.parentElement, scroll = cell?.closest<HTMLElement>(".ct-opt-chain-scroll");
     if (!bar || !cell || !scroll) return;
@@ -172,7 +169,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setUnderlying(nextUnderlying);
     setExpiration(nextExpiration);
     setMarket("");
-    setOpenQuote(undefined); setLastQuantityChange(undefined);
+    setOpenQuote(undefined);
     setNotice(""); setInput(current => ({ ...current, legs: [] }));
     if (nextUnderlying) void saveSelection(nextUnderlying, nextExpiration);
   }
@@ -191,7 +188,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       if (request.signal.aborted) return;
       const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot, saved);
       onNewStrategy();
-      setOpenQuote(undefined); setLastQuantityChange(undefined);
+      setOpenQuote(undefined);
       setInput(next);
       setNotice("Posición cargada. Revisá las primas históricas y agregá ajustes desde la grilla.");
     } catch (error) {
@@ -233,25 +230,16 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setOpenQuote(legKey(leg));
     setNotice("");
   }
-  function changeQuoteQuantity(leg: Leg, preset?: number) {
+  function changeQuoteQuantity(leg: Leg, preset: number) {
     // Several clicks can be queued before React commits the new leg.
     const pending = pendingQuantity.current?.leg === leg ? pendingQuantity.current : undefined;
     const before = pending?.next ?? leg;
-    let next: Leg, change: QuantityChange | undefined;
-    if (preset === undefined) {
-      const undo = pending ? pending.change : lastQuantityChange;
-      if (undo?.after !== before) return;
-      next = { ...before, contracts: undo.before };
-    } else {
-      if (numeric(before.contracts) === preset) return;
-      next = { ...before, contracts: String(preset) };
-      change = { before: before.contracts, after: next };
-    }
-    pendingQuantity.current = { leg, next, change };
+    if (numeric(before.contracts) === preset) return;
+    const next = { ...before, contracts: String(preset) };
+    pendingQuantity.current = { leg, next };
     setInput(current => current.legs.includes(before)
       ? { ...current, legs: current.legs.map(item => item === before ? next : item) }
       : current);
-    setLastQuantityChange(change);
   }
   function chooseStrategy(choice: StrategyChoice): boolean {
     const recipe = strategyRecipe(choice, selected, spot), prices = recipePrices(recipe, data?.instruments, underlying?.currency);
@@ -271,7 +259,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     });
     const today = localDate();
     onNewStrategy();
-    setOpenQuote(undefined); setLastQuantityChange(undefined);
+    setOpenQuote(undefined);
     setInput(current => ({ ...current, underlying: underlying.symbol, expiry: expiryDate(expiration), currency: recipe.legs[0].contract.currency,
       multiplier: String(factor), ...(!current.position ? { spot: String(spot), marketSpotMissing: false, valuationDate: today, scenarioDate: today } : {}), legs }));
     setNotice("");
@@ -305,11 +293,10 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : held ? `Pos. ${held.side === "buy" ? "+" : "−"}${held.contracts}` : ""}</span><OptionQuoteValue quantity value={available ? level.size : undefined} /><OptionQuoteValue value={available ? level.price : undefined} />
       </button>
       {visible && marked && <div ref={quantityBar} className="ct-opt-quantity-bar" role="group" aria-label={`Cantidad de ${side === "buy" ? "compra" : "venta"} ${marked.symbol}`}>
-        <span>Fijar</span>
+        <span>Cant.</span>
         {quantityPresets.map(preset => <button key={preset} type="button" aria-label={`Fijar ${preset} ${preset === 1 ? "contrato" : "contratos"}`}
           onMouseDown={event => event.preventDefault()} onClick={() => changeQuoteQuantity(marked, preset)}>{preset}</button>)}
         <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
-        <button type="button" disabled={lastQuantityChange?.after !== marked} onMouseDown={event => event.preventDefault()} onClick={() => changeQuoteQuantity(marked)}>Deshacer</button>
       </div>}
     </td>;
   };
