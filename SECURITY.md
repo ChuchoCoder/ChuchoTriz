@@ -26,15 +26,18 @@ issues públicos. Usar el canal privado habitual con el propietario.
   de HTML inseguro. Los fixtures *.test.* están excluidos y no se distribuyen.
 - scripts/check-free.mjs mantiene la autoridad única del manifest y paquete: solo
   storage, dominios actuales y recursos explícitos, sin workers, permisos opcionales
-  ni acceso ampliado. La única excepción de lectura de página es
-  `options-market-reader.js`, limitado a catálogo y cotizaciones públicas nativas
-  para el simulador. Un segundo lector acotado importa, sólo a pedido del usuario,
-  cantidades de opciones de la cuenta activa mediante el reporte nativo de Matriz.
-  Exporta únicamente identificadores de contrato, cantidades, fechas y un token
+  ni acceso ampliado. El simulador usa dos lectores de página acotados.
+  `options-market-reader.js` se limita al catálogo y las cotizaciones públicas
+  nativas. `options-position-reader.js` consulta el reporte nativo de la cuenta
+  activa al abrir el simulador o pulsar **Cargar posición** o **Recargar tenencia**. Devuelve los
+  identificadores y cantidades de las opciones de la cadena seleccionada, los
+  nominales del subyacente, las fechas, el estado de esa lectura y un token
   opaco de contexto y una clave de cuenta derivada mediante SHA-256 con semilla
   aleatoria local por sitio. El identificador de cuenta nunca se exporta ni guarda.
-  La contabilidad histórica se guarda localmente por esa clave, cadena y factor;
-  no se sobrescribe con los ajustes propuestos. Las pruebas verifican cancelación, cambios de cuenta,
+  La contabilidad de opciones se guarda localmente por esa clave, cadena y factor.
+  El costo promedio de la tenencia del subyacente se guarda por cuenta, subyacente
+  y moneda. Los ajustes de nominales y su costo quedan en el borrador. Las pruebas
+  verifican cancelación, cambios de cuenta,
   serialización, datos incompletos y ausencia de cuerpos o errores privados.
   Se revisan CSP, frames y exposición a otras extensiones.
   La ausencia de CSP conserva los valores predeterminados de Chrome MV3.
