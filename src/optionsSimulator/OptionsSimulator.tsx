@@ -163,6 +163,7 @@ function ScenarioButtons({ label, value, options, onChange, numericValues = fals
 
 const MIN_CHART_ZOOM = -6;
 const SCENARIO_CHANGES = Array.from({ length: 25 }, (_, index) => index * 2 - 24);
+const scenarioArsPrice = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function scenarioPriceAt(spot: number, factor: number) {
   return factor === 1 ? spot : Number((spot * factor).toPrecision(15));
@@ -203,7 +204,7 @@ function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
             : band === "sigma-two" ? "Entre ±1σ y ±2σ" : band === "outside-sigma" ? "Fuera de ±2σ" : undefined;
           return <tr key={change} data-band={band}>
             <th scope="row" title={label}>{change > 0 ? "+" : ""}{change}%</th>
-            <td>{formatOptionAmount(price)}</td>
+            <td>{currency === "ARS" ? scenarioArsPrice.format(price) : formatOptionAmount(price)}</td>
             {resultCell(resultAt(strategy, price, "expiry"))}
             {resultCell(hasTheory ? resultAt(strategy, price, "theoretical") : NaN)}
           </tr>;

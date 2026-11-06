@@ -97,9 +97,9 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   expect(table.tBodies[0].rows).toHaveLength(25);
   expect(table.querySelectorAll("tbody [data-band]")).toHaveLength(1);
   const reference = table.querySelector<HTMLTableRowElement>('tr[data-band="spot"]')!;
-  expect(Array.from(reference.cells, cell => cell.textContent)).toEqual(["0%", "100", "-500", "—"]);
+  expect(Array.from(reference.cells, cell => cell.textContent)).toEqual(["0%", "100,00", "-500", "—"]);
   const upTen = Array.from(table.tBodies[0].rows).find(row => row.cells[0].textContent === "+10%")!;
-  expect(Array.from(upTen.cells, cell => cell.textContent)).toEqual(["+10%", "110", "500", "—"]);
+  expect(Array.from(upTen.cells, cell => cell.textContent)).toEqual(["+10%", "110,00", "500", "—"]);
   expect(container.textContent).toContain("Teórico no disponible");
   expect(container.querySelector(".ct-sim-expiry-line")).not.toBeNull();
   expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
