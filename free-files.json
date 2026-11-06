@@ -5,6 +5,7 @@
   ".github/workflows/security.yml",
   ".gitignore",
   ".npmrc",
+  "CONTEXT.md",
   "docs/diagnostico-displayqty.md",
   "docs/distribution.md",
   "docs/evidence/remarkets-displayqty.json",

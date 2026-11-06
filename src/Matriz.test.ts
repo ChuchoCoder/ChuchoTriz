@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { expandMiniOrderForm, focusCantidadAfterQuoteClick, miniOrderForm } from "./Matriz";
+import { bindMiniOrderForm, focusCantidadAfterQuoteClick } from "./Matriz";
 import { createPresetSession, PresetSession } from "./PresetSession";
 
 let session: PresetSession | undefined;
 let stopQuoteFocus: (() => void) | undefined;
+let miniOrderForm: ReturnType<typeof bindMiniOrderForm>;
+const bindings: ReturnType<typeof bindMiniOrderForm>[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -12,6 +14,7 @@ afterEach(() => {
   session = undefined;
   stopQuoteFocus?.();
   stopQuoteFocus = undefined;
+  bindings.splice(0).forEach(binding => binding.dispose());
   vi.useRealTimers();
   document.body.replaceChildren();
 });
@@ -55,6 +58,8 @@ function renderMiniOrderForm(
     </div>`;
 
   const form = document.getElementById("MiniOrderForm")!;
+  miniOrderForm = bindMiniOrderForm(form);
+  bindings.push(miniOrderForm);
   const showCantidadAMostrar = (show: boolean) => {
     form.querySelector(".MiniOrderForm_FormMiniOrdenPanel_row-bottom__div")?.remove();
     form.classList.toggle("ExpandedForm", show);
@@ -71,7 +76,8 @@ function renderMiniOrderForm(
   });
 
   return {
-    input: (id: string) => document.getElementById(id) as HTMLInputElement,
+    form,
+    input: (id: string) => form.querySelector<HTMLInputElement>(`#${id}`)!,
     limpiarButton: form.querySelector(".MiniOrderForm_buttonsBlock > button") as HTMLButtonElement,
     presetButton: form.querySelector(".ButtonPreset") as HTMLButtonElement,
     isExpanded: () => form.classList.contains("ExpandedForm"),
@@ -248,6 +254,7 @@ describe("Matriz Mini Order Form", () => {
     });
 
     it("reads an empty ticket when the Mini Order Form is not on the page", () => {
+      renderMiniOrderForm().form.remove();
       expect(miniOrderForm.read()).toEqual({ instrumento: "", ticker: "", precio: "", cantidad: "" });
     });
   });
@@ -485,14 +492,25 @@ describe("Matriz Mini Order Form", () => {
       expect(replacement.input("cantidadMostrar").value).toBe("10000");
     });
 
-    it("stops waiting and cannot write into a field that appears after the timeout", async () => {
+    it.each([0, 20000])("invalidates a pending write (%s) by form identity before disposing the binding", async mostrar => {
+      const previous = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      miniOrderForm.fill({ cantidad: 200000, mostrar });
+      const replacement = renderMiniOrderForm({ cantidad: "200000" });
+
+      await vi.waitFor(() => expect(previous.isExpanded()).toBe(true));
+      expect(previous.input("cantidadMostrar").value).toBe("");
+      expect(replacement.input("cantidadMostrar").value).toBe("");
+    });
+
+    it.each(["timeout", "dispose"])("stops waiting and cannot write into a field that appears after %s", async stop => {
       vi.useFakeTimers();
       try {
         const page = renderMiniOrderForm({ expanded: false });
         const button = document.querySelector(".ExpandButton")!;
         button.replaceWith(button.cloneNode(true));
         miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
-        await vi.advanceTimersByTimeAsync(3000);
+        if (stop === "timeout") await vi.advanceTimersByTimeAsync(3000);
+        else miniOrderForm.dispose();
         document.querySelector("#MiniOrderForm form")!.insertAdjacentHTML("beforeend", cantidadAMostrarRow);
         await Promise.resolve();
 
@@ -502,24 +520,18 @@ describe("Matriz Mini Order Form", () => {
     });
 
     it("does not throw when the Mini Order Form is not on the page", () => {
+      renderMiniOrderForm().form.remove();
       expect(() => miniOrderForm.fill({ cantidad: 1, mostrar: 0 })).not.toThrow();
     });
-  });
 
-  describe("expandMiniOrderForm", () => {
-    it("expands a collapsed Mini Order Form", () => {
-      const page = renderMiniOrderForm({ expanded: false });
-
-      expandMiniOrderForm();
-
-      expect(page.isExpanded()).toBe(true);
-    });
-
-    it("leaves an expanded Mini Order Form expanded", () => {
+    it("does not toggle an already expanded Mini Order Form for a partial preset", () => {
       const page = renderMiniOrderForm({ expanded: true });
+      const toggle = vi.fn();
+      page.form.querySelector(".ExpandButton")!.addEventListener("click", toggle);
 
-      expandMiniOrderForm();
+      miniOrderForm.fill({ cantidad: 100, mostrar: 10 });
 
+      expect(toggle).not.toHaveBeenCalled();
       expect(page.isExpanded()).toBe(true);
     });
   });
@@ -536,6 +548,7 @@ describe("Matriz Mini Order Form", () => {
     });
 
     it("does not throw when the Mini Order Form is not on the page", () => {
+      renderMiniOrderForm().form.remove();
       expect(() => miniOrderForm.editCantidad()).not.toThrow();
     });
   });

@@ -10,6 +10,8 @@ export interface PresetSession {
   // Presets visibles; devuelve la misma referencia mientras no cambien
   presets(): IInstrumentPreset[];
   subscribe(listener: () => void): () => void;
+  // Carga los botones al montar sin consumir el próximo foco del ticket.
+  refresh(): Promise<void>;
   choose(preset: IInstrumentPreset): void;
   dispose(): void;
 }
@@ -20,14 +22,17 @@ const keyOf = (ticket: Ticket) => ticket.instrumento + " " + ticket.precio + " "
 const identityOf = (ticket: Ticket) => JSON.stringify([ticket.instrumento, ticket.ticker, ticket.precio]);
 const instrumentOf = (ticket: Ticket) => JSON.stringify([ticket.instrumento, ticket.ticker]);
 
-export function createPresetSession(form: MiniOrderForm, settings: PresetSettings): PresetSession {
+export function createPresetSession(
+  form: MiniOrderForm,
+  settings: PresetSettings,
+  lastUsedPresets = new Map<string, IInstrumentPreset>(),
+): PresetSession {
   let visiblePresets = NoPresets;
   let lastInstrumento = "";
   let lastTicketKey = "";
-  let revision = 0;
+  let pendingLookup: { identity: string } | undefined;
   let disposed = false;
   let visibleInstrument = "";
-  const lastUsedPresets = new Map<string, IInstrumentPreset>();
   const listeners = new Set<() => void>();
 
   const show = (presets: IInstrumentPreset[], instrument = "") => {
@@ -38,31 +43,36 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
     }
   };
 
-  const onTicketFocus = async () => {
+  const update = async (fromFocus: boolean) => {
+    let request: typeof pendingLookup;
     try {
       const ticket = form.read();
       const ticketKey = keyOf(ticket);
-      if (disposed || lastTicketKey === ticketKey) {
+      const identity = identityOf(ticket);
+      const instrument = instrumentOf(ticket);
+      const alreadyLoadingOrVisible = pendingLookup?.identity === identity ||
+        (!!ticket.precio && visibleInstrument === instrument);
+      if (disposed || (fromFocus ? lastTicketKey === ticketKey : alreadyLoadingOrVisible)) {
         return;
       }
-      const request = ++revision;
-      const identity = identityOf(ticket);
-      const current = () => !disposed && request === revision && identityOf(form.read()) === identity;
       if (ticket.instrumento === "" || ticket.precio === "") {
         // Olvidar el ticket: si vuelve el mismo Instrumento y Precio hay que evaluarlo de nuevo
+        pendingLookup = undefined;
         lastTicketKey = "";
         show(NoPresets);
         return;
       }
 
+      pendingLookup = request = { identity };
+      const current = () => pendingLookup === request && identityOf(form.read()) === identity;
       lastInstrumento = ticket.instrumento;
-      lastTicketKey = ticketKey;
-      show(NoPresets);
+      lastTicketKey = fromFocus ? ticketKey : "";
+      if (visibleInstrument !== instrument) show(NoPresets);
       const presets = await settings.presetsFor(ticket.ticker);
       if (!current()) return;
 
       // Every await can outlive an instrument change, Limpiar, or manual typing.
-      const enabled = !form.read().cantidad && await settings.autocompletar();
+      const enabled = fromFocus && !form.read().cantidad && await settings.autocompletar();
       if (!current()) return;
       if (!form.read().cantidad && enabled) {
         const lastUsed = lastUsedPresets.get(ticket.instrumento);
@@ -77,21 +87,24 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
         form.editCantidad();
       }
 
-      if (current()) show(presets, instrumentOf(ticket));
+      if (current()) show(presets, instrument);
     }
     catch (error) {
       console.error(error);
     }
+    finally {
+      if (pendingLookup === request) pendingLookup = undefined;
+    }
   };
 
   const onLimpiar = () => {
-    revision++;
+    pendingLookup = undefined;
     lastTicketKey = "";
-    lastUsedPresets.delete(lastInstrumento);
+    lastUsedPresets.delete(form.read().instrumento || lastInstrumento);
     show(NoPresets);
   };
 
-  const unsubscribeFocus = form.onTicketFocus(onTicketFocus);
+  const unsubscribeFocus = form.onTicketFocus(() => { void update(true); });
   const unsubscribeLimpiar = form.onLimpiar(onLimpiar);
 
   return {
@@ -100,19 +113,21 @@ export function createPresetSession(form: MiniOrderForm, settings: PresetSetting
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    refresh: () => update(false),
     choose: (preset) => {
       const ticket = form.read();
       // Presets belong to the instrument; editing Precio must not invalidate their buttons.
       if (disposed || !ticket.precio || instrumentOf(ticket) !== visibleInstrument) return;
-      revision++;
-      form.fill(resolvePreset(preset));
+      const resolved = resolvePreset(preset);
+      pendingLookup = undefined;
+      lastUsedPresets.set(ticket.instrumento, preset);
+      form.fill(resolved);
       lastTicketKey = keyOf(form.read());
       form.editCantidad();
-      lastUsedPresets.set(lastInstrumento, preset);
     },
     dispose: () => {
       disposed = true;
-      revision++;
+      pendingLookup = undefined;
       unsubscribeFocus();
       unsubscribeLimpiar();
       listeners.clear();

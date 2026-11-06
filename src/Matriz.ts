@@ -1,25 +1,38 @@
-import { MiniOrderForm } from "./MiniOrderForm";
+import { MiniOrderForm, Ticket } from "./MiniOrderForm";
 
-// Selectores anclados en las clases propias de cada campo, no en la estructura completa
-// de Ant Design: siguen funcionando si Matriz agrega o quita contenedores intermedios.
+// Selectores anclados en las clases propias de cada campo.
 const numberInput = (formItemClass: string) =>
-    `#MiniOrderForm div.ant-form-item.${formItemClass} div.ant-input-number-input-wrap > input`;
+    `div.ant-form-item.${formItemClass} div.ant-input-number-input-wrap > input`;
 
 const instrumentoSelector = "#rc_select_2";
 const precioSelector = numberInput("MiniOrderFormQuantity-price-input");
 const cantidadSelector = numberInput("MiniOrderFormQuantity-amount-input");
+const ticketInputSelector = [instrumentoSelector, precioSelector, cantidadSelector].join(", ");
 const cantidadAMostrarSelector = numberInput("amount-show__div");
-const expandButtonSelector = "#MiniOrderForm > span.ExpandButton";
-// Hijo directo: los botones de Presets usan la misma clase ButtonLimpiar para tomar su estilo
-const limpiarButtonSelector = "#MiniOrderForm > div.MiniOrderForm_buttonsBlock > button.ButtonLimpiar";
+const expandButtonSelector = "span.ExpandButton";
+const buttonsSelector = "div.MiniOrderForm_buttonsBlock";
+// Hijo directo: los botones de Presets usan la misma clase ButtonLimpiar para tomar su estilo.
+const limpiarButtonSelector = `#MiniOrderForm > ${buttonsSelector} > button.ButtonLimpiar`;
 
-// Siempre se busca el elemento vigente: Matriz puede reemplazar sus inputs en cualquier momento
-function find<T extends HTMLElement>(selector: string): T | null {
-    return document.querySelector<T>(selector);
-}
+const currentMiniOrderForm = () => document.getElementById("MiniOrderForm");
 
-function valueOf(selector: string): string {
-    return find<HTMLInputElement>(selector)?.value ?? "";
+export function observeMiniOrderForm(update: (form: HTMLElement | null, buttons: HTMLElement | null) => void) {
+    const reconcile = () => {
+        const form = currentMiniOrderForm();
+        update(form, form?.querySelector<HTMLElement>(`:scope > ${buttonsSelector}`) ?? null);
+    };
+    const body = document.body;
+    new MutationObserver(reconcile).observe(body, { childList: true, subtree: true });
+    // Matriz puede enfocar el formulario nuevo antes de que se ejecute el observador.
+    body.addEventListener("focusin", ({ target }) => {
+        if (target instanceof Element && target.matches(ticketInputSelector) && target.closest("#MiniOrderForm")) {
+            reconcile();
+        }
+    }, true);
+    body.addEventListener("click", ({ target }) => {
+        if (target instanceof Element && target.closest(limpiarButtonSelector)) reconcile();
+    }, true);
+    reconcile();
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
@@ -27,159 +40,18 @@ function setInputValue(input: HTMLInputElement, value: string) {
         window.HTMLInputElement.prototype,
         "value"
     )!.set!.call(input, value);
-    // This will trigger a new render wor the component
     input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-let pendingExpansion: { form: HTMLElement; stop: () => void } | undefined;
-
-// Cantidad a mostrar solo existe con el Mini Order Form expandido.
-// Track the UI transition separately: cancelling a write must not issue a second toggle.
-function expandMiniOrderForm() {
-    const form = find("#MiniOrderForm");
-    if (pendingExpansion && pendingExpansion.form !== form) pendingExpansion.stop();
-    if (find(cantidadAMostrarSelector)) {
-        pendingExpansion?.stop();
-        return;
-    }
-    if (pendingExpansion) return;
-    const button = find(expandButtonSelector);
-    if (!button || !form) return;
-    const observer = new MutationObserver(() => {
-        if (!form.isConnected || find(cantidadAMostrarSelector)) stop();
-    });
-    const stop = () => {
-        observer.disconnect(); clearTimeout(timeout);
-        if (pendingExpansion?.stop === stop) pendingExpansion = undefined;
-    };
-    const timeout = setTimeout(stop, 2000);
-    pendingExpansion = { form, stop };
-    observer.observe(document.body, { childList: true, subtree: true });
-    button.click();
-    if (find(cantidadAMostrarSelector)) stop();
 }
 
 function toTicker(instrumento: string): string {
     return instrumento.replace(" (CI)", "").replace(" (24hs)", "").split(" ")[0].toUpperCase();
 }
 
-let cancelPendingShownQuantity: (() => void) | undefined;
-let cancelWholeQuantity: (() => void) | undefined;
-
-// Mostrar todo remains a mode while the trader edits the total. A manual
-// display-quantity edit takes ownership; fixed/random presets never follow it.
-function followWholeQuantity(form: HTMLElement, instrumento: string, precio: string) {
-    let writing = false;
-    let applied = false;
-    let lastQuantity = valueOf(cantidadSelector);
-    const current = () => form.isConnected && form === find("#MiniOrderForm") &&
-        valueOf(instrumentoSelector) === instrumento && (applied || valueOf(precioSelector) === precio);
-    const sync = () => {
-        if (!current()) { stop(); return; }
-        const quantity = valueOf(cantidadSelector);
-        const input = find<HTMLInputElement>(cantidadAMostrarSelector);
-        if (!input) {
-            // Preserve a deliberate collapse until the total actually changes.
-            if (quantity !== lastQuantity) expandMiniOrderForm();
-        } else {
-            if (input.value !== quantity) {
-                writing = true;
-                try { setInputValue(input, quantity); }
-                finally { writing = false; }
-            }
-            applied = true;
-            clearTimeout(timeout);
-        }
-        lastQuantity = quantity;
-    };
-    const edited = (event: Event) => {
-        if (writing) return;
-        const target = event.target instanceof Element ? event.target : null;
-        const stepping = ["click", "pointerdown"].includes(event.type) && !!target?.closest(".ant-input-number-handler-wrap") ||
-            event instanceof KeyboardEvent && ["ArrowUp", "ArrowDown"].includes(event.key);
-        const displayEdited = target?.closest(".amount-show__div") &&
-            (["input", "change"].includes(event.type) || stepping);
-        if (!current() || target?.matches(instrumentoSelector) && ["input", "change"].includes(event.type) || displayEdited) {
-            stop();
-        } else if (event.eventPhase !== Event.CAPTURING_PHASE && target?.closest(".MiniOrderFormQuantity-amount-input")) sync();
-    };
-    const observer = new MutationObserver(sync);
-    const stop = () => {
-        observer.disconnect(); clearTimeout(timeout); unsubscribeLimpiar();
-        for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.removeEventListener(type, edited, true);
-        for (const type of ["input", "change", "click", "keyup"]) document.removeEventListener(type, edited);
-        if (cancelWholeQuantity === stop) cancelWholeQuantity = undefined;
-    };
-    const unsubscribeLimpiar = onLimpiar(stop);
-    const timeout = setTimeout(() => { if (!applied) stop(); }, 2000);
-    cancelWholeQuantity = stop;
-    // Relinquish manual display edits before Matriz handles/stops the event.
-    for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.addEventListener(type, edited, true);
-    // Let Matriz consume the new total before writing the related field.
-    for (const type of ["input", "change", "click", "keyup"]) document.addEventListener(type, edited);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["value"] });
-    expandMiniOrderForm();
-    sync();
-}
-
-function fill(cantidad: number, cantidadAMostrar: number) {
-    cancelPendingShownQuantity?.();
-    cancelWholeQuantity?.();
-    const cantidadInput = find<HTMLInputElement>(cantidadSelector);
-    const instrumento = valueOf(instrumentoSelector);
-    const precio = valueOf(precioSelector);
-    if (!cantidadInput || instrumento === "" || precio === "") {
-        return;
-    }
-
-    setInputValue(cantidadInput, cantidad.toString());
-    const showPartial = Number.isInteger(cantidadAMostrar) && cantidadAMostrar > 0;
-    // Equal total/display was accepted as no iceberg by ReMarkets. Start the
-    // mode before expansion so manual total edits cannot leave a hidden partial.
-    if (!showPartial) {
-        followWholeQuantity(find("#MiniOrderForm")!, instrumento, precio);
-        return;
-    }
-    expandMiniOrderForm();
-    const current = () => valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio &&
-        valueOf(cantidadSelector) === cantidad.toString();
-    const apply = () => {
-        if (!current()) return true;
-        const input = find<HTMLInputElement>(cantidadAMostrarSelector);
-        if (!input) return false;
-        setInputValue(input, cantidadAMostrar.toString());
-        return true;
-    };
-    if (apply()) return;
-
-    // Expansion can render on a later turn. Only the latest untouched ticket may receive this write.
-    const observer = new MutationObserver(() => { if (apply()) stop(); });
-    const edited = (event: Event) => {
-        if (isTicketInput(event.target) && (event.type === "input" || !current())) stop();
-    };
-    const collapsed = (event: Event) => {
-        if (event.target instanceof Element && event.target.closest(expandButtonSelector)) stop();
-    };
-    const stop = () => {
-        observer.disconnect(); clearTimeout(timeout); unsubscribeLimpiar();
-        for (const type of ["input", "change", "focusin"]) document.removeEventListener(type, edited);
-        document.removeEventListener("click", collapsed);
-        if (cancelPendingShownQuantity === stop) cancelPendingShownQuantity = undefined;
-    };
-    const timeout = setTimeout(stop, 2000);
-    const unsubscribeLimpiar = onLimpiar(stop);
-    cancelPendingShownQuantity = stop;
-    for (const type of ["input", "change", "focusin"]) document.addEventListener(type, edited);
-    document.addEventListener("click", collapsed);
-    observer.observe(document.body, { childList: true, subtree: true });
-}
-
-function editCantidad() {
-    const cantidadInput = find<HTMLInputElement>(cantidadSelector);
-    if (cantidadInput) {
-        cantidadInput.focus();
-        cantidadInput.select();
-        cantidadInput.setSelectionRange(0, cantidadInput.value.length);
+function selectCantidad(input: HTMLInputElement | null) {
+    if (input) {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, input.value.length);
     }
 }
 
@@ -204,12 +76,16 @@ export function focusCantidadAfterQuoteClick(): () => void {
     const focused = (event: Event) => {
         const input = event.target;
         if (timeout === undefined || !(input instanceof HTMLInputElement) || !input.matches(precioSelector)) return;
+        const form = currentMiniOrderForm();
+        if (!form?.contains(input)) return;
         clearTimeout(timeout);
         timeout = undefined;
         const request = revision;
         // Let Matriz finish focus()/select() before selecting Cantidad.
         queueMicrotask(() => {
-            if (request === revision && document.activeElement === input && input.isConnected) editCantidad();
+            if (request === revision && document.activeElement === input && currentMiniOrderForm() === form) {
+                selectCantidad(form.querySelector<HTMLInputElement>(cantidadSelector));
+            }
         });
     };
     document.addEventListener("click", clicked, true);
@@ -225,34 +101,110 @@ export function focusCantidadAfterQuoteClick(): () => void {
     };
 }
 
-function isTicketInput(target: EventTarget | null): boolean {
-    return target instanceof Element &&
-        (target.matches(instrumentoSelector) || target.matches(precioSelector) || target.matches(cantidadSelector));
-}
+export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(): void } {
+    let disposed = false;
+    let fillRevision = 0;
+    let stopExpansion: (() => void) | undefined;
+    let cancelPendingShownQuantity: (() => void) | undefined;
+    let cancelWholeQuantity: (() => void) | undefined;
 
-// Se escucha en el document para no depender de que Matriz mantenga los mismos elementos
-function onTicketFocus(listener: () => void): () => void {
-    const handler = (event: Event) => {
-        if (isTicketInput(event.target)) {
-            listener();
-        }
-    };
-    document.addEventListener("focusin", handler);
-    return () => document.removeEventListener("focusin", handler);
-}
+    const isCurrent = () => !disposed && currentMiniOrderForm() === form;
+    // Matriz puede reemplazar un input dentro del mismo formulario.
+    const find = <T extends HTMLElement>(selector: string) =>
+        isCurrent() ? form.querySelector<T>(selector) : null;
+    const valueOf = (selector: string) => find<HTMLInputElement>(selector)?.value ?? "";
+    const inForm = (target: EventTarget | null): target is Element =>
+        target instanceof Element && isCurrent() && form.contains(target);
+    const isTicketInput = (target: EventTarget | null) => inForm(target) && target.matches(ticketInputSelector);
 
-function onLimpiar(listener: () => void): () => void {
-    const handler = (event: Event) => {
-        if (event.target instanceof Element && event.target.closest(limpiarButtonSelector)) {
-            listener();
-        }
-    };
-    document.addEventListener("click", handler, { passive: true });
-    return () => document.removeEventListener("click", handler);
-}
+    function onLimpiar(listener: () => void) {
+        const handler = (event: Event) => {
+            if (inForm(event.target) && event.target.closest(limpiarButtonSelector)) listener();
+        };
+        // Limpiar puede reemplazar el formulario en el propio handler de Matriz.
+        form.addEventListener("click", handler, { capture: true, passive: true });
+        return () => form.removeEventListener("click", handler, true);
+    }
 
-export const miniOrderForm: MiniOrderForm = {
-    read: () => {
+    // La expansión y la escritura tienen ciclos independientes. Cancelar la escritura
+    // durante la expansión conserva el toggle que ya está en curso.
+    function expand() {
+        if (stopExpansion || find(cantidadAMostrarSelector)) return;
+        const button = find(`:scope > ${expandButtonSelector}`);
+        if (!button) return;
+        const observer = new MutationObserver(() => {
+            if (!isCurrent() || find(cantidadAMostrarSelector)) stop();
+        });
+        const stop = () => {
+            observer.disconnect();
+            clearTimeout(timeout);
+            stopExpansion = undefined;
+        };
+        const timeout = setTimeout(stop, 2000);
+        stopExpansion = stop;
+        observer.observe(form, { childList: true, subtree: true });
+        button.click();
+        if (!isCurrent() || find(cantidadAMostrarSelector)) stop();
+    }
+
+    // Mostrar todo sigue al total mientras el trader edita el ticket.
+    function followWholeQuantity(instrumento: string, precio: string, revision: number) {
+        let writing = false;
+        let applied = false;
+        let lastQuantity = valueOf(cantidadSelector);
+        const current = () => isCurrent() && fillRevision === revision &&
+            valueOf(instrumentoSelector) === instrumento && (applied || valueOf(precioSelector) === precio);
+        const sync = () => {
+            if (!current()) { stop(); return; }
+            const quantity = valueOf(cantidadSelector);
+            const input = find<HTMLInputElement>(cantidadAMostrarSelector);
+            if (!input) {
+                // Preserve a deliberate collapse until the total actually changes.
+                if (quantity !== lastQuantity) expand();
+            } else {
+                if (input.value !== quantity) {
+                    writing = true;
+                    try { setInputValue(input, quantity); }
+                    finally { writing = false; }
+                }
+                applied = true;
+                clearTimeout(timeout);
+            }
+            lastQuantity = quantity;
+        };
+        const edited = (event: Event) => {
+            if (writing) return;
+            const target = inForm(event.target) ? event.target : null;
+            const stepping = ["click", "pointerdown"].includes(event.type) && !!target?.closest(".ant-input-number-handler-wrap") ||
+                event instanceof KeyboardEvent && ["ArrowUp", "ArrowDown"].includes(event.key);
+            const displayEdited = target?.closest(".amount-show__div") &&
+                (["input", "change"].includes(event.type) || stepping);
+            if (!current() || target?.matches(instrumentoSelector) && ["input", "change"].includes(event.type) || displayEdited) {
+                stop();
+            } else if (event.eventPhase !== Event.CAPTURING_PHASE && target?.closest(".MiniOrderFormQuantity-amount-input")) sync();
+        };
+        const observer = new MutationObserver(sync);
+        const stop = () => {
+            observer.disconnect();
+            clearTimeout(timeout);
+            unsubscribeLimpiar();
+            for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.removeEventListener(type, edited, true);
+            for (const type of ["input", "change", "click", "keyup"]) document.removeEventListener(type, edited);
+            if (cancelWholeQuantity === stop) cancelWholeQuantity = undefined;
+        };
+        const unsubscribeLimpiar = onLimpiar(stop);
+        const timeout = setTimeout(() => { if (!applied) stop(); }, 2000);
+        cancelWholeQuantity = stop;
+        // Relinquish manual display edits before Matriz handles/stops the event.
+        for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.addEventListener(type, edited, true);
+        // Let Matriz consume the new total before writing the related field.
+        for (const type of ["input", "change", "click", "keyup"]) document.addEventListener(type, edited);
+        observer.observe(form, { childList: true, subtree: true, attributes: true, attributeFilter: ["value"] });
+        expand();
+        sync();
+    }
+
+    function read(): Ticket {
         const instrumento = valueOf(instrumentoSelector);
         return {
             instrumento,
@@ -260,11 +212,77 @@ export const miniOrderForm: MiniOrderForm = {
             precio: valueOf(precioSelector),
             cantidad: valueOf(cantidadSelector),
         };
-    },
-    fill: (preset) => fill(preset.cantidad, preset.mostrar),
-    editCantidad,
-    onTicketFocus,
-    onLimpiar,
-};
+    }
 
-export { expandMiniOrderForm };
+    return {
+        read,
+        fill: ({ cantidad, mostrar }) => {
+            const revision = ++fillRevision;
+            cancelPendingShownQuantity?.();
+            cancelWholeQuantity?.();
+            const input = find<HTMLInputElement>(cantidadSelector);
+            const instrumento = valueOf(instrumentoSelector);
+            const precio = valueOf(precioSelector);
+            if (!input || instrumento === "" || precio === "") return;
+
+            const quantity = cantidad.toString();
+            const sameTicket = () => isCurrent() && fillRevision === revision &&
+                valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio;
+            setInputValue(input, quantity);
+            if (!sameTicket()) return;
+            const showPartial = Number.isInteger(mostrar) && mostrar > 0;
+            if (!showPartial) {
+                followWholeQuantity(instrumento, precio, revision);
+                return;
+            }
+            const current = () => sameTicket() && valueOf(cantidadSelector) === quantity;
+            if (!current()) return;
+            expand();
+
+            const apply = () => {
+                if (!current()) return true;
+                const shown = find<HTMLInputElement>(cantidadAMostrarSelector);
+                if (!shown) return false;
+                setInputValue(shown, mostrar.toString());
+                return true;
+            };
+            if (apply()) return;
+
+            const observer = new MutationObserver(() => { if (apply()) stop(); });
+            const edited = (event: Event) => {
+                if (isTicketInput(event.target) && (event.type === "input" || !current())) stop();
+            };
+            const collapsed = (event: Event) => {
+                if (inForm(event.target) && event.target.closest(expandButtonSelector)?.parentElement === form) stop();
+            };
+            const stop = () => {
+                observer.disconnect();
+                clearTimeout(timeout);
+                unsubscribeLimpiar();
+                for (const type of ["input", "change", "focusin"]) document.removeEventListener(type, edited);
+                document.removeEventListener("click", collapsed);
+                if (cancelPendingShownQuantity === stop) cancelPendingShownQuantity = undefined;
+            };
+            const timeout = setTimeout(stop, 2000);
+            const unsubscribeLimpiar = onLimpiar(stop);
+            cancelPendingShownQuantity = stop;
+            for (const type of ["input", "change", "focusin"]) document.addEventListener(type, edited);
+            document.addEventListener("click", collapsed);
+            observer.observe(form, { childList: true, subtree: true });
+        },
+        editCantidad: () => selectCantidad(find<HTMLInputElement>(cantidadSelector)),
+        onTicketFocus: (listener) => {
+            // Escuchamos en el document para seguir el orden de eventos de Matriz.
+            const handler = (event: Event) => { if (isTicketInput(event.target)) listener(); };
+            document.addEventListener("focusin", handler);
+            return () => document.removeEventListener("focusin", handler);
+        },
+        onLimpiar,
+        dispose: () => {
+            disposed = true;
+            cancelPendingShownQuantity?.();
+            cancelWholeQuantity?.();
+            stopExpansion?.();
+        },
+    };
+}
