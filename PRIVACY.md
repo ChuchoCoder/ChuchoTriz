@@ -11,8 +11,9 @@ Los presets por instrumento y la preferencia de autocompletar se guardan en
 por instrumento se mantiene en memoria durante la sesión del formulario.
 
 El simulador de opciones lee el catálogo y las cotizaciones de mercado de Matriz
-para mostrar calls, puts, VI y otras métricas. Al abrir el simulador o al pedir
-una recarga, consulta el reporte de la cuenta activa. El lector devuelve los
+para mostrar calls, puts, VI y otras métricas. Al abrir el simulador o al pulsar
+**Cargar posición** o **Recargar tenencia**, consulta el reporte de la cuenta
+activa. El lector devuelve los
 identificadores y cantidades de las opciones de la cadena elegida, los nominales
 del subyacente seleccionado, las fechas de lectura y reporte y referencias opacas
 para verificar el contexto y separar el guardado.
@@ -27,8 +28,8 @@ en el perfil de Chrome. Si cambia una cantidad, el simulador pide revisar la
 prima o ingresar de nuevo el costo promedio, según corresponda.
 El simulador no envía operaciones. La selección de subyacente y vencimiento se guarda
 localmente por sitio de Matriz. Los ajustes propuestos, sus supuestos y las
-cantidades de nominales ajustadas manualmente se mantienen en memoria mientras
-el simulador permanece abierto, junto con el costo asignado a esas cantidades.
+cantidades de nominales ajustadas manualmente se mantienen en memoria durante
+la sesión de la página de Matriz, junto con el costo asignado a esas cantidades.
 El guardado de estrategias está retirado
 de la interfaz; el simulador no lee ni sobrescribe datos guardados por versiones
 anteriores.

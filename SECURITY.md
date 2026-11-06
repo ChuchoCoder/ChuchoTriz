@@ -26,10 +26,10 @@ issues públicos. Usar el canal privado habitual con el propietario.
   de HTML inseguro. Los fixtures *.test.* están excluidos y no se distribuyen.
 - scripts/check-free.mjs mantiene la autoridad única del manifest y paquete: solo
   storage, dominios actuales y recursos explícitos, sin workers, permisos opcionales
-  ni acceso ampliado. La única excepción de lectura de página es
-  `options-market-reader.js`, limitado a catálogo y cotizaciones públicas nativas
-  para el simulador. Al abrir el simulador o pedir una recarga, un segundo lector
-  acotado consulta el reporte nativo de la cuenta activa en Matriz. Devuelve los
+  ni acceso ampliado. El simulador usa dos lectores de página acotados.
+  `options-market-reader.js` se limita al catálogo y las cotizaciones públicas
+  nativas. `options-position-reader.js` consulta el reporte nativo de la cuenta
+  activa al abrir el simulador o pulsar **Cargar posición** o **Recargar tenencia**. Devuelve los
   identificadores y cantidades de las opciones de la cadena seleccionada, los
   nominales del subyacente, las fechas, el estado de esa lectura y un token
   opaco de contexto y una clave de cuenta derivada mediante SHA-256 con semilla
