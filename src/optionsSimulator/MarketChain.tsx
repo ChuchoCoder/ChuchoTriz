@@ -5,7 +5,7 @@ import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_CONTRACTS, MAX_LEGS, newLeg, numeric, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
 import { importPosition, readPositionSnapshot, setPositionQuantity, startPositionDraft, type PositionSeries } from "./positions";
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
@@ -23,13 +23,12 @@ function defaultExpiration(dates: string[]) {
   return dates.find(date => date >= today) ?? dates[0] ?? "";
 }
 
-function PositionQuantity({ label, leg, disabled, onCommit }: {
-  label: string; leg?: Leg; disabled: boolean; onCommit(value: string): void;
+export function SignedQuantityInput({ id, label, value, className, disabled, title = "Cantidad con signo · + compra, − venta", onCommit }: {
+  id?: string; label: string; value: string; className?: string; disabled?: boolean; title?: string; onCommit(value: string): void;
 }) {
   const [draft, setDraft] = useState<string>();
-  const value = leg ? (leg.side === "sell" ? "−" : "+") + leg.contracts : "";
-  return <input type="text" data-ct-inline-editor className={leg ? leg.side === "sell" ? "ct-sim-sell" : "ct-sim-buy" : undefined}
-    aria-label={`Cantidad posición ${label}`} title="Cantidad con signo · + compra, − venta" placeholder="—" disabled={disabled} value={draft ?? value}
+  return <input id={id} type="text" data-ct-inline-editor className={className}
+    aria-label={label} title={title} placeholder="—" disabled={disabled} value={draft ?? value}
     onFocus={event => event.currentTarget.select()} onChange={event => setDraft(event.target.value)}
     onBlur={() => { if (draft !== undefined) onCommit(draft); setDraft(undefined); }}
     onKeyDown={event => {
@@ -285,9 +284,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setNotice({ announcement: "Se limpió la posición del borrador. Podés recargar la tenencia. Los ajustes siguen en Armado." });
   }
   function commitPositionQuantity(series: PositionSeries, value: string) {
-    const raw = value.trim().replace(/^−/, "-");
-    const quantity = raw === "" ? 0 : /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN;
-    if (!Number.isSafeInteger(quantity) || Math.abs(quantity) > MAX_CONTRACTS) {
+    const quantity = parseSignedQuantity(value);
+    if (quantity === undefined) {
       setNotice("Ingresá una cantidad entera válida, positiva para compra y negativa para venta."); return;
     }
     if (quantity && positionLegs.length >= MAX_LEGS && !positionLegs.some(leg => leg.securityId === series.id)) {
@@ -377,7 +375,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         const label = entries.length > 1 ? series.symbol : `${kind.toUpperCase()} ${fmt(strike)}`;
         return <div key={series.id} className="ct-opt-position-field">
           {entries.length > 1 && <small>{series.symbol}</small>}
-          <div>{field === "quantity" ? <PositionQuantity label={label} leg={leg} disabled={loadingPosition}
+          <div>{field === "quantity" ? <SignedQuantityInput label={`Cantidad posición ${label}`} disabled={loadingPosition}
+            value={leg ? (leg.side === "sell" ? "−" : "+") + leg.contracts : ""} className={leg && (leg.side === "sell" ? "ct-sim-sell" : "ct-sim-buy")}
             onCommit={value => commitPositionQuantity(series, value)} />
             : <PositionPremium label={label} leg={leg} disabled={loadingPosition}
               onChange={onPremiumChange} onReview={onPremiumReview} />}</div>

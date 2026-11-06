@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_LEGS,
-  newLeg, numeric, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy } from "./model";
+  newLeg, numeric, parseSignedQuantity, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure } from "./model";
 import "./OptionsSimulator.css";
-import MarketChain from "./MarketChain";
+import MarketChain, { SignedQuantityInput } from "./MarketChain";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
@@ -110,13 +110,15 @@ function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChan
   </section>;
 }
 
-function PositionCosts({ input, onCosts, onRealized, onUnderlyingCost, onReset, onEdit, saveStatus, compact }: {
+function PositionCosts({ input, onCosts, onRealized, onNominals, onUnderlyingCost, onReset, onEdit, saveStatus, compact }: {
   input: Simulation; onCosts(value: string): void; onRealized(value: string): void; onReset(): void;
-  onUnderlyingCost(value: string): void;
+  onNominals(value: string): void; onUnderlyingCost(value: string): void;
   onEdit?(): void; saveStatus: { message: string; error?: boolean }; compact: boolean;
 }) {
+  const nominalsId = useId();
   if (!input.position) return null;
-  const { reportedAt, capturedAt, underlying, underlyingUnavailable } = input.position;
+  const { reportedAt, capturedAt, underlying, nominalOverride, underlyingUnavailable } = input.position;
+  const exposure = underlyingExposure(input.position);
   const reportDateAhead = reportedAt !== undefined && capturedAt !== undefined && reportedAt > capturedAt + 300000;
   const reset = <button type="button" onClick={onReset} title="Descarta el borrador y habilita otro subyacente o vencimiento.">Nueva simulación</button>;
   const status = <small role="status" aria-label="Guardado de datos históricos">{input.position.storage ? saveStatus.message : "Edición manual en este borrador."}</small>;
@@ -129,11 +131,12 @@ function PositionCosts({ input, onCosts, onRealized, onUnderlyingCost, onReset, 
       {onEdit && <button type="button" onClick={onEdit}>Editar posición en la cadena</button>}
       {reset}</div>}
     <div className="ct-sim-position-costs">
-      {underlying && <>
-        <div className="ct-sim-field ct-sim-position-nominals"><span>Nominales de {input.underlying}</span>
-          <output aria-label="Nominales del subyacente" title="Cantidad neta informada por Matriz para el subyacente">{formatOptionNumber(underlying.quantity)}</output></div>
-        {!!underlying.quantity && <Field label="Costo promedio por nominal" value={underlying.averageCost} onChange={onUnderlyingCost} min="0" max="1000000000"
-          title={`Costo histórico por unidad en ${input.currency}. Si cambia la cantidad, ingresá el nuevo costo promedio.`} />}
+      {underlying && exposure && <>
+        <div className="ct-sim-field ct-sim-position-nominals"><label htmlFor={nominalsId}>Nominales de {input.underlying}{nominalOverride && " · Borrador"}</label>
+          <SignedQuantityInput id={nominalsId} label="Nominales del subyacente" value={String(exposure.quantity)} onCommit={onNominals}
+            title={`Cantidad entera con signo. Recargar tenencia recupera los nominales de Matriz${reportedAt !== undefined ? ` (${formatOptionNumber(underlying.quantity)})` : ""}.`} /></div>
+        {!!exposure.quantity && <Field label="Costo promedio por nominal" value={exposure.averageCost} onChange={onUnderlyingCost} min="0" max="1000000000"
+          title={nominalOverride ? `Costo por unidad en ${input.currency} para esta cantidad del borrador.` : `Costo histórico por unidad en ${input.currency}.`} />}
       </>}
       <Field label="Gastos de la posición" value={input.costs} onChange={onCosts} title="Cargos adicionales que todavía no están incluidos en las primas." />
       <Field label="Resultado realizado neto" value={input.realized ?? ""} onChange={onRealized} title="Ganancia o pérdida de cierres anteriores, neta de sus propios gastos." />
@@ -347,10 +350,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   }));
   const [positionMode, setPositionMode] = useState(false);
   const [includePosition, setIncludePosition] = useState(true);
-  const valuationInput = useMemo(() => input.position && (!includePosition || (!input.position.legs.length && !input.position.underlying?.quantity && !input.position.underlyingUnavailable))
+  const valuationInput = useMemo(() => input.position && (!includePosition || (!input.position.legs.length && !underlyingExposure(input.position)?.quantity && !input.position.underlyingUnavailable))
     ? { ...input, position: undefined, costs: input.adjustmentCosts ?? "0", realized: undefined } : input, [input, includePosition]);
   const allLegs = useMemo(() => simulationLegs(valuationInput), [valuationInput]);
-  const holding = valuationInput.position?.underlying;
+  const holding = underlyingExposure(valuationInput.position);
   const hasExposure = !!(allLegs.length || holding?.quantity || valuationInput.position?.underlyingUnavailable);
   const [chartZoom, setChartZoom] = useState<{ context: string; level: number }>();
   const [status, setStatus] = useState("");
@@ -387,7 +390,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     if (deviations || !positionMode || !position?.legs.length) return deviations;
     // The expected move needs prices and IV, so historical accounting can still be incomplete.
     const reference = parseSimulation({ ...valuationInput, costs: "0", adjustmentCosts: "0", realized: undefined,
-      position: { ...position, underlying: undefined, underlyingUnavailable: false, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
+      position: { ...position, underlying: undefined, nominalOverride: undefined, underlyingUnavailable: false, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
     return reference.ok ? standardDeviationLevels(reference.strategy) : undefined;
   }, [deviations, positionMode, valuationInput]);
   const summary = useMemo(() => parsed.ok ? expirySummary(parsed.strategy) : undefined, [parsed]);
@@ -469,10 +472,31 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const reviewPremium = (id: number) => setInput(current => current.position ? { ...current, position: { ...current.position,
     legs: current.position.legs.map(leg => leg.id === id && validHistoricalPremium(leg.premium)
       ? { ...leg, premiumQuantity: signedPositionQuantity(leg), premiumReviewPending: false } : leg) } } : current);
+  function updateNominals(value: string) {
+    const quantity = parseSignedQuantity(value);
+    setStatus(quantity === undefined ? "Ingresá una cantidad entera válida de nominales." : "");
+    if (quantity === undefined) return;
+    setInput(current => {
+      const { position } = current;
+      const original = position?.underlying, exposure = underlyingExposure(position);
+      if (!position || !original || !exposure || quantity === exposure.quantity) return current;
+      const averageCost = quantity !== 0 && Math.sign(quantity) === Math.sign(exposure.quantity) ? exposure.averageCost : "";
+      return { ...current, position: { ...position,
+        nominalOverride: quantity === original.quantity ? undefined : { quantity, averageCost } } };
+    });
+  }
+  function updateUnderlyingCost(averageCost: string) {
+    setInput(current => {
+      const { position } = current;
+      if (!position?.underlying || !underlyingExposure(position)?.quantity) return current;
+      const next = position.nominalOverride ? { nominalOverride: { ...position.nominalOverride, averageCost } }
+        : { underlying: { ...position.underlying, averageCost, costEdited: true } };
+      return { ...current, position: { ...position, ...next } };
+    });
+  }
   const historicalCosts = <PositionCosts input={input} compact={view === "build"}
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
-    onUnderlyingCost={averageCost => setInput(current => current.position?.underlying?.quantity ? { ...current,
-      position: { ...current.position, underlying: { ...current.position.underlying, averageCost, costEdited: true } } } : current)}
+    onNominals={updateNominals} onUnderlyingCost={updateUnderlyingCost}
     saveStatus={saveStatus} onEdit={view === "analysis" ? () => { setPositionMode(true); changeView("build"); } : undefined}
     onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setPositionMode(false); setChartZoom(undefined); setStatus(""); }} />;
   const chart = !hasExposure ? <p>{input.position && !includePosition

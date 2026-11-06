@@ -243,7 +243,7 @@ it("loads nominal holdings without open options and includes them only while the
     reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
   marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
   await mount();
-  expect(byLabel("Nominales del subyacente").textContent).toBe("100");
+  expect(byLabel<HTMLInputElement>("Nominales del subyacente").value).toBe("100");
   expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Costo promedio por nominal");
   await fill("Costo promedio por nominal", "90");
   await showAnalysis();
@@ -256,6 +256,28 @@ it("loads nominal holdings without open options and includes them only while the
   await act(async () => include.click());
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
   await act(async () => root.render(<OptionsSimulator key="fresh-position" />));
+  expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
+});
+
+it("values edited nominal quantities locally and restores the imported quantity and basis on reload", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  await fill("Costo promedio por nominal", "90");
+  const nominals = byLabel<HTMLInputElement>("Nominales del subyacente");
+  await act(async () => nominals.focus());
+  await fill("Nominales del subyacente", "200");
+  await act(async () => nominals.blur());
+  await fill("Costo promedio por nominal", "95");
+  const key = underlyingCostStorageKey("a".repeat(64), marketState.current.catalog!.contracts[0]);
+  expect(await readUnderlyingCost(key)).toMatchObject({ quantity: 100, averageCost: "90" });
+  await showAnalysis();
+  expect(byLabel("Patas analizadas").textContent).toContain("+200 nominales de GGAL");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-inspect output")?.textContent).toBe("1.000 ARS");
+  await showBuild();
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Nominales del subyacente").value).toBe("100");
   expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
 });
 

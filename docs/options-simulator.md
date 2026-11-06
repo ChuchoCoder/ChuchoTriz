@@ -14,7 +14,10 @@ nominales del subyacente informados por Matriz. La cantidad corresponde al
 subyacente y se obtiene aunque el vencimiento seleccionado no tenga opciones
 en cartera. Completá el **Costo promedio por nominal** en la moneda de la
 simulación. Se guarda por cuenta, subyacente y moneda, y se pide de nuevo si
-cambia la cantidad informada.
+cambia la cantidad informada por Matriz. También podés editar los nominales del
+borrador. Si cambiás el signo, ingresá el costo del nuevo sentido. Los nominales
+editados y su costo quedan en ese borrador. **Recargar tenencia** restaura la
+cantidad informada por Matriz y su costo guardado.
 
 La misma cadena cambia a **Posición actual**, con cantidades firmadas y primas
 históricas por unidad a ambos lados del strike. Conserva las marcas de desvíos

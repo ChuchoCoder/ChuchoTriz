@@ -36,7 +36,7 @@ export interface Simulation {
   costs: string;
   realized?: string;
   adjustmentCosts?: string;
-  position?: { legs: Leg[]; underlying?: UnderlyingHolding; underlyingUnavailable?: boolean;
+  position?: { legs: Leg[]; underlying?: UnderlyingHolding; nominalOverride?: Pick<UnderlyingHolding, "quantity" | "averageCost">; underlyingUnavailable?: boolean;
     capturedAt?: number; reportedAt?: number; contextId?: string; storage?: PositionStorageSession };
   volatilityShift: string;
   rangeMin?: string;
@@ -57,6 +57,9 @@ export interface Strategy {
 export function simulationLegs(input: Simulation): Leg[] {
   return [...(input.position?.legs ?? []), ...input.legs];
 }
+export function underlyingExposure(position: Simulation["position"]) {
+  return position?.nominalOverride ?? position?.underlying;
+}
 export const MAX_LEGS = 16;
 export const MAX_CONTRACTS = 1e10;
 const dayMs = 86_400_000;
@@ -64,6 +67,11 @@ const dayMs = 86_400_000;
 // Decimal comma and decimal point are accepted; grouping separators are deliberately rejected.
 export function numeric(value: string): number {
   return /^-?\d+(?:[.,]\d+)?$/.test(value.trim()) ? Number(value.trim().replace(",", ".")) : NaN;
+}
+export function parseSignedQuantity(value: string): number | undefined {
+  const raw = value.trim().replace(/^−/, "-");
+  const quantity = raw === "" ? 0 : /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN;
+  return Number.isSafeInteger(quantity) && Math.abs(quantity) <= MAX_CONTRACTS ? quantity : undefined;
 }
 export function dateDay(value: string): number {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return NaN;
@@ -131,7 +139,7 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   if (!input.underlying.trim()) errors.push("Indicá un subyacente común para todas las patas.");
   const allLegs = simulationLegs(input);
   if (input.position?.underlyingUnavailable) errors.push("No se pudieron verificar los nominales del subyacente. Revisá el reporte de Matriz y recargá la tenencia.");
-  const holding = input.position?.underlying;
+  const holding = underlyingExposure(input.position);
   const underlying = holding?.quantity ? {
     quantity: read(String(holding.quantity), "Nominales del subyacente", -MAX_CONTRACTS, MAX_CONTRACTS, true),
     averageCost: read(holding.averageCost, "Costo promedio por nominal", 0, 1e9),
