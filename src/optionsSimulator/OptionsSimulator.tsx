@@ -3,7 +3,7 @@ import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, 
   newLeg, numeric, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
-import { formatExpiryDays, formatOptionAmount as fmt, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
+import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { PositionAccountingConflict, premiumNeedsReview, savePositionAccounting, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 
@@ -82,6 +82,7 @@ function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChan
   const total = references.ok ? references.currentTotal : entry;
   const span = references.ok ? references.natural.total - references.opposite.total : 0;
   const position = references.ok && total !== undefined && span > 0 ? (references.natural.total - total) / span : 0;
+  const fmt = (amount: number) => formatOptionAmount(amount, input.currency);
   const text = (amount: number | undefined) => amount === undefined ? "—" : `${amount < 0 ? "Crédito" : amount > 0 ? "Débito" : "Neutra"} ${fmt(Math.abs(amount))} ${input.currency}`;
   const compactText = (amount: number | undefined) => amount === undefined ? "—" : `${fmt(Math.abs(amount))} ${amount < 0 ? "cr" : amount > 0 ? "db" : "neutro"}`;
   const marker = Math.max(0, Math.min(100, position * 100));
@@ -180,6 +181,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   const [width, setWidth] = useState(900);
   const clamp = (value: number) => Math.max(strategy.rangeMin, Math.min(strategy.rangeMax, value));
   const price = selectedPrice;
+  const fmt = (amount: number) => formatOptionAmount(amount, currency);
   const cursorVisible = price >= strategy.rangeMin && price <= strategy.rangeMax;
   const height = compact ? 190 : 240, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = 20, bottom = compact ? 26 : 38;
   const hasTheory = strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
@@ -257,7 +259,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       {Array.from({ length: 5 }, (_, index) => {
         const value = strategy.rangeMin + tickStep * index;
         return <text key={index} className="ct-sim-price-tick" x={x(value)} y={height - (compact ? 7 : 20)}
-          textAnchor={index === 4 ? "end" : "middle"}>{formatOptionNumber(value, tickDecimals)}</text>;
+          textAnchor={index === 4 ? "end" : "middle"}>{currency === "ARS" && tickStep >= 1 ? fmt(value) : formatOptionNumber(value, tickDecimals)}</text>;
       })}
       <path d={path("expiry")} className="ct-sim-expiry-line" stroke={`url(#${pnlGradientId})`} />
       {hasTheory && <path d={path("theoretical")} className="ct-sim-theory-line" stroke={`url(#${pnlGradientId})`} />}
@@ -388,6 +390,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       return result.ok ? { ...current, legs: result.legs } : current;
     });
   }
+  const fmt = (amount: number) => formatOptionAmount(amount, input.currency);
   const money = (value: number) => `${fmt(value)} ${input.currency}`;
   const historicalCosts = <PositionCosts input={input} onLegChange={(id, value) => updateLeg(id, "premium", value)}
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
@@ -481,7 +484,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       <Field label="Precio del escenario" min="0" max="1000000000" value={scenarioPrice} onChange={setScenarioPrice}
         slider={<ScenarioSlider label="Deslizar precio del escenario" min={0} max={priceSliderSteps}
           value={priceSpan > 0 ? ((scenarioPriceValid ? selectedPrice : spot) - priceMin) / priceSpan * priceSliderSteps : 0}
-          format={position => priceSpan > 0 ? `${fmt(sliderPrice(position))} ${input.currency}` : "Rango no disponible"}
+          format={position => priceSpan > 0 ? money(sliderPrice(position)) : "Rango no disponible"}
           onChange={position => setScenarioPrice(formatOptionInput(sliderPrice(position)))} />} />
       {input.marketSpotMissing && <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />}</div>
       <div className="ct-sim-scenario-group"><ScenarioButtons label="VI" value={input.volatilityShift} numericValues options={[

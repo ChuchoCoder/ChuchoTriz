@@ -397,6 +397,30 @@ it("validates a custom scenario price and never clamps its reported profit to th
   expect(container.querySelector('.ct-sim-chart')).not.toBeNull();
 });
 
+it.each([
+  ["ARS", "5.374 ARS", "4.457 ARS", "5.329 ARS"],
+  ["USD", "5.373,75 USD", "4.456,64 USD", "5.329,18 USD"],
+] as const)("formats large %s chart amounts without changing the scenario calculation", async (currency, price, result, equilibrium) => {
+  const { catalog, data } = marketState.current;
+  catalog!.underlyings[0].currency = currency;
+  for (const contract of catalog!.contracts) {
+    contract.currency = currency;
+    contract.strikeCurrency = currency;
+  }
+  catalog!.contracts.find(contract => contract.id === "call-100")!.strike = 5000;
+  data!.instruments.GGAL.last = 5000;
+  data!.instruments["call-100"].ask!.price = 329.1836;
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
+  await fill("Precio del escenario", "5373.75");
+  expect(byLabel<HTMLInputElement>("Precio del escenario").value).toBe("5373.75");
+  expect(byLabel("Precio fijado").textContent).toBe(price);
+  expect([...container.querySelectorAll('.ct-sim-inspect output')].map(output => output.textContent)).toEqual([result, result]);
+  expect(container.querySelector('.ct-sim-equilibria')?.textContent).toContain(equilibrium);
+});
+
 it("accepts a reference price when the chain provides a leg quote but no underlying price", async () => {
   marketState.current.data!.instruments.GGAL.last = undefined;
   await mount();
