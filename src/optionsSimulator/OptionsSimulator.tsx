@@ -476,8 +476,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         })}</div></div>)}</div>
       <button type="button" className="ct-sim-clear-legs" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"} onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
-        <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-remove" /></colgroup>
-        <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
+        <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-price" /><col className="ct-sim-leg-remove" /></colgroup>
+        <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th title="Prima de entrada por unidad">Precio</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
         <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
           <td>{leg.securityId
             ? <span className={`ct-sim-kind-chip ct-sim-kind-${leg.kind}`}><abbr title={leg.kind === "call" ? "Call" : "Put"}>{leg.kind === "call" ? "C" : "P"}</abbr></span>
@@ -497,12 +497,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
             <button type="button" className="ct-sim-quantity-step" aria-label={`Aumentar contratos pata ${index + 1}`} disabled={!adjustStrategyQuantity([leg], 1).ok}
               title="Clic: agregar 1 · Doble clic: agregar 10 · Conserva compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, 1, quantityClickSteps(event.detail)); }}>+</button>
           </div></td>
-          <td className="ct-sim-leg-expiry-date" title={`Vencimiento ${input.expiry}`}>{formatOptionExpiry(input.expiry)}</td>
+          <td className="ct-sim-leg-expiry-date" title={`Vencimiento ${input.expiry}`}>{formatOptionExpiry(input.expiry, "short")}</td>
           <td className="ct-sim-leg-expiry" title={`Días calendario desde hoy · Vencimiento ${input.expiry}`}>{formatExpiryDays(daysToExpiry(input.expiry))}</td>
           <th scope="row">
             {leg.securityId ? <span className="ct-sim-leg-strike" aria-label={`Strike pata ${index + 1}`}>{formatOptionNumber(numeric(leg.strike))}</span>
               : <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />}
           </th>
+          <td><EditableLegValue label={`Precio pata ${index + 1}`} value={leg.premium} onChange={value => updateLeg(leg.id, "premium", value)} /></td>
           <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
