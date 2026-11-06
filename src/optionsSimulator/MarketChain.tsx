@@ -295,7 +295,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       {visible && marked && <div ref={quantityBar} className="ct-opt-quantity-bar" role="group" aria-label={`Cantidad de ${side === "buy" ? "compra" : "venta"} ${marked.symbol}`}>
         <span>Cant.</span>
         {quantityPresets.map(preset => <button key={preset} type="button" aria-label={`Fijar ${preset} ${preset === 1 ? "contrato" : "contratos"}`}
-          onMouseDown={event => event.preventDefault()} onClick={() => changeQuoteQuantity(marked, preset)}>{preset}</button>)}
+          onMouseDown={event => event.preventDefault()} onClick={event => {
+            const editor = event.currentTarget.closest(".ct-sim")?.querySelector<HTMLElement>("[data-ct-inline-editor]:focus");
+            editor?.blur();
+            changeQuoteQuantity(marked, preset);
+          }}>{preset}</button>)}
         <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
       </div>}
     </td>;

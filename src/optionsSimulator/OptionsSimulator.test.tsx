@@ -121,15 +121,20 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
   expect(byLabel("Editar Contratos pata 1").textContent).toBe("−100");
 });
 
-it("reflects a quantity edit from Armado and can replace it from the grid", async () => {
+it("closes the active Armado editor and replaces its quantity from the grid", async () => {
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   await act(async () => byLabel<HTMLButtonElement>("Fijar 10 contratos").click());
   await fill("Contratos pata 1", "15");
-  await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  const editor = byLabel<HTMLInputElement>("Contratos pata 1");
+  expect(document.activeElement).toBe(editor);
   const quote = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
   await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
   expect(byLabel("Cantidad total").textContent).toBe("15");
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 25 contratos").click());
+  expect(editor.isConnected).toBe(false);
+  expect(byLabel("Cantidad total").textContent).toBe("25");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+25");
   await fill("Contratos pata 1", "9999999999");
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
