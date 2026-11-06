@@ -275,7 +275,8 @@
 .ct-sim-scenario-results thead th { background: var(--sim-table-header); color: var(--sim-text); font-weight: 700; }
 .ct-sim-scenario-results tbody th, .ct-sim-scenario-results tbody td:nth-child(n+3) { font-weight: 600; }
 .ct-sim-scenario-results tbody th { color: var(--sim-text); }
-.ct-sim-scenario-results tbody tr[data-band]:not([data-band="spot"]) > :nth-child(-n+2) { background: var(--sim-band); color: #080d14; }
+.ct-sim-scenario-results tbody tr[data-band]:not([data-band="spot"]) > :nth-child(-n+2) { background: var(--sim-band); }
+.ct-sim-scenario-results tbody tr[data-band] > :nth-child(-n+2) { color: #fff; -webkit-text-stroke: 2px #080d14; paint-order: stroke fill; }
 .ct-sim-scenario-results tbody [data-band="spot"] > * { background: var(--sim-band-spot); font-weight: 700; }
 .ct-sim-scenario-results [data-band="sigma-one"] { --sim-band: #009807; }
 .ct-sim-scenario-results [data-band="sigma-two"] { --sim-band: #ffa022; }
