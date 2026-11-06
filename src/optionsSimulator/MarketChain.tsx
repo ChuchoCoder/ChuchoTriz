@@ -1,4 +1,4 @@
-import { Dispatch, Fragment, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { Dispatch, Fragment, SetStateAction, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Catalog, Contract, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
@@ -15,6 +15,8 @@ import type { StrikeMarket } from "./strategyAdjustments";
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+const quantityPresets = [1, 10, 25, 50, 100];
+const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
 function defaultExpiration(dates: string[]) {
   const today = localDate().replaceAll("-", "");
   return dates.find(date => date >= today) ?? dates[0] ?? "";
@@ -33,6 +35,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [selectionReady, setSelectionReady] = useState(false);
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState("");
+  const [openQuote, setOpenQuote] = useState<string>();
+  const pendingQuantity = useRef<{ leg: Leg; next: Leg }>(undefined);
+  const quantityBar = useRef<HTMLDivElement>(null);
   const [loadingPosition, setLoadingPosition] = useState(false);
   const positionRequest = useRef<AbortController | null>(null);
   const latestInput = useRef(input);
@@ -78,6 +83,32 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     if (market !== preferred) setMarket(preferred);
   }, [selectionReady, expiration, market, expirations.join(), catalog, underlyingId, !!input.position]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
+  const openLeg = active && input.legs.find(leg => legKey(leg) === openQuote && selected.some(contract => contract.id === leg.securityId));
+  const shownQuote = openLeg ? openQuote : undefined;
+  useEffect(() => {
+    if (!shownQuote) setOpenQuote(undefined);
+  }, [shownQuote]);
+  useLayoutEffect(() => {
+    const bar = quantityBar.current, cell = bar?.parentElement, scroll = cell?.closest<HTMLElement>(".ct-opt-chain-scroll");
+    if (!bar || !cell || !scroll) return;
+    const position = () => {
+      const bounds = scroll.getBoundingClientRect(), anchor = cell.getBoundingClientRect();
+      const start = bounds.left + scroll.clientLeft, end = start + scroll.clientWidth;
+      if (!scroll.clientWidth) return;
+      bar.style.maxWidth = `${scroll.clientWidth}px`;
+      const width = bar.offsetWidth;
+      const preferred = cell.classList.contains("buy") ? anchor.right - width : anchor.left;
+      bar.style.left = `${Math.max(start, Math.min(preferred, end - width)) - anchor.left}px`;
+      const headerBottom = scroll.querySelector("thead")?.getBoundingClientRect().bottom ?? bounds.top;
+      bar.style.visibility = anchor.bottom <= headerBottom || anchor.top >= bounds.bottom || anchor.right <= start || anchor.left >= end ? "hidden" : "";
+    };
+    position();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(position);
+    observer?.observe(bar);
+    observer?.observe(scroll);
+    scroll.addEventListener("scroll", position, { passive: true });
+    return () => { observer?.disconnect(); scroll.removeEventListener("scroll", position); };
+  }, [shownQuote]);
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
   const spot = positive(spotQuote?.last) ? spotQuote.last : undefined;
@@ -138,6 +169,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setUnderlying(nextUnderlying);
     setExpiration(nextExpiration);
     setMarket("");
+    setOpenQuote(undefined);
     setNotice(""); setInput(current => ({ ...current, legs: [] }));
     if (nextUnderlying) void saveSelection(nextUnderlying, nextExpiration);
   }
@@ -156,6 +188,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       if (request.signal.aborted) return;
       const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot, saved);
       onNewStrategy();
+      setOpenQuote(undefined);
       setInput(next);
       setNotice("Posición cargada. Revisá las primas históricas y agregá ajustes desde la grilla.");
     } catch (error) {
@@ -169,7 +202,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }
   function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
-    if (existing?.side === side) { setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) })); return; }
+    if (existing?.side === side) {
+      setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) }));
+      setOpenQuote(undefined);
+      return;
+    }
     if (!existing && input.legs.length >= MAX_LEGS) { setNotice(`Máximo ${MAX_LEGS} patas.`); return; }
     if (!underlying || !comparable || contract.currency !== underlying.currency || !positive(contract.factor)) {
       setNotice("No se puede simular este contrato: faltan factores o hay monedas de prima, ejercicio y subyacente diferentes."); return;
@@ -190,7 +227,19 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setInput(current => ({ ...current, underlying: underlying.symbol, currency: contract.currency, expiry, multiplier: String(contract.factor),
       ...(!allLegs.length ? { spot: spot === undefined ? "" : String(spot), marketSpotMissing: spot === undefined, valuationDate: today, scenarioDate: today } : {}),
       legs: existing ? current.legs.map(item => item.securityId === contract.id ? leg : item) : [...current.legs, leg] }));
+    setOpenQuote(legKey(leg));
     setNotice("");
+  }
+  function changeQuoteQuantity(leg: Leg, preset: number) {
+    // Several clicks can be queued before React commits the new leg.
+    const pending = pendingQuantity.current?.leg === leg ? pendingQuantity.current : undefined;
+    const before = pending?.next ?? leg;
+    if (numeric(before.contracts) === preset) return;
+    const next = { ...before, contracts: String(preset) };
+    pendingQuantity.current = { leg, next };
+    setInput(current => current.legs.includes(before)
+      ? { ...current, legs: current.legs.map(item => item === before ? next : item) }
+      : current);
   }
   function chooseStrategy(choice: StrategyChoice): boolean {
     const recipe = strategyRecipe(choice, selected, spot), prices = recipePrices(recipe, data?.instruments, underlying?.currency);
@@ -210,6 +259,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     });
     const today = localDate();
     onNewStrategy();
+    setOpenQuote(undefined);
     setInput(current => ({ ...current, underlying: underlying.symbol, expiry: expiryDate(expiration), currency: recipe.legs[0].contract.currency,
       multiplier: String(factor), ...(!current.position ? { spot: String(spot), marketSpotMissing: false, valuationDate: today, scenarioDate: today } : {}), legs }));
     setNotice("");
@@ -224,11 +274,35 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const held = contract && input.position?.legs.find(leg => leg.securityId === contract.id && leg.side === side);
     const available = !!contract && !!quote && !!level && price.ok && !reading.issue;
     const moneyness = contract && itmSpot !== undefined && contract.strike !== itmSpot ? (contract.kind === "call" ? contract.strike < itmSpot : contract.strike > itmSpot) ? "itm" : "otm" : undefined;
-    return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}>
+    const key = marked && legKey(marked);
+    const visible = key !== undefined && key === shownQuote;
+    const quantity = marked ? numeric(marked.contracts) : NaN;
+    return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}
+      onMouseEnter={() => { if (key) setOpenQuote(key); }}
+      onMouseLeave={() => {
+        if (!quantityBar.current?.contains(document.activeElement)) setOpenQuote(current => current === key ? undefined : current);
+      }}
+      onFocus={() => { if (key) setOpenQuote(key); }}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(":hover")) {
+          setOpenQuote(current => current === key ? undefined : current);
+        }
+      }}>
       <button type="button" disabled={!available} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
         aria-pressed={!!marked} title={price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}`} onClick={() => contract && quote && selectQuote(contract, side, quote)}>
         <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : held ? `Pos. ${held.side === "buy" ? "+" : "−"}${held.contracts}` : ""}</span><OptionQuoteValue quantity value={available ? level.size : undefined} /><OptionQuoteValue value={available ? level.price : undefined} />
-      </button></td>;
+      </button>
+      {visible && marked && <div ref={quantityBar} className="ct-opt-quantity-bar" role="group" aria-label={`Cantidad de ${side === "buy" ? "compra" : "venta"} ${marked.symbol}`}>
+        <span>Cant.</span>
+        {quantityPresets.map(preset => <button key={preset} type="button" aria-label={`Fijar ${preset} ${preset === 1 ? "contrato" : "contratos"}`}
+          onMouseDown={event => event.preventDefault()} onClick={event => {
+            const editor = event.currentTarget.closest(".ct-sim")?.querySelector<HTMLElement>("[data-ct-inline-editor]:focus");
+            editor?.blur();
+            changeQuoteQuantity(marked, preset);
+          }}>{preset}</button>)}
+        <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
+      </div>}
+    </td>;
   };
   const money = (value: number | undefined) => value === undefined ? "—" : `${fmt(value)} ${underlying?.currency ?? ""}`;
   const viLegend = (kind: "call" | "put") => {

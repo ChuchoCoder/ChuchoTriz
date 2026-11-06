@@ -217,7 +217,7 @@
 .ct-sim-reference-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; font-size: 10px; color: var(--sim-muted); }
 .ct-sim-reference-buttons button { min-height: 26px; padding: 3px 8px; }
 .ct-sim-market .ct-opt-metrics-legend { min-width: 250px; flex-wrap: wrap; }
-.ct-sim .ct-sim-market .ct-opt-metrics-chain td, .ct-sim .ct-sim-market .ct-opt-metrics-chain .ct-opt-price button { height: 32px; }
+.ct-sim .ct-sim-market .ct-opt-metrics-chain td, .ct-sim .ct-sim-market .ct-opt-metrics-chain .ct-opt-price > button { height: 32px; }
 .ct-sim-analysis { display: grid; grid-template-columns: clamp(390px, 34%, 460px) minmax(0, 1fr); gap: 12px; align-items: start; }
 .ct-sim-analysis-panel:not([hidden]) { display: flex; flex: 1 0 auto; flex-direction: column; }
 .ct-sim-analysis-panel > .ct-sim-analysis { flex: 1 0 auto; }

@@ -85,6 +85,73 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(container.querySelectorAll(".ct-sim-chart path")).toHaveLength(3);
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
+
+it("sets only the clicked quote's contracts using the compact quantity bar", async () => {
+  await mount();
+  const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
+  const sell = byLabel<HTMLButtonElement>("Vender PUT 90 en simulación");
+  const bar = () => container.querySelector(".ct-opt-quantity-bar");
+  expect(bar()).toBeNull();
+  await act(async () => buy.click());
+  expect(bar()?.parentElement).toBe(buy.parentElement);
+  expect(bar()?.firstElementChild?.textContent).toBe("Cant.");
+  expect([...bar()!.querySelectorAll("button")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100"]);
+  expect(byLabel("Cantidad total").textContent).toBe("1");
+  await act(async () => {
+    byLabel<HTMLButtonElement>("Fijar 50 contratos").click();
+    const preset = byLabel<HTMLButtonElement>("Fijar 25 contratos");
+    preset.click(); preset.click();
+  });
+  expect(byLabel("Cantidad total").textContent).toBe("25");
+  expect(buy.textContent).toContain("Compra · 25");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+25");
+
+  await act(async () => buy.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: sell })));
+  expect(bar()).toBeNull();
+  await act(async () => sell.click());
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 100 contratos").click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+25");
+  expect(byLabel("Editar Contratos pata 2").textContent).toBe("−100");
+  expect(byLabel("Editar Prima pata 2").textContent).toBe("4");
+  await act(async () => sell.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: buy })));
+  expect(bar()?.parentElement).toBe(buy.parentElement);
+  await act(async () => buy.click());
+  expect(bar()).toBeNull();
+  expect(buy.getAttribute("aria-pressed")).toBe("false");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−100");
+});
+
+it("closes the active Armado editor and replaces its quantity from the grid", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 10 contratos").click());
+  await fill("Contratos pata 1", "15");
+  const editor = byLabel<HTMLInputElement>("Contratos pata 1");
+  expect(document.activeElement).toBe(editor);
+  const quote = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
+  await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(byLabel("Cantidad total").textContent).toBe("15");
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 25 contratos").click());
+  expect(editor.isConnected).toBe(false);
+  expect(byLabel("Cantidad total").textContent).toBe("25");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+25");
+  await fill("Contratos pata 1", "9999999999");
+  await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 1 contrato").click());
+  expect(byLabel("Cantidad total").textContent).toBe("1");
+});
+
+it("does not overwrite an Armado change with a stale grid change", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => {
+    byLabel<HTMLButtonElement>("Aumentar contratos pata 1").click();
+    byLabel<HTMLButtonElement>("Fijar 10 contratos").click();
+  });
+  expect(byLabel("Cantidad total").textContent).toBe("2");
+});
+
 it("keeps expiry available when a native VI is missing and blocks missing quotes", async () => {
   marketState.current.data!.instruments["call-100"].impliedVolatility = undefined;
   marketState.current.data!.instruments["put-100"].ask = undefined;

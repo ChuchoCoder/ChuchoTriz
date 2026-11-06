@@ -41,10 +41,10 @@
 .ct-sim .ct-opt-chain .ct-opt-atm { outline:1px solid #ffd45a; outline-offset:-1px; }
 .ct-sim .ct-opt-chain-scroll { flex:1; min-height:128px; overflow:auto; }
 .ct-sim .ct-opt-chain thead { position:sticky; top:0; z-index:2; background:var(--ct-panel); }
-.ct-sim .ct-opt-chain td.ct-opt-price { padding:0; }
-.ct-sim .ct-opt-price button { box-sizing:border-box; width:100%; height:32px; padding:3px 10px; border:2px solid transparent; border-radius:0; background:none; color:var(--ct-text); text-align:right; font-variant-numeric:tabular-nums; }
-.ct-sim .ct-opt-price button:focus-visible { outline-offset:-4px; }
-.ct-sim .ct-opt-price button { display:grid; grid-template-columns:minmax(42px,1fr) minmax(30px,.6fr) minmax(55px,1fr); gap:5px; align-items:center; white-space:nowrap; }
+.ct-sim .ct-opt-chain td.ct-opt-price { padding:0; position:relative; }
+.ct-sim .ct-opt-price > button { box-sizing:border-box; width:100%; height:32px; padding:3px 10px; border:2px solid transparent; border-radius:0; background:none; color:var(--ct-text); text-align:right; font-variant-numeric:tabular-nums; }
+.ct-sim .ct-opt-price > button:focus-visible { outline-offset:-4px; }
+.ct-sim .ct-opt-price > button { display:grid; grid-template-columns:minmax(42px,1fr) minmax(30px,.6fr) minmax(55px,1fr); gap:5px; align-items:center; white-space:nowrap; }
 .ct-sim .ct-opt-price .ct-opt-marker { grid-column:1; grid-row:1; justify-self:start; font-size:9px; border-radius:2px; }
 .ct-sim .ct-opt-price.selected .ct-opt-marker { padding:1px 3px; border:1px solid currentColor; }
 .ct-sim .ct-opt-price .ct-opt-quantity { grid-column:2; grid-row:1; font-size:11px; font-weight:500; color:inherit; }
@@ -79,11 +79,24 @@
 .ct-sim .ct-opt-itm-line.calls-only .ct-opt-itm-put { display:none; }
 .ct-sim .ct-opt-itm-line.puts-only { grid-template-columns:90px 1fr; }
 .ct-sim .ct-opt-itm-line.puts-only .ct-opt-itm-call { display:none; }
-.ct-sim .ct-opt-price button:not(:disabled):hover { background:#ffffff12; border-color:#ffffff80; }
-.ct-sim .ct-opt-price.buy.selected button { background:#245345; border-color:#50b58b; color:white; }
-.ct-sim .ct-opt-price.sell.selected button { background:#793746; border-color:#e995a0; color:white; }
+.ct-sim .ct-opt-price > button:not(:disabled):hover { background:#ffffff12; border-color:#ffffff80; }
+.ct-sim .ct-opt-price.buy.selected > button { background:#245345; border-color:#50b58b; color:white; }
+.ct-sim .ct-opt-price.sell.selected > button { background:#793746; border-color:#e995a0; color:white; }
 .ct-sim .ct-opt-price.selected .ct-opt-quantity { color:#f2f5fa; }
 .ct-sim .ct-opt-price.buy.selected .ct-opt-marker { background:#245345; color:#c6ffe3; border-color:#50b58b; }
 .ct-sim .ct-opt-price.sell.selected .ct-opt-marker { background:#793746; color:#fff0f3; border-color:#e995a0; }
+.ct-sim .ct-opt-quantity-bar {
+  position:absolute; z-index:3; top:0; left:0; transform:translateY(-100%); width:max-content;
+  display:flex; align-items:center; flex-wrap:wrap; gap:3px; padding:3px 4px;
+  border:1px solid #50b58b; border-radius:5px 5px 3px 3px; background:var(--ct-panel);
+  box-shadow:0 2px 8px #0007; color:var(--ct-text); font-size:11px; white-space:nowrap;
+}
+.ct-sim .ct-opt-price.sell .ct-opt-quantity-bar { border-color:#e995a0; }
+.ct-sim .ct-opt-quantity-bar button {
+  width:auto; min-width:19px; min-height:22px; padding:1px 4px; border-radius:3px; color:var(--ct-text); font:inherit;
+}
+.ct-sim .ct-opt-quantity-bar button:hover:enabled { background:var(--ct-panel); }
+.ct-sim .ct-opt-quantity-total { padding-inline:3px; min-width:7ch; text-align:center; }
+.ct-sim .ct-opt-quantity-total output { font-weight:700; }
 .ct-sim .ct-opt-chain-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; padding:6px 8px; font-size:10px; color:var(--ct-muted); gap:8px; }
 .ct-sim .ct-opt-chain-footer button { background:var(--ct-panel); color:var(--ct-text); padding:3px 7px; border:1px solid var(--ct-border); border-radius:2px; }
