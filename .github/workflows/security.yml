@@ -78,5 +78,5 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Scan with checksum-pinned zizmor and Gitleaks (no npm install)
+      - name: Scan workflows, secrets and outgoing personal data (no npm install)
         run: node scripts/security/run-tools.mjs
