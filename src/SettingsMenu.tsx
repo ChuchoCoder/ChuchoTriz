@@ -6,16 +6,18 @@ import "./SettingsMenu.css";
 
 const barSelector = ".DirectAccessBar";
 const headerSelector = ".HeaderDMA";
-const boundarySelectors = [headerSelector, barSelector, "#ToolPanel", "#MiniOrderForm", ".MobileHeaderDma", ".MobileFooterDma"];
+const toolsSelector = "#ToolPanel";
+const drawerSelector = "#ToolPanel .ToolContent";
+const boundarySelectors = [headerSelector, barSelector, toolsSelector, drawerSelector, "#MiniOrderForm", ".MobileHeaderDma", ".MobileFooterDma"];
 
 function bounds() {
-  const [header, bar, tools, ticket, mobileHeader, mobileFooter] = boundarySelectors.map(selector => {
+  const [header, bar, tools, drawer, ticket, mobileHeader, mobileFooter] = boundarySelectors.map(selector => {
     const rect = document.querySelector(selector)?.getBoundingClientRect();
     return rect && rect.width > 0 && rect.height > 0 ? rect : undefined;
   });
   return {
     top: Math.max(0, header?.bottom ?? 0, mobileHeader?.bottom ?? 0), left: Math.max(0, bar?.right ?? 0),
-    right: tools ? Math.max(0, innerWidth - tools.left) : 0,
+    right: Math.max(0, innerWidth - Math.min(tools?.left ?? innerWidth, drawer?.left ?? innerWidth)),
     bottom: Math.max(0, ticket ? innerHeight - ticket.top : 0, mobileFooter ? innerHeight - mobileFooter.top : 0),
   };
 }
@@ -73,15 +75,23 @@ export function SettingsMenu() {
       frame = requestAnimationFrame(() => {
         const next = bounds();
         setPosition(previous => Object.keys(next).every(key => next[key as keyof typeof next] === previous[key as keyof typeof previous]) ? previous : next);
+        // The fixed drawer slides independently of the toolbar without resizing.
+        if (document.querySelector(drawerSelector)?.getAnimations?.().some(animation => animation.pending || animation.playState === "running")) update();
       });
     };
     const resize = new ResizeObserver(update);
+    const toolState = new MutationObserver(update);
     let observed: Element[] = [];
     const bind = () => {
       const nodes = boundarySelectors.map(selector => document.querySelector(selector)).filter((node): node is Element => node !== null);
       if (nodes.length === observed.length && nodes.every((node, index) => node === observed[index])) return;
       resize.disconnect(); observed = nodes;
-      nodes.forEach(node => resize.observe(node)); update();
+      toolState.disconnect();
+      nodes.forEach(node => {
+        resize.observe(node);
+        if (node.matches(`${toolsSelector}, ${drawerSelector}`)) toolState.observe(node, { attributes: true, attributeFilter: ["class", "style", "hidden"] });
+      });
+      update();
     };
     bind(); update();
     const mutation = new MutationObserver(bind);
@@ -95,7 +105,7 @@ export function SettingsMenu() {
     document.addEventListener("click", navigate, true);
     window.addEventListener("resize", update);
     return () => {
-      cancelAnimationFrame(frame); resize.disconnect(); mutation.disconnect();
+      cancelAnimationFrame(frame); resize.disconnect(); toolState.disconnect(); mutation.disconnect();
       document.removeEventListener("click", navigate, true);
       window.removeEventListener("resize", update);
     };

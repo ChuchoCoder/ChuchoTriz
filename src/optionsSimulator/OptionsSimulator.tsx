@@ -168,6 +168,45 @@ function ScenarioButtons({ label, value, options, onChange, numericValues = fals
 }
 
 const MIN_CHART_ZOOM = -6;
+const SCENARIO_CHANGES = Array.from({ length: 25 }, (_, index) => index * 2 - 24);
+
+function scenarioPriceAt(spot: number, factor: number) {
+  return factor === 1 ? spot : Number((spot * factor).toPrecision(15));
+}
+
+function hasTheoreticalResult(strategy: Strategy) {
+  return strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
+}
+
+function ScenarioResults({ strategy, currency, scenarioDate }: { strategy: Strategy; currency: string; scenarioDate: string }) {
+  const heading = useId();
+  const hasTheory = hasTheoreticalResult(strategy);
+  const resultCell = (value: number) => {
+    if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER) return <td>—</td>;
+    return <td className={value > 0 ? "ct-sim-profit" : value < 0 ? "ct-sim-loss" : undefined}>{formatOptionAmount(value, currency)}</td>;
+  };
+  return <section className="ct-sim-scenario-results" aria-labelledby={heading}>
+    <h4 id={heading}>Resultados por precio</h4>
+    <div className="ct-sim-scenario-scroll" role="region" aria-labelledby={heading} tabIndex={0}>
+      <table>
+        <caption className="ct-sim-sr">Variación respecto del precio de referencia. Teórico al {scenarioDate}.</caption>
+        <thead><tr><th scope="col">Var. %</th><th scope="col">Precio ({currency})</th>
+          <th scope="col">Al vencimiento</th><th scope="col">Teórico</th></tr></thead>
+        <tbody>{SCENARIO_CHANGES.map(change => {
+          const price = scenarioPriceAt(strategy.spot, 1 + change / 100);
+          const distance = Math.abs(change);
+          if (price > 1e9) return null;
+          return <tr key={change} data-band={distance === 0 ? "spot" : distance <= 10 ? "near" : distance <= 20 ? "middle" : "far"}>
+            <th scope="row">{change > 0 ? "+" : ""}{change}%</th>
+            <td>{formatOptionAmount(price)}</td>
+            {resultCell(resultAt(strategy, price, "expiry"))}
+            {resultCell(hasTheory ? resultAt(strategy, price, "theoretical") : NaN)}
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+  </section>;
+}
 
 function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPriceChange, zoom, fullRange, onZoom, compact = false }: {
   strategy: Strategy; currency: string; scenarioDate: string; selectedPrice: number; onPriceChange(price: number): void;
@@ -184,7 +223,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   const fmt = (amount: number) => formatOptionAmount(amount, currency);
   const cursorVisible = price >= strategy.rangeMin && price <= strategy.rangeMax;
   const height = compact ? 190 : 240, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = 20, bottom = compact ? 26 : 38;
-  const hasTheory = strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
+  const hasTheory = hasTheoreticalResult(strategy);
   const toolbar = <div className="ct-sim-chart-toolbar"><div className="ct-sim-legend"><span><i className="ct-sim-expiry-key" /> {compact ? "Vencimiento" : "Al vencimiento"}</span>
     {hasTheory && <span title={`Teórico · ${scenarioDate}`}><i className="ct-sim-theory-key" /> {compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span>}
     {!compact && deviations && deviations.move > 0 && <><span><i className="ct-sim-sigma-one-key" /> ±1σ</span><span><i className="ct-sim-sigma-two-key" /> ±2σ</span></>}</div>
@@ -330,7 +369,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const manualStrategy = !input.position && input.legs.length > 0 && input.legs.every(leg => !leg.securityId);
   const scenarioPrice = scenarioPoint?.context === scenarioContext ? scenarioPoint.price : input.spot;
   const selectedPrice = numeric(scenarioPrice), spot = numeric(input.spot);
-  const priceTarget = (factor: number) => Number((spot * factor).toPrecision(15));
+  const priceTarget = (factor: number) => scenarioPriceAt(spot, factor);
   const scenarioPriceValid = Number.isFinite(selectedPrice) && selectedPrice >= 0 && selectedPrice <= 1e9;
   const setScenarioPrice = (price: string) => setScenarioPoint({ context: scenarioContext, price });
   const priceMin = chartView?.strategy.rangeMin ?? 0;
@@ -537,7 +576,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         </div>
         {!!input.realized?.trim() && <p className="ct-sim-hint">Los resultados incluyen el realizado neto informado de {money(numeric(input.realized))}.</p>}
         <p className="ct-sim-equilibria"><span>Equilibrio al vencimiento: </span>{summary.equilibria.length ? summary.equilibria.map(point => point.from === point.to ? fmt(point.from) : `${fmt(point.from)} a ${point.to === Infinity ? "∞" : fmt(point.to)}`).join(" · ") + ` ${input.currency}` : "Sin puntos de equilibrio"}</p>
-        {view === "analysis" && chart}
+        {view === "analysis" && <div className="ct-sim-analysis-results">
+          <ScenarioResults strategy={parsed.strategy} currency={input.currency} scenarioDate={input.scenarioDate} />
+          <div className="ct-sim-analysis-chart">{chart}</div>
+        </div>}
         {chartView && [...parsed.strategy.legs.map(leg => leg.strike), ...summary.equilibria.map(point => point.from)]
           .some(price => price < chartView.strategy.rangeMin || price > chartView.strategy.rangeMax) && <p className="ct-sim-hint">Hay strikes o equilibrios fuera del rango visible.</p>}
       </>}

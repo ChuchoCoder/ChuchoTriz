@@ -91,12 +91,22 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   await mount();
   expect(byLabel<HTMLButtonElement>("Comprar PUT 100 en simulación").disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  expect(container.querySelector(".ct-sim-scenario-results")).toBeNull();
   await showAnalysis();
+  const table = container.querySelector<HTMLTableElement>(".ct-sim-scenario-results table")!;
+  expect(table.tBodies[0].rows).toHaveLength(25);
+  const reference = table.querySelector<HTMLTableRowElement>('tr[data-band="spot"]')!;
+  expect(Array.from(reference.cells, cell => cell.textContent)).toEqual(["0%", "100", "-500", "—"]);
+  const upTen = Array.from(table.tBodies[0].rows).find(row => row.cells[0].textContent === "+10%")!;
+  expect(Array.from(upTen.cells, cell => cell.textContent)).toEqual(["+10%", "110", "500", "—"]);
   expect(container.textContent).toContain("Teórico no disponible");
   expect(container.querySelector(".ct-sim-expiry-line")).not.toBeNull();
   expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
   await fill("VI pata 1", "45");
   expect(container.querySelector(".ct-sim-theory-line")).not.toBeNull();
+  expect(reference.cells[3].textContent).not.toBe("—");
+  await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
+  expect(reference.cells[3].textContent).toBe(reference.cells[2].textContent);
 });
 it("imports a historical position and preserves its premiums and accounting through every adjustment control", async () => {
   await mount();
