@@ -249,7 +249,12 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(container.querySelectorAll('.ct-sim-legs-card tbody input, .ct-sim-legs-card tbody select')).toHaveLength(0);
+  await fill("Precio pata 1", "6,25");
+  await act(async () => byLabel<HTMLInputElement>("Precio pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("6,25");
+  expect(container.textContent).toContain("625 ARS");
   await showAnalysis();
+  expect(byLabel("Editar Prima pata 1").textContent).toBe("6,25");
   await fill("Prima pata 1", "7,5");
   const premium = byLabel<HTMLInputElement>("Prima pata 1");
   expect(document.activeElement).toBe(premium);
@@ -665,10 +670,11 @@ it("shows days after the expiry selector and compact signed C/P legs without ins
   const expiryControl = byLabel<HTMLSelectElement>("Vencimiento de opciones");
   expect(expiryControl.nextElementSibling).toBe(byLabel("Días al vencimiento de la cadena"));
   expect(byLabel("Días al vencimiento de la cadena").textContent).toBe("30d");
+  expect(expiryControl.selectedOptions[0].textContent).toBe(formatOptionExpiry(expiry, "short"));
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
   const panel = container.querySelector('.ct-sim-legs-card')!;
-  expect([...panel.querySelectorAll('thead th')].map(node => node.textContent)).toEqual(["Tipo", "Cant.", "Venc.", "Días", "Strike", "Acciones"]);
+  expect([...panel.querySelectorAll('thead th')].map(node => node.textContent)).toEqual(["Tipo", "Cant.", "Venc.", "Días", "Strike", "Precio", "Acciones"]);
   expect([1, 2].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+1", "−1"]);
   expect([...panel.querySelectorAll('.ct-sim-kind-chip')].map(node => node.textContent)).toEqual(["C", "P"]);
   expect(panel.querySelector('[role="switch"]')).toBeNull();
@@ -678,7 +684,7 @@ it("shows days after the expiry selector and compact signed C/P legs without ins
   expect(panel.querySelector('[aria-label="Editar VI pata 1"]')).toBeNull();
   expect(byLabel("Editar Contratos pata 1").getAttribute('aria-description')).toContain("Compra");
   expect(panel.querySelector('[aria-label^="Editar Sentido"]')).toBeNull();
-  expect([...panel.querySelectorAll('.ct-sim-leg-expiry-date')].every(node => /^[A-Z][a-z]{3,} \d{1,2}$/.test(node.textContent!))).toBe(true);
+  expect([...panel.querySelectorAll('.ct-sim-leg-expiry-date')].every(node => /^[A-Z][a-z]{2} \d{1,2}$/.test(node.textContent!))).toBe(true);
   expect(panel.querySelector('[aria-label="Editar Prima pata 1"]')).toBeNull();
   await showAnalysis();
   expect(byLabel("Editar VI pata 1").textContent).toBe("40,00");
@@ -696,6 +702,8 @@ it("shows days after the expiry selector and compact signed C/P legs without ins
   expect(container.querySelector('.ct-sim-scenario [aria-label="Vencimiento"]')).toBeNull();
   await act(async () => byLabel<HTMLButtonElement>("Limpiar patas").click());
   await act(async () => button("+ Pata manual").click());
+  await fill("Vencimiento", "2030-12-18");
+  expect(container.querySelector('.ct-sim-leg-expiry-date')!.textContent).toBe("Dic 18");
   await fill("Vencimiento", "");
   expect(container.querySelector('.ct-sim-leg-expiry')!.textContent).toBe("—");
 });
@@ -745,7 +753,7 @@ it("edits quantity signs as buy/sell, preserves partial drafts and restores both
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   expect(byLabel("Editar Contratos pata 1").textContent).toBe("+2");
   expect(byLabel("Comprar CALL 100 en simulación").getAttribute('aria-pressed')).toBe('true');
-  expect(container.querySelector('.ct-sim-leg-expiry-date')!.textContent).toBe(formatOptionExpiry(expiry));
+  expect(container.querySelector('.ct-sim-leg-expiry-date')!.textContent).toBe(formatOptionExpiry(expiry, "short"));
 });
 
 it("replaces per-leg prices with a total-price slider showing Natural, Mid and Opposite debit/credit", async () => {

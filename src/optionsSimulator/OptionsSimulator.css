@@ -74,7 +74,7 @@
 .ct-sim .ct-sim-clear-legs { min-height: 24px; padding: 2px 5px; font-size: 10px; }
 .ct-sim .ct-sim-quick-adjustments button { width: 20px; min-height: 24px; padding: 0; border-radius: 3px 0 0 3px; font-size: 14px; line-height: 22px; }
 .ct-sim .ct-sim-quick-adjustments button + button { border-left: 0; border-radius: 0 3px 3px 0; }
-.ct-sim-legs-card table { min-width: 290px; font-size: 11px; }
+.ct-sim-legs-card table { min-width: 342px; font-size: 11px; }
 .ct-sim-legs-card th, .ct-sim-legs-card td { height: 28px; padding: 1px 2px; vertical-align: middle; }
 .ct-sim-legs-card thead th { height: 22px; font-size: 10px; }
 .ct-sim-legs-card th:first-child, .ct-sim-legs-card th:last-child { width: auto; }
@@ -84,8 +84,9 @@
 .ct-sim-quantity-stepper { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .ct-sim-quantity-stepper > .ct-sim-editable { flex: 1; }
 .ct-sim-legs-card .ct-sim-quantity-step { width: 18px; flex: 0 0 18px; min-height: 22px; padding: 0; font-size: 14px; line-height: 20px; border-radius: 3px; }
-.ct-sim-leg-date { width: 84px; }
-.ct-sim-leg-days { width: 42px; }
+.ct-sim-leg-date { width: 48px; }
+.ct-sim-leg-days { width: 36px; }
+.ct-sim-leg-price { width: 64px; }
 .ct-sim-leg-remove { width: 22px; }
 .ct-sim-kind-chip { display: block; width: 24px; text-align: center; border: 1px solid currentColor; border-radius: 4px; font-size: 10px; line-height: 20px; }
 .ct-sim-kind-call { color: var(--sim-profit); }

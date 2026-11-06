@@ -18,11 +18,12 @@ export function formatExpiryDays(days: number | undefined): string {
   return days === undefined ? "—" : days < 0 ? "Vencido" : `${days}d`;
 }
 
-export function formatOptionExpiry(expiry: string): string {
+export function formatOptionExpiry(expiry: string, monthStyle: "long" | "short" = "long"): string {
   const day = dateDay(expiry);
   if (!Number.isFinite(day)) return "—";
   const date = new Date(day * 86_400_000);
-  const month = date.toLocaleString("es-AR", { month: "long", timeZone: "UTC" });
+  const fullMonth = date.toLocaleString("es-AR", { month: "long", timeZone: "UTC" });
+  const month = monthStyle === "short" ? fullMonth.slice(0, 3) : fullMonth;
   return `${month[0].toUpperCase()}${month.slice(1)} ${date.getUTCDate()}`;
 }
 
