@@ -189,7 +189,7 @@ function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
     <div className="ct-sim-scenario-scroll" role="region" aria-labelledby={heading} tabIndex={0}>
       <table>
         <caption className="ct-sim-sr">Variación respecto del precio de referencia. Teórico al {scenarioDate}.
-          {move > 0 && " Las bandas de color marcan hasta ±1σ y entre ±1σ y ±2σ."}
+          {move > 0 && " Verde hasta ±1σ, naranja entre ±1σ y ±2σ, rojo fuera de ±2σ."}
         </caption>
         <thead><tr><th scope="col">Var. %</th><th scope="col">Precio ({currency})</th>
           <th scope="col">Al vencimiento</th><th scope="col">Teórico</th></tr></thead>
@@ -197,9 +197,10 @@ function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
           const price = scenarioPriceAt(strategy.spot, 1 + change / 100);
           if (price > 1e9) return null;
           const distance = Math.abs(price - strategy.spot);
-          const band = change === 0 ? "spot" : distance <= move ? "sigma-one" : distance <= 2 * move ? "sigma-two" : undefined;
+          const band = change === 0 ? "spot" : distance <= move ? "sigma-one"
+            : distance <= 2 * move ? "sigma-two" : move > 0 ? "outside-sigma" : undefined;
           const label = band === "spot" ? "Precio de referencia" : band === "sigma-one" ? "Dentro de ±1σ"
-            : band === "sigma-two" ? "Entre ±1σ y ±2σ" : move > 0 ? "Fuera de ±2σ" : undefined;
+            : band === "sigma-two" ? "Entre ±1σ y ±2σ" : band === "outside-sigma" ? "Fuera de ±2σ" : undefined;
           return <tr key={change} data-band={band}>
             <th scope="row" title={label}>{change > 0 ? "+" : ""}{change}%</th>
             <td>{formatOptionAmount(price)}</td>

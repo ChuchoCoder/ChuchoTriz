@@ -551,7 +551,7 @@ it("draws four standard-deviation references in both charts and updates them wit
   const bandAt = (change: string) => Array.from(container.querySelectorAll<HTMLTableRowElement>(".ct-sim-scenario-results tbody tr"))
     .find(row => row.cells[0].textContent === change)?.dataset.band;
   expect(["-24%", "-12%", "0%", "+10%", "+12%", "+24%"].map(bandAt))
-    .toEqual([undefined, "sigma-two", "spot", "sigma-one", "sigma-two", undefined]);
+    .toEqual(["outside-sigma", "sigma-two", "spot", "sigma-one", "sigma-two", "outside-sigma"]);
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("VI ref. 40,00 % · 30 días");
   await act(async () => byLabel<HTMLButtonElement>("VI +5 pp").click());
   expect(labels()).not.toEqual(initial);

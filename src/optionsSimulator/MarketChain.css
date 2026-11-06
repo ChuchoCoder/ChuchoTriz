@@ -60,7 +60,7 @@
 .ct-sim .ct-opt-chain-grid { position:relative; display:table; width:100%; }
 .ct-sim .ct-opt-sigma-overlay { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:1; }
 .ct-sim .ct-opt-sigma-1 { color:var(--sim-sigma-one); }
-.ct-sim .ct-opt-sigma-2 { color:var(--sim-accent); }
+.ct-sim .ct-opt-sigma-2 { color:var(--sim-sigma-two); }
 .ct-sim .ct-opt-sigma-key i { font-style:normal; font-weight:700; }
 .ct-sim .ct-opt-sigma-line { position:absolute; left:0; right:0; border-top:1px dashed currentColor; }
 .ct-sim .ct-opt-sigma-line.ct-opt-sigma-2 { border-top-style:dotted; }
