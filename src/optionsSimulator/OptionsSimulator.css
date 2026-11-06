@@ -264,7 +264,7 @@
 .ct-sim-equilibria { color: var(--sim-text); font-size: 12px; margin: 6px 0 8px; }
 .ct-sim-equilibria span { color: var(--sim-muted); }
 .ct-sim-analysis-results { display: flex; flex: 1; flex-wrap: wrap; gap: 12px; }
-.ct-sim-scenario-results { display: flex; flex: 0 1 auto; flex-direction: column; min-width: 0; max-width: 100%; --sim-table-header: #2c4e77; --sim-table-body: #17263b; --sim-band-spot: #25466b; --sim-band-green: #284a3b; --sim-band-yellow: #544823; --sim-band-red: #54343d; }
+.ct-sim-scenario-results { display: flex; flex: 0 1 auto; flex-direction: column; min-width: 0; max-width: 100%; --sim-table-header: #2c4e77; --sim-table-body: #17263b; --sim-band-spot: #25466b; --sim-band-green: #235840; --sim-band-yellow: #62501e; --sim-band-red: #64343f; }
 .ct-sim-analysis-chart { display: flex; flex: 1 1 520px; flex-direction: column; min-width: 0; }
 .ct-sim-analysis-chart > .ct-sim-chart { flex: 1 0 auto; height: 240px; }
 .ct-sim .ct-sim-scenario-results h4 { margin: 0 0 5px; }
@@ -316,7 +316,7 @@
 .ct-sim-assumptions summary { color: var(--sim-text); cursor: pointer; }
 .ct-sim-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .ct-free-settings-panel[data-color-scheme="light"] .ct-sim { color-scheme: light; --sim-bg: #f3f5fa; --sim-card: #ffffff; --sim-field: #f5f7fb; --sim-text: #202b3d; --sim-muted: #46546b; --sim-border: #7b879b; --sim-accent: #53298e; --sim-theory: #005b75; --sim-profit: #075d36; --sim-loss: #a21834; --sim-sigma-one: #246346; --sim-sigma-two: #785b07; }
-.ct-free-settings-panel[data-color-scheme="light"] .ct-sim-scenario-results { --sim-table-header: #d6e6fb; --sim-table-body: #f8faff; --sim-band-spot: #cde2fd; --sim-band-green: #d9eee1; --sim-band-yellow: #f6edcc; --sim-band-red: #f5dce2; }
+.ct-free-settings-panel[data-color-scheme="light"] .ct-sim-scenario-results { --sim-table-header: #d6e6fb; --sim-table-body: #f8faff; --sim-band-spot: #cde2fd; --sim-band-green: #c9e9d5; --sim-band-yellow: #f8e8b3; --sim-band-red: #f5ccd6; }
 @container (max-width: 1050px) {
   .ct-sim-market-layout { grid-template-columns: 1fr; }
   .ct-sim-analysis { grid-template-columns: 1fr; }
