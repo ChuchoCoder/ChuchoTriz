@@ -475,7 +475,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       <div ref={grid} className={`ct-opt-chain-grid${editingPosition ? " ct-opt-position-grid" : ""}`}><table className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : "ct-opt-chain ct-opt-metrics-chain"}>
         {editingPosition ? <><colgroup><col /><col /><col className="strike" /><col /><col /></colgroup>
           <thead><tr><th scope="col" title="Cantidad de Calls · + compra, − venta">CALLS · Cant.</th><th scope="col" title="Prima histórica por unidad de Calls">Prima histórica</th>
-            <th className="ct-opt-strike" scope="col">Strike</th><th scope="col" title="Prima histórica por unidad de Puts">Prima histórica</th><th scope="col" title="Cantidad de Puts · + compra, − venta">PUTS · Cant.</th></tr></thead>
+            <th className="ct-opt-strike" scope="col">Strike</th><th scope="col" title="Cantidad de Puts · + compra, − venta">PUTS · Cant.</th><th scope="col" title="Prima histórica por unidad de Puts">Prima histórica</th></tr></thead>
         </> : <>
         <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col className="theta" /><col className="extrinsic" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="extrinsic" /><col className="theta" /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
         <thead><tr className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
@@ -491,7 +491,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
             {editingPosition ? <>{positionCell("call", strike, "quantity")}{positionCell("call", strike, "premium")}</>
               : <>{metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{metricCell(call, "theta", "call")}{metricCell(call, "extrinsic", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}</>}
             <th scope="row" className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
-            {editingPosition ? <>{positionCell("put", strike, "premium")}{positionCell("put", strike, "quantity")}</>
+            {editingPosition ? <>{positionCell("put", strike, "quantity")}{positionCell("put", strike, "premium")}</>
               : <>{metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "extrinsic", "put")}{metricCell(put, "theta", "put")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}</>}
           </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 5 : 17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>

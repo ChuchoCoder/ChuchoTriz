@@ -256,7 +256,12 @@ it("keeps position accounting above the single-row header and shows deviations w
   await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
   const chain = container.querySelector<HTMLTableElement>(".ct-opt-position-chain")!;
   expect(chain.tHead?.rows).toHaveLength(1);
-  expect(chain.tHead?.rows[0].cells).toHaveLength(5);
+  expect(Array.from(chain.tHead!.rows[0].cells, cell => cell.textContent)).toEqual([
+    "CALLS · Cant.", "Prima histórica", "Strike", "PUTS · Cant.", "Prima histórica",
+  ]);
+  const strikeRow = chain.querySelector<HTMLTableRowElement>('tr[data-option-strike="100"]')!;
+  expect(strikeRow.cells[3].contains(byLabel("Cantidad posición PUT 100"))).toBe(true);
+  expect(strikeRow.cells[4].contains(byLabel("Prima histórica PUT 100"))).toBe(true);
   const controls = byLabel("Controles de posición");
   for (const label of ["Gastos de la posición", "Resultado realizado neto"]) {
     const field = byLabel(label);
