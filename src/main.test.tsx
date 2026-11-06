@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /// <reference types="node" />
 import { act } from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { parse } from "postcss";
 import { readFileSync } from "node:fs";
 const optionsCss = readFileSync("src/Options.css", "utf8");
@@ -64,28 +64,92 @@ it("lets the embedded RAW editor use the available panel width", () => {
 
 const observers: MutationObserver[] = [];
 const NativeObserver = globalThis.MutationObserver;
-afterEach(() => { observers.forEach(observer => observer.disconnect()); vi.unstubAllGlobals(); });
+let stopQuoteFocus: (() => void) | undefined;
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("MutationObserver", class extends NativeObserver {
+    constructor(callback: MutationCallback) { super(callback); observers.push(this); }
+  });
+  vi.stubGlobal("chrome", { storage: {
+    local: {
+      get: vi.fn().mockResolvedValue({ InstrumentPresets: {
+        AL30: [
+          { cantidad: 100, mostrar: 0 },
+          { cantidad: 200, mostrar: 0 },
+          { cantidad: 300, mostrar: 30 },
+        ],
+        GD30: [{ cantidad: 400, mostrar: 0 }],
+      } }),
+      set: vi.fn().mockResolvedValue(undefined),
+    },
+    onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+  } });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+});
+
+afterEach(async () => {
+  await act(async () => { document.getElementById("MiniOrderForm")?.remove(); });
+  stopQuoteFocus?.();
+  stopQuoteFocus = undefined;
+  observers.splice(0).forEach(observer => observer.disconnect());
+  document.body = document.createElement("body");
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+function createForm(cantidad = "") {
+  const form = document.createElement("div");
+  form.id = "MiniOrderForm";
+  form.innerHTML = `
+    <span class="ExpandButton"></span>
+    <input id="rc_select_2" value="AL30 (CI)">
+    <div class="ant-form-item MiniOrderFormQuantity-price-input">
+      <div class="ant-input-number-input-wrap"><input id="precio" value="70000"></div>
+    </div>
+    <div class="ant-form-item MiniOrderFormQuantity-amount-input">
+      <div class="ant-input-number-input-wrap"><input id="cantidad" value="${cantidad}"></div>
+    </div>
+    <div class="MiniOrderForm_buttonsBlock"><button class="ButtonLimpiar">Limpiar</button></div>`;
+  return {
+    form,
+    amount: form.querySelector<HTMLInputElement>("#cantidad")!,
+    price: form.querySelector<HTMLInputElement>("#precio")!,
+    buttons: form.querySelector(".MiniOrderForm_buttonsBlock")!,
+    showPartial: (value = "") => {
+      form.insertAdjacentHTML("beforeend", `
+        <div class="ant-form-item amount-show__div">
+          <div class="ant-input-number-input-wrap"><input id="mostrar" value="${value}"></div>
+        </div>`);
+      return form.querySelector<HTMLInputElement>("#mostrar")!;
+    },
+  };
+}
+
+function presetButton(form: HTMLElement, text: string) {
+  const button = [...form.querySelectorAll<HTMLButtonElement>(".ButtonPreset")].find(preset => preset.textContent === text);
+  expect(button).toBeDefined();
+  return button!;
+}
+
+async function boot() {
+  const startQuoteFocus = vi.spyOn(await import("./Matriz"), "focusCantidadAfterQuoteClick");
+  await act(async () => { await import("./main"); });
+  stopQuoteFocus = startQuoteFocus.mock.results[0]?.value;
+}
 
 it("mounts Configuración in the left menu even before the order form exists", async () => {
   document.body.innerHTML = `
     <header class="HeaderDMA"><a class="NavItem selected" href="/byma" aria-current="page"><span>BYMA</span></a></header>
     <nav class="DirectAccessBar"><a class="Item" href="#favoritos">Favoritos</a></nav>
     <aside id="ToolPanel" hidden></aside>`;
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("MutationObserver", class extends NativeObserver {
-    constructor(callback: MutationCallback) { super(callback); observers.push(this); }
-  });
-  vi.stubGlobal("chrome", { storage: {
-    local: { get: vi.fn().mockResolvedValue({}), set: vi.fn().mockResolvedValue(undefined) },
-    onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-  } });
-  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   let hostBackground = "rgb(245, 246, 250)";
   const nativeComputedStyle = window.getComputedStyle.bind(window);
   const computedStyle = vi.spyOn(window, "getComputedStyle").mockImplementation(element =>
     element.classList.contains("ct-free-settings-panel")
       ? { backgroundColor: hostBackground } as CSSStyleDeclaration : nativeComputedStyle(element));
-  await act(async () => { await import("./main"); });
+  await boot();
   const item = document.querySelector<HTMLAnchorElement>('.DirectAccessBar [aria-label="Configuración (ChuchoTriz)"]');
   expect(item, "Configuration must be reachable from Matriz's left menu").not.toBeNull();
   await act(async () => { item!.click(); });
@@ -202,4 +266,111 @@ it("mounts Configuración in the left menu even before the order form exists", a
   expect(panel!.style.bottom, "Keep native mobile order navigation clear of the footer actions").toBe("83px");
   await act(async () => { panel!.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); mobileHeader.remove(); mobileFooter.remove(); });
   computedStyle.mockRestore();
+});
+
+it("remounts on the new form and waits for ticket focus before applying the last chosen preset", async () => {
+  const previous = createForm();
+  document.body.append(previous.form);
+  await boot();
+  await act(async () => { presetButton(previous.form, "200").click(); });
+  expect(previous.amount.value).toBe("200");
+
+  const replacement = createForm();
+  await act(async () => { previous.form.replaceWith(replacement.form); });
+
+  expect(previous.form.querySelector("#root-chuchotriz")).toBeNull();
+  expect(replacement.form.querySelectorAll("#root-chuchotriz")).toHaveLength(1);
+  presetButton(replacement.form, "200");
+  expect(replacement.amount.value).toBe("");
+  expect(document.activeElement).not.toBe(replacement.amount);
+
+  await act(async () => { replacement.price.focus(); });
+  expect(replacement.amount.value).toBe("200");
+  expect(document.activeElement).toBe(replacement.amount);
+
+  const withoutPrice = createForm();
+  withoutPrice.price.value = "";
+  const afterClear = createForm();
+  const limpiar = withoutPrice.form.querySelector<HTMLButtonElement>(".ButtonLimpiar")!;
+  limpiar.addEventListener("click", () => { withoutPrice.form.replaceWith(afterClear.form); });
+  await act(async () => {
+    replacement.form.replaceWith(withoutPrice.form);
+    limpiar.click();
+  });
+  await act(async () => { afterClear.price.focus(); });
+  expect(afterClear.amount.value).toBe("100");
+});
+
+it("handles ticket focus before the replacement form gets its buttons", async () => {
+  const previous = createForm();
+  document.body.append(previous.form);
+  await boot();
+  const replacement = createForm();
+  replacement.buttons.remove();
+  await act(async () => {
+    previous.form.replaceWith(replacement.form);
+    replacement.price.focus();
+    replacement.form.append(replacement.buttons);
+  });
+
+  expect(replacement.amount.value).toBe("100");
+  presetButton(replacement.form, "100");
+});
+
+it("cancels a pending shown quantity when the form is replaced with identical ticket values", async () => {
+  const previous = createForm();
+  document.body.append(previous.form);
+  await boot();
+  const replacement = createForm("300");
+  const shown = replacement.showPartial("5");
+  await act(async () => {
+    presetButton(previous.form, "300/30").click();
+    previous.form.replaceWith(replacement.form);
+  });
+
+  expect(previous.amount.value).toBe("300");
+  expect(replacement.amount.value).toBe("300");
+  expect(shown.value).toBe("5");
+  presetButton(replacement.form, "300/30");
+});
+
+it("remounts after replacing just the buttons and preserves the pending write in the same form", async () => {
+  const current = createForm();
+  const expand = vi.fn();
+  current.form.querySelector(".ExpandButton")!.addEventListener("click", expand);
+  document.body.append(current.form);
+  await boot();
+  const replacement = current.buttons.cloneNode(true) as HTMLElement;
+
+  await act(async () => {
+    presetButton(current.form, "300/30").click();
+    current.buttons.remove();
+  });
+  expect(current.buttons.querySelector("#root-chuchotriz")).toBeNull();
+  await act(async () => { current.form.append(replacement); });
+  const shown = current.showPartial();
+  await act(async () => {});
+
+  expect(replacement.querySelectorAll("#root-chuchotriz")).toHaveLength(1);
+  presetButton(replacement, "300/30");
+  expect(shown.value).toBe("30");
+  expect(expand).toHaveBeenCalledTimes(1);
+});
+
+it("loads the current ticket's presets when just the buttons and the instrument value change", async () => {
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  presetButton(current.form, "100");
+
+  await act(async () => {
+    current.form.querySelector<HTMLInputElement>("#rc_select_2")!.value = "GD30 (CI)";
+    current.buttons.replaceWith(current.buttons.cloneNode(true));
+  });
+
+  expect(current.form.querySelectorAll(".ButtonPreset")).toHaveLength(1);
+  presetButton(current.form, "400");
+  expect(current.amount.value).toBe("");
+  await act(async () => { current.price.focus(); });
+  expect(current.amount.value).toBe("400");
 });
