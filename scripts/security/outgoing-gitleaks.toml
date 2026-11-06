@@ -1,0 +1,25 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "personal-email"
+description = "Email address outside reserved example domains"
+regex = '''(?i)[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b'''
+[[rules.allowlists]]
+regexes = [
+  '''(?i)@(?:[a-z0-9-]+\.)*(?:example\.(?:com|org|net)|test|invalid|example)$''',
+  '''(?i)@users\.noreply\.github\.com$''',
+  '''(?i)^noreply@github\.com$''',
+]
+
+[[rules]]
+id = "ar-tax-or-bank-id"
+description = "Formatted CUIT/CUIL or 22-digit bank identifier"
+regex = '''(?:^|[^0-9])((?:20|23|24|27|30|33|34)-[0-9]{8}-[0-9]|[0-9]{22})(?:[^0-9]|$)'''
+secretGroup = 1
+
+[[rules]]
+id = "personal-account-field"
+description = "Literal personal or broker account identifier"
+regex = '''(?i)\b(?:dni|cuit|cuil|cbu|cvu|comitente|(?:n[uú]mero|nro\.?)[ _-]?(?:de[ _-]?)?cuenta|account[ _-]?(?:id|number))\b["']?\s*[:=]\s*["']?([0-9][0-9. -]{3,22}[0-9])\b'''
+secretGroup = 1

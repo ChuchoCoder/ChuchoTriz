@@ -48,7 +48,10 @@ issues públicos. Usar el canal privado habitual con el propietario.
   Windows/Linux x64; los hashes se comprueban antes de extraer o ejecutar los binarios.
   Se requiere tar y acceso a GitHub. Dependabot no actualiza este JSON: cada actualización
   de herramientas requiere revisar versión, asset y digest oficiales en ambas plataformas.
-  El reporte de secretos imprime solo ubicaciones/fingerprints, nunca valores.
+  CI informa la regla y el commit sin imprimir valores ni rutas de archivos.
+- El hook de pre-push revisa secretos, datos personales y adjuntos en los
+  commits salientes. El chequeo obligatorio de CI revisa también el rango
+  entrante. [Instalación y revisión de capturas](docs/contribuir-privacidad.md).
 
 No se copian excepciones de Premium: cualquier hallazgo de este historial debe
 revisarse por separado. Un secreto real requiere revocación/rotación e investigación;
@@ -81,6 +84,7 @@ comprobar los checks antes de esa incorporación.
 Configuración prevista y verificada por API durante la entrega:
 
 - Dependabot alerts y security updates habilitados; sin auto-merge.
+- Secret Scanning y Push Protection de GitHub habilitados.
 - Actions exige SHA completo, token por defecto de lectura y no puede aprobar PRs.
 - main exige PR, resolución de conversaciones y checks al día, sin force-push ni
   borrado, aplicando las reglas también al administrador:
