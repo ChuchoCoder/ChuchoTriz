@@ -102,6 +102,7 @@
   "src/SettingsMenu.css",
   "src/SettingsMenu.tsx",
   "tools/preview-free.mjs",
+  "tools/validate-options-grid.playwright.js",
   "tools/validate-options-simulator.playwright.js",
   "tsconfig.json",
   "tsconfig.node.json",

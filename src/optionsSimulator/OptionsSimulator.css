@@ -13,7 +13,8 @@
 .ct-tools button:focus-visible, .ct-tools input:focus-visible, .ct-tools select:focus-visible, .ct-tools summary:focus-visible { outline: 2px solid #c8a9ff; outline-offset: 2px; }
 .ct-sim { --sim-bg: #151d2b; --sim-card: #202b3d; --sim-field: #131c2b; --sim-text: #e8edf6; --sim-muted: #b1bfd2; --sim-border: #64748b; --sim-accent: #c8a9ff; --sim-theory: #69d9ed; --sim-profit: #81e1b6; --sim-loss: #ffa4af; box-sizing: border-box; padding: 8px 12px; background: var(--sim-bg); color: var(--sim-text); font: 14px/1.45 "Lato", system-ui, sans-serif; overflow-y: auto; overscroll-behavior: contain; min-width: 0; color-scheme: dark; }
 .ct-sim *, .ct-sim *::before, .ct-sim *::after { box-sizing: border-box; }
-.ct-sim-topbar { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; margin-bottom: 6px; }
+.ct-tools-embedded .ct-sim { display: flex; flex: 1; flex-direction: column; min-height: 0; scrollbar-gutter: stable; }
+.ct-sim-topbar { position: relative; display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; margin-bottom: 6px; }
 .ct-sim-market-controls { flex: 1 1 auto; min-width: 0; }
 .ct-sim-market-toolbar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .ct-sim-market-toolbar > label { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 11px; }
@@ -51,6 +52,8 @@
 .ct-sim .ct-sim-sell { color: var(--sim-loss); }
 .ct-sim-assumption-fields { margin-top: 16px; }
 .ct-sim-market-layout { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; align-items: start; }
+/* Size the chain from the panel before the catalog can contribute any rows. */
+.ct-tools-embedded .ct-sim-market-layout { flex: 1 0 0; min-height: 200px; grid-template-rows: minmax(0, 1fr); }
 .ct-sim-build-summary { min-width: 0; }
 .ct-sim-quick-results { padding: 10px; }
 .ct-sim-quick-results .ct-sim-section-heading { margin-bottom: 4px; }
@@ -153,7 +156,9 @@
 .ct-sim .ct-sim-market .ct-opt-metrics-legends { padding: 3px 8px; }
 .ct-sim .ct-sim-market .ct-opt-chain-footer { padding: 3px 8px; font-size: 9px; }
 .ct-sim .ct-sim-market .ct-opt-market-status { font-size: 9px; gap: 4px 10px; }
-.ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 0 0 auto; height: auto; max-height: 60vh; min-height: 180px; }
+.ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 0 0 auto; height: auto; max-height: 60vh; min-height: 180px; scrollbar-gutter: stable; }
+.ct-tools-embedded .ct-sim .ct-sim-market { align-self: stretch; }
+.ct-tools-embedded .ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 1 1 0; max-height: none; }
 .ct-sim-chain-notice { padding: 3px 8px; font-size: 10px; color: var(--sim-muted); margin: 0; }
 .ct-sim-chain-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .ct-sim-chain-group > span { color: var(--sim-muted); font-weight: 500; }
@@ -214,8 +219,6 @@
 .ct-sim-market .ct-opt-metrics-legend { min-width: 250px; flex-wrap: wrap; }
 .ct-sim .ct-sim-market .ct-opt-metrics-chain td, .ct-sim .ct-sim-market .ct-opt-metrics-chain .ct-opt-price button { height: 32px; }
 .ct-sim-analysis { display: grid; grid-template-columns: clamp(390px, 34%, 460px) minmax(0, 1fr); gap: 12px; align-items: start; }
-.ct-tools-embedded .ct-sim:has(> .ct-sim-analysis-panel:not([hidden])) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.ct-sim:has(> .ct-sim-analysis-panel:not([hidden])) > .ct-sim-topbar { flex-shrink: 0; }
 .ct-sim-analysis-panel:not([hidden]) { display: flex; flex: 1 0 auto; flex-direction: column; }
 .ct-sim-analysis-panel > .ct-sim-analysis { flex: 1 0 auto; }
 .ct-sim-scenario { padding: 12px; }
@@ -320,6 +323,7 @@
 .ct-free-settings-panel[data-color-scheme="light"] .ct-sim-scenario-results { --sim-table-header: #d6e6fb; --sim-table-body: #f8faff; --sim-band-spot: #cde2fd; --sim-band-green: #bce6cc; --sim-band-yellow: #fbe29e; --sim-band-red: #f5bdca; }
 @container (max-width: 1050px) {
   .ct-sim-market-layout { grid-template-columns: 1fr; }
+  .ct-tools-embedded .ct-sim-market-layout { grid-template-rows: 100% auto; }
   .ct-sim-analysis { grid-template-columns: 1fr; }
 }
 @container (900px < width <= 1050px) {

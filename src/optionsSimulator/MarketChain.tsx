@@ -25,10 +25,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   onStrikeMarket(market: StrikeMarket | undefined): void;
   onNewStrategy(): void;
 }) {
-  const root = useRef<HTMLElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const [strikeRows, setStrikeRows] = useState<{ strike: number; top: number; bottom: number }[]>([]);
-  const [chainHeight, setChainHeight] = useState<number>();
   const [underlyingId, setUnderlying] = useState("");
   const [expiration, setExpiration] = useState("");
   const [market, setMarket] = useState("");
@@ -133,18 +131,6 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [active, strikes.join("|")]);
   const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue,
     spot, currency: underlying?.currency, rate: numeric(input.rate) / 100, dividendYield: numeric(input.dividendYield) / 100 });
-  useEffect(() => {
-    const viewport = root.current?.closest<HTMLElement>(".ct-sim");
-    const scroll = root.current?.querySelector<HTMLElement>(".ct-opt-chain-scroll");
-    if (!active || !viewport || !scroll || typeof ResizeObserver === "undefined") return;
-    const resize = new ResizeObserver(() => {
-      const offset = scroll.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
-      setChainHeight(Math.max(180, Math.floor(viewport.clientHeight - offset - 16)));
-    });
-    [viewport, ...root.current!.querySelectorAll(".ct-sim-chain-notice")].forEach(node => resize.observe(node));
-    if (toolbar?.parentElement) resize.observe(toolbar.parentElement);
-    return () => resize.disconnect();
-  }, [active, toolbar, !!reading.issue, !!notice]);
   function change(field: "underlying" | "expiration", value: string) {
     const nextUnderlying = field === "underlying" ? value : underlyingId;
     const nextExpiration = field === "expiration" ? value : defaultExpiration((catalog?.contracts ?? [])
@@ -264,7 +250,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     </div>
     <div className="ct-opt-metrics-note">{viEnabled && !metrics.windowValid ? "Ingresá minutos enteros mayores que cero." : "VI nativa de Matriz. La antigüedad usa la última operación; una lectura local no acredita vigencia bursátil."}</div>
   </div></details>;
-  return <section ref={root} className="ct-sim-card ct-options ct-sim-market">{toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
+  return <section className="ct-sim-card ct-options ct-sim-market">{toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
       <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
@@ -280,9 +266,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {spotOutsideGrid && <span className="ct-sim-spot-outside">{money(spot)} {spotChange}</span>}
   </div>, toolbar)}
     {reading.issue && <p role="status" className="ct-sim-error ct-sim-chain-notice">{reading.issue}</p>}
-    {!catalog && !reading.issue && <p role="status" className="ct-sim-chain-notice">Leyendo catálogo de opciones de Matriz…</p>}
     {notice && <p role="status" className="ct-sim-chain-notice" title={notice}>{notice}</p>}
-    <div className="ct-table-scroll ct-opt-chain-scroll" style={chainHeight === undefined ? undefined : { maxHeight: chainHeight }} role="region" aria-label="Cadena de opciones" tabIndex={0}>
+    <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" tabIndex={0}>
       <div ref={grid} className="ct-opt-chain-grid"><table className="ct-opt-chain ct-opt-metrics-chain">
         <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col className="theta" /><col className="extrinsic" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="extrinsic" /><col className="theta" /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
         <thead><tr className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
@@ -309,7 +294,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
               {item.sigma > 0 ? "+" : ""}{item.sigma}σ · {formatOptionAmount(item.price, input.currency)}
             </span>)}
           </strong>}
-        </div>)}</div></div>{!strikes.length && <p className="ct-opt-empty">Sin contratos completos para esta selección.</p>}
+        </div>)}</div></div>{!strikes.length && <p role="status" className="ct-opt-empty">
+          {!catalog && !reading.issue ? "Leyendo catálogo de opciones de Matriz…" : "Sin contratos completos para esta selección."}
+        </p>}
     </div>
   </section>;
 }
