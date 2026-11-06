@@ -553,9 +553,12 @@ it("draws four standard-deviation references in both charts and updates them wit
 });
 
 it("positions chain deviation lines on row boundaries without crossing quotes, adding rows or mixing contexts", async () => {
+  const priceScale = 100;
+  for (const contract of marketState.current.catalog!.contracts) contract.strike *= priceScale;
+  marketState.current.data!.instruments.GGAL.last = 100 * priceScale;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
     const strike = this.dataset.optionStrike;
-    return strike === undefined ? new DOMRect(0, 0, 750, 212) : new DOMRect(0, 52 + (Number(strike) - 80) / 10 * 32, 750, 32);
+    return strike === undefined ? new DOMRect(0, 0, 750, 212) : new DOMRect(0, 52 + (Number(strike) / priceScale - 80) / 10 * 32, 750, 32);
   });
   await mount();
   const markers = () => [...container.querySelectorAll<HTMLElement>('.ct-opt-sigma-line')];
@@ -575,6 +578,8 @@ it("positions chain deviation lines on row boundaries without crossing quotes, a
   expect(markers().map(node => parseFloat(node.style.top))).toEqual([116, 116, 148, 148]);
   const chartLabels = [...container.querySelectorAll('.ct-sim-sigma')].map(node => node.getAttribute('aria-label'));
   expect(markers().map(node => node.getAttribute('aria-label')?.replace(' en cadena', ''))).toEqual(chartLabels);
+  expect(chartLabels.every(label => /σ: [\d.]+ ARS$/.test(label ?? ""))).toBe(true);
+  expect(markers().flatMap(node => [...node.querySelectorAll('.ct-opt-sigma-center span')]).every(node => !node.textContent?.includes(','))).toBe(true);
   await fill("Fecha teórica", addDays(expiry, 1));
   expect(markers()).toHaveLength(0);
   await fill("Fecha teórica", localDate());
@@ -867,19 +872,20 @@ it("colors both curves and the expiry fill on the zero axis and each marker by i
 });
 
 it("shows both profit and loss around zero in the priced Iron Condor selector preview", async () => {
-  for (const [id, bid, ask] of [["put-80", 3.9, 4.1], ["put-90", 5.9, 6.1], ["call-110", 5.9, 6.1], ["call-120", 3.9, 4.1]] as const)
+  for (const contract of marketState.current.catalog!.contracts) contract.factor = 1000;
+  for (const [id, bid, ask] of [["put-80", 3.9, 4.1], ["put-90", 5.90018, 6.1], ["call-110", 5.9, 6.1], ["call-120", 3.9, 4.1]] as const)
     marketState.current.data!.instruments[id] = { ...marketState.current.data!.instruments[id], bid: { price: bid, size: 100 }, ask: { price: ask, size: 100 } };
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   await act(async () => container.querySelector<HTMLButtonElement>('[data-family-name="iron-condor"]')!.click());
   const preview = byLabel("Vista previa de la estrategia");
-  expect(preview.textContent).toContain("Crédito por estructura: 360 ARS");
+  expect(preview.textContent).toContain("Crédito por estructura: 3.600 ARS");
   const svg = preview.querySelector('svg')!;
   const axis = Number(svg.querySelector('line')!.getAttribute('y1'));
   const ordinates = [...svg.querySelector('path')!.getAttribute('d')!.matchAll(/[ML][\d.]+,([\d.-]+)/g)].map(match => Number(match[1]));
   expect(Math.min(...ordinates), 'Credit Condor must show a profitable central plateau above zero').toBeLessThan(axis);
   expect(Math.max(...ordinates), 'Condor wings must show loss below zero').toBeGreaterThan(axis);
-  expect(preview.textContent).toContain("Ganancia máx. 360 ARS");
-  expect(preview.textContent).toContain("Pérdida máx. 640 ARS");
+  expect(preview.textContent).toContain("Ganancia máx. 3.600 ARS");
+  expect(preview.textContent).toContain("Pérdida máx. 6.400 ARS");
   const gradient = svg.querySelector('linearGradient')!, stops = [...gradient.querySelectorAll('stop')];
   expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
   expect(stops.map(stop => stop.getAttribute('stop-color'))).toEqual(['var(--sim-profit)', 'var(--sim-profit)', 'var(--sim-loss)', 'var(--sim-loss)']);

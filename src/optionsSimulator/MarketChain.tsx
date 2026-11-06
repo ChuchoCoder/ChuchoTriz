@@ -302,11 +302,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}
-          aria-label={`${level.sigma > 0 ? "+" : ""}${level.sigma}σ en cadena: ${formatOptionAmount(level.price)} ${input.currency}`}>
+          aria-label={`${level.sigma > 0 ? "+" : ""}${level.sigma}σ en cadena: ${formatOptionAmount(level.price, input.currency)} ${input.currency}`}>
           {gridLevels.find(item => item.y === level.y) === level && <strong className="ct-opt-sigma-center">
             {level.afterStrike === spotBoundary && itmSpot !== undefined && <span className="ct-opt-sigma-spot">$ {fmt(itmSpot)} {spotChange}</span>}
             {gridLevels.filter(item => item.y === level.y).map(item => <span key={item.sigma} className={`ct-opt-sigma-${Math.abs(item.sigma)}`}>
-              {item.sigma > 0 ? "+" : ""}{item.sigma}σ · {formatOptionAmount(item.price)}
+              {item.sigma > 0 ? "+" : ""}{item.sigma}σ · {formatOptionAmount(item.price, input.currency)}
             </span>)}
           </strong>}
         </div>)}</div></div>{!strikes.length && <p className="ct-opt-empty">Sin contratos completos para esta selección.</p>}

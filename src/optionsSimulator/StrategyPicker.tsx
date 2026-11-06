@@ -24,10 +24,10 @@ function PayoffGraphic({ payoff, compact, currency }: { payoff: ReturnType<typeo
     <line className="ct-sim-payoff-zero" x1={left} x2={width - right} y1={zero} y2={zero} />
     {!compact && <><text x={left - 6} y={zero + 3} textAnchor="end">0</text>
       <text x={left} y="10">P&amp;L · {currency}</text>
-      {max > 0 && <text x={left - 6} y={y(max) + 3} textAnchor="end">{formatOptionAmount(max)}</text>}
-      {min < 0 && <text x={left - 6} y={y(min) + 3} textAnchor="end">{formatOptionAmount(min)}</text>}
-      <text x={left} y={height - 5}>{formatOptionAmount(payoff.strategy.rangeMin)}</text>
-      <text x={width - right} y={height - 5} textAnchor="end">{formatOptionAmount(payoff.strategy.rangeMax)}</text></>}
+      {max > 0 && <text x={left - 6} y={y(max) + 3} textAnchor="end">{formatOptionAmount(max, currency)}</text>}
+      {min < 0 && <text x={left - 6} y={y(min) + 3} textAnchor="end">{formatOptionAmount(min, currency)}</text>}
+      <text x={left} y={height - 5}>{formatOptionAmount(payoff.strategy.rangeMin, currency)}</text>
+      <text x={width - right} y={height - 5} textAnchor="end">{formatOptionAmount(payoff.strategy.rangeMax, currency)}</text></>}
     <path className="ct-sim-payoff-line" d={path} style={{ stroke: min === 0 && max === 0 ? "var(--sim-muted)" : `url(#${id})` }} />
   </svg>;
 }
@@ -112,12 +112,12 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
         <div className="ct-sim-strategy-preview-title"><strong>{strategyLabel(current.choice)}</strong></div>
         <p>{strategyDescription(current.choice)}</p>
         <PayoffGraphic payoff={current.payoff} currency={currency} />
-        {current.payoff.ok && <div className="ct-sim-payoff-summary"><span className="ct-sim-profit">Ganancia máx. {current.payoff.summary.maxProfit === Infinity ? "∞" : `${formatOptionAmount(current.payoff.summary.maxProfit)} ${currency}`}</span>
-          <span className="ct-sim-loss">Pérdida máx. {current.payoff.summary.maxLoss === Infinity ? "∞" : `${formatOptionAmount(current.payoff.summary.maxLoss)} ${currency}`}</span></div>}
+        {current.payoff.ok && <div className="ct-sim-payoff-summary"><span className="ct-sim-profit">Ganancia máx. {current.payoff.summary.maxProfit === Infinity ? "∞" : `${formatOptionAmount(current.payoff.summary.maxProfit, currency)} ${currency}`}</span>
+          <span className="ct-sim-loss">Pérdida máx. {current.payoff.summary.maxLoss === Infinity ? "∞" : `${formatOptionAmount(current.payoff.summary.maxLoss, currency)} ${currency}`}</span></div>}
         {current.recipe.ok && <ul aria-label="Patas de la plantilla">{current.recipe.legs.map((item, index) => <li key={item.contract.id} className={item.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
           {item.side === "buy" ? "Compra" : "Venta"} {item.ratio}× {item.contract.symbol}{current.prices.ok ? ` · ${fmt(current.prices.premiums[index])}` : ""}
         </li>)}</ul>}
-        {cash !== undefined && <strong>{cash < 0 ? "Crédito" : cash > 0 ? "Débito" : "Neutra"}{costs ? " neto" : ""} por estructura: {formatOptionAmount(Math.abs(cash))} {currency}</strong>}
+        {cash !== undefined && <strong>{cash < 0 ? "Crédito" : cash > 0 ? "Débito" : "Neutra"}{costs ? " neto" : ""} por estructura: {formatOptionAmount(Math.abs(cash), currency)} {currency}</strong>}
         {!current.payoff.ok && <p className="ct-sim-strategy-unavailable" role="status">{current.payoff.reason}</p>}
         <small>Resultado al vencimiento por estructura, con primas{costs ? " y gastos" : ""}. Verde: ganancia. Rojo: pérdida. Armar carga las patas.</small>
       </section>
