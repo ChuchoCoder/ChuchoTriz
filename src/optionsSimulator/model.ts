@@ -263,8 +263,16 @@ export function expirySummary(strategy: Strategy) {
 }
 export function chartPriceRange(strategy: Strategy, equilibria: Equilibrium[], zoom: number) {
   const limit = maximumChartPrice(strategy.legs, strategy.multiplier, strategy.costs, strategy.realized, strategy.underlying?.quantity);
-  const anchors = [strategy.spot, ...strategy.legs.map(leg => leg.strike),
-    ...equilibria.flatMap(({ from, to }) => Number.isFinite(to) ? [from, to] : [from])];
+  const anchors = [strategy.spot, ...strategy.legs.map(leg => leg.strike)];
+  const equilibriumPrices = equilibria.flatMap(({ from, to }) => Number.isFinite(to) ? [from, to] : [from]);
+  if (strategy.underlying?.quantity) {
+    // A small stock slope can move a break-even far beyond the working range of the options.
+    const focusMin = Math.min(strategy.rangeMin, ...anchors), focusMax = Math.max(strategy.rangeMax, ...anchors);
+    const margin = (focusMax - focusMin) / 2;
+    anchors.push(...equilibriumPrices.filter(price => price >= focusMin - margin && price <= focusMax + margin));
+  } else {
+    anchors.push(...equilibriumPrices);
+  }
   const low = Math.min(...anchors), high = Math.max(...anchors);
   const padding = (strategy.rangeMax - strategy.rangeMin) * .1;
   const min = Math.max(0, Math.min(strategy.rangeMin, low - padding));

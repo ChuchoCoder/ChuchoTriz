@@ -259,6 +259,9 @@ Compra tiene sentido +1 y venta −1. Al vencimiento, valor es el intrínseco.
 Máximos y equilibrios se calculan sobre todos los tramos lineales desde 0 hasta
 infinito, sin limitarse al rango del gráfico. Incluye colas ilimitadas, equilibrios
 puntuales y tramos enteros de equilibrio.
+Con nominales del subyacente, el rango inicial del gráfico prioriza el precio
+de referencia, los strikes y los equilibrios cercanos. Los equilibrios lejanos
+siguen en el resumen y se pueden ver en el gráfico ampliando el rango con **−**.
 
 El teórico es Black–Scholes–Merton europeo con días calendario / 365, tasa y
 dividendos continuos y VI constante por pata, más el cambio de escenario. Falta de
