@@ -16,6 +16,8 @@
 .ct-tools-embedded .ct-sim { display: flex; flex: 1; flex-direction: column; min-height: 0; scrollbar-gutter: stable; }
 .ct-sim-topbar { position: relative; display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; margin-bottom: 6px; }
 .ct-sim-market-controls { flex: 1 1 auto; min-width: 0; }
+.ct-sim label.ct-sim-include-position { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
+.ct-sim .ct-sim-include-position input { width: auto; height: auto; margin: 0; accent-color: var(--sim-accent); }
 .ct-sim-market-toolbar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .ct-sim-market-toolbar > label { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 11px; }
 .ct-sim-market-toolbar > label select { width: auto; max-width: 150px; height: 27px; padding: 2px 4px; font-size: 11px; }
@@ -249,10 +251,6 @@
 .ct-sim-position { padding: 10px; margin-bottom: 8px; }
 .ct-sim-position .ct-sim-section-heading { margin-bottom: 6px; }
 .ct-sim-position .ct-sim-section-heading button { min-height: 26px; padding: 2px 6px; font-size: 11px; }
-.ct-sim-position-table { max-height: 220px; overflow: auto; }
-.ct-sim .ct-sim-position table { min-width: 0; table-layout: auto; }
-.ct-sim-position th, .ct-sim-position td { padding: 3px; font-size: 11px; }
-.ct-sim-position th:last-child { width: 48%; }
 .ct-sim-position input { height: 28px; padding: 2px 5px; }
 .ct-sim-position-costs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
 .ct-sim .ct-sim-position-costs .ct-sim-field { display: flex; flex-direction: column; align-items: stretch; gap: 2px; font-size: 11px; }

@@ -78,9 +78,15 @@ it("does not treat explicit zero cost or realized as missing and shifts both cur
   expect(resultAt(realized,110,"theoretical")-resultAt(base,110,"theoretical")).toBeCloseTo(-200);
   expect(expirySummary(realized).equilibria[0].from).toBe(101);
 });
+it("allows manual entry when the verified report has no position in the chain",()=>{
+  const input=load();
+  const empty=importPosition({...snapshot(),positions:[]},contracts,quotes,input,"DEMO",100);
+  expect(empty.position?.legs).toEqual([]);
+  expect(empty.position?.storage?.key).toBe(input.position?.storage?.key);
+});
 it("rejects incomplete snapshots, duplicates, mixed factors and unsupported quantities without changing the draft",()=>{
   const input=load(),original=JSON.stringify(input);
-  for(const positions of [[{securityId:"C100",quantity:.5}],[{securityId:"C100",quantity:1},{securityId:"C100",quantity:2}],[]])
+  for(const positions of [[{securityId:"C100",quantity:.5}],[{securityId:"C100",quantity:1},{securityId:"C100",quantity:2}]])
     expect(()=>importPosition({...snapshot(),positions},contracts,quotes,input,"DEMO",100)).toThrow();
   expect(JSON.stringify(input)).toBe(original);
 });

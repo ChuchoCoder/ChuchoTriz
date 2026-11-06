@@ -7,17 +7,23 @@ Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni 
 **Cargar posición** consulta, a pedido del usuario, las cantidades de opciones de
 la cuenta activa correspondientes al subyacente y vencimiento seleccionados.
 
-La posición se muestra en un bloque separado, con cantidad firmada y prima
-histórica editable por unidad. La primera vez, la prima empieza vacía y debe completarse para
-calcular resultados desde el costo. Cero es un valor válido cuando se ingresa
-explícitamente. **Gastos de la posición** corresponde a cargos que todavía no están
+La misma cadena cambia a **Posición actual**, con cantidades firmadas y primas
+históricas por unidad en las filas de Calls y Puts. Ingresá primero la cantidad.
+Enter o salir del campo confirma el cambio. Dejarlo vacío o ingresar cero quita la pata.
+La primera vez, la prima empieza vacía y debe completarse para calcular resultados
+desde el costo. Cero es una prima válida cuando se ingresa explícitamente.
+**Gastos de la posición** corresponde a cargos que todavía no están
 incluidos en las primas. **Resultado realizado neto** permite sumar ganancias o
 pérdidas de cierres anteriores, ya netas de sus propios gastos.
 
-Las patas agregadas desde la grilla forman **Ajustes simulados**. Cantidades,
+**Cotizaciones** recupera BID y ASK en la misma grilla. Las patas agregadas
+desde ahí forman **Ajustes simulados**. Cantidades,
 strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
 Las primas históricas, gastos y realizado permanecen en la posición original.
 **Limpiar ajustes** vuelve a la posición sin esas operaciones hipotéticas.
+**Limpiar posición** vacía del borrador las patas, los gastos y el realizado de la
+posición. **Recargar tenencia** consulta nuevamente Matriz y recupera las primas
+históricas guardadas. Los ajustes de la misma cadena y cuenta se conservan.
 **Nueva simulación** elimina el borrador y habilita otro contexto, conservando
 los datos históricos guardados localmente para futuras importaciones.
 
@@ -27,9 +33,10 @@ perfil de Chrome, separados por cuenta, sitio y cadena (incluido el factor).
 reiniciar Chrome. El estado de guardado se muestra debajo del reporte; si falla,
 se avisa para que no se cierre el borrador sin conservar los datos.
 
-El resultado suma los valores menos primas de la posición y los ajustes, resta
-los gastos de la posición y agrega el realizado informado. Sin realizado se
-muestra el resultado abierto con los ajustes. La fecha del reporte de Matriz queda
+El check **Incluir posición actual en Análisis** está en la barra común de
+**Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
+propios gastos. Al marcarlo, también incluye las patas de la posición, resta sus
+gastos y suma el realizado informado. La fecha del reporte de Matriz queda
 visible. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
 actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.

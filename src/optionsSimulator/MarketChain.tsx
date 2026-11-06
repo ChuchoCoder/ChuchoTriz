@@ -1,12 +1,13 @@
-import { Dispatch, Fragment, SetStateAction, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Catalog, Contract, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSimulation, simulationLegs, Simulation, standardDeviationLevels } from "./model";
-import { importPosition, readPositionSnapshot } from "./positions";
+import { daysToExpiry, Leg, localDate, MAX_CONTRACTS, MAX_LEGS, newLeg, numeric, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
+import { importPosition, readPositionSnapshot, setPositionQuantity, startPositionDraft, type PositionSeries } from "./positions";
+import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, quotePrice, recipePrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
@@ -22,10 +23,47 @@ function defaultExpiration(dates: string[]) {
   return dates.find(date => date >= today) ?? dates[0] ?? "";
 }
 
-export default function MarketChain({ active, toolbar, input, setInput, onStrikeMarket, onNewStrategy }: {
+function PositionQuantity({ label, leg, disabled, onCommit }: {
+  label: string; leg?: Leg; disabled: boolean; onCommit(value: string): void;
+}) {
+  const [draft, setDraft] = useState<string>();
+  const value = leg ? (leg.side === "sell" ? "−" : "+") + leg.contracts : "";
+  return <input type="text" data-ct-inline-editor className={leg ? leg.side === "sell" ? "ct-sim-sell" : "ct-sim-buy" : undefined}
+    aria-label={`Cantidad posición ${label}`} placeholder="—" disabled={disabled} value={draft ?? value}
+    onFocus={event => event.currentTarget.select()} onChange={event => setDraft(event.target.value)}
+    onBlur={() => { if (draft !== undefined) onCommit(draft); setDraft(undefined); }}
+    onKeyDown={event => {
+      if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setDraft(undefined); }
+    }} />;
+}
+
+function PositionPremium({ label, leg, disabled, onChange, onReview }: {
+  label: string; leg?: Leg; disabled: boolean; onChange(id: number, value: string): void; onReview(id: number): void;
+}) {
+  const warningId = useId();
+  const pending = !!leg && premiumNeedsReview(leg);
+  return <>
+    <input type="number" min="0" max="1000000000" step="any" aria-label={`Prima histórica ${label}`} readOnly={!leg} disabled={disabled}
+      value={leg?.premium ?? ""} placeholder={leg ? "Completar" : "—"} aria-describedby={pending ? warningId : undefined}
+      onChange={event => { if (leg) onChange(leg.id, event.target.value); }} />
+    {leg && pending && <div className="ct-sim-premium-warning" id={warningId} role="alert">
+      {numeric(leg.premiumQuantity ?? "") !== numeric(signedPositionQuantity(leg))
+        ? `Cambió la cantidad de ${leg.premiumQuantity} a ${signedPositionQuantity(leg)}.` : "La cantidad cambió desde la última revisión."} Revisá la prima histórica.
+      {validHistoricalPremium(leg.premium) && <button type="button" disabled={disabled} aria-label={`Confirmar prima histórica ${label}`}
+        onClick={() => onReview(leg.id)}>Prima revisada</button>}
+    </div>}
+  </>;
+}
+
+export default function MarketChain({ active, toolbar, input, setInput, onStrikeMarket, onNewStrategy, deviationReference,
+  positionMode, setPositionMode, positionAccounting, onPremiumChange, onPremiumReview }: {
   active: boolean; toolbar: HTMLDivElement | null; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
   onStrikeMarket(market: StrikeMarket | undefined): void;
   onNewStrategy(): void;
+  deviationReference: ReturnType<typeof standardDeviationLevels>;
+  positionMode: boolean; setPositionMode(value: boolean): void; positionAccounting?: ReactNode;
+  onPremiumChange(id: number, value: string): void; onPremiumReview(id: number): void;
 }) {
   const grid = useRef<HTMLDivElement>(null);
   const [strikeRows, setStrikeRows] = useState<{ strike: number; top: number; bottom: number }[]>([]);
@@ -83,6 +121,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     if (market !== preferred) setMarket(preferred);
   }, [selectionReady, expiration, market, expirations.join(), catalog, underlyingId, !!input.position]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
+  const editingPosition = positionMode && !!input.position;
   const openLeg = active && input.legs.find(leg => legKey(leg) === openQuote && selected.some(contract => contract.id === leg.securityId));
   const shownQuote = openLeg ? openQuote : undefined;
   useEffect(() => {
@@ -117,7 +156,13 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     ? <strong className={changePercent > 0 ? "ct-opt-up" : changePercent < 0 ? "ct-opt-down" : undefined}
         aria-label="Variación diaria del subyacente">{changePercent > 0 ? "+" : ""}{formatOptionVolatility(changePercent)} %</strong>
     : null;
-  const strikes = [...new Set(selected.map(contract => contract.strike))].sort((a, b) => a - b);
+  const positionLegs = input.position?.legs ?? [];
+  const positionSeries: PositionSeries[] = editingPosition ? selected.filter(contract => contract.factor === numeric(input.multiplier)) : [];
+  if (editingPosition) for (const leg of positionLegs) {
+    if (leg.securityId && !positionSeries.some(series => series.id === leg.securityId))
+      positionSeries.push({ id: leg.securityId, kind: leg.kind, strike: numeric(leg.strike), symbol: leg.symbol ?? leg.securityId });
+  }
+  const strikes = [...new Set([...selected, ...positionSeries].map(contract => contract.strike))].sort((a, b) => a - b);
   const unique = (kind: "call" | "put", strike: number) => {
     const matches = selected.filter(contract => contract.kind === kind && contract.strike === strike);
     return matches.length === 1 ? matches[0] : undefined;
@@ -129,10 +174,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     } : undefined);
   }, [active, catalog, data, underlyingId, expiration, market, reading.issue, onStrikeMarket]);
   const itmSpot = comparable ? spot : undefined;
-  const parsed = useMemo(() => parseSimulation(input), [input]);
-  const deviationReference = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
   const sameContext = comparable && input.underlying === underlying?.symbol && input.expiry === expiryDate(expiration) && input.currency === underlying?.currency;
-  const deviations = sameContext ? deviationReference : undefined;
+  const deviations = sameContext && !editingPosition ? deviationReference : undefined;
   const gridLevels = deviations && deviations.move > 0 && strikes.length > 1 && strikeRows.length === strikes.length && strikeRows.every((row, index) => row.strike === strikes[index])
     ? deviations.levels.flatMap(level => {
       const index = strikes.findIndex(strike => strike >= level.price);
@@ -145,7 +188,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const spotSharesSigma = gridLevels.some(level => level.afterStrike === spotBoundary);
   useEffect(() => {
     const container = grid.current;
-    if (!active || !container) return;
+    if (!active || editingPosition || !container) return;
     const position = () => {
       const base = container.getBoundingClientRect().top;
       const rows = [...container.querySelectorAll<HTMLTableRowElement>("tr[data-option-strike]")];
@@ -159,7 +202,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const observer = new ResizeObserver(position);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [active, strikes.join("|")]);
+  }, [active, editingPosition, strikes.join("|")]);
   const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue,
     spot, currency: underlying?.currency, rate: numeric(input.rate) / 100, dividendYield: numeric(input.dividendYield) / 100 });
   function change(field: "underlying" | "expiration", value: string) {
@@ -177,7 +220,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     try { await chrome.storage.local.set({ [selectionKey]: { underlyingId, expiration } }); }
     catch { /* The current selection still works without local storage. */ }
   }
-  async function loadPosition() {
+  async function loadPosition(draft = input) {
     if (!underlying || loadingPosition) return;
     const request = new AbortController();
     positionRequest.current?.abort();
@@ -186,11 +229,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     try {
       const { snapshot, saved } = await readPositionSnapshot(selected, request.signal);
       if (request.signal.aborted) return;
-      const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot, saved);
+      const next = importPosition(snapshot, selected, data?.instruments, latestInput.current.position ? latestInput.current : draft, underlying.symbol, spot, saved);
       onNewStrategy();
       setOpenQuote(undefined);
       setInput(next);
-      setNotice("Posición cargada. Revisá las primas históricas y agregá ajustes desde la grilla.");
+      setNotice(next.position?.legs.length ? "Tenencia cargada. Revisá las primas históricas en la grilla."
+        : "No hay posición abierta en esta cadena. Podés ingresar una posición manual.");
     } catch (error) {
       if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "No se pudo cargar la posición.");
     } finally {
@@ -199,6 +243,39 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         setLoadingPosition(false);
       }
     }
+  }
+  function openPosition() {
+    if (!underlying) return;
+    if (input.position) { setPositionMode(true); setOpenQuote(undefined); setNotice(""); return; }
+    try {
+      const draft = startPositionDraft(input, selected, underlying.symbol, spot);
+      setInput(draft);
+      setPositionMode(true);
+      setOpenQuote(undefined);
+      void loadPosition(draft);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo abrir la carga de posición.");
+    }
+  }
+  function clearPosition() {
+    setInput(current => current.position ? { ...current, position: { legs: [] }, costs: "0", realized: undefined } : current);
+    setNotice("Se limpió la posición del borrador. Podés recargar la tenencia. Los ajustes siguen en Armado.");
+  }
+  function commitPositionQuantity(series: PositionSeries, value: string) {
+    const raw = value.trim().replace(/^−/, "-");
+    const quantity = raw === "" ? 0 : /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN;
+    if (!Number.isSafeInteger(quantity) || Math.abs(quantity) > MAX_CONTRACTS) {
+      setNotice("Ingresá una cantidad entera válida, positiva para compra y negativa para venta."); return;
+    }
+    if (quantity && positionLegs.length >= MAX_LEGS && !positionLegs.some(leg => leg.securityId === series.id)) {
+      setNotice(`La posición admite hasta ${MAX_LEGS} patas.`); return;
+    }
+    setNotice("");
+    setInput(current => {
+      if (!current.position) return current;
+      const legs = setPositionQuantity(current.position.legs, series, quantity, data?.instruments[series.id]);
+      return legs === current.position.legs ? current : { ...current, position: { ...current.position, legs } };
+    });
   }
   function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
@@ -267,6 +344,22 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }
   const metricCell = (contract: Contract | undefined, field: "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic", kind: "call" | "put") =>
     <OptionMetricCell contract={contract} field={field} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />;
+  const positionCell = (kind: "call" | "put", strike: number, field: "quantity" | "premium") => {
+    const entries = positionSeries.filter(series => series.kind === kind && series.strike === strike);
+    return <td className={entries.some(series => positionLegs.some(leg => leg.securityId === series.id)) ? "ct-opt-position-held" : undefined}>
+      {entries.length ? entries.map(series => {
+        const leg = positionLegs.find(item => item.securityId === series.id);
+        const label = entries.length > 1 ? series.symbol : `${kind.toUpperCase()} ${fmt(strike)}`;
+        return <div key={series.id} className="ct-opt-position-field">
+          {entries.length > 1 && <small>{series.symbol}</small>}
+          {field === "quantity" ? <PositionQuantity label={label} leg={leg} disabled={loadingPosition}
+            onCommit={value => commitPositionQuantity(series, value)} />
+            : <PositionPremium label={label} leg={leg} disabled={loadingPosition}
+              onChange={onPremiumChange} onReview={onPremiumReview} />}
+        </div>;
+      }) : "—"}
+    </td>;
+  };
   const quoteCell = (contract: Contract | undefined, side: "buy" | "sell") => {
     const quote = contract && data?.instruments[contract.id], level = quote?.[side === "buy" ? "ask" : "bid"];
     const price = quotePrice(quote, side);
@@ -316,7 +409,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     return <span className="ct-sim-vi-scale" title={`${scale.included}/${scale.total} VI ${viEnabled ? `de operaciones de los últimos ${viMinutes} min` : "con dato"}. Gris: fuera de la escala.`}>
       <i aria-hidden="true" /><strong>{range}</strong></span>;
   };
-  const sigmaKey = deviations && deviations.move > 0 && <span className="ct-opt-sigma-key" title={`Desvíos de la simulación · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${parsed.ok ? Math.round(parsed.strategy.years * 365) : 0} días restantes. Solo se dibujan los niveles dentro de los strikes de la cadena.`}>
+  const sigmaKey = deviations && deviations.move > 0 && <span className="ct-opt-sigma-key" title={`Desvíos de la simulación · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${daysToExpiry(input.expiry, input.scenarioDate)} días restantes. Solo se dibujan los niveles dentro de los strikes de la cadena.`}>
     <i className="ct-opt-sigma-1">±1σ</i> <i className="ct-opt-sigma-2">±2σ</i></span>;
   const spotOutsideGrid = spot !== undefined && (itmSpot === undefined || spot < (strikes[0] ?? Infinity) || spot > (strikes.at(-1) ?? -Infinity));
   const viSettings = <details className="ct-sim-market-settings"><summary aria-label="Configurar filtro de VI" title="Configurar filtro y escala de VI">⚙ VI</summary><div className="ct-sim-market-settings-panel">
@@ -332,11 +425,14 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
       <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
-    <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency} costs={input.position ? 0 : numeric(input.costs)}
-      context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />
-    <button type="button" disabled={!comparable || loadingPosition || selected.length > 160} onClick={() => void loadPosition()}
-      aria-label="Cargar posición actual" title="Leer la posición de la cuenta activa para este subyacente y vencimiento">
-      {loadingPosition ? "Cargando posición…" : input.position ? "Actualizar posición" : "Cargar posición"}</button>
+    {!editingPosition && <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency}
+      costs={numeric(input.position ? input.adjustmentCosts ?? "0" : input.costs)}
+      context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />}
+    {input.position ? <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">
+      <button type="button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>Cotizaciones</button>
+      <button type="button" aria-pressed={editingPosition} disabled={loadingPosition} onClick={openPosition}>Posición actual</button>
+    </div> : <button type="button" disabled={!comparable || loadingPosition || selected.length > 160} onClick={openPosition}
+      aria-label="Cargar posición actual" title="Leer la posición de la cuenta activa para este subyacente y vencimiento">Cargar posición</button>}
     <span className="ct-sim-chain-counts">
       <span>{strikes.length} ejercicios</span>
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
@@ -344,9 +440,18 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {spotOutsideGrid && <span className="ct-sim-spot-outside">{money(spot)} {spotChange}</span>}
   </div>, toolbar)}
     {reading.issue && <p role="status" className="ct-sim-error ct-sim-chain-notice">{reading.issue}</p>}
+    {editingPosition && <div className="ct-sim-position-toolbar">
+      <small>Cantidad con signo · + compra, − venta. Ingresá la prima histórica por unidad.</small>
+      <button type="button" disabled={loadingPosition} onClick={clearPosition}>Limpiar posición</button>
+      <button type="button" disabled={!comparable || loadingPosition || selected.length > 160} onClick={() => void loadPosition()}>
+        {loadingPosition ? "Cargando posición…" : "Recargar tenencia"}</button>
+    </div>}
     {notice && <p role="status" className="ct-sim-chain-notice" title={notice}>{notice}</p>}
-    <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" tabIndex={0}>
-      <div ref={grid} className="ct-opt-chain-grid"><table className="ct-opt-chain ct-opt-metrics-chain">
+    <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" aria-busy={editingPosition && loadingPosition} tabIndex={0}>
+      <div ref={grid} className="ct-opt-chain-grid"><table className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : "ct-opt-chain ct-opt-metrics-chain"}>
+        {editingPosition ? <thead><tr><th colSpan={2} scope="colgroup">CALLS</th><th className="ct-opt-strike" rowSpan={2} scope="col">Strike</th><th colSpan={2} scope="colgroup">PUTS</th></tr>
+          <tr><th scope="col">Cantidad</th><th scope="col">Prima histórica</th><th scope="col">Prima histórica</th><th scope="col">Cantidad</th></tr>
+        </thead> : <>
         <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col className="theta" /><col className="extrinsic" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="extrinsic" /><col className="theta" /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
         <thead><tr className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
           <th colSpan={7} className="ct-opt-calls-heading">CALLS</th>
@@ -354,14 +459,16 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           <th className="ct-opt-strike">{viSettings}</th>
           <th className="ct-opt-vi-heading">{viLegend("put")}</th>
           <th colSpan={7}><div className="ct-sim-chain-group">PUTS {sigmaKey}</div></th>
-        </tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th className="ct-opt-vi-heading">VI</th><th className="ct-opt-strike">Strike</th><th className="ct-opt-vi-heading">VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead>
-        <tbody>{strikes.map((strike, index) => {
-          const call = unique("call", strike), put = unique("put", strike);
+        </tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th className="ct-opt-vi-heading">VI</th><th className="ct-opt-strike">Strike</th><th className="ct-opt-vi-heading">VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead></>}
+        <tbody>{strikes.map(strike => {
+          const call = editingPosition ? undefined : unique("call", strike), put = editingPosition ? undefined : unique("put", strike);
           return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}>
-            {metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{metricCell(call, "theta", "call")}{metricCell(call, "extrinsic", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}
-            <th className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
-            {metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "extrinsic", "put")}{metricCell(put, "theta", "put")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}
-          </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
+            {editingPosition ? <>{positionCell("call", strike, "quantity")}{positionCell("call", strike, "premium")}</>
+              : <>{metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{metricCell(call, "theta", "call")}{metricCell(call, "extrinsic", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}</>}
+            <th scope="row" className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
+            {editingPosition ? <>{positionCell("put", strike, "premium")}{positionCell("put", strike, "quantity")}</>
+              : <>{metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "extrinsic", "put")}{metricCell(put, "theta", "put")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}</>}
+          </tr>{!editingPosition && itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}
@@ -376,5 +483,6 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           {!catalog && !reading.issue ? "Leyendo catálogo de opciones de Matriz…" : "Sin contratos completos para esta selección."}
         </p>}
     </div>
+    {editingPosition && positionAccounting && <fieldset className="ct-sim-position-accounting" disabled={loadingPosition}>{positionAccounting}</fieldset>}
   </section>;
 }

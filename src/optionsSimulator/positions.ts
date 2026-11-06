@@ -34,6 +34,47 @@ export async function readPositionSnapshot(contracts: Contract[], signal: AbortS
   }
 }
 
+function positionChain(contracts: Contract[]) {
+  const first = contracts[0], factor = first?.factor;
+  if (!first || !factor || !Number.isFinite(factor) || factor <= 0 || factor > 100000 ||
+    contracts.some(contract => contract.underlyingId !== first.underlyingId || contract.expiration !== first.expiration ||
+      contract.currency !== first.currency || contract.strikeCurrency !== first.currency || contract.settlement !== first.settlement))
+    throw Error("La posición requiere contratos del mismo subyacente, vencimiento, moneda y plazo.");
+  return { first, factor, expiry: first.expiration.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3") };
+}
+
+export function startPositionDraft(input: Simulation, contracts: Contract[], underlying: string, spot: number | undefined): Simulation {
+  const { first, factor, expiry } = positionChain(contracts);
+  const sameChain = input.underlying === underlying && input.currency === first.currency && input.expiry === expiry && numeric(input.multiplier) === factor;
+  if (input.legs.length && !sameChain) throw Error("Limpiá los ajustes antes de cargar una posición de otra cadena.");
+  const today = localDate();
+  const hasSpot = spot !== undefined && spot > 0;
+  return { ...input, underlying, currency: first.currency, expiry, multiplier: formatOptionInput(factor),
+    spot: sameChain ? input.spot : hasSpot ? formatOptionInput(spot) : "",
+    marketSpotMissing: sameChain ? input.marketSpotMissing : !hasSpot,
+    valuationDate: sameChain ? input.valuationDate : today, scenarioDate: sameChain ? input.scenarioDate : today,
+    adjustmentCosts: sameChain ? input.costs : "0", costs: "0", realized: undefined, position: { legs: [] } };
+}
+
+export type PositionSeries = Pick<Contract, "id" | "kind" | "strike" | "symbol">;
+
+export function setPositionQuantity(legs: Leg[], series: PositionSeries, signedQuantity: number, quote?: Quote): Leg[] {
+  if (!Number.isSafeInteger(signedQuantity) || Math.abs(signedQuantity) > MAX_CONTRACTS) return legs;
+  const previous = legs.find(leg => leg.securityId === series.id);
+  if (signedQuantity === 0) return previous ? legs.filter(leg => leg !== previous) : legs;
+  if (previous && numeric(signedPositionQuantity(previous)) === signedQuantity) return legs;
+  if (!previous && legs.length >= MAX_LEGS) return legs;
+  const side = signedQuantity > 0 ? "buy" : "sell";
+  const iv = quote?.impliedVolatility;
+  const leg: Leg = { id: previous?.id ?? Math.min(0, ...legs.map(item => item.id)) - 1,
+    securityId: series.id, symbol: series.symbol, kind: series.kind, strike: formatOptionInput(series.strike),
+    side, contracts: String(Math.abs(signedQuantity)), premium: previous?.side === side ? previous.premium : "",
+    volatility: previous?.volatility ?? (iv !== undefined && Number.isFinite(iv) && iv >= 0 && iv <= 500 ? formatOptionInput(iv) : ""),
+    premiumQuantity: previous?.premiumQuantity ?? (previous ? signedPositionQuantity(previous) : String(signedQuantity)),
+    premiumReviewPending: !!previous };
+  return previous ? legs.map(item => item === previous ? leg : item) : [...legs, leg];
+}
+
 /** Builds a local draft without treating a current quote as historical cost. */
 export function importPosition(snapshot: PositionSnapshot, contracts: Contract[], quotes: Record<string, Quote> | undefined,
   input: Simulation, underlying: string, spot: number | undefined, saved?: PositionAccounting): Simulation {
@@ -42,18 +83,12 @@ export function importPosition(snapshot: PositionSnapshot, contracts: Contract[]
     snapshot.reportedAt <= 0 || snapshot.capturedAt < snapshot.reportedAt - 300000 || snapshot.capturedAt > Date.now() + 300000 ||
     !Array.isArray(snapshot.positions) || snapshot.positions.length > MAX_LEGS)
     throw Error("El reporte de posición es inválido o supera las 16 patas admitidas.");
-  if (!snapshot.positions.length) throw Error("No hay posición abierta en la cadena seleccionada.");
-  const first = contracts[0], factor = first?.factor;
-  if (!first || !factor || !Number.isFinite(factor) || factor <= 0 || factor > 100000 ||
-    contracts.some(contract => contract.underlyingId !== first.underlyingId || contract.expiration !== first.expiration ||
-      contract.currency !== first.currency || contract.strikeCurrency !== first.currency || contract.settlement !== first.settlement))
-    throw Error("La posición requiere contratos del mismo subyacente, vencimiento, moneda y plazo.");
-  const expiry = first.expiration.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+  const { first, factor, expiry } = positionChain(contracts);
   const storageKey = positionStorageKey(snapshot.storageScope, first);
   const sameAccounting = input.position?.storage?.key === storageKey;
   const storage = sameAccounting ? input.position!.storage : { key: storageKey, revision: saved?.revision };
-  const sameContext = input.position?.contextId === snapshot.contextId && input.underlying === underlying && input.currency === first.currency &&
-    input.expiry === expiry && numeric(input.multiplier) === factor && sameAccounting;
+  const sameChain = input.underlying === underlying && input.currency === first.currency && input.expiry === expiry && numeric(input.multiplier) === factor;
+  const sameContext = sameChain && (!input.position?.contextId || input.position.contextId === snapshot.contextId && sameAccounting);
   const accounting = sameAccounting ? { legs: input.position!.legs, costs: input.costs, realized: input.realized } : saved;
   const seen = new Set<string>();
   const legs = snapshot.positions.map((position, index): Leg => {
@@ -79,5 +114,6 @@ export function importPosition(snapshot: PositionSnapshot, contracts: Contract[]
     marketSpotMissing: sameContext ? input.marketSpotMissing : !(spot !== undefined && spot > 0),
     valuationDate: sameContext ? input.valuationDate : today, scenarioDate: sameContext ? input.scenarioDate : today,
     costs: accounting?.costs ?? "0", realized: accounting?.realized ?? "",
+    adjustmentCosts: sameContext ? input.position ? input.adjustmentCosts : input.costs : "0",
     legs: sameContext ? input.legs : [], position: { legs, storage, contextId: snapshot.contextId, capturedAt: snapshot.capturedAt, reportedAt: snapshot.reportedAt } };
 }

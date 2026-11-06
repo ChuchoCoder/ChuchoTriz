@@ -28,7 +28,8 @@ export interface Simulation {
   multiplier: string;
   costs: string;
   realized?: string;
-  position?: { legs: Leg[]; capturedAt: number; reportedAt: number; contextId: string; storage?: PositionStorageSession };
+  adjustmentCosts?: string;
+  position?: { legs: Leg[]; capturedAt?: number; reportedAt?: number; contextId?: string; storage?: PositionStorageSession };
   volatilityShift: string;
   rangeMin?: string;
   rangeMax?: string;
@@ -106,7 +107,8 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   };
   const spot = read(input.spot, "Precio del subyacente", .000001, 1e9);
   const multiplier = read(input.multiplier, "Factor monetario por contrato", .000001, 100000);
-  const costs = read(input.costs, "Gastos de entrada", 0, 1e12);
+  const costs = read(input.costs, "Gastos de entrada", 0, 1e12) +
+    (input.position && input.legs.length && input.adjustmentCosts !== undefined ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0);
   const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12);
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
