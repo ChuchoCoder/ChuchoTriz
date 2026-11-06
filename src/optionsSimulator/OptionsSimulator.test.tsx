@@ -85,6 +85,74 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(container.querySelectorAll(".ct-sim-chart path")).toHaveLength(3);
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
+
+it("adjusts only the clicked quote's contracts from the grid and undoes just the last increment", async () => {
+  await mount();
+  const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
+  const sell = byLabel<HTMLButtonElement>("Vender PUT 90 en simulación");
+  const bar = () => container.querySelector(".ct-opt-quantity-bar");
+  expect(bar()).toBeNull();
+  await act(async () => buy.click());
+  expect(bar()?.parentElement).toBe(buy.parentElement);
+  expect([...bar()!.querySelectorAll("button")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100", "Deshacer"]);
+  expect(byLabel("Cantidad total").textContent).toBe("1");
+  expect(button("Deshacer").disabled).toBe(true);
+  await act(async () => {
+    const increment = byLabel<HTMLButtonElement>("Sumar 25");
+    increment.click(); increment.click();
+  });
+  expect(byLabel("Cantidad total").textContent).toBe("51");
+  expect(buy.textContent).toContain("Compra · 51");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+51");
+  await act(async () => button("Deshacer").click());
+  expect(byLabel("Cantidad total").textContent).toBe("26");
+  expect(button("Deshacer").disabled).toBe(true);
+
+  await act(async () => buy.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: sell })));
+  expect(bar()).toBeNull();
+  await act(async () => sell.click());
+  await act(async () => byLabel<HTMLButtonElement>("Sumar 100").click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+26");
+  expect(byLabel("Editar Contratos pata 2").textContent).toBe("−101");
+  expect(byLabel("Editar Prima pata 2").textContent).toBe("4");
+  await act(async () => sell.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: buy })));
+  expect(bar()?.parentElement).toBe(buy.parentElement);
+  expect(button("Deshacer").disabled).toBe(true);
+  await act(async () => buy.click());
+  expect(bar()).toBeNull();
+  expect(buy.getAttribute("aria-pressed")).toBe("false");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−101");
+});
+
+it("discards grid undo after a quantity edit from Armado", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Sumar 10").click());
+  await fill("Contratos pata 1", "15");
+  await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  const quote = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
+  await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(byLabel("Cantidad total").textContent).toBe("15");
+  expect(button("Deshacer").disabled).toBe(true);
+  await fill("Contratos pata 1", "9999999999");
+  await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(byLabel<HTMLButtonElement>("Sumar 10").disabled).toBe(true);
+  await act(async () => byLabel<HTMLButtonElement>("Sumar 1").click());
+  expect(byLabel("Cantidad total").textContent).toBe("10.000.000.000");
+});
+
+it("does not undo an Armado change if a queued grid change was superseded", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await act(async () => {
+    byLabel<HTMLButtonElement>("Aumentar contratos pata 1").click();
+    byLabel<HTMLButtonElement>("Sumar 1").click();
+  });
+  expect(byLabel("Cantidad total").textContent).toBe("2");
+  expect(button("Deshacer").disabled).toBe(true);
+});
+
 it("keeps expiry available when a native VI is missing and blocks missing quotes", async () => {
   marketState.current.data!.instruments["call-100"].impliedVolatility = undefined;
   marketState.current.data!.instruments["put-100"].ask = undefined;

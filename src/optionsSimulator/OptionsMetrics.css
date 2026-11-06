@@ -26,8 +26,8 @@
 .ct-sim .ct-opt-volume-fill{display:block;height:100%;border-radius:2px;background:var(--ct-volume)}
 .ct-sim .ct-opt-up{color:var(--sim-profit)}.ct-sim .ct-opt-down{color:var(--sim-loss)}
 /* Preserve quantity/price mirror and the existing quote pulse with compact markers. */
-.ct-sim .ct-opt-metrics-chain .ct-opt-price button{position:relative;height:36px;padding:2px 6px 8px;grid-template-columns:0 minmax(20px,.6fr) minmax(55px,1fr);gap:4px;font-size:11px}
-.ct-sim .ct-opt-metrics-chain .ct-opt-price.buy button{grid-template-columns:minmax(55px,1fr) minmax(20px,.6fr) 0}
+.ct-sim .ct-opt-metrics-chain .ct-opt-price > button{position:relative;height:36px;padding:2px 6px 8px;grid-template-columns:0 minmax(20px,.6fr) minmax(55px,1fr);gap:4px;font-size:11px}
+.ct-sim .ct-opt-metrics-chain .ct-opt-price.buy > button{grid-template-columns:minmax(55px,1fr) minmax(20px,.6fr) 0}
 .ct-sim .ct-opt-metrics-chain .ct-opt-price .ct-opt-marker{position:absolute;bottom:0;left:3px;font-size:8px;padding:0 2px;line-height:10px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-price.buy .ct-opt-marker{left:auto;right:3px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-price .ct-opt-quantity{font-size:9px}
