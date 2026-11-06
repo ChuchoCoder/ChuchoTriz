@@ -16,10 +16,12 @@ export interface Snapshot {
   contextRevision: number; catalogRevision: number; underlyingId: string; capturedAt: number; instruments: Record<string, Quote>;
 }
 export class MarketReader {
-  private channel = "chuchotriz-options-market-" + crypto.randomUUID();
+  private channel: string;
   private pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   private script = document.createElement("script");
   private ready: Promise<void>;
+  private releaseReady?: () => void;
+  private disposed = false;
   private receive = (event: MessageEvent) => {
     const msg = event.data;
     if (event.source !== window || msg?.channel !== this.channel || msg.kind !== "response") return;
@@ -28,28 +30,34 @@ export class MarketReader {
     clearTimeout(task.timer); this.pending.delete(msg.id);
     if (typeof msg.error === "string") task.reject(Error(msg.error)); else task.resolve(msg.result);
   };
-  constructor() {
+  constructor(private resource: "options-market-reader.js" | "options-position-reader.js" = "options-market-reader.js") {
+    this.channel = `chuchotriz-options-${resource === "options-position-reader.js" ? "position" : "market"}-${crypto.randomUUID()}`;
     window.addEventListener("message", this.receive);
     this.script.dataset.channel = this.channel;
-    this.script.src = chrome.runtime.getURL("options-market-reader.js");
+    this.script.src = chrome.runtime.getURL(resource);
     this.ready = new Promise((resolve, reject) => {
+      this.releaseReady = resolve;
       this.script.onload = () => resolve(); this.script.onerror = () => reject(Error("No se pudo cargar el lector de mercado. Recargá Matriz."));
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "positions" | "verifyPositionContext", params = {}): Promise<T> {
     await this.ready;
+    if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(id); window.postMessage({ channel: this.channel, kind: "retire", id }, location.origin);
         reject(Error("La lectura de mercado no respondió a tiempo."));
-      }, 5000);
+      }, this.resource === "options-position-reader.js" ? 15000 : 5000);
       this.pending.set(id, { resolve: value => resolve(value as T), reject, timer });
       window.postMessage({ channel: this.channel, kind: "request", id, method, params }, location.origin);
     });
   }
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.releaseReady?.();
     window.postMessage({ channel: this.channel, kind: "detach" }, location.origin);
     window.removeEventListener("message", this.receive); this.script.remove();
     this.pending.forEach(task => { clearTimeout(task.timer); task.reject(Error("Lectura cerrada.")); }); this.pending.clear();

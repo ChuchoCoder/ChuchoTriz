@@ -40,13 +40,18 @@ function installMarketFixture() {
   const underlying = { id: 'DEMO-GGAL', symbolStr: 'GGAL', currency: 'ARS', cfiCode: 'ESXXXX', change: 1.25, md: { lst: 100, seq: 10, bid: 99.9, bsz: 100, ask: 100.1, asz: 100 } };
   const options = [70, 80, 90, 100, 110, 120, 130].flatMap(strike => ['call', 'put'].map(kind => {
     const price = Math.max(0, kind === 'call' ? 100 - strike : strike - 100) + 2 + Math.max(0, 6 - Math.abs(100 - strike) / 5);
-    return { id: `${kind}-${strike}`, symbolStr: `DEMO ${kind.toUpperCase()} ${strike}`, marketId: 'bm', underlying: underlying.id, currency: 'ARS', settlementType: '2', cfiCode: kind === 'call' ? 'OCASPS' : 'OPASPS',
+    return { id: `${kind}-${strike}`, fixSymbol: `DEMO FIX ${kind} ${strike}`, symbolStr: `DEMO ${kind.toUpperCase()} ${strike}`, marketId: 'bm', underlying: underlying.id, currency: 'ARS', settlementType: '2', cfiCode: kind === 'call' ? 'OCASPS' : 'OPASPS',
       refData: { strikePrice: strike, maturityDateStr, totalAmountFactor: 1, contractMultiplier: 1, roundLot: 100 },
       impliedVolatility: 35 + Math.abs(100 - strike) / 2, greeks: { ggd: kind === 'call' ? .5 : -.5 }, change: (strike - 100) / 10,
       md: { lst: price, bid: price - .1, bsz: 200, ask: price + .1, asz: 150, seq: 10, von: strike * 10, lstdStr: new Date(Date.now() - (strike === 70 ? 45 : 2) * 60000).toISOString() },
     };
   }));
+  const positionReport = { lastCalculation: new Date(), types: [{ type: 'STOCK_OPTION_CALL', securitiesDetailed: [
+    { detailedPositions: [{ tradingSymbol: 'DEMO FIX call 100', totalCurrentSize: 2, totalCollateralSize: 0 }] },
+    { detailedPositions: [{ tradingSymbol: 'DEMO FIX call 110', totalCurrentSize: -1, totalCollateralSize: 0 }] },
+  ] }] };
   window.mainStore = { securityStore: { options, underlyingsForMatrix: [underlying], getSecurity: async id => [underlying, ...options].find(s => s.id === id) },
+    portfolioStore: { detailedPositionReport: positionReport, getDetailedPositionReport: async () => { positionReport.lastCalculation = new Date(); return positionReport; } },
     dmaWebSocket: { addSubscription() {} }, profileStore: { activeAccount: 'DEMO-NO-BROKER' }, webSocketConnectionStatus: true };
 }
 

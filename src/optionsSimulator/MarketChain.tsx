@@ -5,7 +5,8 @@ import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSimulation, Simulation, standardDeviationLevels } from "./model";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSimulation, simulationLegs, Simulation, standardDeviationLevels } from "./model";
+import { importPosition, readPositionSnapshot } from "./positions";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, quotePrice, recipePrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
@@ -34,6 +35,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [selectionReady, setSelectionReady] = useState(false);
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState("");
+  const [loadingPosition, setLoadingPosition] = useState(false);
+  const positionRequest = useRef<AbortController | null>(null);
+  const latestInput = useRef(input);
+  latestInput.current = input;
+  useEffect(() => () => positionRequest.current?.abort(), [active, input.position?.capturedAt]);
   const [catalogCache, setCatalogCache] = useState<Catalog>();
   const selectionKey = `OptionsSimulatorMarketSelectionV1:${location.origin}`;
   useEffect(() => {
@@ -61,18 +67,18 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const contracts = catalog?.contracts.filter(contract => contract.underlyingId === underlyingId) ?? [];
   const expirations = [...new Set(contracts.map(contract => contract.expiration))].sort();
   useEffect(() => {
-    if (!selectionReady || !underlyings.length || underlyings.some(item => item.id === underlyingId)) return;
+    if (input.position || !selectionReady || !underlyings.length || underlyings.some(item => item.id === underlyingId)) return;
     setUnderlying((underlyings.find(item => item.symbol === "GGAL") ?? underlyings[0]).id);
     setExpiration("");
-  }, [catalog, selectionReady, underlyingId]);
+  }, [catalog, selectionReady, underlyingId, !!input.position]);
   useEffect(() => {
     const currentUnderlying = underlyings.find(item => item.id === underlyingId);
-    if (!selectionReady || !currentUnderlying) return;
+    if (input.position || !selectionReady || !currentUnderlying) return;
     const nextExpiration = expirations.includes(expiration) ? expiration : defaultExpiration(expirations);
     if (expiration !== nextExpiration) setExpiration(nextExpiration);
     const preferred = preferredOptionMarket(contracts.filter(contract => contract.expiration === nextExpiration), currentUnderlying.currency);
     if (market !== preferred) setMarket(preferred);
-  }, [selectionReady, expiration, market, expirations.join(), catalog, underlyingId]);
+  }, [selectionReady, expiration, market, expirations.join(), catalog, underlyingId, !!input.position]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
@@ -153,6 +159,28 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     try { await chrome.storage.local.set({ [selectionKey]: { underlyingId, expiration } }); }
     catch { /* The current selection still works without local storage. */ }
   }
+  async function loadPosition() {
+    if (!underlying || loadingPosition) return;
+    const request = new AbortController();
+    positionRequest.current?.abort();
+    positionRequest.current = request;
+    setLoadingPosition(true); setNotice("");
+    try {
+      const { snapshot, saved } = await readPositionSnapshot(selected, request.signal);
+      if (request.signal.aborted) return;
+      const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot, saved);
+      onNewStrategy();
+      setInput(next);
+      setNotice("Posición cargada. Revisá las primas históricas y agregá ajustes desde la grilla.");
+    } catch (error) {
+      if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "No se pudo cargar la posición.");
+    } finally {
+      if (positionRequest.current === request) {
+        positionRequest.current = null;
+        setLoadingPosition(false);
+      }
+    }
+  }
   function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
     if (existing?.side === side) { setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) })); return; }
@@ -161,7 +189,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       setNotice("No se puede simular este contrato: faltan factores o hay monedas de prima, ejercicio y subyacente diferentes."); return;
     }
     const expiry = expiryDate(contract.expiration);
-    const mismatched = input.legs.length && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || input.legs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
+    const allLegs = simulationLegs(input);
+    const mismatched = allLegs.length && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || allLegs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
     if (mismatched) { setNotice("Limpiá las patas antes de cambiar el contexto de la simulación o combinar con datos manuales."); return; }
     const level = quote[side === "buy" ? "ask" : "bid"];
     const price = quotePrice(quote, side);
@@ -171,9 +200,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       kind: contract.kind, side, strike: String(contract.strike), premium: String(level.price),
       contracts: existing?.contracts ?? "1", volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     const today = localDate();
-    if (!input.legs.length) onNewStrategy();
+    if (!allLegs.length) onNewStrategy();
     setInput(current => ({ ...current, underlying: underlying.symbol, currency: contract.currency, expiry, multiplier: String(contract.factor),
-      ...(current.legs.length === 0 ? { spot: spot === undefined ? "" : String(spot), marketSpotMissing: spot === undefined, valuationDate: today, scenarioDate: today } : {}),
+      ...(!allLegs.length ? { spot: spot === undefined ? "" : String(spot), marketSpotMissing: spot === undefined, valuationDate: today, scenarioDate: today } : {}),
       legs: existing ? current.legs.map(item => item.securityId === contract.id ? leg : item) : [...current.legs, leg] }));
     setNotice("");
   }
@@ -183,6 +212,10 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       setNotice(!recipe.ok ? recipe.reason : !prices.ok ? prices.reason : "Esperando una lectura completa de mercado."); return false;
     }
     const factor = recipe.legs[0].contract.factor!;
+    if (input.position && (factor !== numeric(input.multiplier) || input.underlying !== underlying.symbol ||
+      input.expiry !== expiryDate(expiration) || input.currency !== recipe.legs[0].contract.currency)) {
+      setNotice("Los ajustes deben usar el mismo subyacente, vencimiento, moneda y factor que la posición cargada."); return false;
+    }
     const legs = recipe.legs.map((item, index): Leg => {
       const contract = item.contract, quote = data.instruments[contract.id];
       return { ...newLeg(index + 1), securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side: item.side,
@@ -192,7 +225,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const today = localDate();
     onNewStrategy();
     setInput(current => ({ ...current, underlying: underlying.symbol, expiry: expiryDate(expiration), currency: recipe.legs[0].contract.currency,
-      multiplier: String(factor), spot: String(spot), marketSpotMissing: false, valuationDate: today, scenarioDate: today, legs }));
+      multiplier: String(factor), ...(!current.position ? { spot: String(spot), marketSpotMissing: false, valuationDate: today, scenarioDate: today } : {}), legs }));
     setNotice("");
     return true;
   }
@@ -202,12 +235,13 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const quote = contract && data?.instruments[contract.id], level = quote?.[side === "buy" ? "ask" : "bid"];
     const price = quotePrice(quote, side);
     const marked = contract && input.legs.find(leg => leg.securityId === contract.id && leg.side === side);
+    const held = contract && input.position?.legs.find(leg => leg.securityId === contract.id && leg.side === side);
     const available = !!contract && !!quote && !!level && price.ok && !reading.issue;
     const moneyness = contract && itmSpot !== undefined && contract.strike !== itmSpot ? (contract.kind === "call" ? contract.strike < itmSpot : contract.strike > itmSpot) ? "itm" : "otm" : undefined;
     return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}>
       <button type="button" disabled={!available} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
         aria-pressed={!!marked} title={price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}`} onClick={() => contract && quote && selectQuote(contract, side, quote)}>
-        <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : ""}</span><OptionQuoteValue quantity value={available ? level.size : undefined} /><OptionQuoteValue value={available ? level.price : undefined} />
+        <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : held ? `Pos. ${held.side === "buy" ? "+" : "−"}${held.contracts}` : ""}</span><OptionQuoteValue quantity value={available ? level.size : undefined} /><OptionQuoteValue value={available ? level.price : undefined} />
       </button></td>;
   };
   const money = (value: number | undefined) => value === undefined ? "—" : `${fmt(value)} ${underlying?.currency ?? ""}`;
@@ -231,11 +265,14 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     <div className="ct-opt-metrics-note">{viEnabled && !metrics.windowValid ? "Ingresá minutos enteros mayores que cero." : "VI nativa de Matriz. La antigüedad usa la última operación; una lectura local no acredita vigencia bursátil."}</div>
   </div></details>;
   return <section ref={root} className="ct-sim-card ct-options ct-sim-market">{toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
-    <label>Subyacente<select aria-label="Subyacente de opciones" value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
-    <label>Vencimiento<select aria-label="Vencimiento de opciones" value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value))}</option>)}</select>
+    <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
+    <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value))}</option>)}</select>
       <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
-    <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency} costs={numeric(input.costs)}
-      context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration))}`} onApply={chooseStrategy} />
+    <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency} costs={input.position ? 0 : numeric(input.costs)}
+      context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration))}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />
+    <button type="button" disabled={!comparable || loadingPosition || selected.length > 160} onClick={() => void loadPosition()}
+      aria-label="Cargar posición actual" title="Leer la posición de la cuenta activa para este subyacente y vencimiento">
+      {loadingPosition ? "Cargando posición…" : input.position ? "Actualizar posición" : "Cargar posición"}</button>
     <span className="ct-sim-chain-counts">
       <span>{strikes.length} ejercicios</span>
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}

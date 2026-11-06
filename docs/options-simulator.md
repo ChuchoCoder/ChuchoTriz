@@ -3,8 +3,43 @@
 El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulador de
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
-Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes y no lee tenencias, saldos
-ni órdenes propias.
+Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes.
+**Cargar posición** consulta, a pedido del usuario, las cantidades de opciones de
+la cuenta activa correspondientes al subyacente y vencimiento seleccionados.
+
+La posición se muestra en un bloque separado, con cantidad firmada y prima
+histórica editable por unidad. La primera vez, la prima empieza vacía y debe completarse para
+calcular resultados desde el costo. Cero es un valor válido cuando se ingresa
+explícitamente. **Gastos de la posición** corresponde a cargos que todavía no están
+incluidos en las primas. **Resultado realizado neto** permite sumar ganancias o
+pérdidas de cierres anteriores, ya netas de sus propios gastos.
+
+Las patas agregadas desde la grilla forman **Ajustes simulados**. Cantidades,
+strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
+Las primas históricas, gastos y realizado permanecen en la posición original.
+**Limpiar ajustes** vuelve a la posición sin esas operaciones hipotéticas.
+**Nueva simulación** elimina el borrador y habilita otro contexto, conservando
+los datos históricos guardados localmente para futuras importaciones.
+
+Las primas, VI por pata, gastos y realizado se guardan automáticamente en este
+perfil de Chrome, separados por cuenta, sitio y cadena (incluido el factor).
+**Cargar posición** recupera esos datos aun después de cerrar el simulador o
+reiniciar Chrome. El estado de guardado se muestra debajo del reporte; si falla,
+se avisa para que no se cierre el borrador sin conservar los datos.
+
+El resultado suma los valores menos primas de la posición y los ajustes, resta
+los gastos de la posición y agrega el realizado informado. Sin realizado se
+muestra el resultado abierto con los ajustes. La fecha del reporte de Matriz queda
+visible. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
+una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
+actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.
+Si cambia de compra a venta o viceversa, la prima se vacía para evitar aplicar
+el costo de una posición anterior al sentido opuesto. Las series nuevas empiezan
+sin prima. Revisá también gastos y realizado luego de operaciones reales: no se
+reconstruyen automáticamente y un cierre y reapertura con igual cantidad no puede
+detectarse comparando únicamente los saldos.
+Los saldos ambiguos o en garantía que no puedan reconciliarse se informan para
+revisión, sin truncar la posición ni asignarles un costo supuesto.
 
 La cabecera **ChuchoTriz** reúne las dos herramientas y abre primero el simulador.
 Subyacente, vencimiento, estrategia, conteos y **Armado / Análisis** comparten

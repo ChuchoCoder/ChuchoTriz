@@ -28,7 +28,14 @@ issues públicos. Usar el canal privado habitual con el propietario.
   storage, dominios actuales y recursos explícitos, sin workers, permisos opcionales
   ni acceso ampliado. La única excepción de lectura de página es
   `options-market-reader.js`, limitado a catálogo y cotizaciones públicas nativas
-  para el simulador; no expone ejecución, credenciales ni datos privados de cuenta.
+  para el simulador. Un segundo lector acotado importa, sólo a pedido del usuario,
+  cantidades de opciones de la cuenta activa mediante el reporte nativo de Matriz.
+  Exporta únicamente identificadores de contrato, cantidades, fechas y un token
+  opaco de contexto y una clave de cuenta derivada mediante SHA-256 con semilla
+  aleatoria local por sitio. El identificador de cuenta nunca se exporta ni guarda.
+  La contabilidad histórica se guarda localmente por esa clave, cadena y factor;
+  no se sobrescribe con los ajustes propuestos. Las pruebas verifican cancelación, cambios de cuenta,
+  serialización, datos incompletos y ausencia de cuerpos o errores privados.
   Se revisan CSP, frames y exposición a otras extensiones.
   La ausencia de CSP conserva los valores predeterminados de Chrome MV3.
 - free-files.json enumera cada archivo autorizado. Cada incorporación requiere
