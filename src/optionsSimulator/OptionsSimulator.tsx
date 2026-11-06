@@ -189,7 +189,7 @@ function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
     <div className="ct-sim-scenario-scroll" role="region" aria-labelledby={heading} tabIndex={0}>
       <table>
         <caption className="ct-sim-sr">Variación respecto del precio de referencia. Teórico al {scenarioDate}.
-          {move > 0 && " Verde hasta ±1σ, naranja entre ±1σ y ±2σ, rojo fuera de ±2σ."}
+          {move > 0 && " Verde hasta ±1σ, amarillo entre ±1σ y ±2σ, rojo fuera de ±2σ."}
         </caption>
         <thead><tr><th scope="col">Var. %</th><th scope="col">Precio ({currency})</th>
           <th scope="col">Al vencimiento</th><th scope="col">Teórico</th></tr></thead>
