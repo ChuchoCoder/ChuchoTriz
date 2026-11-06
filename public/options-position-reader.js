@@ -1,10 +1,10 @@
-// One-shot import of option quantities for the selected chain.
+// One-shot import of option quantities and nominal holdings for the selected underlying.
 // Account context and the native report stay inside Matriz.
 (() => {
   const channel = document.currentScript?.dataset.channel;
   if (!channel) return;
-  if (window.__chuchotrizOptionsPositionReaderV2) {
-    window.__chuchotrizOptionsPositionReaderV2.attach(channel); return;
+  if (window.__chuchotrizOptionsPositionReaderV3) {
+    window.__chuchotrizOptionsPositionReaderV3.attach(channel); return;
   }
   const channels = new Set([channel]);
   let active, previousContext, contextId;
@@ -27,6 +27,32 @@
     check(channels.has(operation.channel) && !operation.retired && Date.now() <= operation.deadline, "Lectura de posición retirada o fuera de tiempo.");
     const current = context();
     check(Object.keys(operation.context).every(key => current[key] === operation.context[key]), "Cambió la cuenta o el contexto durante la lectura. Volvé a cargar la posición.");
+  }
+  function underlyingQuantity(securities, types, params) {
+    const catalog = securities.underlyingsForMatrix;
+    check(Array.isArray(catalog) && catalog.length <= 2000, "Catálogo de subyacentes no disponible.");
+    const matches = catalog.filter(item => item?.id === params.underlyingId);
+    check(matches.length === 1 && matches[0].currency === params.currency && typeof matches[0].symbolStr === "string" && matches[0].symbolStr,
+      "El subyacente ya no coincide con la cadena seleccionada.");
+    const underlying = matches[0];
+    const groupType = underlying.cfiCode?.startsWith("ES") ? "STOCK" : underlying.cfiCode?.startsWith("EM") ? "CEDEAR" : undefined;
+    if (underlying.marketId !== "bm" || !groupType) return undefined;
+    const groups = types.filter(group => group?.type === groupType);
+    check(groups.length <= 1 && groups.every(group => Array.isArray(group.securitiesDetailed) && group.securitiesDetailed.length <= 10000),
+      "El reporte de nominales del subyacente está incompleto.");
+    const candidates = (groups[0]?.securitiesDetailed ?? []).filter(item => item?.security?.id === underlying.id || item?.symbolReference === underlying.symbolStr);
+    if (!candidates.length) return 0;
+    const [instrument] = candidates;
+    check(candidates.length === 1 && instrument.security?.id === underlying.id &&
+      Number.isSafeInteger(instrument.instrumentCurrentSize) && Math.abs(instrument.instrumentCurrentSize) <= 1e10 &&
+      Array.isArray(instrument.detailedPositions) && instrument.detailedPositions.length <= 10000,
+    "Matriz informó una posición del subyacente que requiere revisión.");
+    const rows = instrument.detailedPositions;
+    check(rows.every(row => row?.security?.id === underlying.id && Number.isSafeInteger(row.totalCurrentSize) && Math.abs(row.totalCurrentSize) <= 1e10) &&
+      rows.reduce((sum, row) => sum + row.totalCurrentSize, 0) === instrument.instrumentCurrentSize,
+    "El total de nominales del subyacente no coincide con su detalle en Matriz.");
+    check(rows.every(row => !row.totalCollateralSize), "La posición del subyacente incluye cantidades en garantía y requiere revisión en Matriz.");
+    return instrument.instrumentCurrentSize;
   }
   async function read(params, operation) {
     check(typeof params.storageSalt === "string" && /^[a-f0-9]{64}$/.test(params.storageSalt), "Guardado local de posición no disponible.");
@@ -81,9 +107,13 @@
         }
       }
     }
+    let nominalQuantity, underlyingUnavailable;
+    try { nominalQuantity = underlyingQuantity(securities, report.types, params); }
+    catch { underlyingUnavailable = true; }
     assertCurrent(operation);
     return { contextId: operation.context.contextId, storageScope, capturedAt: Date.now(), reportedAt, version: operation.context.version,
-      positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })) };
+      positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })),
+      underlyingQuantity: nominalQuantity, ...(underlyingUnavailable && { underlyingUnavailable }) };
   }
   window.addEventListener("message", async event => {
     const msg = event.data;
@@ -117,5 +147,5 @@
       if (operation && active === operation) active = undefined;
     }
   });
-  window.__chuchotrizOptionsPositionReaderV2 = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };
+  window.__chuchotrizOptionsPositionReaderV3 = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };
 })();

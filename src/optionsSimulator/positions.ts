@@ -1,7 +1,8 @@
 import { MarketReader, type Contract, type Quote } from "./market";
 import { formatOptionInput } from "./format";
 import { localDate, MAX_CONTRACTS, MAX_LEGS, numeric, type Leg, type Simulation } from "./model";
-import { positionStorageKey, positionStorageSalt, premiumNeedsReview, readPositionAccounting, signedPositionQuantity, type PositionAccounting } from "./positionStorage";
+import { positionStorageKey, positionStorageSalt, premiumNeedsReview, readPositionAccounting, readUnderlyingCost, reconcileUnderlyingCost,
+  signedPositionQuantity, underlyingCostStorageKey, type PositionAccounting, type UnderlyingCost } from "./positionStorage";
 
 export interface PositionSnapshot {
   contextId: string;
@@ -9,9 +10,13 @@ export interface PositionSnapshot {
   capturedAt: number;
   reportedAt: number;
   positions: { securityId: string; quantity: number }[];
+  underlyingQuantity?: number;
+  underlyingUnavailable?: true;
 }
 
-export async function readPositionSnapshot(contracts: Contract[], signal: AbortSignal): Promise<{ snapshot: PositionSnapshot; saved?: PositionAccounting }> {
+export async function readPositionSnapshot(contracts: Contract[], signal: AbortSignal): Promise<{
+  snapshot: PositionSnapshot; saved?: PositionAccounting; savedUnderlying?: UnderlyingCost; costStorageUnavailable?: boolean;
+}> {
   const first = contracts[0];
   if (!first || signal.aborted) throw Error("Seleccioná una cadena de opciones para cargar la posición.");
   const reader = new MarketReader("options-position-reader.js");
@@ -23,11 +28,26 @@ export async function readPositionSnapshot(contracts: Contract[], signal: AbortS
     const snapshot = await reader.call<PositionSnapshot>("positions", { ids: contracts.map(contract => contract.id),
       underlyingId: first.underlyingId, expiration: first.expiration, currency: first.currency, settlement: first.settlement, storageSalt });
     const saved = await readPositionAccounting(positionStorageKey(snapshot.storageScope, first));
-    if (signal.aborted) throw Error("Lectura de posición cancelada.");
-    // The account may have changed while waiting for local storage.
-    if (await reader.call<boolean>("verifyPositionContext", { contextId: snapshot.contextId }) !== true)
-      throw Error("No se pudo verificar la cuenta activa. Volvé a cargar la posición.");
-    return { snapshot, saved };
+    const verify = async () => {
+      if (signal.aborted || await reader.call<boolean>("verifyPositionContext", { contextId: snapshot.contextId }) !== true || signal.aborted)
+        throw Error("No se pudo verificar la cuenta activa. Volvé a cargar la posición.");
+    };
+    const quantity = snapshot.underlyingQuantity;
+    if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || Math.abs(quantity) > MAX_CONTRACTS) {
+      await verify();
+      return { snapshot, saved };
+    }
+    const costKey = underlyingCostStorageKey(snapshot.storageScope, first);
+    let savedUnderlying, costStorageUnavailable = false;
+    try { savedUnderlying = await readUnderlyingCost(costKey); }
+    catch { costStorageUnavailable = true; }
+    await verify();
+    if (savedUnderlying && savedUnderlying.quantity !== quantity) {
+      try { savedUnderlying = await reconcileUnderlyingCost(costKey, quantity, savedUnderlying); }
+      catch { savedUnderlying = undefined; costStorageUnavailable = true; }
+      await verify();
+    }
+    return { snapshot, saved, savedUnderlying, costStorageUnavailable };
   } finally {
     signal.removeEventListener("abort", cancel);
     reader.dispose();
@@ -77,20 +97,32 @@ export function setPositionQuantity(legs: Leg[], series: PositionSeries, signedQ
 
 /** Builds a local draft without treating a current quote as historical cost. */
 export function importPosition(snapshot: PositionSnapshot, contracts: Contract[], quotes: Record<string, Quote> | undefined,
-  input: Simulation, underlying: string, spot: number | undefined, saved?: PositionAccounting): Simulation {
+  input: Simulation, underlying: string, spot: number | undefined, saved?: PositionAccounting, savedUnderlying?: UnderlyingCost,
+  costStorageUnavailable = false): Simulation {
   if (!snapshot || typeof snapshot.contextId !== "string" || !/^[A-Za-z0-9-]{1,80}$/.test(snapshot.contextId) ||
     !Number.isFinite(snapshot.capturedAt) || !Number.isFinite(snapshot.reportedAt) ||
     snapshot.reportedAt <= 0 || snapshot.reportedAt > 8.64e15 || snapshot.capturedAt <= 0 || snapshot.capturedAt > Date.now() + 300000 ||
-    !Array.isArray(snapshot.positions) || snapshot.positions.length > MAX_LEGS)
+    !Array.isArray(snapshot.positions) || snapshot.positions.length > MAX_LEGS ||
+    (snapshot.underlyingQuantity !== undefined && (!Number.isSafeInteger(snapshot.underlyingQuantity) || Math.abs(snapshot.underlyingQuantity) > MAX_CONTRACTS)) ||
+    (snapshot.underlyingUnavailable !== undefined && (snapshot.underlyingUnavailable !== true || snapshot.underlyingQuantity !== undefined)))
     throw Error("El reporte de posición es inválido o supera las 16 patas admitidas.");
   const { first, factor, expiry } = positionChain(contracts);
   const storageKey = positionStorageKey(snapshot.storageScope, first);
   const sameAccounting = input.position?.storage?.key === storageKey;
-  const useDraftAccounting = sameAccounting && !!input.position?.legs.length;
+  const useDraftAccounting = sameAccounting && !!(input.position?.legs.length || input.position?.underlying?.quantity);
   const storage = useDraftAccounting ? input.position!.storage : { key: storageKey, revision: saved?.revision };
   const sameChain = input.underlying === underlying && input.currency === first.currency && input.expiry === expiry && numeric(input.multiplier) === factor;
   const sameContext = sameChain && (!input.position?.contextId || input.position.contextId === snapshot.contextId && sameAccounting);
   const accounting = useDraftAccounting ? { legs: input.position!.legs, costs: input.costs, realized: input.realized } : saved;
+  const quantity = snapshot.underlyingQuantity;
+  const costKey = underlyingCostStorageKey(snapshot.storageScope, first);
+  const previousHolding = input.position?.underlying;
+  const sameHolding = quantity !== undefined && quantity !== 0 && previousHolding?.quantity === quantity &&
+    (previousHolding.storage?.key === costKey || (sameAccounting && costStorageUnavailable && previousHolding.costStorageUnavailable));
+  const holding = quantity === undefined ? undefined
+    : sameHolding && !costStorageUnavailable ? previousHolding
+    : { quantity, averageCost: sameHolding ? previousHolding.averageCost : savedUnderlying?.quantity === quantity ? savedUnderlying.averageCost : "",
+      storage: quantity && !costStorageUnavailable ? { key: costKey, revision: savedUnderlying?.revision } : undefined, costStorageUnavailable };
   const seen = new Set<string>();
   const legs = snapshot.positions.map((position, index): Leg => {
     const matches = contracts.filter(contract => contract.id === position.securityId);
@@ -118,5 +150,6 @@ export function importPosition(snapshot: PositionSnapshot, contracts: Contract[]
     valuationDate: sameContext ? input.valuationDate : today, scenarioDate: sameContext ? input.scenarioDate : today,
     costs: accounting?.costs ?? "0", realized: accounting?.realized ?? "",
     adjustmentCosts: sameContext ? input.position ? input.adjustmentCosts : input.costs : "0",
-    legs: sameContext ? input.legs : [], position: { legs, storage, contextId: snapshot.contextId, capturedAt: snapshot.capturedAt, reportedAt: snapshot.reportedAt } };
+    legs: sameContext ? input.legs : [], position: { legs, underlying: holding, underlyingUnavailable: snapshot.underlyingUnavailable,
+      storage, contextId: snapshot.contextId, capturedAt: snapshot.capturedAt, reportedAt: snapshot.reportedAt } };
 }

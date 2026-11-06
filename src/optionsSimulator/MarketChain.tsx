@@ -235,16 +235,17 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     initialPositionAttempted.current = true;
     setLoadingPosition(true); setNotice("");
     try {
-      const { snapshot, saved } = await readPositionSnapshot(selected, request.signal);
+      const { snapshot, saved, savedUnderlying, costStorageUnavailable } = await readPositionSnapshot(selected, request.signal);
       if (request.signal.aborted) return;
       const current = latestInput.current;
       if (automatic && current.position) return;
       const base = automatic ? startPositionDraft(current, selected, underlying.symbol, spot) : current.position ? current : draft;
-      const next = importPosition(snapshot, selected, data?.instruments, base, underlying.symbol, spot, saved);
-      const hasPosition = !!next.position?.legs.length;
-      setNotice(hasPosition ? { announcement: "Tenencia cargada. Revisá las primas históricas en la grilla." }
+      const next = importPosition(snapshot, selected, data?.instruments, base, underlying.symbol, spot, saved, savedUnderlying, costStorageUnavailable);
+      const hasPosition = !!(next.position?.legs.length || next.position?.underlying?.quantity);
+      const underlyingUnavailable = next.position?.underlyingUnavailable;
+      setNotice(hasPosition || underlyingUnavailable ? { announcement: "Reporte recibido. Revisá la posición actual en la grilla." }
         : "No hay posición abierta en esta cadena. Podés ingresar una posición manual.");
-      if (automatic && !hasPosition) return;
+      if (automatic && !hasPosition && !underlyingUnavailable) return;
       if (automatic) setPositionMode(true);
       onNewStrategy();
       setOpenQuote(undefined);
@@ -279,7 +280,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     }
   }
   function clearPosition() {
-    setInput(current => current.position ? { ...current, position: { legs: [] }, costs: "0", realized: undefined } : current);
+    setInput(current => current.position ? { ...current, position: { legs: [],
+      underlying: current.position.underlying && { quantity: 0, averageCost: "" } }, costs: "0", realized: undefined } : current);
     setNotice({ announcement: "Se limpió la posición del borrador. Podés recargar la tenencia. Los ajustes siguen en Armado." });
   }
   function commitPositionQuantity(series: PositionSeries, value: string) {

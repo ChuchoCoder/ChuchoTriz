@@ -11,13 +11,19 @@ function fixture() {
     currency:'ARS', settlementType:'2', underlying:'DEMO', refData:{maturityDateStr:'20261218'} }));
   const positions = options.map((sec,index)=>({ tradingSymbol:sec.fixSymbol, totalCurrentSize:index ? -3:2, totalCollateralSize:0,
     historicalCost:'PRIVATE_COST', orders:'PRIVATE_ORDERS' }));
+  const underlying = {id:'DEMO',symbolStr:'DEMO',currency:'ARS',marketId:'bm',cfiCode:'ESXXXX'};
+  const holding = {symbolReference:'DEMO',security:underlying,instrumentCurrentSize:100,detailedPositions:[
+    {security:underlying,totalCurrentSize:75,tradingSymbol:'DEMO CI',historicalCost:'PRIVATE_COST'},
+    {security:underlying,totalCurrentSize:25,tradingSymbol:'DEMO 24'},
+  ]};
   const report = {lastCalculation:new Date(), types:[
     {type:'STOCK_OPTION_CALL',securitiesDetailed:[{detailedPositions:[positions[0]]}]},
     {type:'STOCK_OPTION_PUT',securitiesDetailed:[{detailedPositions:[positions[1]]}]},
-    {type:'STOCK',get securitiesDetailed(){throw Error('Unrelated report access');}},
+    {type:'STOCK',securitiesDetailed:[holding,{symbolReference:'OTHER',get detailedPositions(){throw Error('Unrelated report access');}}]},
+    {type:'BOND',get securitiesDetailed(){throw Error('Unrelated report access');}},
   ],account:'PRIVATE_ACCOUNT'};
   const store = { profileStore:{activeAccount:'PRIVATE_ACCOUNT',context:{riskDetailedCollateralEnabled:true}},
-    securityStore:{options},portfolioStore:{detailedPositionReport:report,getDetailedPositionReport:async (...args)=>{calls.push(args);return report;}} };
+    securityStore:{options,underlyingsForMatrix:[underlying]},portfolioStore:{detailedPositionReport:report,getDetailedPositionReport:async (...args)=>{calls.push(args);return report;}} };
   for(const name of ['orderStore','balanceStore']) Object.defineProperty(store,name,{get(){throw Error('Forbidden account field');}});
   const window = {mainStore:store,addEventListener:(_name,listener)=>listeners.push(listener),postMessage:msg=>replies.push(msg)};
   const document = {currentScript:{dataset:{channel:'position-test'}},body:{innerText:'Versión: 4.24.4'}};
@@ -30,7 +36,7 @@ function fixture() {
     await listeners[0]({source:window,data:{channel:'position-test',kind:'request',id:request,method,params:selected}});
     return replies.find(reply=>reply.id===request);
   }
-  return {store,window,document,report,positions,options,params,listeners,replies,calls,call};
+  return {store,window,document,report,positions,options,holding,params,listeners,replies,calls,call};
 }
 test('reads only after explicit request and exports only selected signed quantities and timestamps',async()=>{
   const f=fixture();
@@ -40,7 +46,21 @@ test('reads only after explicit request and exports only selected signed quantit
   assert.deepEqual(f.calls[0],['PRIVATE_ACCOUNT',true]);
   assert.deepEqual(JSON.parse(JSON.stringify(result.positions)),[{securityId:'option-0',quantity:2},{securityId:'option-1',quantity:-3}]);
   assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
-  assert.deepEqual(Object.keys(result).sort(),['capturedAt','contextId','positions','reportedAt','storageScope','version']);
+  assert.equal(result.underlyingQuantity,100);
+  assert.deepEqual(Object.keys(result).sort(),['capturedAt','contextId','positions','reportedAt','storageScope','underlyingQuantity','version']);
+});
+test('validates nominal holdings against the selected instrument and its signed settlement detail',async()=>{
+  const f=fixture();
+  f.holding.instrumentCurrentSize=-100;
+  f.holding.detailedPositions.forEach(row=>{row.totalCurrentSize*=-1;});
+  assert.equal((await f.call()).result.underlyingQuantity,-100);
+  f.holding.instrumentCurrentSize=-99;
+  const partial=(await f.call()).result;
+  assert.equal(partial.underlyingUnavailable,true);
+  assert.equal(partial.underlyingQuantity,undefined);
+  assert.equal(partial.positions.length,2);
+  f.report.types.find(group=>group.type==='STOCK').securitiesDetailed.shift();
+  assert.equal((await f.call()).result.underlyingQuantity,0);
 });
 test('filters the selected chain and never interprets native prices as historical premiums',async()=>{
   const f=fixture();

@@ -4,7 +4,7 @@ import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OptionsSimulator from "./OptionsSimulator";
 import { Catalog, Contract, Quote, Snapshot } from "./market";
-import { positionStorageKey, readPositionAccounting } from "./positionStorage";
+import { positionStorageKey, readPositionAccounting, readUnderlyingCost, underlyingCostStorageKey } from "./positionStorage";
 import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
 
@@ -14,7 +14,9 @@ const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
   readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
     const snapshot = await readPosition(contracts, signal);
-    return { snapshot, saved: signal.aborted ? undefined : await readPositionAccounting(positionStorageKey(snapshot.storageScope, contracts[0])) };
+    if (signal.aborted) return { snapshot };
+    return { snapshot, saved: await readPositionAccounting(positionStorageKey(snapshot.storageScope, contracts[0])),
+      savedUnderlying: snapshot.underlyingQuantity ? await readUnderlyingCost(underlyingCostStorageKey(snapshot.storageScope, contracts[0])) : undefined };
   },
 }));
 let root: Root, container: HTMLDivElement;
@@ -234,6 +236,27 @@ it("loads the initial position once when the selected chain is ready", async () 
   expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
   await act(async () => button("Nueva simulación").click());
   expect(readPosition).toHaveBeenCalledTimes(1);
+});
+
+it("loads nominal holdings without open options and includes them only while the position is checked", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  expect(byLabel("Nominales del subyacente").textContent).toBe("100");
+  expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Costo promedio por nominal");
+  await fill("Costo promedio por nominal", "90");
+  await showAnalysis();
+  expect(byLabel("Patas analizadas").textContent).toContain("+100 nominales de GGAL");
+  expect([...container.querySelectorAll(".ct-sim-analysis-chart .ct-sim-inspect output")].map(node => node.textContent)).toEqual(["1.000 ARS", "1.000 ARS"]);
+  const include = container.querySelector<HTMLInputElement>(".ct-sim-include-position input")!;
+  await act(async () => include.click());
+  expect(byLabel("Patas analizadas").textContent).not.toContain("nominales");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).toBeNull();
+  await act(async () => include.click());
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
+  await act(async () => root.render(<OptionsSimulator key="fresh-position" />));
+  expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
 });
 
 it("loads holdings and shows the local read time if Matriz reports a future date", async () => {

@@ -25,6 +25,11 @@ export function positionStorageKey(scope: string, contract: Contract): string {
   return prefix + JSON.stringify([scope, contract.underlyingId, contract.expiration, contract.currency, contract.settlement, contract.factor]);
 }
 
+export function underlyingCostStorageKey(scope: string, contract: Contract): string {
+  if (!/^[a-f0-9]{64}$/.test(scope)) throw Error("No se pudo identificar el guardado local de la cuenta.");
+  return "OptionsUnderlyingCostV1:" + JSON.stringify([scope, contract.underlyingId, contract.currency]);
+}
+
 export interface PositionAccounting {
   version: 1;
   revision: string;
@@ -65,14 +70,68 @@ export async function readPositionAccounting(key: string): Promise<PositionAccou
 
 export class PositionAccountingConflict extends Error {}
 
+function queueWrite(key: string, work: () => Promise<void>): Promise<void> {
+  // Serialize writes so a slow previous keystroke cannot replace a later value.
+  const pending = (writes.get(key) ?? Promise.resolve()).catch(() => {}).then(() => locked(key, work));
+  writes.set(key, pending);
+  void pending.finally(() => { if (writes.get(key) === pending) writes.delete(key); }).catch(() => {});
+  return pending;
+}
+
+export interface UnderlyingCost {
+  revision: string;
+  quantity: number;
+  averageCost: string;
+}
+
+function validUnderlyingCost(value: unknown): value is UnderlyingCost {
+  if (!value || typeof value !== "object") return false;
+  const cost = value as UnderlyingCost;
+  return text(cost.revision) && !!cost.revision && Number.isSafeInteger(cost.quantity) && Math.abs(cost.quantity) <= MAX_CONTRACTS &&
+    (cost.quantity === 0 ? cost.averageCost === "" : numberText(cost.averageCost, 0, 1e9));
+}
+
+async function readStoredUnderlyingCost(key: string): Promise<UnderlyingCost | undefined> {
+  const value = (await chrome.storage.local.get(key))[key];
+  if (value === undefined) return;
+  if (!validUnderlyingCost(value)) throw Error("El costo guardado del subyacente requiere revisión.");
+  return value;
+}
+
+export async function readUnderlyingCost(key: string): Promise<UnderlyingCost | undefined> {
+  await writes.get(key)?.catch(() => {});
+  return readStoredUnderlyingCost(key);
+}
+
+/** Retire the old basis even when holdings later return to the original quantity. */
+export async function reconcileUnderlyingCost(key: string, quantity: number, saved?: UnderlyingCost): Promise<UnderlyingCost | undefined> {
+  if (!saved || saved.quantity === quantity) return saved;
+  await saveUnderlyingCost({ key, revision: saved.revision }, quantity, "");
+  const current = await readUnderlyingCost(key);
+  if (current?.quantity !== quantity) throw new PositionAccountingConflict();
+  return current;
+}
+
+export function saveUnderlyingCost(storage: PositionStorageSession, quantity: number, averageCost: string): Promise<void> {
+  const { key } = storage;
+  const value = { revision: crypto.randomUUID(), quantity, averageCost };
+  if (!validUnderlyingCost(value)) return Promise.reject(Error("Revisá el costo del subyacente antes de guardarlo."));
+  return queueWrite(key, async () => {
+    const previous = await readStoredUnderlyingCost(key);
+    if (previous?.quantity === quantity && previous.averageCost === averageCost) { savedRevisions.set(storage, previous.revision); return; }
+    if (previous?.revision !== (savedRevisions.get(storage) ?? storage.revision)) throw new PositionAccountingConflict();
+    await chrome.storage.local.set({ [key]: value });
+    savedRevisions.set(storage, value.revision);
+  });
+}
+
 /** Store only the original position's accounting; proposed adjustments never overwrite it. */
 export function savePositionAccounting(storage: PositionStorageSession, legs: Leg[], costs: string, realized = ""): Promise<void> {
   const { key } = storage;
   const value: PositionAccounting = { version: 1, revision: crypto.randomUUID(), costs, realized,
     legs: legs.map(leg => ({ id: leg.id, ...legRecord(leg) })) };
   if (!valid(value)) return Promise.reject(Error("Revisá los valores históricos antes de guardarlos."));
-  // Serialize writes so a slow previous keystroke cannot replace a later value.
-  const pending = (writes.get(key) ?? Promise.resolve()).catch(() => {}).then(() => locked(key, async () => {
+  return queueWrite(key, async () => {
     const previous = await readStored(key);
     // Removing a leg from the draft can be temporary. Keep its last cost for a reload, flagged for review.
     const removed = previous?.legs.filter(leg => !value.legs.some(current => current.securityId === leg.securityId))
@@ -93,10 +152,7 @@ export function savePositionAccounting(storage: PositionStorageSession, legs: Le
     if (previous?.revision !== (savedRevisions.get(storage) ?? storage.revision)) throw new PositionAccountingConflict();
     await chrome.storage.local.set({ [key]: next });
     savedRevisions.set(storage, value.revision);
-  }));
-  writes.set(key, pending);
-  void pending.finally(() => { if (writes.get(key) === pending) writes.delete(key); }).catch(() => {});
-  return pending;
+  });
 }
 
 export const signedPositionQuantity = (leg: Leg) => (leg.side === "buy" ? "" : "-") + leg.contracts;

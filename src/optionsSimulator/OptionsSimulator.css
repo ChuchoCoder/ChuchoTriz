@@ -260,6 +260,7 @@
 .ct-sim .ct-sim-position-inline .ct-sim-position-costs .ct-sim-field { flex-direction: row; align-items: center; gap: 4px; }
 .ct-sim .ct-sim-position-inline .ct-sim-field label { white-space: nowrap; }
 .ct-sim .ct-sim-position-inline .ct-sim-field input { width: 86px; height: 26px; }
+.ct-sim-position-nominals output { font-weight: 700; font-variant-numeric: tabular-nums; }
 .ct-sim-position-info { font-size: 11px; }
 .ct-sim-position-info summary { cursor: pointer; color: var(--sim-accent); }
 .ct-sim-position-info[open] { flex-basis: 100%; text-align: center; }

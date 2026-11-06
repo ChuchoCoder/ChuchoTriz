@@ -5,7 +5,7 @@ import "./OptionsSimulator.css";
 import MarketChain from "./MarketChain";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
-import { PositionAccountingConflict, savePositionAccounting, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
+import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 
 // A native double click delivers two click events: 1 + 9 makes ten in total.
 const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 9 : 1;
@@ -110,12 +110,13 @@ function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChan
   </section>;
 }
 
-function PositionCosts({ input, onCosts, onRealized, onReset, onEdit, saveStatus, compact }: {
+function PositionCosts({ input, onCosts, onRealized, onUnderlyingCost, onReset, onEdit, saveStatus, compact }: {
   input: Simulation; onCosts(value: string): void; onRealized(value: string): void; onReset(): void;
+  onUnderlyingCost(value: string): void;
   onEdit?(): void; saveStatus: { message: string; error?: boolean }; compact: boolean;
 }) {
   if (!input.position) return null;
-  const { reportedAt, capturedAt } = input.position;
+  const { reportedAt, capturedAt, underlying, underlyingUnavailable } = input.position;
   const reportDateAhead = reportedAt !== undefined && capturedAt !== undefined && reportedAt > capturedAt + 300000;
   const reset = <button type="button" onClick={onReset} title="Descarta el borrador y habilita otro subyacente o vencimiento.">Nueva simulación</button>;
   const status = <small role="status" aria-label="Guardado de datos históricos">{input.position.storage ? saveStatus.message : "Edición manual en este borrador."}</small>;
@@ -128,9 +129,17 @@ function PositionCosts({ input, onCosts, onRealized, onReset, onEdit, saveStatus
       {onEdit && <button type="button" onClick={onEdit}>Editar posición en la cadena</button>}
       {reset}</div>}
     <div className="ct-sim-position-costs">
+      {underlying && <>
+        <div className="ct-sim-field ct-sim-position-nominals"><span>Nominales de {input.underlying}</span>
+          <output aria-label="Nominales del subyacente" title="Cantidad neta informada por Matriz para el subyacente">{formatOptionNumber(underlying.quantity)}</output></div>
+        {!!underlying.quantity && <Field label="Costo promedio por nominal" value={underlying.averageCost} onChange={onUnderlyingCost} min="0" max="1000000000"
+          title={`Costo histórico por unidad en ${input.currency}. Si cambia la cantidad, ingresá el nuevo costo promedio.`} />}
+      </>}
       <Field label="Gastos de la posición" value={input.costs} onChange={onCosts} title="Cargos adicionales que todavía no están incluidos en las primas." />
       <Field label="Resultado realizado neto" value={input.realized ?? ""} onChange={onRealized} title="Ganancia o pérdida de cierres anteriores, neta de sus propios gastos." />
     </div>
+    {underlyingUnavailable && <small role="status">Nominales de {input.underlying} sin verificar. Revisá el reporte de Matriz y recargá la tenencia.</small>}
+    {!!underlying?.quantity && underlying.costStorageUnavailable && <small role="status">El costo del subyacente queda solo en este borrador.</small>}
     {compact ? <>{reset}<details className="ct-sim-position-info"><summary title="Reporte de Matriz y estado de guardado">Info</summary>
       <div>{report}{!saveStatus.error && status}</div>
     </details>{saveStatus.error && status}</> : <>
@@ -338,25 +347,36 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   }));
   const [positionMode, setPositionMode] = useState(false);
   const [includePosition, setIncludePosition] = useState(true);
-  const valuationInput = useMemo(() => input.position && (!includePosition || !input.position.legs.length)
+  const valuationInput = useMemo(() => input.position && (!includePosition || (!input.position.legs.length && !input.position.underlying?.quantity && !input.position.underlyingUnavailable))
     ? { ...input, position: undefined, costs: input.adjustmentCosts ?? "0", realized: undefined } : input, [input, includePosition]);
   const allLegs = useMemo(() => simulationLegs(valuationInput), [valuationInput]);
+  const holding = valuationInput.position?.underlying;
+  const hasExposure = !!(allLegs.length || holding?.quantity || valuationInput.position?.underlyingUnavailable);
   const [chartZoom, setChartZoom] = useState<{ context: string; level: number }>();
   const [status, setStatus] = useState("");
   const [saveStatus, setSaveStatus] = useState<{ message: string; error?: boolean }>({ message: "" });
   const accountingLegs = input.position?.legs, accountingStorage = input.position?.storage;
+  const underlyingAccounting = input.position?.underlying;
   const { costs, realized } = input;
   useEffect(() => {
-    if (!accountingStorage || !accountingLegs?.length) { setSaveStatus({ message: "" }); return; }
+    const writes = [];
+    if (accountingStorage && accountingLegs && (accountingLegs.length || underlyingAccounting?.quantity))
+      writes.push(savePositionAccounting(accountingStorage, accountingLegs, costs, realized));
+    if (underlyingAccounting?.storage && underlyingAccounting.costEdited)
+      writes.push(saveUnderlyingCost(underlyingAccounting.storage, underlyingAccounting.quantity, underlyingAccounting.averageCost));
+    if (!writes.length) {
+      setSaveStatus({ message: underlyingAccounting?.averageCost ? "Costo del subyacente guardado en este perfil" : "" });
+      return;
+    }
     let current = true;
     setSaveStatus({ message: "Guardando…" });
-    void savePositionAccounting(accountingStorage, accountingLegs, costs, realized).then(() => { if (current) setSaveStatus({ message: "Guardado en este perfil · cuenta y vencimiento" }); },
+    void Promise.all(writes).then(() => { if (current) setSaveStatus({ message: "Guardado en este perfil" }); },
       error => { if (current) setSaveStatus({ error: true, message: error instanceof PositionAccountingConflict
         ? "Otra pestaña guardó cambios. Tus ediciones siguen en este borrador. Usá Nueva simulación y volvé a cargar para recuperar el guardado."
         : "No se pudo guardar. Revisá los valores y el almacenamiento local antes de cerrar." }); });
     return () => { current = false; };
     // Scenarios and proposed adjustments do not change historical accounting.
-  }, [accountingStorage, accountingLegs, costs, realized]);
+  }, [accountingStorage, accountingLegs, underlyingAccounting, costs, realized]);
   const [strikeMarket, setStrikeMarket] = useState<StrikeMarket>();
   const menusId = useId();
   const nextId = useRef(3);
@@ -367,7 +387,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     if (deviations || !positionMode || !position?.legs.length) return deviations;
     // The expected move needs prices and IV, so historical accounting can still be incomplete.
     const reference = parseSimulation({ ...valuationInput, costs: "0", adjustmentCosts: "0", realized: undefined,
-      position: { ...position, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
+      position: { ...position, underlying: undefined, underlyingUnavailable: false, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
     return reference.ok ? standardDeviationLevels(reference.strategy) : undefined;
   }, [deviations, positionMode, valuationInput]);
   const summary = useMemo(() => parsed.ok ? expirySummary(parsed.strategy) : undefined, [parsed]);
@@ -451,9 +471,11 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       ? { ...leg, premiumQuantity: signedPositionQuantity(leg), premiumReviewPending: false } : leg) } } : current);
   const historicalCosts = <PositionCosts input={input} compact={view === "build"}
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
+    onUnderlyingCost={averageCost => setInput(current => current.position?.underlying?.quantity ? { ...current,
+      position: { ...current.position, underlying: { ...current.position.underlying, averageCost, costEdited: true } } } : current)}
     saveStatus={saveStatus} onEdit={view === "analysis" ? () => { setPositionMode(true); changeView("build"); } : undefined}
     onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setPositionMode(false); setChartZoom(undefined); setStatus(""); }} />;
-  const chart = !allLegs.length ? <p>{input.position && !includePosition
+  const chart = !hasExposure ? <p>{input.position && !includePosition
     ? "La posición está excluida. Agregá un ajuste o volvé a incluirla para calcular resultados."
     : "Armá una estrategia para ver su resultado al vencimiento y teórico."}</p>
     : !parsed.ok ? <div className="ct-sim-errors" role="alert"><p>Revisá los datos para calcular:</p><ul>{parsed.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>
@@ -540,7 +562,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </section>}</div></div>
     <div id={`${menusId}-analysis-panel`} role="tabpanel" aria-labelledby={`${menusId}-analysis-tab`} hidden={view !== "analysis"} className="ct-sim-analysis-panel">
     <div className="ct-sim-analysis"><section className="ct-sim-card ct-sim-scenario"><h3>Escenarios</h3>
-      {!allLegs.length ? <p className="ct-sim-hint">Agregá patas en Armado para probar escenarios.</p> : <>
+      {!hasExposure ? <p className="ct-sim-hint">Agregá patas en Armado para probar escenarios.</p> : <>
       <div className="ct-sim-scenario-group"><ScenarioButtons label="Precio" value={scenarioPrice} numericValues options={[
         { label: "−10%", value: formatOptionInput(priceTarget(.9)), disabled: !Number.isFinite(spot) || spot <= 0 },
         { label: "0%", value: input.spot, disabled: !Number.isFinite(spot) || spot <= 0 },
@@ -552,7 +574,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
           format={position => priceSpan > 0 ? money(sliderPrice(position)) : "Rango no disponible"}
           onChange={position => setScenarioPrice(formatOptionInput(sliderPrice(position)))} />} />
       {input.marketSpotMissing && <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />}</div>
-      <div className="ct-sim-scenario-group"><ScenarioButtons label="VI" value={input.volatilityShift} numericValues options={[
+      {!!allLegs.length && <div className="ct-sim-scenario-group"><ScenarioButtons label="VI" value={input.volatilityShift} numericValues options={[
         { label: "−5 pp", value: "-5" }, { label: "0 pp", value: "0" }, { label: "+5 pp", value: "5" },
       ].map(option => ({ ...option, disabled: allLegs.some(leg => Number.isFinite(numeric(leg.volatility)) && (numeric(leg.volatility) + Number(option.value) < 0 || numeric(leg.volatility) + Number(option.value) > 500)) }))}
         onChange={value => update("volatilityShift", value)} />
@@ -564,7 +586,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
         <EditableLegValue label={`VI pata ${index + 1}`} value={leg.volatility} formatValue={formatOptionVolatility} onChange={value => updateLeg(leg.id, "volatility", value)} /><span>%</span>
       </div>)}</details>
-      </div>
+      </div>}
       <div className="ct-sim-scenario-group"><ScenarioButtons label="Fecha" value={input.scenarioDate} options={!baseDatesValid ? [] : [
         ...(days > 0 ? [{ label: "0 días", value: input.valuationDate }] : []),
         ...(days > 1 ? [{ label: midpointDays === 1 ? "1 día" : `${midpointDays} días`, value: addDays(input.valuationDate, midpointDays) }] : []),
@@ -614,13 +636,16 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         <h3 title={input.expiry}>{input.underlying || "Sin selección"} · {formatOptionExpiry(input.expiry)} · {allLegs.length} patas</h3>
         <button type="button" onClick={() => changeView("build")}>Editar armado</button>
       </div>
-      <div className="ct-sim-strategy-summary" aria-label="Patas analizadas">{allLegs.map(leg => <span key={leg.id} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
+      <div className="ct-sim-strategy-summary" aria-label="Patas analizadas">
+        {!!holding?.quantity && <span className={holding.quantity > 0 ? "ct-sim-buy" : "ct-sim-sell"}>
+          {holding.quantity > 0 ? "+" : ""}{fmt(holding.quantity)} nominales de {input.underlying}</span>}
+        {allLegs.map(leg => <span key={leg.id} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
         {leg.side === "buy" ? "Compra" : "Venta"} {leg.contracts}× {leg.symbol ?? `${leg.kind === "call" ? "Call" : "Put"} ${leg.strike}`}
       </span>)}</div>
     </section></div>
     <details className="ct-sim-card ct-sim-assumptions"><summary>Cómo se calcula y qué supuestos usa</summary>
       <p>Máximos y equilibrios calculados para todo precio del subyacente desde 0 hasta ∞, independientemente del rango visible.</p>
-      <p>Resultado total = suma de (valor de cada opción − prima de entrada) × contratos × unidades por contrato, con signo positivo para compra y negativo para venta, menos los gastos de entrada totales, más el resultado realizado neto informado.</p>
+      <p>Resultado total = suma de (valor de cada opción − prima de entrada) × contratos × unidades por contrato, más (precio del escenario − costo promedio) × nominales del subyacente. Las cantidades llevan signo, se restan los gastos de entrada y se suma el resultado realizado neto informado.</p>
       <p>Al vencimiento se usa valor intrínseco. El teórico usa Black–Scholes–Merton europeo, días calendario / 365, tasa y dividendos continuos, y VI constante por pata más el cambio de escenario. Es una estimación: no modela ejercicio anticipado, dividendos en efectivo, garantías, financiación de primas ni gastos de salida o ejercicio.</p>
       <p>La cadena muestra cotizaciones y métricas nativas de Matriz; la hora de lectura local no certifica frescura bursátil. Theta es una estimación BSM por unidad y día calendario; Extrínseco es Mid menos intrínseco. Tasa y dividendos empiezan en 0%, sin representar condiciones actuales. No se infiere VI a partir de primas: si falta, se muestra solo el resultado al vencimiento hasta ingresarla. Cambiar la VI no cambia las primas de entrada.</p>
     </details></div>

@@ -9,6 +9,13 @@ cuenta activa para el subyacente y vencimiento iniciales. Si hay tenencia, apare
 en la grilla. Si la cadena está vacía o falla la consulta, quedan disponibles las
 cotizaciones y el botón **Cargar posición**.
 
+Para acciones y CEDEARs, la barra de **Posición actual** también muestra los
+nominales del subyacente informados por Matriz. La cantidad corresponde al
+subyacente y se obtiene aunque el vencimiento seleccionado no tenga opciones
+en cartera. Completá el **Costo promedio por nominal** en la moneda de la
+simulación. Se guarda por cuenta, subyacente y moneda, y se pide de nuevo si
+cambia la cantidad informada.
+
 La misma cadena cambia a **Posición actual**, con cantidades firmadas y primas
 históricas por unidad a ambos lados del strike. Conserva las marcas de desvíos
 cuando hay precio y VI para estimarlas. Ingresá primero la cantidad.
@@ -40,8 +47,10 @@ Si falla el guardado, el aviso aparece en la barra de la grilla.
 
 El check **Incluir posición actual en Análisis** está en la barra común de
 **Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
-propios gastos. Al marcarlo, también incluye las patas de la posición, resta sus
-gastos y suma el realizado informado. La fecha del reporte de Matriz aparece en
+propios gastos. Al marcarlo, también incluye las patas y los nominales de la
+posición, resta sus gastos y suma el realizado informado. En ambas curvas, los
+nominales aportan la cantidad neta multiplicada por la diferencia entre el precio
+del escenario y el costo promedio por unidad. La fecha del reporte de Matriz aparece en
 **Info** y en **Análisis**. Si está adelantada respecto del reloj local, también
 se muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
