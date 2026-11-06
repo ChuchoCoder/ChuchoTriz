@@ -570,6 +570,19 @@ it("draws four standard-deviation references in both charts and updates them wit
   expect(container.querySelector('.ct-sim-expiry-line')).not.toBeNull();
 });
 
+it("colors both sides of the exact deviation boundaries symmetrically at a decimal spot", async () => {
+  const annualExpiry = addDays(localDate(), 365).replaceAll("-", "");
+  for (const contract of marketState.current.catalog!.contracts) contract.expiration = annualExpiry;
+  marketState.current.data!.instruments.GGAL.last = 1800.32;
+  marketState.current.data!.instruments["call-100"].impliedVolatility = 10;
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  const rows = Array.from(container.querySelectorAll<HTMLTableRowElement>(".ct-sim-scenario-results tbody tr"));
+  const bandAt = (change: string) => rows.find(row => row.cells[0].textContent === change)?.dataset.band;
+  expect(["-20%", "-10%", "+10%", "+20%"].map(bandAt)).toEqual(["sigma-two", "sigma-one", "sigma-one", "sigma-two"]);
+});
+
 it("positions chain deviation lines on row boundaries without crossing quotes, adding rows or mixing contexts", async () => {
   const priceScale = 100;
   for (const contract of marketState.current.catalog!.contracts) contract.strike *= priceScale;

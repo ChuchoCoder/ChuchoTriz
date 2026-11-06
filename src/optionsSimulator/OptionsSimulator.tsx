@@ -197,7 +197,7 @@ function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
         <tbody>{SCENARIO_CHANGES.map(change => {
           const price = scenarioPriceAt(strategy.spot, 1 + change / 100);
           if (price > 1e9) return null;
-          const distance = Math.abs(price - strategy.spot);
+          const distance = strategy.spot * (Math.abs(change) / 100);
           const band = change === 0 ? "spot" : distance <= move ? "sigma-one"
             : distance <= 2 * move ? "sigma-two" : move > 0 ? "outside-sigma" : undefined;
           const label = band === "spot" ? "Precio de referencia" : band === "sigma-one" ? "Dentro de ±1σ"
