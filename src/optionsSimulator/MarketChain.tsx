@@ -290,7 +290,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     }
     const expiry = expiryDate(contract.expiration);
     const allLegs = simulationLegs(input);
-    const mismatched = allLegs.length && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || allLegs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
+    const mismatched = (input.position || allLegs.length) && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || allLegs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
     if (mismatched) { setNotice("Limpiá las patas antes de cambiar el contexto de la simulación o combinar con datos manuales."); return; }
     const level = quote[side === "buy" ? "ask" : "bid"];
     const price = quotePrice(quote, side);
@@ -300,9 +300,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       kind: contract.kind, side, strike: String(contract.strike), premium: String(level.price),
       contracts: existing?.contracts ?? "1", volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     const today = localDate();
-    if (!allLegs.length) onNewStrategy();
+    if (!allLegs.length && !input.position) onNewStrategy();
     setInput(current => ({ ...current, underlying: underlying.symbol, currency: contract.currency, expiry, multiplier: String(contract.factor),
-      ...(!allLegs.length ? { spot: spot === undefined ? "" : String(spot), marketSpotMissing: spot === undefined, valuationDate: today, scenarioDate: today } : {}),
+      ...(!allLegs.length && !current.position ? { spot: spot === undefined ? "" : String(spot), marketSpotMissing: spot === undefined, valuationDate: today, scenarioDate: today } : {}),
       legs: existing ? current.legs.map(item => item.securityId === contract.id ? leg : item) : [...current.legs, leg] }));
     setOpenQuote(legKey(leg));
     setNotice("");

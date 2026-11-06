@@ -74,14 +74,24 @@ export function savePositionAccounting(storage: PositionStorageSession, legs: Le
   // Serialize writes so a slow previous keystroke cannot replace a later value.
   const pending = (writes.get(key) ?? Promise.resolve()).catch(() => {}).then(() => locked(key, async () => {
     const previous = await readStored(key);
-    const unchanged = previous && previous.costs === costs && previous.realized === realized && previous.legs.length === value.legs.length &&
-      value.legs.every(leg => {
+    // Removing a leg from the draft can be temporary. Keep its last cost for a reload, flagged for review.
+    const removed = previous?.legs.filter(leg => !value.legs.some(current => current.securityId === leg.securityId))
+      .slice(0, MAX_LEGS - value.legs.length).map(leg => ({ ...leg, premiumReviewPending: true })) ?? [];
+    const active = value.legs.map(leg => {
+      if (leg.premium !== "") return leg;
+      const known = previous?.legs.find(item => item.securityId === leg.securityId && item.side === leg.side &&
+        item.kind === leg.kind && numeric(item.strike) === numeric(leg.strike) && item.premiumReviewPending && item.premium !== "");
+      return known ? { ...leg, premium: known.premium, premiumQuantity: known.premiumQuantity, premiumReviewPending: true } : leg;
+    });
+    const next = { ...value, legs: [...active, ...removed] };
+    const unchanged = previous && previous.costs === costs && previous.realized === realized && previous.legs.length === next.legs.length &&
+      next.legs.every(leg => {
         const match = previous.legs.find(item => item.securityId === leg.securityId);
         return match && JSON.stringify(legRecord(match)) === JSON.stringify(legRecord(leg));
       });
     if (unchanged) { savedRevisions.set(storage, previous.revision); return; }
     if (previous?.revision !== (savedRevisions.get(storage) ?? storage.revision)) throw new PositionAccountingConflict();
-    await chrome.storage.local.set({ [key]: value });
+    await chrome.storage.local.set({ [key]: next });
     savedRevisions.set(storage, value.revision);
   }));
   writes.set(key, pending);

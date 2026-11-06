@@ -86,10 +86,11 @@ export function importPosition(snapshot: PositionSnapshot, contracts: Contract[]
   const { first, factor, expiry } = positionChain(contracts);
   const storageKey = positionStorageKey(snapshot.storageScope, first);
   const sameAccounting = input.position?.storage?.key === storageKey;
-  const storage = sameAccounting ? input.position!.storage : { key: storageKey, revision: saved?.revision };
+  const useDraftAccounting = sameAccounting && !!input.position?.legs.length;
+  const storage = useDraftAccounting ? input.position!.storage : { key: storageKey, revision: saved?.revision };
   const sameChain = input.underlying === underlying && input.currency === first.currency && input.expiry === expiry && numeric(input.multiplier) === factor;
   const sameContext = sameChain && (!input.position?.contextId || input.position.contextId === snapshot.contextId && sameAccounting);
-  const accounting = sameAccounting ? { legs: input.position!.legs, costs: input.costs, realized: input.realized } : saved;
+  const accounting = useDraftAccounting ? { legs: input.position!.legs, costs: input.costs, realized: input.realized } : saved;
   const seen = new Set<string>();
   const legs = snapshot.positions.map((position, index): Leg => {
     const matches = contracts.filter(contract => contract.id === position.securityId);
@@ -98,8 +99,10 @@ export function importPosition(snapshot: PositionSnapshot, contracts: Contract[]
       throw Error("Hay cantidades, contratos o factores de posición que requieren revisión.");
     seen.add(position.securityId);
     const contract = matches[0], side = position.quantity > 0 ? "buy" : "sell";
-    const previous = accounting?.legs.find(leg => leg.securityId === contract.id &&
-      numeric(leg.strike) === contract.strike && leg.kind === contract.kind);
+    const matchesSeries = (leg: Leg) => leg.securityId === contract.id && numeric(leg.strike) === contract.strike && leg.kind === contract.kind;
+    const edited = accounting?.legs.find(matchesSeries), stored = saved?.legs.find(matchesSeries);
+    const previous = stored?.premiumReviewPending && edited?.premium === "" && edited.side === stored.side
+      ? stored : edited ?? stored;
     const iv = quotes?.[contract.id]?.impliedVolatility;
     return { id: -(index + 1), securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side,
       strike: formatOptionInput(contract.strike), contracts: String(Math.abs(position.quantity)),

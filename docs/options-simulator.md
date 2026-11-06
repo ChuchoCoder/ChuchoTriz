@@ -24,6 +24,7 @@ Las primas históricas, gastos y realizado permanecen en la posición original.
 **Limpiar posición** vacía del borrador las patas, los gastos y el realizado de la
 posición. **Recargar tenencia** consulta nuevamente Matriz y recupera las primas
 históricas guardadas. Los ajustes de la misma cadena y cuenta se conservan.
+Si una serie quitada del borrador vuelve a aparecer, revisá su prima recuperada.
 **Nueva simulación** elimina el borrador y habilita otro contexto, conservando
 los datos históricos guardados localmente para futuras importaciones.
 

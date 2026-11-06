@@ -364,6 +364,57 @@ it("keeps manual position editing available when the native report fails", async
   expect(byLabel("Guardado de datos históricos").textContent).toContain("Edición manual");
   expect(write).not.toHaveBeenCalled();
 });
+
+it("recovers saved premiums after a verified empty report and a later reload", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica CALL 100", "8");
+  const written = write.mock.calls.length;
+  readPosition.mockResolvedValueOnce({ contextId: "demo-context", storageScope: "a".repeat(64),
+    capturedAt: Date.now(), reportedAt: Date.now(), positions: [] });
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  expect(write.mock.calls).toHaveLength(written);
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
+});
+
+it("keeps the position factor locked even when the verified report is empty", async () => {
+  marketState.current.catalog!.contracts.find(contract => contract.id === "put-90")!.factor = 200;
+  readPosition.mockResolvedValueOnce({ contextId: "demo-context", storageScope: "a".repeat(64),
+    capturedAt: Date.now(), reportedAt: Date.now(), positions: [] });
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await act(async () => button("Cotizaciones").click());
+  await act(async () => byLabel<HTMLButtonElement>("Comprar PUT 90 en simulación").click());
+  expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(0);
+  await act(async () => button("Posición actual").click());
+  expect(container.querySelector('[aria-label="Cantidad posición PUT 90"]')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+});
+
+it("recovers a removed series' saved premium for review when it is still held", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64),
+    capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }, { securityId: "put-90", quantity: -1 }] });
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica CALL 100", "8");
+  await fill("Prima histórica PUT 90", "3");
+  const quantity = byLabel<HTMLInputElement>("Cantidad posición CALL 100");
+  await act(async () => quantity.focus());
+  await fill("Cantidad posición CALL 100", "0");
+  await act(async () => quantity.blur());
+  expect(quantity.value).toBe("");
+  await act(async () => quantity.focus());
+  await fill("Cantidad posición CALL 100", "+2");
+  await act(async () => quantity.blur());
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("");
+  await act(async () => button("Recargar tenencia").click());
+  expect(quantity.value).toBe("+2");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
+  expect(byLabel("Confirmar prima histórica CALL 100")).not.toBeNull();
+});
 it("selecting a marked quote removes the leg; no execution controls are present", async () => {
   await mount();
   const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
