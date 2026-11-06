@@ -302,7 +302,10 @@ it("shows a live chart below the legs and shares its scenario with the full anal
   const buildResults = outputs();
   await act(async () => button("Análisis →").click());
   expect(container.querySelectorAll('.ct-sim-chart')).toHaveLength(1);
-  expect(container.querySelector('.ct-sim-results .ct-sim-chart')).not.toBeNull();
+  const results = byLabel("Resultados de la simulación");
+  const analysisChart = results.querySelector('.ct-sim-chart')!;
+  expect(analysisChart.compareDocumentPosition(results.querySelector('h3')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(analysisChart.compareDocumentPosition(byLabel("Patas analizadas"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(outputs()).toEqual(buildResults);
   await act(async () => byLabel<HTMLButtonElement>("VI +5 pp").click());
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());

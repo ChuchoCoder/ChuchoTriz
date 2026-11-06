@@ -525,10 +525,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       <Field label="Dividendos anuales continuos %" value={input.dividendYield} onChange={value => update("dividendYield", value)} />
       </details></>}
     {view === "analysis" && historicalCosts}
-    </section><section className="ct-sim-card ct-sim-results" aria-label="Resultados de la simulación"><div className="ct-sim-section-heading"><h3 title={input.expiry}>{input.underlying || "Sin selección"} · {formatOptionExpiry(input.expiry)} · {allLegs.length} patas</h3><button type="button" onClick={() => changeView("build")}>Editar armado</button></div>
-      <div className="ct-sim-strategy-summary" aria-label="Patas analizadas">{allLegs.map(leg => <span key={leg.id} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
-        {leg.side === "buy" ? "Compra" : "Venta"} {leg.contracts}× {leg.symbol ?? `${leg.kind === "call" ? "Call" : "Put"} ${leg.strike}`}
-      </span>)}</div>
+    </section><section className="ct-sim-card ct-sim-results" aria-label="Resultados de la simulación">
       {(!parsed.ok || !summary) ? view === "analysis" && chart : <>
         <div className="ct-sim-metrics">
           <div><span>{summary.entry < 0 ? "Crédito inicial neto" : "Débito inicial total"}</span><strong>{money(Math.abs(summary.entry))}</strong></div>
@@ -541,6 +538,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         {chartView && [...parsed.strategy.legs.map(leg => leg.strike), ...summary.equilibria.map(point => point.from)]
           .some(price => price < chartView.strategy.rangeMin || price > chartView.strategy.rangeMax) && <p className="ct-sim-hint">Hay strikes o equilibrios fuera del rango visible.</p>}
       </>}
+      <div className="ct-sim-section-heading">
+        <h3 title={input.expiry}>{input.underlying || "Sin selección"} · {formatOptionExpiry(input.expiry)} · {allLegs.length} patas</h3>
+        <button type="button" onClick={() => changeView("build")}>Editar armado</button>
+      </div>
+      <div className="ct-sim-strategy-summary" aria-label="Patas analizadas">{allLegs.map(leg => <span key={leg.id} className={leg.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
+        {leg.side === "buy" ? "Compra" : "Venta"} {leg.contracts}× {leg.symbol ?? `${leg.kind === "call" ? "Call" : "Put"} ${leg.strike}`}
+      </span>)}</div>
     </section></div>
     <details className="ct-sim-card ct-sim-assumptions"><summary>Cómo se calcula y qué supuestos usa</summary>
       <p>Máximos y equilibrios calculados para todo precio del subyacente desde 0 hasta ∞, independientemente del rango visible.</p>
