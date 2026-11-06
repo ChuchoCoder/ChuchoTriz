@@ -86,7 +86,7 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
 
-it("adjusts only the clicked quote's contracts from the grid and undoes just the last increment", async () => {
+it("sets only the clicked quote's contracts from the grid and undoes just the last change", async () => {
   await mount();
   const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
   const sell = byLabel<HTMLButtonElement>("Vender PUT 90 en simulación");
@@ -98,22 +98,23 @@ it("adjusts only the clicked quote's contracts from the grid and undoes just the
   expect(byLabel("Cantidad total").textContent).toBe("1");
   expect(button("Deshacer").disabled).toBe(true);
   await act(async () => {
-    const increment = byLabel<HTMLButtonElement>("Sumar 25");
-    increment.click(); increment.click();
+    byLabel<HTMLButtonElement>("Fijar 50 contratos").click();
+    const preset = byLabel<HTMLButtonElement>("Fijar 25 contratos");
+    preset.click(); preset.click();
   });
-  expect(byLabel("Cantidad total").textContent).toBe("51");
-  expect(buy.textContent).toContain("Compra · 51");
-  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+51");
+  expect(byLabel("Cantidad total").textContent).toBe("25");
+  expect(buy.textContent).toContain("Compra · 25");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+25");
   await act(async () => button("Deshacer").click());
-  expect(byLabel("Cantidad total").textContent).toBe("26");
+  expect(byLabel("Cantidad total").textContent).toBe("50");
   expect(button("Deshacer").disabled).toBe(true);
 
   await act(async () => buy.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: sell })));
   expect(bar()).toBeNull();
   await act(async () => sell.click());
-  await act(async () => byLabel<HTMLButtonElement>("Sumar 100").click());
-  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+26");
-  expect(byLabel("Editar Contratos pata 2").textContent).toBe("−101");
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 100 contratos").click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("+50");
+  expect(byLabel("Editar Contratos pata 2").textContent).toBe("−100");
   expect(byLabel("Editar Prima pata 2").textContent).toBe("4");
   await act(async () => sell.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: buy })));
   expect(bar()?.parentElement).toBe(buy.parentElement);
@@ -121,13 +122,13 @@ it("adjusts only the clicked quote's contracts from the grid and undoes just the
   await act(async () => buy.click());
   expect(bar()).toBeNull();
   expect(buy.getAttribute("aria-pressed")).toBe("false");
-  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−101");
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−100");
 });
 
 it("discards grid undo after a quantity edit from Armado", async () => {
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
-  await act(async () => byLabel<HTMLButtonElement>("Sumar 10").click());
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 10 contratos").click());
   await fill("Contratos pata 1", "15");
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   const quote = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
@@ -137,9 +138,10 @@ it("discards grid undo after a quantity edit from Armado", async () => {
   await fill("Contratos pata 1", "9999999999");
   await act(async () => byLabel<HTMLInputElement>("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-  expect(byLabel<HTMLButtonElement>("Sumar 10").disabled).toBe(true);
-  await act(async () => byLabel<HTMLButtonElement>("Sumar 1").click());
-  expect(byLabel("Cantidad total").textContent).toBe("10.000.000.000");
+  await act(async () => byLabel<HTMLButtonElement>("Fijar 1 contrato").click());
+  expect(byLabel("Cantidad total").textContent).toBe("1");
+  await act(async () => button("Deshacer").click());
+  expect(byLabel("Cantidad total").textContent).toBe("9.999.999.999");
 });
 
 it("does not undo an Armado change if a queued grid change was superseded", async () => {
@@ -147,7 +149,7 @@ it("does not undo an Armado change if a queued grid change was superseded", asyn
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   await act(async () => {
     byLabel<HTMLButtonElement>("Aumentar contratos pata 1").click();
-    byLabel<HTMLButtonElement>("Sumar 1").click();
+    byLabel<HTMLButtonElement>("Fijar 10 contratos").click();
   });
   expect(byLabel("Cantidad total").textContent).toBe("2");
   expect(button("Deshacer").disabled).toBe(true);

@@ -5,19 +5,19 @@ import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_CONTRACTS, MAX_LEGS, newLeg, numeric, parseSimulation, simulationLegs, Simulation, standardDeviationLevels } from "./model";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSimulation, simulationLegs, Simulation, standardDeviationLevels } from "./model";
 import { importPosition, readPositionSnapshot } from "./positions";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import { preferredOptionMarket, quotePrice, recipePrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
-import { adjustStrategyQuantity, type StrikeMarket } from "./strategyAdjustments";
+import type { StrikeMarket } from "./strategyAdjustments";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
-const quantitySteps = [1, 10, 25, 50, 100];
+const quantityPresets = [1, 10, 25, 50, 100];
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
-type QuantitySum = { before: string; after: Leg };
+type QuantityChange = { before: string; after: Leg };
 function defaultExpiration(dates: string[]) {
   const today = localDate().replaceAll("-", "");
   return dates.find(date => date >= today) ?? dates[0] ?? "";
@@ -37,8 +37,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState("");
   const [openQuote, setOpenQuote] = useState<string>();
-  const [lastSum, setLastSum] = useState<QuantitySum>();
-  const pendingQuantity = useRef<{ leg: Leg; next: Leg; sum?: QuantitySum }>(undefined);
+  const [lastQuantityChange, setLastQuantityChange] = useState<QuantityChange>();
+  const pendingQuantity = useRef<{ leg: Leg; next: Leg; change?: QuantityChange }>(undefined);
   const quantityBar = useRef<HTMLDivElement>(null);
   const [loadingPosition, setLoadingPosition] = useState(false);
   const positionRequest = useRef<AbortController | null>(null);
@@ -89,8 +89,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const shownQuote = openLeg ? openQuote : undefined;
   useEffect(() => {
     if (!shownQuote) setOpenQuote(undefined);
-    if (lastSum && !input.legs.includes(lastSum.after)) setLastSum(undefined);
-  }, [shownQuote, input.legs, lastSum]);
+    if (lastQuantityChange && !input.legs.includes(lastQuantityChange.after)) setLastQuantityChange(undefined);
+  }, [shownQuote, input.legs, lastQuantityChange]);
   useLayoutEffect(() => {
     const bar = quantityBar.current, cell = bar?.parentElement, scroll = cell?.closest<HTMLElement>(".ct-opt-chain-scroll");
     if (!bar || !cell || !scroll) return;
@@ -172,7 +172,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setUnderlying(nextUnderlying);
     setExpiration(nextExpiration);
     setMarket("");
-    setOpenQuote(undefined); setLastSum(undefined);
+    setOpenQuote(undefined); setLastQuantityChange(undefined);
     setNotice(""); setInput(current => ({ ...current, legs: [] }));
     if (nextUnderlying) void saveSelection(nextUnderlying, nextExpiration);
   }
@@ -191,7 +191,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       if (request.signal.aborted) return;
       const next = importPosition(snapshot, selected, data?.instruments, latestInput.current, underlying.symbol, spot, saved);
       onNewStrategy();
-      setOpenQuote(undefined); setLastSum(undefined);
+      setOpenQuote(undefined); setLastQuantityChange(undefined);
       setInput(next);
       setNotice("Posición cargada. Revisá las primas históricas y agregá ajustes desde la grilla.");
     } catch (error) {
@@ -233,27 +233,25 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setOpenQuote(legKey(leg));
     setNotice("");
   }
-  function adjustQuoteQuantity(leg: Leg, step?: number) {
+  function changeQuoteQuantity(leg: Leg, preset?: number) {
     // Several clicks can be queued before React commits the new leg.
     const pending = pendingQuantity.current?.leg === leg ? pendingQuantity.current : undefined;
     const before = pending?.next ?? leg;
-    let next: Leg, sum: QuantitySum | undefined;
-    if (step === undefined) {
-      const undo = pending ? pending.sum : lastSum;
+    let next: Leg, change: QuantityChange | undefined;
+    if (preset === undefined) {
+      const undo = pending ? pending.change : lastQuantityChange;
       if (undo?.after !== before) return;
       next = { ...before, contracts: undo.before };
     } else {
-      if (numeric(before.contracts) + step > MAX_CONTRACTS) return;
-      const adjustment = adjustStrategyQuantity([before], 1, step);
-      if (!adjustment.ok) return;
-      next = adjustment.legs[0];
-      sum = { before: before.contracts, after: next };
+      if (numeric(before.contracts) === preset) return;
+      next = { ...before, contracts: String(preset) };
+      change = { before: before.contracts, after: next };
     }
-    pendingQuantity.current = { leg, next, sum };
+    pendingQuantity.current = { leg, next, change };
     setInput(current => current.legs.includes(before)
       ? { ...current, legs: current.legs.map(item => item === before ? next : item) }
       : current);
-    setLastSum(sum);
+    setLastQuantityChange(change);
   }
   function chooseStrategy(choice: StrategyChoice): boolean {
     const recipe = strategyRecipe(choice, selected, spot), prices = recipePrices(recipe, data?.instruments, underlying?.currency);
@@ -273,7 +271,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     });
     const today = localDate();
     onNewStrategy();
-    setOpenQuote(undefined); setLastSum(undefined);
+    setOpenQuote(undefined); setLastQuantityChange(undefined);
     setInput(current => ({ ...current, underlying: underlying.symbol, expiry: expiryDate(expiration), currency: recipe.legs[0].contract.currency,
       multiplier: String(factor), ...(!current.position ? { spot: String(spot), marketSpotMissing: false, valuationDate: today, scenarioDate: today } : {}), legs }));
     setNotice("");
@@ -307,12 +305,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : held ? `Pos. ${held.side === "buy" ? "+" : "−"}${held.contracts}` : ""}</span><OptionQuoteValue quantity value={available ? level.size : undefined} /><OptionQuoteValue value={available ? level.price : undefined} />
       </button>
       {visible && marked && <div ref={quantityBar} className="ct-opt-quantity-bar" role="group" aria-label={`Cantidad de ${side === "buy" ? "compra" : "venta"} ${marked.symbol}`}>
-        <span>Sumar</span>
-        {quantitySteps.map(step => <button key={step} type="button" aria-label={`Sumar ${step}`}
-          disabled={!Number.isSafeInteger(quantity) || quantity < 1 || quantity + step > MAX_CONTRACTS}
-          onMouseDown={event => event.preventDefault()} onClick={() => adjustQuoteQuantity(marked, step)}>{step}</button>)}
+        <span>Fijar</span>
+        {quantityPresets.map(preset => <button key={preset} type="button" aria-label={`Fijar ${preset} ${preset === 1 ? "contrato" : "contratos"}`}
+          onMouseDown={event => event.preventDefault()} onClick={() => changeQuoteQuantity(marked, preset)}>{preset}</button>)}
         <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
-        <button type="button" disabled={lastSum?.after !== marked} onMouseDown={event => event.preventDefault()} onClick={() => adjustQuoteQuantity(marked)}>Deshacer</button>
+        <button type="button" disabled={lastQuantityChange?.after !== marked} onMouseDown={event => event.preventDefault()} onClick={() => changeQuoteQuantity(marked)}>Deshacer</button>
       </div>}
     </td>;
   };
