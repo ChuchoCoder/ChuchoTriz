@@ -86,6 +86,48 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
 
+it("pulses each price in its own direction and ignores the first quote after a gap", async () => {
+  const snapshot = marketState.current.data!;
+  const original = snapshot.instruments["call-100"];
+  const ask = () => byLabel("Comprar CALL 100 en simulación").querySelector(".ct-opt-quote-value")!;
+  const bid = () => byLabel("Vender CALL 100 en simulación").querySelector(".ct-opt-quote-value")!;
+  const pulses = () => container.querySelectorAll(".ct-opt-quote-changed");
+  marketState.current.data = undefined;
+  await mount();
+  expect(ask().textContent).toBe("—");
+  expect(pulses()).toHaveLength(0);
+
+  marketState.current.data = snapshot;
+  await mount();
+  expect(ask().textContent).toBe("$ 5");
+  expect(pulses()).toHaveLength(0);
+
+  snapshot.instruments["call-100"] = { ...original, ask: { price: 6, size: 200 }, bid: { price: 3, size: 110 } };
+  await mount();
+  expect(ask().classList.contains("ct-opt-quote-up")).toBe(true);
+  expect(bid().classList.contains("ct-opt-quote-down")).toBe(true);
+  expect(byLabel("Vender CALL 100 en simulación").querySelector(".ct-opt-quantity.ct-opt-quote-quantity")).not.toBeNull();
+  expect(pulses()).toHaveLength(3);
+
+  const previousAsk = ask();
+  snapshot.instruments["call-100"] = { ...snapshot.instruments["call-100"], ask: { price: 7, size: 200 } };
+  await mount();
+  expect(ask()).not.toBe(previousAsk);
+  expect(ask().classList.contains("ct-opt-quote-up")).toBe(true);
+  await act(async () => ask().dispatchEvent(new Event("animationend")));
+  expect(ask().classList.contains("ct-opt-quote-changed")).toBe(false);
+
+  marketState.current.data = undefined;
+  await mount();
+  expect(bid().textContent).toBe("—");
+  expect(pulses()).toHaveLength(0);
+  snapshot.instruments["call-100"] = original;
+  marketState.current.data = snapshot;
+  await mount();
+  expect(bid().textContent).toBe("$ 4");
+  expect(pulses()).toHaveLength(0);
+});
+
 it("sets only the clicked quote's contracts using the compact quantity bar", async () => {
   await mount();
   const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
