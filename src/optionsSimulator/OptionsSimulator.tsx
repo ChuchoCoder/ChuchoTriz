@@ -30,43 +30,37 @@ function ScenarioSlider({ label, min, max, value, format, onChange }: {
     value={position} disabled={max === min} onChange={event => onChange(event.target.valueAsNumber)} />;
 }
 
-function EditableLegValue({ label, value, onChange, options, className = "", formatValue = formatOptionNumber, valueDescription, inputMode = "decimal" }: {
-  label: string; value: string; onChange(value: string): void;
-  options?: readonly (readonly [string, string])[]; className?: string;
+function EditableLegValue({ label, value, onChange, className = "", formatValue = formatOptionNumber, valueDescription, inputMode = "decimal" }: {
+  label: string; value: string; onChange(value: string): void; className?: string;
   formatValue?(value: number): string;
   valueDescription?: string;
   inputMode?: "decimal" | "text";
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  const control = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const control = useRef<HTMLInputElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const original = useRef(value);
   const returnFocus = useRef(false);
   useEffect(() => {
     if (editing) {
       control.current?.focus();
-      if (control.current instanceof HTMLInputElement) control.current.select();
+      control.current?.select();
     } else if (returnFocus.current) {
       returnFocus.current = false; button.current?.focus();
     }
   }, [editing]);
-  const display = options ? options.find(([key]) => key === value)?.[1] ?? value
-    : value.trim() === "" ? "—" : Number.isFinite(numeric(value)) ? formatValue(numeric(value)) : value;
+  const display = value.trim() === "" ? "—" : Number.isFinite(numeric(value)) ? formatValue(numeric(value)) : value;
   const finish = (focus: boolean) => { returnFocus.current = focus; setEditing(false); };
   const keyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "Enter" && event.key !== "Escape") return;
-    if (event.key === "Enter" && event.target instanceof HTMLButtonElement) return;
     event.preventDefault(); event.stopPropagation();
     if (event.key === "Escape") onChange(original.current);
     finish(true);
   };
   return <span className={`ct-sim-editable ${className}`} onKeyDown={editing ? keyDown : undefined}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) finish(false); }}>
-    {editing ? options ? <select ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={draft}
-      onChange={event => { setDraft(event.target.value); onChange(event.target.value); }}>
-      {options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
-    </select> : <input ref={node => { control.current = node; }} data-ct-inline-editor aria-label={label} value={draft} inputMode={inputMode}
+    {editing ? <input ref={control} data-ct-inline-editor aria-label={label} value={draft} inputMode={inputMode}
       onChange={event => { setDraft(event.target.value); onChange(event.target.value); }} />
       : <button ref={button} type="button" className="ct-sim-cell-value" aria-label={`Editar ${label}`} aria-description={`Valor actual: ${valueDescription ?? display}`}
         title={`${label}: ${valueDescription ?? display} · Clic para editar`} onClick={() => { original.current = value; setDraft(value); setEditing(true); }}>{display}</button>}
@@ -178,9 +172,14 @@ function hasTheoreticalResult(strategy: Strategy) {
   return strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
 }
 
-function ScenarioResults({ strategy, currency, scenarioDate }: { strategy: Strategy; currency: string; scenarioDate: string }) {
+type DeviationReference = ReturnType<typeof standardDeviationLevels>;
+
+function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
+  strategy: Strategy; currency: string; scenarioDate: string; deviations: DeviationReference;
+}) {
   const heading = useId();
   const hasTheory = hasTheoreticalResult(strategy);
+  const move = deviations?.move ?? 0;
   const resultCell = (value: number) => {
     if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER) return <td>—</td>;
     return <td className={value > 0 ? "ct-sim-profit" : value < 0 ? "ct-sim-loss" : undefined}>{formatOptionAmount(value, currency)}</td>;
@@ -189,15 +188,20 @@ function ScenarioResults({ strategy, currency, scenarioDate }: { strategy: Strat
     <h4 id={heading}>Resultados por precio</h4>
     <div className="ct-sim-scenario-scroll" role="region" aria-labelledby={heading} tabIndex={0}>
       <table>
-        <caption className="ct-sim-sr">Variación respecto del precio de referencia. Teórico al {scenarioDate}.</caption>
+        <caption className="ct-sim-sr">Variación respecto del precio de referencia. Teórico al {scenarioDate}.
+          {move > 0 && " Las bandas de color marcan hasta ±1σ y entre ±1σ y ±2σ."}
+        </caption>
         <thead><tr><th scope="col">Var. %</th><th scope="col">Precio ({currency})</th>
           <th scope="col">Al vencimiento</th><th scope="col">Teórico</th></tr></thead>
         <tbody>{SCENARIO_CHANGES.map(change => {
           const price = scenarioPriceAt(strategy.spot, 1 + change / 100);
-          const distance = Math.abs(change);
           if (price > 1e9) return null;
-          return <tr key={change} data-band={distance === 0 ? "spot" : distance <= 10 ? "near" : distance <= 20 ? "middle" : "far"}>
-            <th scope="row">{change > 0 ? "+" : ""}{change}%</th>
+          const distance = Math.abs(price - strategy.spot);
+          const band = change === 0 ? "spot" : distance <= move ? "sigma-one" : distance <= 2 * move ? "sigma-two" : undefined;
+          const label = band === "spot" ? "Precio de referencia" : band === "sigma-one" ? "Dentro de ±1σ"
+            : band === "sigma-two" ? "Entre ±1σ y ±2σ" : move > 0 ? "Fuera de ±2σ" : undefined;
+          return <tr key={change} data-band={band}>
+            <th scope="row" title={label}>{change > 0 ? "+" : ""}{change}%</th>
             <td>{formatOptionAmount(price)}</td>
             {resultCell(resultAt(strategy, price, "expiry"))}
             {resultCell(hasTheory ? resultAt(strategy, price, "theoretical") : NaN)}
@@ -208,14 +212,13 @@ function ScenarioResults({ strategy, currency, scenarioDate }: { strategy: Strat
   </section>;
 }
 
-function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPriceChange, zoom, fullRange, onZoom, compact = false }: {
+function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPriceChange, zoom, fullRange, onZoom, deviations, compact = false }: {
   strategy: Strategy; currency: string; scenarioDate: string; selectedPrice: number; onPriceChange(price: number): void;
   zoom: number; fullRange: boolean; onZoom(value: number): void;
-  compact?: boolean;
+  deviations: DeviationReference; compact?: boolean;
 }) {
   const gradientId = useId().replace(/:/g, "");
   const points = useMemo(() => curve(strategy), [strategy]);
-  const deviations = useMemo(() => standardDeviationLevels(strategy), [strategy]);
   const svg = useRef<SVGSVGElement>(null);
   const [{ width, measuredHeight }, setDimensions] = useState({ width: 900, measuredHeight: 240 });
   const clamp = (value: number) => Math.max(strategy.rangeMin, Math.min(strategy.rangeMax, value));
@@ -359,6 +362,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const menusId = useId();
   const nextId = useRef(3);
   const parsed = useMemo(() => parseSimulation(input), [input]);
+  const deviations = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
   const summary = useMemo(() => parsed.ok ? expirySummary(parsed.strategy) : undefined, [parsed]);
   const days = dateDay(input.expiry) - dateDay(input.valuationDate);
   const midpointDays = Math.floor(days / 2);
@@ -444,7 +448,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const chart = !allLegs.length ? <p>Armá una estrategia para ver su resultado al vencimiento y teórico.</p>
     : !parsed.ok ? <div className="ct-sim-errors" role="alert"><p>Revisá los datos para calcular:</p><ul>{parsed.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>
     : !scenarioPriceValid ? <p role="alert">Ingresá un precio de escenario válido entre 0 y 1000000000.</p>
-    : chartView && <ResultsChart strategy={chartView.strategy} currency={input.currency} scenarioDate={input.scenarioDate} selectedPrice={selectedPrice}
+    : chartView && <ResultsChart strategy={chartView.strategy} currency={input.currency} scenarioDate={input.scenarioDate} selectedPrice={selectedPrice} deviations={deviations}
       zoom={zoom} fullRange={chartView.full} onZoom={level => setChartZoom({ context: scenarioContext, level })}
       onPriceChange={price => setScenarioPrice(formatOptionInput(price))} compact={view === "build"} />;
   return <div ref={viewport} className="ct-sim" aria-label="Simulador de opciones">
@@ -473,11 +477,14 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-remove" /></colgroup>
         <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
         <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
-          <td><span className={`ct-sim-kind-chip ct-sim-kind-${leg.kind}`}>
-            {leg.securityId ? <abbr title={leg.kind === "call" ? "Call" : "Put"}>{leg.kind === "call" ? "C" : "P"}</abbr>
-              : <EditableLegValue label={`Tipo pata ${index + 1}`} value={leg.kind} options={[["call", "C"], ["put", "P"]]}
-                valueDescription={leg.kind === "call" ? "Call" : "Put"} onChange={value => updateLeg(leg.id, "kind", value)} />}
-          </span></td>
+          <td>{leg.securityId
+            ? <span className={`ct-sim-kind-chip ct-sim-kind-${leg.kind}`}><abbr title={leg.kind === "call" ? "Call" : "Put"}>{leg.kind === "call" ? "C" : "P"}</abbr></span>
+            : <button type="button" role="switch" className="ct-sim-kind-toggle" aria-label={`Put en pata ${index + 1}`}
+              aria-checked={leg.kind === "put"} aria-description="Desactivado: Call. Activado: Put."
+              title={leg.kind === "call" ? "Call · Clic para cambiar a Put" : "Put · Clic para cambiar a Call"}
+              onClick={() => updateLeg(leg.id, "kind", leg.kind === "call" ? "put" : "call")}>
+              <span aria-hidden="true">C</span><span aria-hidden="true">P</span>
+            </button>}</td>
           <td><div className="ct-sim-quantity-stepper">
             <button type="button" className="ct-sim-quantity-step" aria-label={`Reducir contratos pata ${index + 1}`} disabled={!adjustStrategyQuantity([leg], -1).ok}
               title="Clic: quitar 1 · Doble clic: quitar 10 · Conserva compra/venta" onClick={event => { event.currentTarget.focus(); stepQuantity(leg.id, -1, quantityClickSteps(event.detail)); }}>−</button>
@@ -581,7 +588,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         {!!input.realized?.trim() && <p className="ct-sim-hint">Los resultados incluyen el realizado neto informado de {money(numeric(input.realized))}.</p>}
         <p className="ct-sim-equilibria"><span>Equilibrio al vencimiento: </span>{summary.equilibria.length ? summary.equilibria.map(point => point.from === point.to ? fmt(point.from) : `${fmt(point.from)} a ${point.to === Infinity ? "∞" : fmt(point.to)}`).join(" · ") + ` ${input.currency}` : "Sin puntos de equilibrio"}</p>
         {view === "analysis" && <div className="ct-sim-analysis-results">
-          <ScenarioResults strategy={parsed.strategy} currency={input.currency} scenarioDate={input.scenarioDate} />
+          <ScenarioResults strategy={parsed.strategy} currency={input.currency} scenarioDate={input.scenarioDate} deviations={deviations} />
           <div className="ct-sim-analysis-chart">{chart}</div>
         </div>}
         {chartView && [...parsed.strategy.legs.map(leg => leg.strike), ...summary.equilibria.map(point => point.from)]

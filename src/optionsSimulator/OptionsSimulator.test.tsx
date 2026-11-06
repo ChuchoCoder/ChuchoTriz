@@ -95,6 +95,7 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   await showAnalysis();
   const table = container.querySelector<HTMLTableElement>(".ct-sim-scenario-results table")!;
   expect(table.tBodies[0].rows).toHaveLength(25);
+  expect(table.querySelectorAll("tbody [data-band]")).toHaveLength(1);
   const reference = table.querySelector<HTMLTableRowElement>('tr[data-band="spot"]')!;
   expect(Array.from(reference.cells, cell => cell.textContent)).toEqual(["0%", "100", "-500", "—"]);
   const upTen = Array.from(table.tBodies[0].rows).find(row => row.cells[0].textContent === "+10%")!;
@@ -547,15 +548,22 @@ it("draws four standard-deviation references in both charts and updates them wit
   expect(labels()).toHaveLength(4);
   expect(labels()[0]).toMatch(/^-2σ/); expect(labels()[3]).toMatch(/^\+2σ/);
   const initial = labels(); await showAnalysis(); expect(labels()).toEqual(initial);
+  const bandAt = (change: string) => Array.from(container.querySelectorAll<HTMLTableRowElement>(".ct-sim-scenario-results tbody tr"))
+    .find(row => row.cells[0].textContent === change)?.dataset.band;
+  expect(["-24%", "-12%", "0%", "+10%", "+12%", "+24%"].map(bandAt))
+    .toEqual([undefined, "sigma-two", "spot", "sigma-one", "sigma-two", undefined]);
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("VI ref. 40,00 % · 30 días");
   await act(async () => byLabel<HTMLButtonElement>("VI +5 pp").click());
   expect(labels()).not.toEqual(initial);
+  expect(["-24%", "-12%", "+12%", "+24%"].map(bandAt)).toEqual(["sigma-two", "sigma-one", "sigma-one", "sigma-two"]);
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("VI ref. 45,00 %");
   for (let step = 0; step < 3; step++) await act(async () => byLabel<HTMLButtonElement>("Acercar rango de precios").click());
   expect(labels()).toHaveLength(0);
+  expect(bandAt("+24%")).toBe("sigma-two");
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("fuera del rango visible");
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
   expect(labels()).toHaveLength(0);
+  expect(bandAt("+12%")).toBeUndefined();
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("Los niveles coinciden");
   await fill("VI pata 1", "");
   expect(byLabel("Referencias de desvío estándar").textContent).toContain("Desvíos no disponibles");
@@ -650,6 +658,7 @@ it("shows days after the expiry selector and compact signed C/P legs without ins
   expect([...panel.querySelectorAll('thead th')].map(node => node.textContent)).toEqual(["Tipo", "Cant.", "Venc.", "Días", "Strike", "Acciones"]);
   expect([1, 2].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+1", "−1"]);
   expect([...panel.querySelectorAll('.ct-sim-kind-chip')].map(node => node.textContent)).toEqual(["C", "P"]);
+  expect(panel.querySelector('[role="switch"]')).toBeNull();
   expect([...panel.querySelectorAll('.ct-sim-leg-strike')].map(node => node.textContent)).toEqual(["100", "90"]);
   expect([...panel.querySelectorAll('.ct-sim-leg-expiry')].map(node => node.textContent)).toEqual(["30d", "30d"]);
   expect(panel.textContent).not.toContain("CALL 100"); expect(panel.textContent).not.toContain("PUT 90");
@@ -664,10 +673,13 @@ it("shows days after the expiry selector and compact signed C/P legs without ins
   await showBuild();
   expect(container.querySelector('.ct-sim-leg-expiry')!.textContent).toBe("30d");
   await act(async () => button("+ Pata manual").click());
-  await act(async () => byLabel<HTMLButtonElement>("Editar Tipo pata 3").click());
-  await act(async () => { const select = byLabel<HTMLSelectElement>("Tipo pata 3"); select.value = "put"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-  await act(async () => byLabel<HTMLButtonElement>("Editar Contratos pata 3").focus());
-  expect(byLabel("Editar Tipo pata 3").textContent).toBe("P");
+  const kind = byLabel<HTMLButtonElement>("Put en pata 3");
+  expect(kind.getAttribute("aria-checked")).toBe("false");
+  await act(async () => kind.click());
+  expect(kind.getAttribute("aria-checked")).toBe("true");
+  expect(panel.querySelector("select")).toBeNull();
+  await act(async () => kind.click());
+  expect(kind.getAttribute("aria-checked")).toBe("false");
   expect(container.querySelector('.ct-sim-scenario [aria-label="Vencimiento"]')).toBeNull();
   await act(async () => byLabel<HTMLButtonElement>("Limpiar patas").click());
   await act(async () => button("+ Pata manual").click());
