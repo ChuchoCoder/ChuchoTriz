@@ -43,11 +43,13 @@
     const candidates = (groups[0]?.securitiesDetailed ?? []).filter(item => item?.security?.id === underlying.id || item?.symbolReference === underlying.symbolStr);
     if (!candidates.length) return 0;
     const [instrument] = candidates;
-    check(candidates.length === 1 && instrument.security?.id === underlying.id &&
+    check(candidates.length === 1 && (!instrument.security || instrument.security.id === underlying.id) &&
       Number.isSafeInteger(instrument.instrumentCurrentSize) && Math.abs(instrument.instrumentCurrentSize) <= 1e10 &&
       Array.isArray(instrument.detailedPositions) && instrument.detailedPositions.length <= 10000,
     "Matriz informó una posición del subyacente que requiere revisión.");
     const rows = instrument.detailedPositions;
+    // Matriz populates the security objects shortly after it publishes the native report.
+    if (!instrument.security || rows.some(row => row && !row.security)) return null;
     check(rows.every(row => row?.security?.id === underlying.id && Number.isSafeInteger(row.totalCurrentSize) && Math.abs(row.totalCurrentSize) <= 1e10) &&
       rows.reduce((sum, row) => sum + row.totalCurrentSize, 0) === instrument.instrumentCurrentSize,
     "El total de nominales del subyacente no coincide con su detalle en Matriz.");
@@ -108,12 +110,22 @@
       }
     }
     let nominalQuantity, underlyingUnavailable;
-    try { nominalQuantity = underlyingQuantity(securities, report.types, params); }
-    catch { underlyingUnavailable = true; }
+    try {
+      nominalQuantity = underlyingQuantity(securities, report.types, params);
+      for (const delay of [50, 100, 200, 400]) {
+        if (nominalQuantity !== null) break;
+        await new Promise(resolve => setTimeout(() => resolve(), delay));
+        assertCurrent(operation);
+        check(report === portfolio.detailedPositionReport, "Cambió el reporte durante la lectura. Volvé a cargar la posición.");
+        nominalQuantity = underlyingQuantity(securities, report.types, params);
+      }
+      if (nominalQuantity === null) underlyingUnavailable = true;
+    } catch { underlyingUnavailable = true; }
     assertCurrent(operation);
+    check(report === portfolio.detailedPositionReport, "Cambió el reporte durante la lectura. Volvé a cargar la posición.");
     return { contextId: operation.context.contextId, storageScope, capturedAt: Date.now(), reportedAt, version: operation.context.version,
       positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })),
-      underlyingQuantity: nominalQuantity, ...(underlyingUnavailable && { underlyingUnavailable }) };
+      underlyingQuantity: underlyingUnavailable ? undefined : nominalQuantity, ...(underlyingUnavailable && { underlyingUnavailable }) };
   }
   window.addEventListener("message", async event => {
     const msg = event.data;

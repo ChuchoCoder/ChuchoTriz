@@ -28,7 +28,7 @@ function fixture() {
   const window = {mainStore:store,addEventListener:(_name,listener)=>listeners.push(listener),postMessage:msg=>replies.push(msg)};
   const document = {currentScript:{dataset:{channel:'position-test'}},body:{innerText:'Versión: 4.24.4'}};
   let uuid=0;
-  runInNewContext(source,{window,document,Date,TextEncoder,crypto:{randomUUID:()=>`context-${++uuid}`,subtle:webcrypto.subtle},location:{origin:'https://fixture.test'}});
+  runInNewContext(source,{window,document,Date,TextEncoder,setTimeout,crypto:{randomUUID:()=>`context-${++uuid}`,subtle:webcrypto.subtle},location:{origin:'https://fixture.test'}});
   const params = {ids:options.map(sec=>sec.id),underlyingId:'DEMO',expiration:'20261218',currency:'ARS',settlement:'2',storageSalt:'a'.repeat(64)};
   let id = 0;
   async function call(method='positions', selected=params) {
@@ -61,6 +61,22 @@ test('validates nominal holdings against the selected instrument and its signed 
   assert.equal(partial.positions.length,2);
   f.report.types.find(group=>group.type==='STOCK').securitiesDetailed.shift();
   assert.equal((await f.call()).result.underlyingQuantity,0);
+});
+test('waits for native security references to arrive without requesting the report again',async()=>{
+  const f=fixture();
+  const getReport=f.store.portfolioStore.getDetailedPositionReport;
+  f.store.portfolioStore.getDetailedPositionReport=async (...args)=>{
+    const security=f.holding.security;
+    delete f.holding.security;
+    for(const row of f.holding.detailedPositions)delete row.security;
+    setTimeout(()=>{
+      f.holding.security=security;
+      for(const row of f.holding.detailedPositions)row.security=security;
+    },20);
+    return getReport(...args);
+  };
+  assert.equal((await f.call()).result.underlyingQuantity,100);
+  assert.equal(f.calls.length,1);
 });
 test('filters the selected chain and never interprets native prices as historical premiums',async()=>{
   const f=fixture();
