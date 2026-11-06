@@ -209,6 +209,10 @@
 .ct-sim-market .ct-opt-metrics-legend { min-width: 250px; flex-wrap: wrap; }
 .ct-sim .ct-sim-market .ct-opt-metrics-chain td, .ct-sim .ct-sim-market .ct-opt-metrics-chain .ct-opt-price button { height: 32px; }
 .ct-sim-analysis { display: grid; grid-template-columns: clamp(390px, 34%, 460px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.ct-tools-embedded .ct-sim:has(> .ct-sim-analysis-panel:not([hidden])) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ct-sim:has(> .ct-sim-analysis-panel:not([hidden])) > .ct-sim-topbar { flex-shrink: 0; }
+.ct-sim-analysis-panel:not([hidden]) { display: flex; flex: 1 0 auto; flex-direction: column; }
+.ct-sim-analysis-panel > .ct-sim-analysis { flex: 1 0 auto; }
 .ct-sim-scenario { padding: 12px; }
 .ct-sim .ct-sim-scenario h3 { margin: 0 0 8px; }
 .ct-sim-scenario-group { display: grid; gap: 5px; margin-bottom: 8px; min-width: 0; }
@@ -225,6 +229,7 @@
 .ct-sim-scenario-advanced > .ct-sim-field + .ct-sim-field { margin-top: 5px; }
 .ct-sim-scenario .ct-sim-leg-volatilities, .ct-sim-scenario .ct-sim-hint { margin: 0; font-size: 11px; }
 .ct-sim-results, .ct-sim-assumptions { padding: 12px; margin-bottom: 8px; }
+.ct-sim-results:has(.ct-sim-analysis-results) { display: flex; flex-direction: column; align-self: stretch; }
 .ct-sim-results .ct-sim-section-heading { margin: 8px 0 6px; }
 .ct-sim-results .ct-sim-section-heading button { min-height: 26px; padding: 2px 8px; font-size: 11px; }
 .ct-sim-strategy-summary { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -254,21 +259,24 @@
 .ct-sim-metrics strong { display: block; font-size: 16px; font-weight: 600; }
 .ct-sim-equilibria { color: var(--sim-text); font-size: 12px; margin: 6px 0 8px; }
 .ct-sim-equilibria span { color: var(--sim-muted); }
-.ct-sim-analysis-results { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
-.ct-sim-scenario-results { flex: 0 1 auto; min-width: 0; max-width: 100%; }
-.ct-sim-analysis-chart { flex: 1 1 520px; min-width: 0; }
+.ct-sim-analysis-results { display: flex; flex: 1; flex-wrap: wrap; gap: 12px; }
+.ct-sim-scenario-results { display: flex; flex: 0 1 auto; flex-direction: column; min-width: 0; max-width: 100%; --sim-table-header: #2c4e77; --sim-table-body: #17263b; --sim-band-spot: #25466b; --sim-band-near: #23533e; --sim-band-middle: #614815; --sim-band-far: #683446; }
+.ct-sim-analysis-chart { display: flex; flex: 1 1 520px; flex-direction: column; min-width: 0; }
+.ct-sim-analysis-chart > .ct-sim-chart { flex: 1 0 auto; height: 240px; }
 .ct-sim .ct-sim-scenario-results h4 { margin: 0 0 5px; }
-.ct-sim-scenario-scroll { max-height: 340px; overflow: auto; scrollbar-width: thin; scrollbar-gutter: stable; border: 1px solid var(--sim-border); border-radius: 5px; }
+.ct-sim-scenario-scroll { display: flex; flex: 1 0 auto; overflow-x: auto; border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-table-body); }
 .ct-sim-scenario-scroll:focus-visible { outline: 2px solid var(--sim-accent); outline-offset: 2px; }
-.ct-sim .ct-sim-scenario-results table { width: max-content; min-width: 0; table-layout: auto; font-variant-numeric: tabular-nums; }
-.ct-sim .ct-sim-scenario-results :is(th, td) { width: auto; padding: 2px 4px; text-align: right; font-size: 11px; white-space: nowrap; }
-.ct-sim-scenario-results thead th { position: sticky; top: 0; background: var(--sim-field); }
+.ct-sim .ct-sim-scenario-results table { flex: none; width: max-content; min-width: 0; table-layout: auto; font-variant-numeric: tabular-nums; }
+.ct-sim .ct-sim-scenario-results :is(th, td) { width: auto; padding: 2px 4px; text-align: right; font-size: 12px; line-height: 1.25; white-space: nowrap; }
+.ct-sim-scenario-results thead th { background: var(--sim-table-header); color: var(--sim-text); font-weight: 700; }
+.ct-sim-scenario-results tbody th, .ct-sim-scenario-results tbody td:nth-child(n+3) { font-weight: 600; }
 .ct-sim-scenario-results tbody th { color: var(--sim-text); }
-.ct-sim-scenario-results tbody tr[data-band] > :nth-child(-n+2) { background: color-mix(in srgb, var(--sim-band) 16%, var(--sim-card)); }
-.ct-sim-scenario-results [data-band="spot"] { --sim-band: var(--sim-theory); font-weight: 700; }
-.ct-sim-scenario-results [data-band="near"] { --sim-band: var(--sim-profit); }
-.ct-sim-scenario-results [data-band="middle"] { --sim-band: #d5a626; }
-.ct-sim-scenario-results [data-band="far"] { --sim-band: var(--sim-loss); }
+.ct-sim-scenario-results tbody tr[data-band] > :nth-child(-n+2) { background: var(--sim-band); }
+.ct-sim-scenario-results tbody [data-band="spot"] > * { background: var(--sim-band-spot); font-weight: 700; }
+.ct-sim-scenario-results [data-band="spot"] { --sim-band: var(--sim-band-spot); }
+.ct-sim-scenario-results [data-band="near"] { --sim-band: var(--sim-band-near); }
+.ct-sim-scenario-results [data-band="middle"] { --sim-band: var(--sim-band-middle); }
+.ct-sim-scenario-results [data-band="far"] { --sim-band: var(--sim-band-far); }
 .ct-sim-legend { display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px; }
 .ct-sim-chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 .ct-sim-chart-zoom { display: flex; gap: 4px; }
@@ -303,6 +311,7 @@
 .ct-sim-assumptions summary { color: var(--sim-text); cursor: pointer; }
 .ct-sim-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .ct-free-settings-panel[data-color-scheme="light"] .ct-sim { color-scheme: light; --sim-bg: #f3f5fa; --sim-card: #ffffff; --sim-field: #f5f7fb; --sim-text: #202b3d; --sim-muted: #46546b; --sim-border: #7b879b; --sim-accent: #53298e; --sim-theory: #005b75; --sim-profit: #075d36; --sim-loss: #a21834; }
+.ct-free-settings-panel[data-color-scheme="light"] .ct-sim-scenario-results { --sim-table-header: #d6e6fb; --sim-table-body: #f8faff; --sim-band-spot: #cde2fd; --sim-band-near: #c8efda; --sim-band-middle: #fae9ae; --sim-band-far: #fbd1d7; }
 @container (max-width: 1050px) {
   .ct-sim-market-layout { grid-template-columns: 1fr; }
   .ct-sim-analysis { grid-template-columns: 1fr; }

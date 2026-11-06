@@ -217,12 +217,12 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   const points = useMemo(() => curve(strategy), [strategy]);
   const deviations = useMemo(() => standardDeviationLevels(strategy), [strategy]);
   const svg = useRef<SVGSVGElement>(null);
-  const [width, setWidth] = useState(900);
+  const [{ width, measuredHeight }, setDimensions] = useState({ width: 900, measuredHeight: 240 });
   const clamp = (value: number) => Math.max(strategy.rangeMin, Math.min(strategy.rangeMax, value));
   const price = selectedPrice;
   const fmt = (amount: number) => formatOptionAmount(amount, currency);
   const cursorVisible = price >= strategy.rangeMin && price <= strategy.rangeMax;
-  const height = compact ? 190 : 240, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = 20, bottom = compact ? 26 : 38;
+  const height = compact ? 190 : measuredHeight, left = width < 500 ? 64 : 92, right = width < 500 ? 12 : 24, top = 20, bottom = compact ? 26 : 38;
   const hasTheory = hasTheoreticalResult(strategy);
   const toolbar = <div className="ct-sim-chart-toolbar"><div className="ct-sim-legend"><span><i className="ct-sim-expiry-key" /> {compact ? "Vencimiento" : "Al vencimiento"}</span>
     {hasTheory && <span title={`Teórico · ${scenarioDate}`}><i className="ct-sim-theory-key" /> {compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span>}
@@ -240,12 +240,16 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   useEffect(() => {
     const chart = svg.current;
     if (!chart) return;
-    const resize = (measured: number) => { if (measured > 0) setWidth(Math.max(260, Math.round(measured))); };
-    resize(chart.getBoundingClientRect().width);
+    const resize = ({ width, height }: { width: number; height: number }) => {
+      if (width <= 0) return;
+      const next = { width: Math.max(260, Math.round(width)), measuredHeight: compact ? 240 : Math.max(240, Math.round(height)) };
+      setDimensions(previous => previous.width === next.width && previous.measuredHeight === next.measuredHeight ? previous : next);
+    };
+    resize(chart.getBoundingClientRect());
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(entries => resize(entries[0].contentRect.width));
+    const observer = new ResizeObserver(entries => resize(entries[0].contentRect));
     observer.observe(chart); return () => observer.disconnect();
-  }, [drawable]);
+  }, [compact, drawable]);
   if (!drawable)
     return <>{toolbar}<p role="alert">El resultado supera la precisión admitida. Reducí el rango, las cantidades, el plazo o las tasas.</p></>;
   const minValue = Math.min(0, ...values), maxValue = Math.max(0, ...values);
