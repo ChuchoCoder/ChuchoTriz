@@ -115,6 +115,8 @@ function PositionCosts({ input, onCosts, onRealized, onReset, onEdit, saveStatus
   onEdit?(): void; saveStatus: string;
 }) {
   if (!input.position) return null;
+  const { reportedAt, capturedAt } = input.position;
+  const reportDateAhead = reportedAt !== undefined && capturedAt !== undefined && reportedAt > capturedAt + 300000;
   return <section className="ct-sim-card ct-sim-position" aria-label="Posición actual y costos históricos">
     <div className="ct-sim-section-heading"><h3>Posición actual</h3>
       {onEdit && <button type="button" onClick={onEdit}>Editar posición en la cadena</button>}
@@ -124,7 +126,8 @@ function PositionCosts({ input, onCosts, onRealized, onReset, onEdit, saveStatus
       <Field label="Resultado realizado neto" value={input.realized ?? ""} onChange={onRealized} />
     </div>
     <p className="ct-sim-hint">Gastos adicionales al costo. Realizado neto de sus gastos, positivo o negativo.</p>
-    {input.position.reportedAt !== undefined && <small>Reporte de Matriz · {new Date(input.position.reportedAt).toLocaleString("es-AR")}</small>}
+    {reportedAt !== undefined && <small>Reporte de Matriz · {new Date(reportedAt).toLocaleString("es-AR")}</small>}
+    {reportDateAhead && <small>Consulta local · {new Date(capturedAt).toLocaleString("es-AR")}. La fecha informada por Matriz es posterior a la consulta.</small>}
     <small role="status" aria-label="Guardado de datos históricos">{input.position.storage ? saveStatus : "Edición manual en este borrador."}</small>
   </section>;
 }

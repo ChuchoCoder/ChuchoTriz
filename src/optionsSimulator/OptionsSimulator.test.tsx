@@ -8,7 +8,7 @@ import { positionStorageKey, readPositionAccounting } from "./positionStorage";
 import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
 
-const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string } }));
+const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string } }));
 vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
 const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
@@ -218,6 +218,35 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
   expect(reference.cells[3].textContent).toBe(reference.cells[2].textContent);
 });
+it("loads the initial position once when the selected chain is ready", async () => {
+  await mount();
+  expect(readPosition).not.toHaveBeenCalled();
+
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  expect(readPosition).toHaveBeenCalledTimes(1);
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(container.querySelector<HTMLInputElement>(".ct-sim-include-position input")?.checked).toBe(true);
+
+  await showAnalysis();
+  await showBuild();
+  await act(async () => button("Limpiar posición").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  await act(async () => button("Nueva simulación").click());
+  expect(readPosition).toHaveBeenCalledTimes(1);
+});
+
+it("loads holdings and shows the local read time if Matriz reports a future date", async () => {
+  const capturedAt = Date.now();
+  readPosition.mockResolvedValueOnce({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt,
+    reportedAt: capturedAt + 25 * 60 * 60 * 1000, positions: [{ securityId: "call-100", quantity: 2 }] });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(container.textContent).toContain("Consulta local · " + new Date(capturedAt).toLocaleString("es-AR"));
+  expect(container.textContent).toContain("La fecha informada por Matriz es posterior a la consulta.");
+});
+
 it("imports a historical position and preserves its premiums and accounting through every adjustment control", async () => {
   await mount();
   expect(readPosition).not.toHaveBeenCalled();

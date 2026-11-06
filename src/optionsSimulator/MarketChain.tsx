@@ -78,6 +78,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const quantityBar = useRef<HTMLDivElement>(null);
   const [loadingPosition, setLoadingPosition] = useState(false);
   const positionRequest = useRef<AbortController | null>(null);
+  const initialPositionAttempted = useRef(false);
   const latestInput = useRef(input);
   latestInput.current = input;
   useEffect(() => () => positionRequest.current?.abort(), [active, input.position?.capturedAt]);
@@ -220,30 +221,43 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     try { await chrome.storage.local.set({ [selectionKey]: { underlyingId, expiration } }); }
     catch { /* The current selection still works without local storage. */ }
   }
-  async function loadPosition(draft = input) {
-    if (!underlying || loadingPosition) return;
+  async function loadPosition(draft = input, automatic = false) {
+    if (!underlying || positionRequest.current) return;
     const request = new AbortController();
-    positionRequest.current?.abort();
     positionRequest.current = request;
+    initialPositionAttempted.current = true;
     setLoadingPosition(true); setNotice("");
     try {
       const { snapshot, saved } = await readPositionSnapshot(selected, request.signal);
       if (request.signal.aborted) return;
-      const next = importPosition(snapshot, selected, data?.instruments, latestInput.current.position ? latestInput.current : draft, underlying.symbol, spot, saved);
+      const current = latestInput.current;
+      if (automatic && current.position) return;
+      const base = automatic ? startPositionDraft(current, selected, underlying.symbol, spot) : current.position ? current : draft;
+      const next = importPosition(snapshot, selected, data?.instruments, base, underlying.symbol, spot, saved);
+      const hasPosition = !!next.position?.legs.length;
+      setNotice(hasPosition ? "Tenencia cargada. Revisá las primas históricas en la grilla."
+        : "No hay posición abierta en esta cadena. Podés ingresar una posición manual.");
+      if (automatic && !hasPosition) return;
+      if (automatic) setPositionMode(true);
       onNewStrategy();
       setOpenQuote(undefined);
       setInput(next);
-      setNotice(next.position?.legs.length ? "Tenencia cargada. Revisá las primas históricas en la grilla."
-        : "No hay posición abierta en esta cadena. Podés ingresar una posición manual.");
     } catch (error) {
       if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "No se pudo cargar la posición.");
     } finally {
       if (positionRequest.current === request) {
         positionRequest.current = null;
+        if (automatic && request.signal.aborted) initialPositionAttempted.current = false;
         setLoadingPosition(false);
       }
     }
   }
+  const canLoadPosition = comparable && selected.length <= 160;
+  const selectedMarketKey = JSON.stringify([...new Set([underlyingId, ...selected.map(contract => contract.id)])].sort());
+  useEffect(() => {
+    if (active && selectionReady && canLoadPosition && data && !reading.issue && reading.selectionKey === selectedMarketKey &&
+      !loadingPosition && !input.position && !initialPositionAttempted.current) void loadPosition(input, true);
+  }, [active, selectionReady, canLoadPosition, data, reading.issue, reading.selectionKey, selectedMarketKey, loadingPosition, input.position]);
   function openPosition() {
     if (!underlying) return;
     if (input.position) { setPositionMode(true); setOpenQuote(undefined); setNotice(""); return; }
@@ -431,8 +445,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {input.position ? <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">
       <button type="button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>Cotizaciones</button>
       <button type="button" aria-pressed={editingPosition} disabled={loadingPosition} onClick={openPosition}>Posición actual</button>
-    </div> : <button type="button" disabled={!comparable || loadingPosition || selected.length > 160} onClick={openPosition}
-      aria-label="Cargar posición actual" title="Leer la posición de la cuenta activa para este subyacente y vencimiento">Cargar posición</button>}
+    </div> : <button type="button" disabled={!canLoadPosition || loadingPosition} onClick={openPosition}
+      aria-label="Cargar posición actual" title="Leer la posición de la cuenta activa para este subyacente y vencimiento">{loadingPosition ? "Cargando posición…" : "Cargar posición"}</button>}
     <span className="ct-sim-chain-counts">
       <span>{strikes.length} ejercicios</span>
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
@@ -443,11 +457,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {editingPosition && <div className="ct-sim-position-toolbar">
       <small>Cantidad con signo · + compra, − venta. Ingresá la prima histórica por unidad.</small>
       <button type="button" disabled={loadingPosition} onClick={clearPosition}>Limpiar posición</button>
-      <button type="button" disabled={!comparable || loadingPosition || selected.length > 160} onClick={() => void loadPosition()}>
+      <button type="button" disabled={!canLoadPosition || loadingPosition} onClick={() => void loadPosition()}>
         {loadingPosition ? "Cargando posición…" : "Recargar tenencia"}</button>
     </div>}
     {notice && <p role="status" className="ct-sim-chain-notice" title={notice}>{notice}</p>}
-    <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" aria-busy={editingPosition && loadingPosition} tabIndex={0}>
+    <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" aria-busy={loadingPosition} tabIndex={0}>
       <div ref={grid} className="ct-opt-chain-grid"><table className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : "ct-opt-chain ct-opt-metrics-chain"}>
         {editingPosition ? <thead><tr><th colSpan={2} scope="colgroup">CALLS</th><th className="ct-opt-strike" rowSpan={2} scope="col">Strike</th><th colSpan={2} scope="colgroup">PUTS</th></tr>
           <tr><th scope="col">Cantidad</th><th scope="col">Prima histórica</th><th scope="col">Prima histórica</th><th scope="col">Cantidad</th></tr>

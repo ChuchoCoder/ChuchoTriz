@@ -49,6 +49,13 @@ test('filters the selected chain and never interprets native prices as historica
   assert.equal(result.positions.length,1);
   assert.deepEqual(Object.keys(result.positions[0]).sort(),['quantity','securityId']);
 });
+test('preserves the native report date when it is ahead of the local clock',async()=>{
+  const f=fixture();
+  f.report.lastCalculation=new Date(Date.now()+25*60*60*1000);
+  const {result}=await f.call();
+  assert.equal(result?.reportedAt,f.report.lastCalculation.getTime());
+  assert.equal(result.positions.length,2);
+});
 test('rejects arbitrary methods before native account access',async()=>{
   const f=fixture();
   for(const method of ['catalog','snapshot','orders','sendOrder','constructor','getPortfolio'])

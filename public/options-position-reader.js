@@ -1,4 +1,4 @@
-// Explicit, one-shot import of option quantities for the selected chain.
+// One-shot import of option quantities for the selected chain.
 // Account context and the native report stay inside Matriz.
 (() => {
   const channel = document.currentScript?.dataset.channel;
@@ -44,7 +44,7 @@
     check(report === portfolio.detailedPositionReport && Array.isArray(report?.types) && report.types.length <= 50,
       "El reporte de posición está incompleto.");
     const reportedAt = report.lastCalculation instanceof Date ? report.lastCalculation.getTime() : NaN;
-    check(Number.isFinite(reportedAt) && reportedAt > 0 && reportedAt <= Date.now() + 300000, "La fecha del reporte de posición no es válida.");
+    check(Number.isFinite(reportedAt) && reportedAt > 0, "La fecha del reporte de posición no es válida.");
     const options = securities.options;
     check(Array.isArray(options) && options.length <= 10000, "Catálogo de opciones no disponible.");
     const byFix = new Map(), byId = new Map();

@@ -4,8 +4,10 @@ El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulado
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
 Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes.
-**Cargar posición** consulta, a pedido del usuario, las cantidades de opciones de
-la cuenta activa correspondientes al subyacente y vencimiento seleccionados.
+Al abrir el simulador se consulta automáticamente la posición de opciones de la
+cuenta activa para el subyacente y vencimiento iniciales. Si hay tenencia, aparece
+en la grilla. Si la cadena está vacía o falla la consulta, quedan disponibles las
+cotizaciones y el botón **Cargar posición**.
 
 La misma cadena cambia a **Posición actual**, con cantidades firmadas y primas
 históricas por unidad en las filas de Calls y Puts. Ingresá primero la cantidad.
@@ -30,7 +32,7 @@ los datos históricos guardados localmente para futuras importaciones.
 
 Las primas, VI por pata, gastos y realizado se guardan automáticamente en este
 perfil de Chrome, separados por cuenta, sitio y cadena (incluido el factor).
-**Cargar posición** recupera esos datos aun después de cerrar el simulador o
+La carga de posición recupera esos datos aun después de cerrar el simulador o
 reiniciar Chrome. El estado de guardado se muestra debajo del reporte; si falla,
 se avisa para que no se cierre el borrador sin conservar los datos.
 
@@ -38,7 +40,8 @@ El check **Incluir posición actual en Análisis** está en la barra común de
 **Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
 propios gastos. Al marcarlo, también incluye las patas de la posición, resta sus
 gastos y suma el realizado informado. La fecha del reporte de Matriz queda
-visible. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
+visible. Si esa fecha está adelantada respecto del reloj local, también se
+muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
 actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.
 Si cambia de compra a venta o viceversa, la prima se vacía para evitar aplicar

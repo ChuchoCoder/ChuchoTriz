@@ -80,7 +80,7 @@ export function importPosition(snapshot: PositionSnapshot, contracts: Contract[]
   input: Simulation, underlying: string, spot: number | undefined, saved?: PositionAccounting): Simulation {
   if (!snapshot || typeof snapshot.contextId !== "string" || !/^[A-Za-z0-9-]{1,80}$/.test(snapshot.contextId) ||
     !Number.isFinite(snapshot.capturedAt) || !Number.isFinite(snapshot.reportedAt) ||
-    snapshot.reportedAt <= 0 || snapshot.capturedAt < snapshot.reportedAt - 300000 || snapshot.capturedAt > Date.now() + 300000 ||
+    snapshot.reportedAt <= 0 || snapshot.reportedAt > 8.64e15 || snapshot.capturedAt <= 0 || snapshot.capturedAt > Date.now() + 300000 ||
     !Array.isArray(snapshot.positions) || snapshot.positions.length > MAX_LEGS)
     throw Error("El reporte de posición es inválido o supera las 16 patas admitidas.");
   const { first, factor, expiry } = positionChain(contracts);
