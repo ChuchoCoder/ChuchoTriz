@@ -1,10 +1,10 @@
-// Explicit, one-shot import of option quantities for the selected chain.
+// One-shot import of option quantities and nominal holdings for the selected underlying.
 // Account context and the native report stay inside Matriz.
 (() => {
   const channel = document.currentScript?.dataset.channel;
   if (!channel) return;
-  if (window.__chuchotrizOptionsPositionReaderV2) {
-    window.__chuchotrizOptionsPositionReaderV2.attach(channel); return;
+  if (window.__chuchotrizOptionsPositionReaderV3) {
+    window.__chuchotrizOptionsPositionReaderV3.attach(channel); return;
   }
   const channels = new Set([channel]);
   let active, previousContext, contextId;
@@ -28,6 +28,34 @@
     const current = context();
     check(Object.keys(operation.context).every(key => current[key] === operation.context[key]), "Cambió la cuenta o el contexto durante la lectura. Volvé a cargar la posición.");
   }
+  function underlyingQuantity(securities, types, params) {
+    const catalog = securities.underlyingsForMatrix;
+    check(Array.isArray(catalog) && catalog.length <= 2000, "Catálogo de subyacentes no disponible.");
+    const matches = catalog.filter(item => item?.id === params.underlyingId);
+    check(matches.length === 1 && matches[0].currency === params.currency && typeof matches[0].symbolStr === "string" && matches[0].symbolStr,
+      "El subyacente ya no coincide con la cadena seleccionada.");
+    const underlying = matches[0];
+    const groupType = underlying.cfiCode?.startsWith("ES") ? "STOCK" : underlying.cfiCode?.startsWith("EM") ? "CEDEAR" : undefined;
+    if (underlying.marketId !== "bm" || !groupType) return undefined;
+    const groups = types.filter(group => group?.type === groupType);
+    check(groups.length <= 1 && groups.every(group => Array.isArray(group.securitiesDetailed) && group.securitiesDetailed.length <= 10000),
+      "El reporte de nominales del subyacente está incompleto.");
+    const candidates = (groups[0]?.securitiesDetailed ?? []).filter(item => item?.security?.id === underlying.id || item?.symbolReference === underlying.symbolStr);
+    if (!candidates.length) return 0;
+    const [instrument] = candidates;
+    check(candidates.length === 1 && (!instrument.security || instrument.security.id === underlying.id) &&
+      Number.isSafeInteger(instrument.instrumentCurrentSize) && Math.abs(instrument.instrumentCurrentSize) <= 1e10 &&
+      Array.isArray(instrument.detailedPositions) && instrument.detailedPositions.length <= 10000,
+    "Matriz informó una posición del subyacente que requiere revisión.");
+    const rows = instrument.detailedPositions;
+    // Matriz populates the security objects shortly after it publishes the native report.
+    if (!instrument.security || rows.some(row => row && !row.security)) return null;
+    check(rows.every(row => row?.security?.id === underlying.id && Number.isSafeInteger(row.totalCurrentSize) && Math.abs(row.totalCurrentSize) <= 1e10) &&
+      rows.reduce((sum, row) => sum + row.totalCurrentSize, 0) === instrument.instrumentCurrentSize,
+    "El total de nominales del subyacente no coincide con su detalle en Matriz.");
+    check(rows.every(row => !row.totalCollateralSize), "La posición del subyacente incluye cantidades en garantía y requiere revisión en Matriz.");
+    return instrument.instrumentCurrentSize;
+  }
   async function read(params, operation) {
     check(typeof params.storageSalt === "string" && /^[a-f0-9]{64}$/.test(params.storageSalt), "Guardado local de posición no disponible.");
     check(Array.isArray(params.ids) && params.ids.length > 0 && params.ids.length <= 160 &&
@@ -44,7 +72,7 @@
     check(report === portfolio.detailedPositionReport && Array.isArray(report?.types) && report.types.length <= 50,
       "El reporte de posición está incompleto.");
     const reportedAt = report.lastCalculation instanceof Date ? report.lastCalculation.getTime() : NaN;
-    check(Number.isFinite(reportedAt) && reportedAt > 0 && reportedAt <= Date.now() + 300000, "La fecha del reporte de posición no es válida.");
+    check(Number.isFinite(reportedAt) && reportedAt > 0, "La fecha del reporte de posición no es válida.");
     const options = securities.options;
     check(Array.isArray(options) && options.length <= 10000, "Catálogo de opciones no disponible.");
     const byFix = new Map(), byId = new Map();
@@ -81,9 +109,23 @@
         }
       }
     }
+    let nominalQuantity, underlyingUnavailable;
+    try {
+      nominalQuantity = underlyingQuantity(securities, report.types, params);
+      for (const delay of [50, 100, 200, 400]) {
+        if (nominalQuantity !== null) break;
+        await new Promise(resolve => setTimeout(() => resolve(), delay));
+        assertCurrent(operation);
+        check(report === portfolio.detailedPositionReport, "Cambió el reporte durante la lectura. Volvé a cargar la posición.");
+        nominalQuantity = underlyingQuantity(securities, report.types, params);
+      }
+      if (nominalQuantity === null) underlyingUnavailable = true;
+    } catch { underlyingUnavailable = true; }
     assertCurrent(operation);
+    check(report === portfolio.detailedPositionReport, "Cambió el reporte durante la lectura. Volvé a cargar la posición.");
     return { contextId: operation.context.contextId, storageScope, capturedAt: Date.now(), reportedAt, version: operation.context.version,
-      positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })) };
+      positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })),
+      underlyingQuantity: underlyingUnavailable ? undefined : nominalQuantity, ...(underlyingUnavailable && { underlyingUnavailable }) };
   }
   window.addEventListener("message", async event => {
     const msg = event.data;
@@ -117,5 +159,5 @@
       if (operation && active === operation) active = undefined;
     }
   });
-  window.__chuchotrizOptionsPositionReaderV2 = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };
+  window.__chuchotrizOptionsPositionReaderV3 = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };
 })();

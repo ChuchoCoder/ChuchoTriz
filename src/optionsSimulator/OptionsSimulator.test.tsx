@@ -4,17 +4,19 @@ import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OptionsSimulator from "./OptionsSimulator";
 import { Catalog, Contract, Quote, Snapshot } from "./market";
-import { positionStorageKey, readPositionAccounting } from "./positionStorage";
+import { positionStorageKey, readPositionAccounting, readUnderlyingCost, underlyingCostStorageKey } from "./positionStorage";
 import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
 
-const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string } }));
+const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string } }));
 vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
 const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
   readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
     const snapshot = await readPosition(contracts, signal);
-    return { snapshot, saved: signal.aborted ? undefined : await readPositionAccounting(positionStorageKey(snapshot.storageScope, contracts[0])) };
+    if (signal.aborted) return { snapshot };
+    return { snapshot, saved: await readPositionAccounting(positionStorageKey(snapshot.storageScope, contracts[0])),
+      savedUnderlying: snapshot.underlyingQuantity ? await readUnderlyingCost(underlyingCostStorageKey(snapshot.storageScope, contracts[0])) : undefined };
   },
 }));
 let root: Root, container: HTMLDivElement;
@@ -218,32 +220,134 @@ it("keeps expiry available when a native VI is missing and blocks missing quotes
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
   expect(reference.cells[3].textContent).toBe(reference.cells[2].textContent);
 });
+it("loads the initial position once when the selected chain is ready", async () => {
+  await mount();
+  expect(readPosition).not.toHaveBeenCalled();
+
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  expect(readPosition).toHaveBeenCalledTimes(1);
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(container.querySelector<HTMLInputElement>(".ct-sim-include-position input")?.checked).toBe(true);
+
+  await showAnalysis();
+  await showBuild();
+  await act(async () => button("Limpiar posición").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  await act(async () => button("Nueva simulación").click());
+  expect(readPosition).toHaveBeenCalledTimes(1);
+});
+
+it("loads nominal holdings without open options and includes them only while the position is checked", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  expect(byLabel<HTMLInputElement>("Nominales del subyacente").value).toBe("100");
+  expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Costo promedio por nominal");
+  await fill("Costo promedio por nominal", "90");
+  await showAnalysis();
+  expect(byLabel("Patas analizadas").textContent).toContain("+100 nominales de GGAL");
+  expect([...container.querySelectorAll(".ct-sim-analysis-chart .ct-sim-inspect output")].map(node => node.textContent)).toEqual(["1.000 ARS", "1.000 ARS"]);
+  const include = container.querySelector<HTMLInputElement>(".ct-sim-include-position input")!;
+  await act(async () => include.click());
+  expect(byLabel("Patas analizadas").textContent).not.toContain("nominales");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).toBeNull();
+  await act(async () => include.click());
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
+  await act(async () => root.render(<OptionsSimulator key="fresh-position" />));
+  expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
+});
+
+it("values edited nominal quantities locally and restores the imported quantity and basis on reload", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  await fill("Costo promedio por nominal", "90");
+  const nominals = byLabel<HTMLInputElement>("Nominales del subyacente");
+  await act(async () => nominals.focus());
+  await fill("Nominales del subyacente", "200");
+  await act(async () => nominals.blur());
+  await fill("Costo promedio por nominal", "95");
+  const key = underlyingCostStorageKey("a".repeat(64), marketState.current.catalog!.contracts[0]);
+  expect(await readUnderlyingCost(key)).toMatchObject({ quantity: 100, averageCost: "90" });
+  await showAnalysis();
+  expect(byLabel("Patas analizadas").textContent).toContain("+200 nominales de GGAL");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-inspect output")?.textContent).toBe("1.000 ARS");
+  await showBuild();
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Nominales del subyacente").value).toBe("100");
+  expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
+});
+
+it("loads holdings and shows the local read time if Matriz reports a future date", async () => {
+  const capturedAt = Date.now();
+  readPosition.mockResolvedValueOnce({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt,
+    reportedAt: capturedAt + 25 * 60 * 60 * 1000, positions: [{ securityId: "call-100", quantity: 2 }] });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(container.textContent).toContain("Consulta local · " + new Date(capturedAt).toLocaleString("es-AR"));
+  expect(container.textContent).toContain("La fecha informada por Matriz es posterior a la consulta.");
+});
+
+it("keeps position accounting above the single-row header and shows deviations while premiums are incomplete", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
+    const strike = this.dataset.optionStrike;
+    return strike === undefined ? new DOMRect(0, 0, 496, 186) : new DOMRect(0, 26 + (Number(strike) - 80) / 10 * 32, 496, 32);
+  });
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  const chain = container.querySelector<HTMLTableElement>(".ct-opt-position-chain")!;
+  expect(chain.tHead?.rows).toHaveLength(1);
+  expect(Array.from(chain.tHead!.rows[0].cells, cell => cell.textContent)).toEqual([
+    "CALLS · Cant.", "Prima histórica", "Strike", "PUTS · Cant.", "Prima histórica",
+  ]);
+  const strikeRow = chain.querySelector<HTMLTableRowElement>('tr[data-option-strike="100"]')!;
+  expect(strikeRow.cells[3].contains(byLabel("Cantidad posición PUT 100"))).toBe(true);
+  expect(strikeRow.cells[4].contains(byLabel("Prima histórica PUT 100"))).toBe(true);
+  const controls = byLabel("Controles de posición");
+  for (const label of ["Gastos de la posición", "Resultado realizado neto"]) {
+    const field = byLabel(label);
+    expect(controls.contains(field)).toBe(true);
+    expect(field.compareDocumentPosition(button("Limpiar posición"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("");
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  expect(container.querySelectorAll(".ct-opt-sigma-line")).toHaveLength(2);
+  await fill("Prima histórica CALL 100", "8");
+  expect(container.querySelectorAll(".ct-opt-sigma-line")).toHaveLength(2);
+});
+
 it("imports a historical position and preserves its premiums and accounting through every adjustment control", async () => {
   await mount();
   expect(readPosition).not.toHaveBeenCalled();
   await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
   expect(container.querySelector('.ct-sim-position')).not.toBeNull();
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("");
   expect(container.querySelector('.ct-sim-chart')).toBeNull();
-  await fill("Prima histórica pata 1", "8");
+  await fill("Prima histórica CALL 100", "8");
   await fill("Gastos de la posición", "40");
   await fill("Resultado realizado neto", "200");
   const baseResults = [...container.querySelectorAll('.ct-sim-inspect output')].map(node => node.textContent);
+  await act(async () => button("Cotizaciones").click());
   await act(async () => byLabel<HTMLButtonElement>("Vender CALL 100 en simulación").click());
   await act(async () => byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia").click());
   await act(async () => byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia").click());
   await act(async () => byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").click());
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  await act(async () => button("Posición actual").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
   expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
   expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("200");
-  expect(container.querySelector('.ct-sim-position table tbody')?.textContent).toContain("+2");
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
   expect(byLabel<HTMLSelectElement>("Subyacente de opciones").disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Limpiar ajustes").click());
   expect([...container.querySelectorAll('.ct-sim-inspect output')].map(node => node.textContent)).toEqual(baseResults);
-  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
   await showAnalysis();
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  expect(container.querySelector('.ct-sim-analysis-panel .ct-opt-position-chain')).toBeNull();
   expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
   expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("200");
   expect(container.querySelectorAll('.ct-sim-position')).toHaveLength(1);
@@ -254,42 +358,44 @@ it("imports a historical position and preserves its premiums and accounting thro
 it("restores saved accounting after resetting the draft and remounting the simulator", async () => {
   await mount();
   await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
-  await fill("Prima histórica pata 1", "8.25"); await fill("Gastos de la posición", "40"); await fill("Resultado realizado neto", "-200");
+  await fill("Prima histórica CALL 100", "8.25"); await fill("Gastos de la posición", "40"); await fill("Resultado realizado neto", "-200");
   await act(async () => button("Nueva simulación").click());
   await act(async () => root.render(<OptionsSimulator key="new-session" />));
   readPosition.mockResolvedValueOnce({ contextId: "new-session", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
   await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8.25");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8.25");
   expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("40");
   expect(byLabel<HTMLInputElement>("Resultado realizado neto").value).toBe("-200");
   expect(byLabel("Guardado de datos históricos").textContent).toContain("Guardado en este perfil");
 });
 it("warns on quantity changes until the user confirms or edits the premium, including on later imports", async () => {
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
-  await fill("Prima histórica pata 1", "8");
+  await fill("Prima histórica CALL 100", "8");
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 3 }] });
-  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
   expect(container.querySelector('.ct-sim-premium-warning')?.textContent).toContain("Cambió la cantidad de 2 a 3");
-  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await act(async () => button("Recargar tenencia").click());
   expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
-  await act(async () => byLabel<HTMLButtonElement>("Confirmar prima histórica pata 1").click());
+  await act(async () => byLabel<HTMLButtonElement>("Ver aviso de prima histórica CALL 100").click());
+  expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Confirmar prima histórica CALL 100").click());
   expect(container.querySelector('.ct-sim-premium-warning')).toBeNull();
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 4 }] });
-  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await act(async () => button("Recargar tenencia").click());
   expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
-  await fill("Prima histórica pata 1", "-1");
-  expect(container.querySelector('.ct-sim-premium-warning button')).toBeNull();
+  await fill("Prima histórica CALL 100", "-1");
+  expect(container.querySelector('.ct-opt-premium-review button')).toBeNull();
   expect(container.querySelector('.ct-sim-premium-warning')).not.toBeNull();
-  await fill("Prima histórica pata 1", "8.50");
+  await fill("Prima histórica CALL 100", "8.50");
   expect(container.querySelector('.ct-sim-premium-warning')).toBeNull();
 });
 it("shows an error if historical accounting cannot be saved", async () => {
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
   write.mockRejectedValueOnce(Error("storage unavailable"));
-  await fill("Prima histórica pata 1", "8");
+  await fill("Prima histórica CALL 100", "8");
   expect(byLabel("Guardado de datos históricos").textContent).toContain("No se pudo guardar");
-  expect(byLabel<HTMLInputElement>("Prima histórica pata 1").value).toBe("8");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
 });
 it("cancels an in-flight import when leaving Armado and never overwrites the draft with its late response", async () => {
   let resolve!: (value: unknown) => void;
@@ -300,7 +406,118 @@ it("cancels an in-flight import when leaving Armado and never overwrites the dra
   await showAnalysis();
   expect(signal.aborted).toBe(true);
   await act(async () => resolve({ contextId: "demo-context", capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] }));
-  expect(container.querySelector('.ct-sim-position')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  expect(container.textContent).not.toContain("Reporte de Matriz");
+});
+
+it("edits position in the chain and toggles its effect without discarding the simulated strategy or accounting", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  await fill("Gastos de entrada totales", "15");
+  await showBuild();
+  const chain = byLabel("Cadena de opciones");
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  const quantity = byLabel<HTMLInputElement>("Cantidad posición CALL 100");
+  expect(chain.contains(quantity)).toBe(true);
+  expect(quantity.value).toBe("+2");
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  const include = container.querySelector<HTMLInputElement>(".ct-sim-include-position input")!;
+  await act(async () => include.click());
+  expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("-515 ARS");
+  await fill("Prima histórica CALL 100", "8");
+  await fill("Gastos de la posición", "40");
+  await fill("Resultado realizado neto", "200");
+  await act(async () => byLabel<HTMLInputElement>("Cantidad posición PUT 90").focus());
+  await fill("Cantidad posición PUT 90", "−3");
+  await act(async () => byLabel<HTMLInputElement>("Cantidad posición PUT 90").blur());
+  expect(byLabel<HTMLInputElement>("Cantidad posición PUT 90").value).toBe("−3");
+  await fill("Prima histórica PUT 90", "2.5");
+  await showAnalysis();
+  expect(include.checked).toBe(false);
+  expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("-515 ARS");
+  expect(byLabel("Patas analizadas").textContent).not.toContain("PUT 90");
+  await act(async () => include.click());
+  expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("-1.205 ARS");
+  expect(byLabel("Patas analizadas").textContent).toContain("Venta 3× PUT 90");
+  await act(async () => button("Editar posición en la cadena").click());
+  await act(async () => button("Limpiar posición").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  expect(byLabel<HTMLInputElement>("Cantidad posición PUT 90").value).toBe("");
+  expect(byLabel<HTMLInputElement>("Gastos de la posición").value).toBe("0");
+  expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("-515 ARS");
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
+  expect(byLabel<HTMLInputElement>("Cantidad posición PUT 90").value).toBe("");
+  expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(1);
+});
+
+it("keeps manual position editing available when the native report fails", async () => {
+  readPosition.mockRejectedValueOnce(Error("El reporte no respondió."));
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  expect(container.textContent).toContain("El reporte no respondió.");
+  const quantity = byLabel<HTMLInputElement>("Cantidad posición PUT 90");
+  await act(async () => quantity.focus());
+  await fill("Cantidad posición PUT 90", "-2");
+  await act(async () => quantity.blur());
+  await fill("Prima histórica PUT 90", "3");
+  expect(quantity.value).toBe("−2");
+  expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("600 ARS");
+  expect(byLabel("Guardado de datos históricos").textContent).toContain("Edición manual");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("recovers saved premiums after a verified empty report and a later reload", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica CALL 100", "8");
+  const written = write.mock.calls.length;
+  readPosition.mockResolvedValueOnce({ contextId: "demo-context", storageScope: "a".repeat(64),
+    capturedAt: Date.now(), reportedAt: Date.now(), positions: [] });
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  expect(write.mock.calls).toHaveLength(written);
+  await act(async () => button("Recargar tenencia").click());
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
+});
+
+it("keeps the position factor locked even when the verified report is empty", async () => {
+  marketState.current.catalog!.contracts.find(contract => contract.id === "put-90")!.factor = 200;
+  readPosition.mockResolvedValueOnce({ contextId: "demo-context", storageScope: "a".repeat(64),
+    capturedAt: Date.now(), reportedAt: Date.now(), positions: [] });
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await act(async () => button("Cotizaciones").click());
+  await act(async () => byLabel<HTMLButtonElement>("Comprar PUT 90 en simulación").click());
+  expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(0);
+  await act(async () => button("Posición actual").click());
+  expect(container.querySelector('[aria-label="Cantidad posición PUT 90"]')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+});
+
+it("recovers a removed series' saved premium for review when it is still held", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64),
+    capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }, { securityId: "put-90", quantity: -1 }] });
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica CALL 100", "8");
+  await fill("Prima histórica PUT 90", "3");
+  const quantity = byLabel<HTMLInputElement>("Cantidad posición CALL 100");
+  await act(async () => quantity.focus());
+  await fill("Cantidad posición CALL 100", "0");
+  await act(async () => quantity.blur());
+  expect(quantity.value).toBe("");
+  await act(async () => quantity.focus());
+  await fill("Cantidad posición CALL 100", "+2");
+  await act(async () => quantity.blur());
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("");
+  await act(async () => button("Recargar tenencia").click());
+  expect(quantity.value).toBe("+2");
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("8");
+  expect(byLabel("Confirmar prima histórica CALL 100")).not.toBeNull();
 });
 it("selecting a marked quote removes the leg; no execution controls are present", async () => {
   await mount();

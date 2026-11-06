@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { PositionAccountingConflict, positionStorageKey, positionStorageSalt, premiumNeedsReview, readPositionAccounting, savePositionAccounting } from "./positionStorage";
+import { PositionAccountingConflict, positionStorageKey, positionStorageSalt, premiumNeedsReview, readPositionAccounting, readUnderlyingCost, reconcileUnderlyingCost,
+  savePositionAccounting, saveUnderlyingCost, underlyingCostStorageKey } from "./positionStorage";
 import { importPosition, type PositionSnapshot } from "./positions";
 import { addDays, initialSimulation, localDate, type Simulation } from "./model";
 import type { Contract } from "./market";
@@ -42,6 +43,22 @@ it("isolates accounts, expiries, currencies, settlement, underlying and factors"
     expect(other).not.toBe(key); expect(await readPositionAccounting(other)).toBeUndefined();
   }
   expect((await readPositionAccounting(key))?.legs[0].premium).toBe("0");
+});
+it("stores underlying cost per account, ticker and currency across option expiries", async () => {
+  const scope = "a".repeat(64);
+  const key = underlyingCostStorageKey(scope, contract);
+  const session = { key };
+  await saveUnderlyingCost(session, 100, "123.45");
+  const saved = await readUnderlyingCost(underlyingCostStorageKey(scope, { ...contract, expiration: "20991218", factor: 1 }));
+  expect(saved).toMatchObject({ quantity: 100, averageCost: "123.45" });
+  expect(await readUnderlyingCost(underlyingCostStorageKey("b".repeat(64), contract))).toBeUndefined();
+  expect(await readUnderlyingCost(underlyingCostStorageKey(scope, { ...contract, underlyingId: "OTHER" }))).toBeUndefined();
+  await saveUnderlyingCost(session, 100, "125");
+  await expect(saveUnderlyingCost({ key, revision: saved!.revision }, 100, "124")).rejects.toBeInstanceOf(PositionAccountingConflict);
+  const closed = await reconcileUnderlyingCost(key, 0, await readUnderlyingCost(key));
+  expect(closed).toMatchObject({ quantity: 0, averageCost: "" });
+  const reopened = await reconcileUnderlyingCost(key, 100, closed);
+  expect(reopened).toMatchObject({ quantity: 100, averageCost: "" });
 });
 it("preserves pending quantity review through writes and repeated imports until explicitly confirmed", async () => {
   const input = draft(); input.position!.legs[0].premium = "8";

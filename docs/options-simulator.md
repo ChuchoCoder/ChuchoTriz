@@ -4,33 +4,58 @@ El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulado
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
 Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes.
-**Cargar posición** consulta, a pedido del usuario, las cantidades de opciones de
-la cuenta activa correspondientes al subyacente y vencimiento seleccionados.
+Al abrir el simulador se consulta automáticamente la posición de opciones de la
+cuenta activa para el subyacente y vencimiento iniciales. Si hay tenencia, aparece
+en la grilla. Si la cadena está vacía o falla la consulta, quedan disponibles las
+cotizaciones y el botón **Cargar posición**.
 
-La posición se muestra en un bloque separado, con cantidad firmada y prima
-histórica editable por unidad. La primera vez, la prima empieza vacía y debe completarse para
-calcular resultados desde el costo. Cero es un valor válido cuando se ingresa
-explícitamente. **Gastos de la posición** corresponde a cargos que todavía no están
+Para acciones y CEDEARs, la barra de **Posición actual** también muestra los
+nominales del subyacente informados por Matriz. La cantidad corresponde al
+subyacente y se obtiene aunque el vencimiento seleccionado no tenga opciones
+en cartera. Completá el **Costo promedio por nominal** en la moneda de la
+simulación. Se guarda por cuenta, subyacente y moneda, y se pide de nuevo si
+cambia la cantidad informada por Matriz. También podés editar los nominales del
+borrador. Si cambiás el signo, ingresá el costo del nuevo sentido. Los nominales
+editados y su costo quedan en ese borrador. **Recargar tenencia** restaura la
+cantidad informada por Matriz y su costo guardado.
+
+La misma cadena cambia a **Posición actual**, con cantidades firmadas y primas
+históricas por unidad a ambos lados del strike. Conserva las marcas de desvíos
+cuando hay precio y VI para estimarlas. Ingresá primero la cantidad.
+Enter o salir del campo confirma el cambio. Dejarlo vacío o ingresar cero quita la pata.
+La primera vez, la prima empieza vacía y debe completarse para calcular resultados
+desde el costo. Cero es una prima válida cuando se ingresa explícitamente.
+**Gastos de la posición** y **Resultado realizado neto** se editan en la barra
+superior de la grilla. **Gastos de la posición** corresponde a cargos que todavía no están
 incluidos en las primas. **Resultado realizado neto** permite sumar ganancias o
 pérdidas de cierres anteriores, ya netas de sus propios gastos.
 
-Las patas agregadas desde la grilla forman **Ajustes simulados**. Cantidades,
+**Cotizaciones** recupera BID y ASK en la misma grilla. Las patas agregadas
+desde ahí forman **Ajustes simulados**. Cantidades,
 strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
 Las primas históricas, gastos y realizado permanecen en la posición original.
 **Limpiar ajustes** vuelve a la posición sin esas operaciones hipotéticas.
+**Limpiar posición** vacía del borrador las patas, los gastos y el realizado de la
+posición. **Recargar tenencia** consulta nuevamente Matriz y recupera las primas
+históricas guardadas. Los ajustes de la misma cadena y cuenta se conservan.
+Si una serie quitada del borrador vuelve a aparecer, revisá su prima recuperada.
 **Nueva simulación** elimina el borrador y habilita otro contexto, conservando
 los datos históricos guardados localmente para futuras importaciones.
 
 Las primas, VI por pata, gastos y realizado se guardan automáticamente en este
 perfil de Chrome, separados por cuenta, sitio y cadena (incluido el factor).
-**Cargar posición** recupera esos datos aun después de cerrar el simulador o
-reiniciar Chrome. El estado de guardado se muestra debajo del reporte; si falla,
-se avisa para que no se cierre el borrador sin conservar los datos.
+La carga de posición recupera esos datos aun después de cerrar el simulador o
+reiniciar Chrome. En Armado, **Info** reúne el reporte y el estado de guardado.
+Si falla el guardado, el aviso aparece en la barra de la grilla.
 
-El resultado suma los valores menos primas de la posición y los ajustes, resta
-los gastos de la posición y agrega el realizado informado. Sin realizado se
-muestra el resultado abierto con los ajustes. La fecha del reporte de Matriz queda
-visible. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
+El check **Incluir posición actual en Análisis** está en la barra común de
+**Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
+propios gastos. Al marcarlo, también incluye las patas y los nominales de la
+posición, resta sus gastos y suma el realizado informado. En ambas curvas, los
+nominales aportan la cantidad neta multiplicada por la diferencia entre el precio
+del escenario y el costo promedio por unidad. La fecha del reporte de Matriz aparece en
+**Info** y en **Análisis**. Si está adelantada respecto del reloj local, también
+se muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
 actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.
 Si cambia de compra a venta o viceversa, la prima se vacía para evitar aplicar

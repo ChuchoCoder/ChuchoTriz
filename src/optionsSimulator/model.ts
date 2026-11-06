@@ -15,6 +15,13 @@ export interface Leg {
   premiumReviewPending?: boolean;
 }
 export interface PositionStorageSession { key: string; revision?: string }
+export interface UnderlyingHolding {
+  quantity: number;
+  averageCost: string;
+  storage?: PositionStorageSession;
+  costEdited?: boolean;
+  costStorageUnavailable?: boolean;
+}
 export interface Simulation {
   underlying: string;
   currency: "ARS" | "USD";
@@ -28,7 +35,9 @@ export interface Simulation {
   multiplier: string;
   costs: string;
   realized?: string;
-  position?: { legs: Leg[]; capturedAt: number; reportedAt: number; contextId: string; storage?: PositionStorageSession };
+  adjustmentCosts?: string;
+  position?: { legs: Leg[]; underlying?: UnderlyingHolding; nominalOverride?: Pick<UnderlyingHolding, "quantity" | "averageCost">; underlyingUnavailable?: boolean;
+    capturedAt?: number; reportedAt?: number; contextId?: string; storage?: PositionStorageSession };
   volatilityShift: string;
   rangeMin?: string;
   rangeMax?: string;
@@ -39,6 +48,7 @@ export interface ParsedLeg {
 }
 export interface Strategy {
   legs: ParsedLeg[];
+  underlying?: { quantity: number; averageCost: number };
   multiplier: number; costs: number; spot: number; years: number; rate: number; dividendYield: number;
   rangeMin: number; rangeMax: number;
   realized?: number;
@@ -47,6 +57,9 @@ export interface Strategy {
 export function simulationLegs(input: Simulation): Leg[] {
   return [...(input.position?.legs ?? []), ...input.legs];
 }
+export function underlyingExposure(position: Simulation["position"]) {
+  return position?.nominalOverride ?? position?.underlying;
+}
 export const MAX_LEGS = 16;
 export const MAX_CONTRACTS = 1e10;
 const dayMs = 86_400_000;
@@ -54,6 +67,11 @@ const dayMs = 86_400_000;
 // Decimal comma and decimal point are accepted; grouping separators are deliberately rejected.
 export function numeric(value: string): number {
   return /^-?\d+(?:[.,]\d+)?$/.test(value.trim()) ? Number(value.trim().replace(",", ".")) : NaN;
+}
+export function parseSignedQuantity(value: string): number | undefined {
+  const raw = value.trim().replace(/^−/, "-");
+  const quantity = raw === "" ? 0 : /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN;
+  return Number.isSafeInteger(quantity) && Math.abs(quantity) <= MAX_CONTRACTS ? quantity : undefined;
 }
 export function dateDay(value: string): number {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return NaN;
@@ -91,9 +109,9 @@ export function initialSimulation(today = localDate()): Simulation {
     volatilityShift: "0", rangeMin: "60", rangeMax: "140", legs: exampleLegs("bull-call") };
 }
 
-function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number, realized = 0) {
+function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number, realized = 0, nominalQuantity = 0) {
   const contracts = legs.reduce((sum, leg) => sum + leg.contracts, 0);
-  return Math.min(1e9, (Number.MAX_SAFE_INTEGER - costs - Math.abs(realized)) / (contracts * multiplier));
+  return Math.min(1e9, (Number.MAX_SAFE_INTEGER - costs - Math.abs(realized)) / (contracts * multiplier + Math.abs(nominalQuantity)));
 }
 
 export function parseSimulation(input: Simulation): { ok: true; strategy: Strategy } | { ok: false; errors: string[] } {
@@ -106,7 +124,8 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   };
   const spot = read(input.spot, "Precio del subyacente", .000001, 1e9);
   const multiplier = read(input.multiplier, "Factor monetario por contrato", .000001, 100000);
-  const costs = read(input.costs, "Gastos de entrada", 0, 1e12);
+  const costs = read(input.costs, "Gastos de entrada", 0, 1e12) +
+    (input.position && input.legs.length && input.adjustmentCosts !== undefined ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0);
   const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12);
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
@@ -119,7 +138,13 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     errors.push("La fecha teórica debe estar entre la fecha de entrada y el vencimiento (hasta 10 años).");
   if (!input.underlying.trim()) errors.push("Indicá un subyacente común para todas las patas.");
   const allLegs = simulationLegs(input);
-  if (!allLegs.length || input.legs.length > MAX_LEGS || (input.position?.legs.length ?? 0) > MAX_LEGS)
+  if (input.position?.underlyingUnavailable) errors.push("No se pudieron verificar los nominales del subyacente. Revisá el reporte de Matriz y recargá la tenencia.");
+  const holding = underlyingExposure(input.position);
+  const underlying = holding?.quantity ? {
+    quantity: read(String(holding.quantity), "Nominales del subyacente", -MAX_CONTRACTS, MAX_CONTRACTS, true),
+    averageCost: read(holding.averageCost, "Costo promedio por nominal", 0, 1e9),
+  } : undefined;
+  if ((!allLegs.length && !underlying && !input.position?.underlyingUnavailable) || input.legs.length > MAX_LEGS || (input.position?.legs.length ?? 0) > MAX_LEGS)
     errors.push(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`);
   const legs = allLegs.map((leg, index): ParsedLeg => {
     const historical = index < (input.position?.legs.length ?? 0);
@@ -132,11 +157,12 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
       premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, true),
       volatility: volatility / 100 };
   });
-  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs + Math.abs(realized));
+  const nominalExposure = underlying ? Math.abs(underlying.quantity) * Math.max(spot, explicitMax ?? 0, underlying.averageCost) : 0;
+  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs + Math.abs(realized) + nominalExposure);
   if (exposure > Number.MAX_SAFE_INTEGER) errors.push("Reducí precios o cantidades: el importe total supera la precisión admitida.");
-  const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs, realized), spot * 1.25);
+  const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs, realized, underlying?.quantity), spot * 1.25);
   if (rangeMin >= rangeMax) errors.push("El precio máximo del gráfico debe superar al mínimo.");
-  return errors.length ? { ok: false, errors } : { ok: true, strategy: { legs, multiplier, costs, spot,
+  return errors.length ? { ok: false, errors } : { ok: true, strategy: { legs, underlying, multiplier, costs, spot,
     years: (expiry - scenario) / 365, rate, dividendYield, rangeMin, rangeMax, realized } };
 }
 
@@ -193,21 +219,24 @@ export function theoreticalTheta(kind: OptionKind, spot: number, strike: number,
 }
 const direction = (leg: ParsedLeg) => leg.side === "buy" ? 1 : -1;
 export function entryCost(strategy: Strategy): number {
-  return strategy.costs + strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier * leg.premium, 0);
+  const stockCost = strategy.underlying ? strategy.underlying.quantity * strategy.underlying.averageCost : 0;
+  return strategy.costs + strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier * leg.premium, stockCost);
 }
 export function resultAt(strategy: Strategy, spot: number, mode: "expiry" | "theoretical"): number {
+  const stockValue = (strategy.underlying?.quantity ?? 0) * spot;
   return strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier *
-    (mode === "expiry" ? intrinsic(leg.kind, spot, leg.strike) : theoreticalPrice(leg.kind, spot, leg.strike, strategy.years, leg.volatility, strategy.rate, strategy.dividendYield)), (strategy.realized ?? 0) - entryCost(strategy));
+    (mode === "expiry" ? intrinsic(leg.kind, spot, leg.strike) : theoreticalPrice(leg.kind, spot, leg.strike, strategy.years, leg.volatility, strategy.rate, strategy.dividendYield)), (strategy.realized ?? 0) - entryCost(strategy) + stockValue);
 }
 export interface Equilibrium { from: number; to: number }
 export function expirySummary(strategy: Strategy) {
   const knots = [...new Set([0, ...strategy.legs.map(leg => leg.strike)])].sort((a, b) => a - b);
   const values = knots.map(price => resultAt(strategy, price, "expiry"));
   // Integer quantities cancel exactly before applying a potentially fractional factor.
-  const slope = strategy.legs.filter(leg => leg.kind === "call").reduce((sum, leg) => sum + direction(leg) * leg.contracts, 0) * strategy.multiplier;
+  const slope = strategy.legs.filter(leg => leg.kind === "call").reduce((sum, leg) => sum + direction(leg) * leg.contracts, 0) * strategy.multiplier + (strategy.underlying?.quantity ?? 0);
   // Bound rounding relative to the actual terms, so tiny valid losses remain losses.
   const zeros = values.map((value, index) => Math.abs(value) <= Number.EPSILON * 32 * (Math.abs(strategy.costs) + strategy.legs.reduce((sum, leg) =>
-    sum + leg.contracts * strategy.multiplier * (intrinsic(leg.kind, knots[index], leg.strike) + leg.premium), Math.abs(strategy.realized ?? 0))));
+    sum + leg.contracts * strategy.multiplier * (intrinsic(leg.kind, knots[index], leg.strike) + leg.premium), Math.abs(strategy.realized ?? 0) +
+    (strategy.underlying ? Math.abs(strategy.underlying.quantity) * (knots[index] + strategy.underlying.averageCost) : 0))));
   const equilibria: Equilibrium[] = [];
   const add = (from: number, to = from) => {
     const last = equilibria.at(-1);
@@ -233,7 +262,7 @@ export function expirySummary(strategy: Strategy) {
     maxLoss: slope < 0 ? Infinity : Math.max(0, ...values.map(value => -value)), equilibria };
 }
 export function chartPriceRange(strategy: Strategy, equilibria: Equilibrium[], zoom: number) {
-  const limit = maximumChartPrice(strategy.legs, strategy.multiplier, strategy.costs, strategy.realized);
+  const limit = maximumChartPrice(strategy.legs, strategy.multiplier, strategy.costs, strategy.realized, strategy.underlying?.quantity);
   const anchors = [strategy.spot, ...strategy.legs.map(leg => leg.strike),
     ...equilibria.flatMap(({ from, to }) => Number.isFinite(to) ? [from, to] : [from])];
   const low = Math.min(...anchors), high = Math.max(...anchors);

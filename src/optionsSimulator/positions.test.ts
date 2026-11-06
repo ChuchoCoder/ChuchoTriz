@@ -78,9 +78,44 @@ it("does not treat explicit zero cost or realized as missing and shifts both cur
   expect(resultAt(realized,110,"theoretical")-resultAt(base,110,"theoretical")).toBeCloseTo(-200);
   expect(expirySummary(realized).equilibria[0].from).toBe(101);
 });
+it("allows manual entry when the verified report has no position in the chain",()=>{
+  const input=load();
+  const empty=importPosition({...snapshot(),positions:[]},contracts,quotes,input,"DEMO",100);
+  expect(empty.position?.legs).toEqual([]);
+  expect(empty.position?.storage?.key).toBe(input.position?.storage?.key);
+});
+it("includes nominal holdings in both curves, including when they cover the call tail",()=>{
+  const input=importPosition({...snapshot(),underlyingQuantity:100,positions:[{securityId:"C100",quantity:-1}]},contracts,quotes,
+    {...initialSimulation(),legs:[]},"DEMO",100);
+  expect(parseSimulation(input).ok).toBe(false);
+  input.position!.underlying!.averageCost="90";
+  input.position!.legs[0].premium="5";
+  const covered=strategy(input);
+  expect(expirySummary(covered)).toMatchObject({entry:8500,maxProfit:1500,maxLoss:8500,equilibria:[{from:85,to:85}]});
+  expect(resultAt(covered,110,"expiry")).toBe(1500);
+  expect(resultAt(covered,120,"expiry")).toBe(1500);
+  const optionsOnly={...covered,underlying:undefined};
+  expect(resultAt(covered,110,"theoretical")-resultAt(optionsOnly,110,"theoretical")).toBeCloseTo(2000);
+  expect(expirySummary(optionsOnly).maxLoss).toBe(Infinity);
+});
+
+it("values stock-only positions and invalidates a saved cost when the signed holding changes",()=>{
+  const report={...snapshot(),positions:[],underlyingQuantity:-50};
+  const saved={revision:"original",quantity:-50,averageCost:"100"};
+  const input=importPosition(report,contracts,quotes,{...initialSimulation(),legs:[]},"DEMO",100,undefined,saved);
+  expect(input.position?.underlying).toMatchObject({quantity:-50,averageCost:"100"});
+  const parsed=strategy(input);
+  expect(resultAt(parsed,110,"expiry")).toBe(-500);
+  expect(resultAt(parsed,110,"theoretical")).toBe(-500);
+  expect(expirySummary(parsed)).toMatchObject({maxProfit:5000,maxLoss:Infinity,equilibria:[{from:100,to:100}]});
+  for(const quantity of [-75,50]) {
+    const changed=importPosition({...report,underlyingQuantity:quantity},contracts,quotes,input,"DEMO",100,undefined,saved);
+    expect(changed.position?.underlying).toMatchObject({quantity,averageCost:""});
+  }
+});
 it("rejects incomplete snapshots, duplicates, mixed factors and unsupported quantities without changing the draft",()=>{
   const input=load(),original=JSON.stringify(input);
-  for(const positions of [[{securityId:"C100",quantity:.5}],[{securityId:"C100",quantity:1},{securityId:"C100",quantity:2}],[]])
+  for(const positions of [[{securityId:"C100",quantity:.5}],[{securityId:"C100",quantity:1},{securityId:"C100",quantity:2}]])
     expect(()=>importPosition({...snapshot(),positions},contracts,quotes,input,"DEMO",100)).toThrow();
   expect(JSON.stringify(input)).toBe(original);
 });
