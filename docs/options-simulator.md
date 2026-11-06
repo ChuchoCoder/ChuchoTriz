@@ -10,11 +10,13 @@ en la grilla. Si la cadena está vacía o falla la consulta, quedan disponibles 
 cotizaciones y el botón **Cargar posición**.
 
 La misma cadena cambia a **Posición actual**, con cantidades firmadas y primas
-históricas por unidad en las filas de Calls y Puts. Ingresá primero la cantidad.
+históricas por unidad a ambos lados del strike. Conserva las marcas de desvíos
+cuando hay precio y VI para estimarlas. Ingresá primero la cantidad.
 Enter o salir del campo confirma el cambio. Dejarlo vacío o ingresar cero quita la pata.
 La primera vez, la prima empieza vacía y debe completarse para calcular resultados
 desde el costo. Cero es una prima válida cuando se ingresa explícitamente.
-**Gastos de la posición** corresponde a cargos que todavía no están
+**Gastos de la posición** y **Resultado realizado neto** se editan en la barra
+superior de la grilla. **Gastos de la posición** corresponde a cargos que todavía no están
 incluidos en las primas. **Resultado realizado neto** permite sumar ganancias o
 pérdidas de cierres anteriores, ya netas de sus propios gastos.
 
@@ -33,15 +35,15 @@ los datos históricos guardados localmente para futuras importaciones.
 Las primas, VI por pata, gastos y realizado se guardan automáticamente en este
 perfil de Chrome, separados por cuenta, sitio y cadena (incluido el factor).
 La carga de posición recupera esos datos aun después de cerrar el simulador o
-reiniciar Chrome. El estado de guardado se muestra debajo del reporte; si falla,
-se avisa para que no se cierre el borrador sin conservar los datos.
+reiniciar Chrome. En Armado, **Info** reúne el reporte y el estado de guardado.
+Si falla el guardado, el aviso aparece en la barra de la grilla.
 
 El check **Incluir posición actual en Análisis** está en la barra común de
 **Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
 propios gastos. Al marcarlo, también incluye las patas de la posición, resta sus
-gastos y suma el realizado informado. La fecha del reporte de Matriz queda
-visible. Si esa fecha está adelantada respecto del reloj local, también se
-muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
+gastos y suma el realizado informado. La fecha del reporte de Matriz aparece en
+**Info** y en **Análisis**. Si está adelantada respecto del reloj local, también
+se muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
 actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.
 Si cambia de compra a venta o viceversa, la prima se vacía para evitar aplicar

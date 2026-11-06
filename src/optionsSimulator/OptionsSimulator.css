@@ -256,8 +256,15 @@
 .ct-sim .ct-sim-position-costs .ct-sim-field { display: flex; flex-direction: column; align-items: stretch; gap: 2px; font-size: 11px; }
 .ct-sim-position .ct-sim-hint, .ct-sim-position > small { margin-top: 5px; font-size: 10px; color: var(--sim-muted); }
 .ct-sim-position > small { display: block; }
-.ct-sim-premium-warning { color: var(--sim-loss); font-size: 11px; font-weight: 600; text-align: left; }
-.ct-sim-premium-warning button { margin: 3px 0; padding: 2px 5px; min-height: 24px; font-size: 11px; }
+.ct-sim-position-inline, .ct-sim-position-inline .ct-sim-position-costs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 7px; padding: 0; margin: 0; min-width: 0; }
+.ct-sim .ct-sim-position-inline .ct-sim-position-costs .ct-sim-field { flex-direction: row; align-items: center; gap: 4px; }
+.ct-sim .ct-sim-position-inline .ct-sim-field label { white-space: nowrap; }
+.ct-sim .ct-sim-position-inline .ct-sim-field input { width: 86px; height: 26px; }
+.ct-sim-position-info { font-size: 11px; }
+.ct-sim-position-info summary { cursor: pointer; color: var(--sim-accent); }
+.ct-sim-position-info[open] { flex-basis: 100%; text-align: center; }
+.ct-sim-position-info small { display: block; color: var(--sim-muted); font-size: 11px; }
+.ct-sim-position-inline > small[role="status"] { flex-basis: 100%; margin: 0; color: var(--sim-loss); text-align: center; }
 .ct-sim-scenario > .ct-sim-position { grid-column: 1 / -1; margin: 4px 0 0; }
 .ct-sim input[type="range"] { accent-color: var(--sim-accent); padding: 0; border: 0; background: transparent; cursor: pointer; }
 .ct-sim-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }

@@ -62,21 +62,27 @@
 .ct-sim .ct-opt-price.buy .ct-opt-quote-value { grid-column:1; text-align:left; }
 .ct-sim .ct-opt-price.buy .ct-opt-quantity { text-align:left; }
 .ct-sim .ct-opt-chain { min-width:750px; }
-.ct-sim .ct-opt-position-chain { min-width:440px; }
-.ct-sim .ct-opt-position-chain thead th { text-align:center; }
-.ct-sim .ct-opt-position-chain tbody td { padding:2px 5px; }
-.ct-opt-position-field { display:grid; gap:3px; margin:2px 0; }
-.ct-opt-position-field small { color:var(--sim-muted); }
-.ct-opt-position-field input { text-align:right; }
+.ct-sim .ct-opt-chain-grid.ct-opt-position-grid { display:block; width:496px; margin-inline:auto; }
+.ct-sim .ct-opt-position-chain { --ct-opt-metric-strike:104px; min-width:0; font-size:11px; }
+.ct-sim .ct-opt-position-chain col.strike { width:var(--ct-opt-metric-strike); }
+.ct-sim .ct-opt-position-chain thead tr th { text-align:center; white-space:nowrap; }
+.ct-sim .ct-opt-position-chain .ct-opt-itm-line { grid-template-columns:1fr var(--ct-opt-metric-strike) 1fr; }
+.ct-opt-position-field + .ct-opt-position-field { margin-top:2px; }
+.ct-opt-position-field small { display:block; color:var(--sim-muted); overflow-wrap:anywhere; }
+.ct-opt-position-field > div { display:flex; align-items:center; gap:2px; }
+.ct-sim .ct-options .ct-opt-position-field input { height:24px; padding:2px 4px; font-size:11px; text-align:right; }
+.ct-opt-position-field input[type="number"] { appearance:textfield; }
+.ct-opt-position-field input[type="number"]::-webkit-inner-spin-button,
+.ct-opt-position-field input[type="number"]::-webkit-outer-spin-button { appearance:none; margin:0; }
 .ct-opt-position-field input[readonly] { opacity:.65; }
+.ct-opt-position-otm { background:color-mix(in srgb, var(--sim-muted) 6%, transparent); }
 .ct-opt-position-held { background:color-mix(in srgb, var(--sim-theory) 12%, transparent); }
+.ct-sim-premium-warning { flex:0 0 17px; color:var(--sim-loss); font-weight:700; text-align:center; }
+.ct-sim .ct-sim-market .ct-opt-position-chain .ct-sim-premium-warning button { width:17px; height:20px; padding:0; border-radius:3px; border-color:currentColor; color:inherit; font-size:11px; }
 .ct-sim-position-tabs, .ct-sim-position-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:5px; }
 .ct-sim .ct-sim-position-tabs button, .ct-sim .ct-sim-position-toolbar button { min-height:26px; padding:2px 6px; font-size:11px; }
 .ct-sim .ct-sim-position-tabs button[aria-pressed="true"] { background:var(--sim-accent); color:var(--sim-card); }
-.ct-sim-position-toolbar { padding:6px 8px; border-bottom:1px solid var(--sim-border); }
-.ct-sim-position-toolbar small { margin-right:auto; color:var(--sim-muted); }
-.ct-sim-position-accounting { border:0; padding:0; margin:0; min-width:0; }
-.ct-sim-position-accounting > .ct-sim-position { margin:0; border-radius:0 0 9px 9px; }
+.ct-sim-position-toolbar { justify-content:center; padding:4px 6px; margin:0; min-width:0; border:0; border-bottom:1px solid var(--sim-border); }
 .ct-sim .ct-opt-chain-grid { position:relative; display:table; width:100%; }
 .ct-sim .ct-opt-sigma-overlay { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:1; }
 .ct-sim .ct-opt-sigma-1 { color:var(--sim-sigma-one); }

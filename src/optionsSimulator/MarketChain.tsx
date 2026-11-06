@@ -29,7 +29,7 @@ function PositionQuantity({ label, leg, disabled, onCommit }: {
   const [draft, setDraft] = useState<string>();
   const value = leg ? (leg.side === "sell" ? "−" : "+") + leg.contracts : "";
   return <input type="text" data-ct-inline-editor className={leg ? leg.side === "sell" ? "ct-sim-sell" : "ct-sim-buy" : undefined}
-    aria-label={`Cantidad posición ${label}`} placeholder="—" disabled={disabled} value={draft ?? value}
+    aria-label={`Cantidad posición ${label}`} title="Cantidad con signo · + compra, − venta" placeholder="—" disabled={disabled} value={draft ?? value}
     onFocus={event => event.currentTarget.select()} onChange={event => setDraft(event.target.value)}
     onBlur={() => { if (draft !== undefined) onCommit(draft); setDraft(undefined); }}
     onKeyDown={event => {
@@ -42,16 +42,19 @@ function PositionPremium({ label, leg, disabled, onChange, onReview }: {
   label: string; leg?: Leg; disabled: boolean; onChange(id: number, value: string): void; onReview(id: number): void;
 }) {
   const warningId = useId();
-  const pending = !!leg && premiumNeedsReview(leg);
+  const warning = leg && premiumNeedsReview(leg) ?
+    `${numeric(leg.premiumQuantity ?? "") !== numeric(signedPositionQuantity(leg))
+      ? `Cambió la cantidad de ${leg.premiumQuantity} a ${signedPositionQuantity(leg)}.` : "La cantidad cambió desde la última revisión."} Revisá la prima histórica.` : undefined;
   return <>
     <input type="number" min="0" max="1000000000" step="any" aria-label={`Prima histórica ${label}`} readOnly={!leg} disabled={disabled}
-      value={leg?.premium ?? ""} placeholder={leg ? "Completar" : "—"} aria-describedby={pending ? warningId : undefined}
+      value={leg?.premium ?? ""} placeholder={leg ? "Completar" : "—"} aria-describedby={warning ? warningId : undefined}
+      title={warning ?? "Prima histórica por unidad"}
       onChange={event => { if (leg) onChange(leg.id, event.target.value); }} />
-    {leg && pending && <div className="ct-sim-premium-warning" id={warningId} role="alert">
-      {numeric(leg.premiumQuantity ?? "") !== numeric(signedPositionQuantity(leg))
-        ? `Cambió la cantidad de ${leg.premiumQuantity} a ${signedPositionQuantity(leg)}.` : "La cantidad cambió desde la última revisión."} Revisá la prima histórica.
+    {leg && warning && <div className="ct-sim-premium-warning" title={warning}>
+      <span className="ct-sim-sr" id={warningId} role="status">{warning}</span>
       {validHistoricalPremium(leg.premium) && <button type="button" disabled={disabled} aria-label={`Confirmar prima histórica ${label}`}
-        onClick={() => onReview(leg.id)}>Prima revisada</button>}
+        aria-describedby={warningId} title={`${warning} Clic para confirmar la prima.`} onClick={() => onReview(leg.id)}>!</button>}
+      {!validHistoricalPremium(leg.premium) && <span aria-hidden="true">!</span>}
     </div>}
   </>;
 }
@@ -72,7 +75,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [market, setMarket] = useState("");
   const [selectionReady, setSelectionReady] = useState(false);
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<string | { announcement: string }>("");
   const [openQuote, setOpenQuote] = useState<string>();
   const pendingQuantity = useRef<{ leg: Leg; next: Leg }>(undefined);
   const quantityBar = useRef<HTMLDivElement>(null);
@@ -176,7 +179,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [active, catalog, data, underlyingId, expiration, market, reading.issue, onStrikeMarket]);
   const itmSpot = comparable ? spot : undefined;
   const sameContext = comparable && input.underlying === underlying?.symbol && input.expiry === expiryDate(expiration) && input.currency === underlying?.currency;
-  const deviations = sameContext && !editingPosition ? deviationReference : undefined;
+  const deviations = sameContext ? deviationReference : undefined;
   const gridLevels = deviations && deviations.move > 0 && strikes.length > 1 && strikeRows.length === strikes.length && strikeRows.every((row, index) => row.strike === strikes[index])
     ? deviations.levels.flatMap(level => {
       const index = strikes.findIndex(strike => strike >= level.price);
@@ -189,7 +192,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const spotSharesSigma = gridLevels.some(level => level.afterStrike === spotBoundary);
   useEffect(() => {
     const container = grid.current;
-    if (!active || editingPosition || !container) return;
+    if (!active || !container) return;
     const position = () => {
       const base = container.getBoundingClientRect().top;
       const rows = [...container.querySelectorAll<HTMLTableRowElement>("tr[data-option-strike]")];
@@ -235,7 +238,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       const base = automatic ? startPositionDraft(current, selected, underlying.symbol, spot) : current.position ? current : draft;
       const next = importPosition(snapshot, selected, data?.instruments, base, underlying.symbol, spot, saved);
       const hasPosition = !!next.position?.legs.length;
-      setNotice(hasPosition ? "Tenencia cargada. Revisá las primas históricas en la grilla."
+      setNotice(hasPosition ? { announcement: "Tenencia cargada. Revisá las primas históricas en la grilla." }
         : "No hay posición abierta en esta cadena. Podés ingresar una posición manual.");
       if (automatic && !hasPosition) return;
       if (automatic) setPositionMode(true);
@@ -273,7 +276,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }
   function clearPosition() {
     setInput(current => current.position ? { ...current, position: { legs: [] }, costs: "0", realized: undefined } : current);
-    setNotice("Se limpió la posición del borrador. Podés recargar la tenencia. Los ajustes siguen en Armado.");
+    setNotice({ announcement: "Se limpió la posición del borrador. Podés recargar la tenencia. Los ajustes siguen en Armado." });
   }
   function commitPositionQuantity(series: PositionSeries, value: string) {
     const raw = value.trim().replace(/^−/, "-");
@@ -360,16 +363,18 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     <OptionMetricCell contract={contract} field={field} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />;
   const positionCell = (kind: "call" | "put", strike: number, field: "quantity" | "premium") => {
     const entries = positionSeries.filter(series => series.kind === kind && series.strike === strike);
-    return <td className={entries.some(series => positionLegs.some(leg => leg.securityId === series.id)) ? "ct-opt-position-held" : undefined}>
+    const held = entries.some(series => positionLegs.some(leg => leg.securityId === series.id));
+    const otm = itmSpot !== undefined && (kind === "call" ? strike > itmSpot : strike < itmSpot);
+    return <td className={held ? "ct-opt-position-held" : otm ? "ct-opt-position-otm" : undefined}>
       {entries.length ? entries.map(series => {
         const leg = positionLegs.find(item => item.securityId === series.id);
         const label = entries.length > 1 ? series.symbol : `${kind.toUpperCase()} ${fmt(strike)}`;
         return <div key={series.id} className="ct-opt-position-field">
           {entries.length > 1 && <small>{series.symbol}</small>}
-          {field === "quantity" ? <PositionQuantity label={label} leg={leg} disabled={loadingPosition}
+          <div>{field === "quantity" ? <PositionQuantity label={label} leg={leg} disabled={loadingPosition}
             onCommit={value => commitPositionQuantity(series, value)} />
             : <PositionPremium label={label} leg={leg} disabled={loadingPosition}
-              onChange={onPremiumChange} onReview={onPremiumReview} />}
+              onChange={onPremiumChange} onReview={onPremiumReview} />}</div>
         </div>;
       }) : "—"}
     </td>;
@@ -454,18 +459,20 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {spotOutsideGrid && <span className="ct-sim-spot-outside">{money(spot)} {spotChange}</span>}
   </div>, toolbar)}
     {reading.issue && <p role="status" className="ct-sim-error ct-sim-chain-notice">{reading.issue}</p>}
-    {editingPosition && <div className="ct-sim-position-toolbar">
-      <small>Cantidad con signo · + compra, − venta. Ingresá la prima histórica por unidad.</small>
-      <button type="button" disabled={loadingPosition} onClick={clearPosition}>Limpiar posición</button>
-      <button type="button" disabled={!canLoadPosition || loadingPosition} onClick={() => void loadPosition()}>
+    {editingPosition && <fieldset className="ct-sim-position-toolbar" aria-label="Controles de posición" disabled={loadingPosition}>
+      {positionAccounting}
+      <button type="button" onClick={clearPosition} title="Vacía la posición y sus costos del borrador. Conserva los ajustes.">Limpiar posición</button>
+      <button type="button" disabled={!canLoadPosition} onClick={() => void loadPosition()}>
         {loadingPosition ? "Cargando posición…" : "Recargar tenencia"}</button>
-    </div>}
-    {notice && <p role="status" className="ct-sim-chain-notice" title={notice}>{notice}</p>}
+    </fieldset>}
+    {notice && (typeof notice === "string" ? <p role="status" className="ct-sim-chain-notice">{notice}</p>
+      : <span role="status" className="ct-sim-sr">{notice.announcement}</span>)}
     <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" aria-busy={loadingPosition} tabIndex={0}>
-      <div ref={grid} className="ct-opt-chain-grid"><table className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : "ct-opt-chain ct-opt-metrics-chain"}>
-        {editingPosition ? <thead><tr><th colSpan={2} scope="colgroup">CALLS</th><th className="ct-opt-strike" rowSpan={2} scope="col">Strike</th><th colSpan={2} scope="colgroup">PUTS</th></tr>
-          <tr><th scope="col">Cantidad</th><th scope="col">Prima histórica</th><th scope="col">Prima histórica</th><th scope="col">Cantidad</th></tr>
-        </thead> : <>
+      <div ref={grid} className={`ct-opt-chain-grid${editingPosition ? " ct-opt-position-grid" : ""}`}><table className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : "ct-opt-chain ct-opt-metrics-chain"}>
+        {editingPosition ? <><colgroup><col /><col /><col className="strike" /><col /><col /></colgroup>
+          <thead><tr><th scope="col" title="Cantidad de Calls · + compra, − venta">CALLS · Cant.</th><th scope="col" title="Prima histórica por unidad de Calls">Prima histórica</th>
+            <th className="ct-opt-strike" scope="col">Strike</th><th scope="col" title="Prima histórica por unidad de Puts">Prima histórica</th><th scope="col" title="Cantidad de Puts · + compra, − venta">PUTS · Cant.</th></tr></thead>
+        </> : <>
         <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col className="theta" /><col className="extrinsic" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="extrinsic" /><col className="theta" /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
         <thead><tr className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
           <th colSpan={7} className="ct-opt-calls-heading">CALLS</th>
@@ -482,7 +489,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
             <th scope="row" className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
             {editingPosition ? <>{positionCell("put", strike, "premium")}{positionCell("put", strike, "quantity")}</>
               : <>{metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "extrinsic", "put")}{metricCell(put, "theta", "put")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}</>}
-          </tr>{!editingPosition && itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
+          </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 5 : 17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}
@@ -497,6 +504,5 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           {!catalog && !reading.issue ? "Leyendo catálogo de opciones de Matriz…" : "Sin contratos completos para esta selección."}
         </p>}
     </div>
-    {editingPosition && positionAccounting && <fieldset className="ct-sim-position-accounting" disabled={loadingPosition}>{positionAccounting}</fieldset>}
   </section>;
 }

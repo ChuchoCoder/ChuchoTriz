@@ -247,6 +247,29 @@ it("loads holdings and shows the local read time if Matriz reports a future date
   expect(container.textContent).toContain("La fecha informada por Matriz es posterior a la consulta.");
 });
 
+it("keeps position accounting above the single-row header and shows deviations while premiums are incomplete", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
+    const strike = this.dataset.optionStrike;
+    return strike === undefined ? new DOMRect(0, 0, 496, 186) : new DOMRect(0, 26 + (Number(strike) - 80) / 10 * 32, 496, 32);
+  });
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  const chain = container.querySelector<HTMLTableElement>(".ct-opt-position-chain")!;
+  expect(chain.tHead?.rows).toHaveLength(1);
+  expect(chain.tHead?.rows[0].cells).toHaveLength(5);
+  const controls = byLabel("Controles de posición");
+  for (const label of ["Gastos de la posición", "Resultado realizado neto"]) {
+    const field = byLabel(label);
+    expect(controls.contains(field)).toBe(true);
+    expect(field.compareDocumentPosition(button("Limpiar posición"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+  expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("");
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  expect(container.querySelectorAll(".ct-opt-sigma-line")).toHaveLength(2);
+  await fill("Prima histórica CALL 100", "8");
+  expect(container.querySelectorAll(".ct-opt-sigma-line")).toHaveLength(2);
+});
+
 it("imports a historical position and preserves its premiums and accounting through every adjustment control", async () => {
   await mount();
   expect(readPosition).not.toHaveBeenCalled();

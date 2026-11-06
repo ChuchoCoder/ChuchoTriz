@@ -12,7 +12,7 @@ const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 
 const PRICE_SLIDER_STEPS = 200;
 
 function Field({ label, value, onChange, type = "number", slider, ...attributes }: {
-  label: string; value: string; onChange(value: string): void; type?: "number" | "date"; min?: string; max?: string; slider?: ReactNode;
+  label: string; value: string; onChange(value: string): void; type?: "number" | "date"; min?: string; max?: string; title?: string; slider?: ReactNode;
 }) {
   const id = useId();
   const field = <input id={id} aria-label={label} type={type} value={value}
@@ -110,25 +110,33 @@ function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChan
   </section>;
 }
 
-function PositionCosts({ input, onCosts, onRealized, onReset, onEdit, saveStatus }: {
+function PositionCosts({ input, onCosts, onRealized, onReset, onEdit, saveStatus, compact }: {
   input: Simulation; onCosts(value: string): void; onRealized(value: string): void; onReset(): void;
-  onEdit?(): void; saveStatus: string;
+  onEdit?(): void; saveStatus: { message: string; error?: boolean }; compact: boolean;
 }) {
   if (!input.position) return null;
   const { reportedAt, capturedAt } = input.position;
   const reportDateAhead = reportedAt !== undefined && capturedAt !== undefined && reportedAt > capturedAt + 300000;
-  return <section className="ct-sim-card ct-sim-position" aria-label="Posición actual y costos históricos">
-    <div className="ct-sim-section-heading"><h3>Posición actual</h3>
-      {onEdit && <button type="button" onClick={onEdit}>Editar posición en la cadena</button>}
-      <button type="button" onClick={onReset}>Nueva simulación</button></div>
-    <div className="ct-sim-position-costs">
-      <Field label="Gastos de la posición" value={input.costs} onChange={onCosts} />
-      <Field label="Resultado realizado neto" value={input.realized ?? ""} onChange={onRealized} />
-    </div>
-    <p className="ct-sim-hint">Gastos adicionales al costo. Realizado neto de sus gastos, positivo o negativo.</p>
+  const reset = <button type="button" onClick={onReset} title="Descarta el borrador y habilita otro subyacente o vencimiento.">Nueva simulación</button>;
+  const status = <small role="status" aria-label="Guardado de datos históricos">{input.position.storage ? saveStatus.message : "Edición manual en este borrador."}</small>;
+  const report = <>
     {reportedAt !== undefined && <small>Reporte de Matriz · {new Date(reportedAt).toLocaleString("es-AR")}</small>}
     {reportDateAhead && <small>Consulta local · {new Date(capturedAt).toLocaleString("es-AR")}. La fecha informada por Matriz es posterior a la consulta.</small>}
-    <small role="status" aria-label="Guardado de datos históricos">{input.position.storage ? saveStatus : "Edición manual en este borrador."}</small>
+  </>;
+  return <section className={compact ? "ct-sim-position ct-sim-position-inline" : "ct-sim-card ct-sim-position"} aria-label="Posición actual y costos históricos">
+    {!compact && <div className="ct-sim-section-heading"><h3>Posición actual</h3>
+      {onEdit && <button type="button" onClick={onEdit}>Editar posición en la cadena</button>}
+      {reset}</div>}
+    <div className="ct-sim-position-costs">
+      <Field label="Gastos de la posición" value={input.costs} onChange={onCosts} title="Cargos adicionales que todavía no están incluidos en las primas." />
+      <Field label="Resultado realizado neto" value={input.realized ?? ""} onChange={onRealized} title="Ganancia o pérdida de cierres anteriores, neta de sus propios gastos." />
+    </div>
+    {compact ? <>{reset}<details className="ct-sim-position-info"><summary title="Reporte de Matriz y estado de guardado">Info</summary>
+      <div>{report}{!saveStatus.error && status}</div>
+    </details>{saveStatus.error && status}</> : <>
+      <p className="ct-sim-hint">Gastos adicionales al costo. Realizado neto de sus gastos, positivo o negativo.</p>
+      {report}{status}
+    </>}
   </section>;
 }
 
@@ -335,17 +343,17 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const allLegs = useMemo(() => simulationLegs(valuationInput), [valuationInput]);
   const [chartZoom, setChartZoom] = useState<{ context: string; level: number }>();
   const [status, setStatus] = useState("");
-  const [saveStatus, setSaveStatus] = useState("");
+  const [saveStatus, setSaveStatus] = useState<{ message: string; error?: boolean }>({ message: "" });
   const accountingLegs = input.position?.legs, accountingStorage = input.position?.storage;
   const { costs, realized } = input;
   useEffect(() => {
-    if (!accountingStorage || !accountingLegs?.length) { setSaveStatus(""); return; }
+    if (!accountingStorage || !accountingLegs?.length) { setSaveStatus({ message: "" }); return; }
     let current = true;
-    setSaveStatus("Guardando…");
-    void savePositionAccounting(accountingStorage, accountingLegs, costs, realized).then(() => { if (current) setSaveStatus("Guardado en este perfil · cuenta y vencimiento"); },
-      error => { if (current) setSaveStatus(error instanceof PositionAccountingConflict
+    setSaveStatus({ message: "Guardando…" });
+    void savePositionAccounting(accountingStorage, accountingLegs, costs, realized).then(() => { if (current) setSaveStatus({ message: "Guardado en este perfil · cuenta y vencimiento" }); },
+      error => { if (current) setSaveStatus({ error: true, message: error instanceof PositionAccountingConflict
         ? "Otra pestaña guardó cambios. Tus ediciones siguen en este borrador. Usá Nueva simulación y volvé a cargar para recuperar el guardado."
-        : "No se pudo guardar. Revisá los valores y el almacenamiento local antes de cerrar."); });
+        : "No se pudo guardar. Revisá los valores y el almacenamiento local antes de cerrar." }); });
     return () => { current = false; };
     // Scenarios and proposed adjustments do not change historical accounting.
   }, [accountingStorage, accountingLegs, costs, realized]);
@@ -354,6 +362,14 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const nextId = useRef(3);
   const parsed = useMemo(() => parseSimulation(valuationInput), [valuationInput]);
   const deviations = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
+  const chainDeviations = useMemo(() => {
+    const { position } = valuationInput;
+    if (deviations || !positionMode || !position?.legs.length) return deviations;
+    // The expected move needs prices and IV, so historical accounting can still be incomplete.
+    const reference = parseSimulation({ ...valuationInput, costs: "0", adjustmentCosts: "0", realized: undefined,
+      position: { ...position, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
+    return reference.ok ? standardDeviationLevels(reference.strategy) : undefined;
+  }, [deviations, positionMode, valuationInput]);
   const summary = useMemo(() => parsed.ok ? expirySummary(parsed.strategy) : undefined, [parsed]);
   const days = dateDay(input.expiry) - dateDay(input.valuationDate);
   const midpointDays = Math.floor(days / 2);
@@ -433,7 +449,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const reviewPremium = (id: number) => setInput(current => current.position ? { ...current, position: { ...current.position,
     legs: current.position.legs.map(leg => leg.id === id && validHistoricalPremium(leg.premium)
       ? { ...leg, premiumQuantity: signedPositionQuantity(leg), premiumReviewPending: false } : leg) } } : current);
-  const historicalCosts = <PositionCosts input={input}
+  const historicalCosts = <PositionCosts input={input} compact={view === "build"}
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
     saveStatus={saveStatus} onEdit={view === "analysis" ? () => { setPositionMode(true); changeView("build"); } : undefined}
     onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setPositionMode(false); setChartZoom(undefined); setStatus(""); }} />;
@@ -459,7 +475,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </div>
     <span role="status" className="ct-sim-sr">{status}</span>
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} toolbar={marketToolbar} input={input} setInput={setInput} onStrikeMarket={setStrikeMarket} onNewStrategy={() => setChartZoom(undefined)}
-      deviationReference={deviations} positionMode={positionMode} setPositionMode={setPositionMode} positionAccounting={view === "build" ? historicalCosts : undefined}
+      deviationReference={chainDeviations} positionMode={positionMode} setPositionMode={setPositionMode} positionAccounting={view === "build" ? historicalCosts : undefined}
       onPremiumChange={(id, value) => updateLeg(id, "premium", value)} onPremiumReview={reviewPremium} />
     <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-leg-toolbar"><h3>{input.position ? "Ajustes simulados" : "Patas"}</h3>
       <div className="ct-sim-quick-adjustments" aria-label="Ajustar toda la estrategia">{([ ["strike", "Strike"], ["quantity", "Cantidad"] ] as const).map(([kind, label]) =>
