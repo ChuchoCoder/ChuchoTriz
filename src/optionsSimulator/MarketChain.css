@@ -50,9 +50,14 @@
 .ct-sim .ct-opt-price .ct-opt-quantity { grid-column:2; grid-row:1; font-size:11px; font-weight:500; color:inherit; }
 .ct-sim .ct-opt-price .ct-opt-quote-value { grid-column:3; grid-row:1; font-weight:600; }
 .ct-sim .ct-opt-price .ct-opt-quantity,.ct-sim .ct-opt-price .ct-opt-quote-value { border-radius:2px; }
-.ct-sim .ct-opt-quote-changed { animation:ct-opt-quote-pulse 700ms ease-out; }
-@keyframes ct-opt-quote-pulse { 0%,25% { background:#1767ac; color:#fff; box-shadow:0 0 0 2px #1767ac; } }
-@media(prefers-reduced-motion:reduce) { .ct-sim .ct-opt-quote-changed { animation:none; } }
+.ct-sim .ct-opt-quote-up { --ct-opt-price-pulse:color-mix(in srgb, var(--sim-profit) 32%, transparent); }
+.ct-sim .ct-opt-quote-down { --ct-opt-price-pulse:color-mix(in srgb, var(--sim-loss) 32%, transparent); }
+@keyframes ct-opt-price-pulse { from { background-color:var(--ct-opt-price-pulse); } }
+@keyframes ct-opt-quantity-pulse { 0%,25% { background:#1767ac; color:#fff; box-shadow:0 0 0 2px #1767ac; } }
+@media(prefers-reduced-motion:no-preference) {
+  .ct-sim .ct-opt-quote-value.ct-opt-quote-changed { animation:ct-opt-price-pulse 500ms ease-out; }
+  .ct-sim .ct-opt-quote-quantity { animation:ct-opt-quantity-pulse 700ms ease-out; }
+}
 .ct-sim .ct-opt-price.buy .ct-opt-marker { grid-column:3; justify-self:end; }
 .ct-sim .ct-opt-price.buy .ct-opt-quote-value { grid-column:1; text-align:left; }
 .ct-sim .ct-opt-price.buy .ct-opt-quantity { text-align:left; }
