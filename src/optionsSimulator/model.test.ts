@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curve, dateDay, daysToExpiry, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice, theoreticalTheta } from "./model";
+import { chartPriceRange, curve, dateDay, daysToExpiry, exampleLegs, expirySummary, initialSimulation, numeric, parseSimulation, resultAt, Simulation, standardDeviationLevels, theoreticalPrice, theoreticalTheta } from "./model";
 
 function strategy(change: Partial<Simulation> = {}) {
   const parsed = parseSimulation({ ...initialSimulation("2026-11-03"), ...change });
@@ -66,6 +66,22 @@ describe("total profit and loss at expiry", () => {
     expect(points.map(point => point.price)).toEqual(expect.arrayContaining([90, 93, 100, 107, 110]));
     expect(points[0].price).toBe(70); expect(points.at(-1)!.price).toBe(130);
   });
+});
+it("keeps the default chart near the strikes when nominal holdings add a distant equilibrium", () => {
+  const value = strategy({ spot: "100", rangeMin: undefined, rangeMax: undefined, legs: [], position: {
+    underlying: { quantity: 8, averageCost: "100" },
+    legs: [
+      { id: -1, kind: "call", side: "sell", strike: "100", premium: "5", contracts: "1", volatility: "40" },
+      { id: -2, kind: "call", side: "buy", strike: "110", premium: "2", contracts: "1", volatility: "40" },
+    ],
+  } });
+  const { equilibria } = expirySummary(value);
+  expect(equilibria).toHaveLength(3);
+  expect(equilibria.at(-1)?.from).toBe(187.5);
+  const initial = chartPriceRange(value, equilibria, 0);
+  expect(initial.rangeMin).toBeLessThan(equilibria[0].from);
+  expect(initial.rangeMax).toBe(125);
+  expect(chartPriceRange(value, equilibria, 2).rangeMax).toBeGreaterThan(187.5);
 });
 describe("European theoretical prices", () => {
   it("keeps exactly hedged decimal-factor call tails bounded in either direction", () => {

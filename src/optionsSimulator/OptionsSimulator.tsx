@@ -219,9 +219,9 @@ function ScenarioResults({ strategy, currency, scenarioDate, deviations }: {
   </section>;
 }
 
-function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPriceChange, zoom, fullRange, onZoom, deviations, compact = false }: {
+function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPriceChange, zoom, fullRange, outOfRange, onZoom, deviations, compact = false }: {
   strategy: Strategy; currency: string; scenarioDate: string; selectedPrice: number; onPriceChange(price: number): void;
-  zoom: number; fullRange: boolean; onZoom(value: number): void;
+  zoom: number; fullRange: boolean; outOfRange: boolean; onZoom(value: number): void;
   deviations: DeviationReference; compact?: boolean;
 }) {
   const gradientId = useId().replace(/:/g, "");
@@ -240,7 +240,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
     <div className="ct-sim-chart-zoom" role="group" aria-label="Zoom del eje de precios">
       <button type="button" aria-label="Ampliar rango de precios" title={fullRange ? "Límite del rango alcanzado" : "Ampliar rango de precios"} disabled={fullRange} onClick={() => onZoom(zoom + 1)}>−</button>
       <button type="button" aria-label="Acercar rango de precios" title="Acercar rango de precios" disabled={zoom <= MIN_CHART_ZOOM} onClick={() => onZoom(zoom - 1)}>+</button>
-      <button type="button" title="Ajustar el rango a los strikes y puntos de equilibrio" disabled={zoom === 0} onClick={() => onZoom(0)}>Ajustar</button>
+      <button type="button" title="Volver al rango inicial de precios" disabled={zoom === 0} onClick={() => onZoom(0)}>Ajustar</button>
     </div>
   </div>;
   const values = points.flatMap(point => hasTheory ? [point.expiry, point.theoretical] : [point.expiry]);
@@ -337,6 +337,7 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
       <div title={`Teórico · ${scenarioDate}`}><span>{compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span><output className={theoreticalResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{hasTheory ? `${fmt(theoreticalResult)} ${currency}` : "Sin VI"}</output></div>
     </div>
     {!cursorVisible && <p className="ct-sim-hint">El precio evaluado está fuera del rango visible. Ampliá el rango para ubicarlo en el gráfico.</p>}
+    {outOfRange && <p className="ct-sim-hint">Hay strikes o equilibrios fuera del rango visible. Usá − para ampliar.</p>}
   </>;
 }
 
@@ -402,7 +403,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const chartView = useMemo(() => {
     if (!parsed.ok || !summary) return;
     const { rangeMin, rangeMax, full } = chartPriceRange(parsed.strategy, summary.equilibria, zoom);
-    return { strategy: { ...parsed.strategy, rangeMin, rangeMax }, full };
+    const outside = (price: number) => price < rangeMin || price > rangeMax;
+    const outOfRange = parsed.strategy.legs.some(leg => outside(leg.strike)) ||
+      summary.equilibria.some(({ from, to }) => outside(from) || (Number.isFinite(to) && outside(to)));
+    return { strategy: { ...parsed.strategy, rangeMin, rangeMax }, full, outOfRange };
   }, [parsed, summary, zoom]);
   const manualStrategy = !input.position && input.legs.length > 0 && input.legs.every(leg => !leg.securityId);
   const scenarioPrice = scenarioPoint?.context === scenarioContext ? scenarioPoint.price : input.spot;
@@ -505,7 +509,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     : !parsed.ok ? <div className="ct-sim-errors" role="alert"><p>Revisá los datos para calcular:</p><ul>{parsed.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>
     : !scenarioPriceValid ? <p role="alert">Ingresá un precio de escenario válido entre 0 y 1000000000.</p>
     : chartView && <ResultsChart strategy={chartView.strategy} currency={input.currency} scenarioDate={input.scenarioDate} selectedPrice={selectedPrice} deviations={deviations}
-      zoom={zoom} fullRange={chartView.full} onZoom={level => setChartZoom({ context: scenarioContext, level })}
+      zoom={zoom} fullRange={chartView.full} outOfRange={chartView.outOfRange} onZoom={level => setChartZoom({ context: scenarioContext, level })}
       onPriceChange={price => setScenarioPrice(formatOptionInput(price))} compact={view === "build"} />;
   return <div ref={viewport} className="ct-sim" aria-label="Simulador de opciones">
     <div className="ct-sim-topbar"><div ref={setMarketToolbar} className="ct-sim-market-controls" />
@@ -653,8 +657,6 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
           <ScenarioResults strategy={parsed.strategy} currency={input.currency} scenarioDate={input.scenarioDate} deviations={deviations} />
           <div className="ct-sim-analysis-chart">{chart}</div>
         </div>}
-        {chartView && [...parsed.strategy.legs.map(leg => leg.strike), ...summary.equilibria.map(point => point.from)]
-          .some(price => price < chartView.strategy.rangeMin || price > chartView.strategy.rangeMax) && <p className="ct-sim-hint">Hay strikes o equilibrios fuera del rango visible.</p>}
       </>}
       <div className="ct-sim-section-heading">
         <h3 title={input.expiry}>{input.underlying || "Sin selección"} · {formatOptionExpiry(input.expiry)} · {allLegs.length} patas</h3>
