@@ -5,7 +5,8 @@ import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
 const barSelector = ".DirectAccessBar";
-const boundarySelectors = [".HeaderDMA", barSelector, "#ToolPanel", "#MiniOrderForm", ".MobileHeaderDma", ".MobileFooterDma"];
+const headerSelector = ".HeaderDMA";
+const boundarySelectors = [headerSelector, barSelector, "#ToolPanel", "#MiniOrderForm", ".MobileHeaderDma", ".MobileFooterDma"];
 
 function bounds() {
   const [header, bar, tools, ticket, mobileHeader, mobileFooter] = boundarySelectors.map(selector => {
@@ -87,7 +88,7 @@ export function SettingsMenu() {
     mutation.observe(document.body, { childList: true, subtree: true });
     const navigate = (event: MouseEvent) => {
       if (event.target instanceof Element) {
-        const item = event.target.closest(`${barSelector} a.Item`);
+        const item = event.target.closest(`${barSelector} a.Item, ${headerSelector} a.NavItem`);
         if (item && !item.closest(".ct-free-settings-slot")) setOpen(false);
       }
     };

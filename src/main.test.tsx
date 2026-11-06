@@ -67,7 +67,10 @@ const NativeObserver = globalThis.MutationObserver;
 afterEach(() => { observers.forEach(observer => observer.disconnect()); vi.unstubAllGlobals(); });
 
 it("mounts Configuración in the left menu even before the order form exists", async () => {
-  document.body.innerHTML = '<header class="HeaderDMA"></header><nav class="DirectAccessBar"><a class="Item" href="#favoritos">Favoritos</a></nav><aside id="ToolPanel" hidden></aside>';
+  document.body.innerHTML = `
+    <header class="HeaderDMA"><a class="NavItem selected" href="/byma" aria-current="page"><span>BYMA</span></a></header>
+    <nav class="DirectAccessBar"><a class="Item" href="#favoritos">Favoritos</a></nav>
+    <aside id="ToolPanel" hidden></aside>`;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("MutationObserver", class extends NativeObserver {
     constructor(callback: MutationCallback) { super(callback); observers.push(this); }
@@ -116,6 +119,25 @@ it("mounts Configuración in the left menu even before the order form exists", a
   await act(async () => { item!.click(); });
   expect(panel!.dataset.colorScheme).toBe("dark");
   await act(async () => { panel!.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); });
+
+  const byma = document.querySelector<HTMLAnchorElement>('.HeaderDMA a[href="/byma"]')!;
+  const nativeNavigation = vi.fn((event: MouseEvent) => {
+    expect(event.defaultPrevented).toBe(false);
+    event.preventDefault(); // Matriz can keep the current route when BYMA is already selected.
+  });
+  byma.addEventListener("click", nativeNavigation);
+  for (const label of ["Simulador de opciones", "Cantidades rápidas"]) {
+    await act(async () => { item!.click(); });
+    const tab = Array.from(panel!.querySelectorAll<HTMLButtonElement>(".ct-tools-tabs button"))
+      .find(button => button.textContent === label)!;
+    await act(async () => { tab.click(); });
+    expect(tab.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => { byma.querySelector("span")!.click(); });
+    expect(panel!.hidden, `BYMA must close ${label} even on the current route`).toBe(true);
+    expect(item!.getAttribute("aria-expanded")).toBe("false");
+  }
+  expect(nativeNavigation).toHaveBeenCalledTimes(2);
+
   document.documentElement.classList.remove("matriz-dark");
   await act(async () => {
     document.querySelector('.DirectAccessBar')!.remove();
