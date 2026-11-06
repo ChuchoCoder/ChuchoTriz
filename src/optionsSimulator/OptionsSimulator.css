@@ -255,13 +255,13 @@
 .ct-sim-equilibria { color: var(--sim-text); font-size: 12px; margin: 6px 0 8px; }
 .ct-sim-equilibria span { color: var(--sim-muted); }
 .ct-sim-analysis-results { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
-.ct-sim-scenario-results { flex: 1 1 320px; min-width: 0; }
-.ct-sim-analysis-chart { flex: 2 1 520px; min-width: 0; }
+.ct-sim-scenario-results { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.ct-sim-analysis-chart { flex: 1 1 520px; min-width: 0; }
 .ct-sim .ct-sim-scenario-results h4 { margin: 0 0 5px; }
-.ct-sim-scenario-scroll { max-height: 340px; overflow: auto; border: 1px solid var(--sim-border); border-radius: 5px; }
+.ct-sim-scenario-scroll { max-height: 340px; overflow: auto; scrollbar-width: thin; scrollbar-gutter: stable; border: 1px solid var(--sim-border); border-radius: 5px; }
 .ct-sim-scenario-scroll:focus-visible { outline: 2px solid var(--sim-accent); outline-offset: 2px; }
-.ct-sim .ct-sim-scenario-results table { min-width: 280px; table-layout: auto; font-variant-numeric: tabular-nums; }
-.ct-sim .ct-sim-scenario-results :is(th, td) { padding: 2px 6px; text-align: right; font-size: 11px; white-space: nowrap; }
+.ct-sim .ct-sim-scenario-results table { width: max-content; min-width: 0; table-layout: auto; font-variant-numeric: tabular-nums; }
+.ct-sim .ct-sim-scenario-results :is(th, td) { width: auto; padding: 2px 4px; text-align: right; font-size: 11px; white-space: nowrap; }
 .ct-sim-scenario-results thead th { position: sticky; top: 0; background: var(--sim-field); }
 .ct-sim-scenario-results tbody th { color: var(--sim-text); }
 .ct-sim-scenario-results tbody tr[data-band] > :nth-child(-n+2) { background: color-mix(in srgb, var(--sim-band) 16%, var(--sim-card)); }
