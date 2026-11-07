@@ -29,7 +29,7 @@
     }
   ],
   "web_accessible_resources": [{
-    "resources": ["options-market-reader.js", "options-position-reader.js"],
+    "resources": ["options-market-reader.js", "options-position-reader.js", "options-executions-reader.js"],
     "matches": ["https://*.xoms.com.ar/*", "https://remarkets.matriz.com.ar/*"]
   }],
   "permissions": [
