@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Contract, Quote } from "./market";
 import { formatOptionAmount, formatOptionNumber as fmt } from "./format";
-import { initialChoice, recipePayoff, recipePrices, strategyDescription, strategyFamilies, strategyGlyph, strategyLabel, strategyRecipe,
+import { initialChoice, recipeDraftPrices, recipePayoff, strategyDescription, strategyFamilies, strategyGlyph, strategyLabel, strategyRecipe,
   type StrategyChoice, type StrategyFamily } from "./strategyTemplates";
 
 function PayoffGraphic({ payoff, compact, currency }: { payoff: ReturnType<typeof recipePayoff>; compact?: boolean; currency?: string }) {
@@ -44,7 +44,9 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
   const returnFocus = useRef(false), panelId = useId();
   const rows = useMemo(() => strategyFamilies.map(family => {
     const choice = choices[family.id], recipe = strategyRecipe(choice, contracts, spot);
-    return { ...family, choice, recipe, prices: recipePrices(recipe, quotes, currency), payoff: recipePayoff(recipe, quotes, spot, currency, costs), glyph: strategyGlyph(choice) };
+    const payoff = recipePayoff(recipe, quotes, spot, currency, costs);
+    return { ...family, choice, recipe, prices: recipeDraftPrices(recipe, quotes, currency), payoff,
+      canApply: payoff.ok || "missingPremiums" in payoff, glyph: strategyGlyph(choice) };
   }), [choices, contracts, quotes, spot, currency, costs]);
   const current = rows.find(row => row.id === selected)!;
   const close = (focus: boolean) => { returnFocus.current = focus; setOpen(false); };
@@ -104,7 +106,7 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
           {row.kinds ? <button type="button" className={`ct-sim-strategy-variant ${row.choice.kind}`} aria-label={`Alternar Call/Put de ${row.label}`}
             aria-description={row.choice.kind === "call" ? "Call" : "Put"} onFocus={() => setSelected(row.id)} onClick={() => vary(row.id, "kind")}>{row.choice.kind === "call" ? "Call" : "Put"}</button>
             : <span className="ct-sim-strategy-both">C + P</span>}
-          <button type="button" className="ct-sim-strategy-apply" aria-label={`Armar ${strategyLabel(row.choice)}`} disabled={!row.payoff.ok} title={row.payoff.ok ? "Reemplazar las patas por esta estructura simulada" : row.payoff.reason}
+          <button type="button" className="ct-sim-strategy-apply" aria-label={`Armar ${strategyLabel(row.choice)}`} disabled={!row.canApply} title={row.payoff.ok ? "Reemplazar las patas por esta estructura simulada" : row.payoff.reason}
             onFocus={() => setSelected(row.id)} onClick={() => apply(row.id)}>Armar <span aria-hidden="true">↳</span></button>
         </div>)}
       </div>
@@ -114,9 +116,13 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
         <PayoffGraphic payoff={current.payoff} currency={currency} />
         {current.payoff.ok && <div className="ct-sim-payoff-summary"><span className="ct-sim-profit">Ganancia máx. {current.payoff.summary.maxProfit === Infinity ? "∞" : `${formatOptionAmount(current.payoff.summary.maxProfit, currency)} ${currency}`}</span>
           <span className="ct-sim-loss">Pérdida máx. {current.payoff.summary.maxLoss === Infinity ? "∞" : `${formatOptionAmount(current.payoff.summary.maxLoss, currency)} ${currency}`}</span></div>}
-        {current.recipe.ok && <ul aria-label="Patas de la plantilla">{current.recipe.legs.map((item, index) => <li key={item.contract.id} className={item.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
-          {item.side === "buy" ? "Compra" : "Venta"} {item.ratio}× {item.contract.symbol}{current.prices.ok ? ` · ${fmt(current.prices.premiums[index])}` : ""}
-        </li>)}</ul>}
+        {current.recipe.ok && <ul aria-label="Patas de la plantilla">{current.recipe.legs.map((item, index) => {
+          const premium = current.prices.ok ? current.prices.premiums[index] : undefined;
+          return <li key={item.contract.id} className={item.side === "buy" ? "ct-sim-buy" : "ct-sim-sell"}>
+            {item.side === "buy" ? "Compra" : "Venta"} {item.ratio}× {item.contract.symbol}
+            {premium && (premium.value === undefined ? " · Precio pendiente" : ` · ${fmt(premium.value)}${premium.fromLast ? " (último operado)" : ""}`)}
+          </li>;
+        })}</ul>}
         {cash !== undefined && <strong>{cash < 0 ? "Crédito" : cash > 0 ? "Débito" : "Neutra"}{costs ? " neto" : ""} por estructura: {formatOptionAmount(Math.abs(cash), currency)} {currency}</strong>}
         {!current.payoff.ok && <p className="ct-sim-strategy-unavailable" role="status">{current.payoff.reason}</p>}
         <small>Resultado al vencimiento por estructura, con primas{costs ? " y gastos" : ""}. Verde: ganancia. Rojo: pérdida. Armar carga las patas.</small>

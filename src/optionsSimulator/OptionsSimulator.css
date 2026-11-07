@@ -161,7 +161,7 @@
 .ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 0 0 auto; height: auto; max-height: 60vh; min-height: 180px; scrollbar-gutter: stable; }
 .ct-tools-embedded .ct-sim .ct-sim-market { align-self: stretch; }
 .ct-tools-embedded .ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 1 1 0; max-height: none; }
-.ct-sim-chain-notice { padding: 3px 8px; font-size: 10px; color: var(--sim-muted); margin: 0; }
+.ct-sim .ct-sim-chain-notice { padding: 1px 8px; font-size: 10px; line-height: 1.2; color: var(--sim-muted); margin: 0; }
 .ct-sim-chain-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .ct-sim-chain-group > span { color: var(--sim-muted); font-weight: 500; }
 .ct-sim-chain-group strong { color: var(--sim-text); }
