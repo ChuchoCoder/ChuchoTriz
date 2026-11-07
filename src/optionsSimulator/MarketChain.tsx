@@ -10,7 +10,7 @@ import { importPosition, readPositionSnapshot, setPositionQuantity, startPositio
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
-import { preferredOptionMarket, quotePrice, recipePrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
+import { lastTradedPremium, preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
 import type { StrikeMarket } from "./strategyAdjustments";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -156,6 +156,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     return () => { observer?.disconnect(); scroll.removeEventListener("scroll", position); };
   }, [shownQuote]);
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
+  const strategyQuotes = reading.issue ? undefined : data?.instruments;
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
   const spot = positive(spotQuote?.last) ? spotQuote.last : undefined;
   const changePercent = spotQuote?.changePercent;
@@ -336,8 +337,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       : current);
   }
   function chooseStrategy(choice: StrategyChoice): boolean {
-    const recipe = strategyRecipe(choice, selected, spot), prices = recipePrices(recipe, data?.instruments, underlying?.currency);
-    if (!recipe.ok || !prices.ok || !data || !underlying || !positive(spot)) {
+    const recipe = strategyRecipe(choice, selected, spot), prices = recipeDraftPrices(recipe, strategyQuotes, underlying?.currency);
+    if (!recipe.ok || !prices.ok || !strategyQuotes || !underlying || !positive(spot)) {
       setNotice(!recipe.ok ? recipe.reason : !prices.ok ? prices.reason : "Esperando una lectura completa de mercado."); return false;
     }
     const factor = recipe.legs[0].contract.factor!;
@@ -346,9 +347,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       setNotice("Los ajustes deben usar el mismo subyacente, vencimiento, moneda y factor que la posición cargada."); return false;
     }
     const legs = recipe.legs.map((item, index): Leg => {
-      const contract = item.contract, quote = data.instruments[contract.id];
+      const contract = item.contract, quote = strategyQuotes[contract.id], premium = prices.premiums[index].value;
       return { ...newLeg(index + 1), securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side: item.side,
-        strike: String(contract.strike), premium: String(prices.premiums[index]), contracts: String(item.ratio),
+        strike: String(contract.strike), premium: premium === undefined ? "" : String(premium), contracts: String(item.ratio),
         volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     });
     const today = localDate();
@@ -386,7 +387,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const marked = contract && input.legs.find(leg => leg.securityId === contract.id && leg.side === side);
     const held = contract && input.position?.legs.find(leg => leg.securityId === contract.id && leg.side === side);
     const selectable = !!quote && !reading.issue && (price.ok || price.kind === "missing");
-    const last = positive(quote?.last) ? quote.last : undefined;
+    const last = lastTradedPremium(quote);
     const fallback = last === undefined ? "Ingresá el precio en Armado." : `Usar último precio operado ($ ${fmt(last)}) como referencia.`;
     const title = price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}${selectable ? ` ${fallback}` : ""}`;
     const moneyness = contract && itmSpot !== undefined && contract.strike !== itmSpot ? (contract.kind === "call" ? contract.strike < itmSpot : contract.strike > itmSpot) ? "itm" : "otm" : undefined;
@@ -450,7 +451,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
       <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
-    {!editingPosition && <StrategyPicker active={active} contracts={selected} quotes={data?.instruments} spot={spot} currency={underlying?.currency}
+    {!editingPosition && <StrategyPicker active={active} contracts={selected} quotes={strategyQuotes} spot={spot} currency={underlying?.currency}
       costs={numeric(input.position ? input.adjustmentCosts ?? "0" : input.costs)}
       context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />}
     {input.position ? <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">

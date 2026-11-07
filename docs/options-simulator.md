@@ -246,12 +246,16 @@ compra dos más alejadas; Short invierte esos lados
 Jade Lizard Normal combina put vendida y call spread vendido; Reversed combina
 put spread vendido y call vendida (Twisted Sister), según la
 [guía de tastylive](https://assets.contentstack.io/v3/assets/blt40263f25ec36953f/blt094f33167a64ab9a/648c7f8b83c7fb90a25f4c77/tastylive-options-strategy-guide-2023.pdf).
-El selector muestra el resultado al vencimiento con primas de entrada (ASK para
-compras, BID para ventas), proporciones de cada pata, factor y gastos. Comparte
-el motor de resultados del gráfico principal; el eje horizontal marca resultado
-cero. Verde indica ganancia y rojo pérdida. Su vista previa incluye máximos
-globales de ganancia/pérdida. Sin precios disponibles, solo se conserva un icono
-esquemático sin eje y se deshabilita la aplicación de la estructura.
+El selector toma ASK para compras y BID para ventas. Si falta una punta, usa el
+último precio operado y lo identifica en la vista previa. **Armar** carga la
+estructura aunque falten precios. Las patas sin punta ni último operado quedan
+con el precio vacío para completar en **Armado**.
+
+Cuando están todas las primas, la vista previa usa las proporciones de cada pata,
+el factor y los gastos para mostrar el resultado al vencimiento y los máximos de
+ganancia y pérdida. Comparte el motor del gráfico principal. El eje horizontal
+marca el resultado cero. Verde indica ganancia y rojo indica pérdida. Si falta
+una prima, el resultado queda pendiente y se conserva el icono esquemático.
 
 `resultado = Σ sentido × contratosDeLaPata × factor × (valor − prima) − gastos`
 

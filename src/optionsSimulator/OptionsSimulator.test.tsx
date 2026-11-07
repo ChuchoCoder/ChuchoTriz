@@ -924,11 +924,37 @@ it("replaces the selectors with eight visual option families and previews varian
   expect(document.activeElement).toBe(byLabel("Elegir estrategia"));
 });
 
-it("disables unavailable template quotes and closes the strategy picker with Escape", async () => {
-  marketState.current.data!.instruments["call-100"].ask = undefined;
+it("uses quoted and last-traded template premiums and leaves unpriced legs editable", async () => {
+  const quotes = marketState.current.data!.instruments;
+  quotes["call-90"].last = 17;
+  quotes["call-100"] = { ...quotes["call-100"], bid: undefined, last: 3.75 };
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => button("Butterfly").click());
+  const preview = byLabel("Vista previa de la estrategia");
+  expect(byLabel("Patas de la plantilla").textContent).toContain("Venta 2× CALL 100 · 3,75 (último operado)");
+  expect(preview.querySelector(".ct-sim-payoff-preview")).not.toBeNull();
+
+  quotes["call-110"].ask = undefined;
+  await mount();
+  expect(byLabel("Patas de la plantilla").textContent).toContain("Compra 1× CALL 110 · Precio pendiente");
+  expect(preview.querySelector(".ct-sim-payoff-preview")).toBeNull();
+  expect(preview.textContent).toContain("Completá los precios pendientes en Armado");
+  const apply = byLabel<HTMLButtonElement>("Armar Butterfly · Long Call");
+  expect(apply.disabled).toBe(false);
+  await act(async () => apply.click());
+  expect([1, 2, 3].map(index => byLabel(`Editar Precio pata ${index}`).textContent)).toEqual(["5", "3,75", "—"]);
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+1", "−2", "+1"]);
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  await fill("Precio pata 3", "2,5");
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+});
+
+it("disables crossed template quotes and closes the strategy picker with Escape", async () => {
+  marketState.current.data!.instruments["call-100"] = { bid: { price: 6, size: 100 }, ask: { price: 5, size: 100 }, last: 4 };
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   expect(byLabel<HTMLButtonElement>("Armar Option · Long Call").disabled).toBe(true);
-  expect(byLabel("Vista previa de la estrategia").textContent).toContain("sin ASK");
+  expect(byLabel("Vista previa de la estrategia").textContent).toContain("cerrado o cruzado");
   await act(async () => byLabel("Selector visual de estrategias").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(container.querySelector('[aria-label="Selector visual de estrategias"]')).toBeNull();
   expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(0);
