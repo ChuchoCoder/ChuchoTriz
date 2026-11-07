@@ -33,7 +33,7 @@
   const numeric = value => typeof value === "number" || (typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value))
     ? Number(value) : NaN;
 
-  async function projectExecutions(report, { account, securities }) {
+  async function projectExecutions(report, { account, securities }, assertCurrent) {
     const events = Array.isArray(report) ? report : report?.orderEvents;
     check(Array.isArray(events) && events.length <= 50000 && !(report?.nextTime && report.noData !== true),
       "Matriz devolvió un reporte incompleto o fuera del límite de lectura.");
@@ -56,10 +56,11 @@
       }
       if (!byId.has(securityId)) {
         const security = await securities.getSecurity(securityId).catch(() => undefined);
+        assertCurrent();
         byId.set(securityId, security);
       }
       const security = byId.get(securityId);
-      if (!security) {
+      if (security?.id !== securityId) {
         unmatched++;
         continue;
       }
@@ -75,7 +76,7 @@
         !["1", "2"].includes(side) || !Number.isSafeInteger(quantity) || quantity <= 0 ||
         !Number.isFinite(price) || price <= 0 || !Number.isFinite(timestamp) ||
         typeof symbol !== "string" || !symbol || typeof underlying !== "string" || !underlying ||
-        !Number.isFinite(strike) || strike <= 0 || !/^\d{8}$/.test(maturityDateStr) ||
+        !Number.isFinite(strike) || strike <= 0 || typeof maturityDateStr !== "string" || !/^\d{8}$/.test(maturityDateStr) ||
         typeof currency !== "string" || !currency || typeof settlement !== "string" ||
         (strikeCurrency != null && typeof strikeCurrency !== "string")) {
         unmatched++;
@@ -115,12 +116,14 @@
       const current = context();
       operation = { id: msg.id };
       channels.set(msg.channel, operation);
+      const assertCurrent = () => {
+        check(channels.get(msg.channel) === operation, "Lectura de operaciones cerrada.");
+        check(context().contextId === current.contextId, contextChanged);
+      };
       const report = await current.events.getOrderEventsForAccountReport(current.account);
-      if (channels.get(msg.channel) !== operation) return;
-      check(context().contextId === current.contextId, contextChanged);
-      const result = await projectExecutions(report, current);
-      if (channels.get(msg.channel) !== operation) return;
-      check(context().contextId === current.contextId, contextChanged);
+      assertCurrent();
+      const result = await projectExecutions(report, current, assertCurrent);
+      assertCurrent();
       reply({ result: { contextId: current.contextId, ...result } });
     } catch (error) {
       if (operation && channels.get(msg.channel) !== operation) return;

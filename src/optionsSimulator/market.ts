@@ -31,7 +31,7 @@ export class MarketReader {
     if (typeof msg.error === "string") task.reject(Error(msg.error)); else task.resolve(msg.result);
   };
   constructor(private resource: "options-market-reader.js" | "options-position-reader.js" | "options-executions-reader.js" = "options-market-reader.js") {
-    this.channel = `chuchotriz-options-${resource.slice(8, -10)}-${crypto.randomUUID()}`;
+    this.channel = `chuchotriz-${resource}-${crypto.randomUUID()}`;
     window.addEventListener("message", this.receive);
     this.script.dataset.channel = this.channel;
     this.script.src = chrome.runtime.getURL(resource);

@@ -105,3 +105,37 @@ test('drops an in-flight report when the panel closes', async () => {
   release(f.rows);
   assert.equal(await pending, undefined);
 });
+
+test('keeps valid executions when a lookup returns the wrong instrument or a malformed expiration', async () => {
+  const f = fixture();
+  f.rows.push({ ...event, id: 12, securityId: 'invalid-expiration' });
+  f.mainStore.securityStore.getSecurity = async id => id === 'invalid-expiration'
+    ? { ...call, id, refData: { ...call.refData, maturityDateStr: 20261218 } }
+    : call;
+  const { result } = await f.request();
+  assert.equal(result.rows.length, 2);
+  assert.ok(result.rows.every(row => row.symbol === call.symbolStr));
+  assert.equal(result.unmatched, 5);
+});
+
+for (const interruption of ['detach', 'retire', 'account change']) {
+  test(`stops looking up more instruments after ${interruption}`, async () => {
+    const f = fixture(), lookups = [];
+    let release, started;
+    const lookupStarted = new Promise(resolve => { started = resolve; });
+    f.mainStore.securityStore.getSecurity = id => {
+      lookups.push(id);
+      if (id !== put.id) return Promise.resolve(undefined);
+      return new Promise(resolve => { release = resolve; started(); });
+    };
+    const pending = f.request();
+    await lookupStarted;
+    if (interruption === 'account change') f.mainStore.profileStore.activeAccount = 'OTHER_ACCOUNT';
+    else await f.message({ kind: interruption, id: 1 });
+    release(put);
+    const reply = await pending;
+    assert.deepEqual(lookups, [put.id]);
+    if (interruption === 'account change') assert.match(reply.error, /Cambió la cuenta/);
+    else assert.equal(reply, undefined);
+  });
+}
