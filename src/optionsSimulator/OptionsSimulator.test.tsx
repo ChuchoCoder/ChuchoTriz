@@ -52,6 +52,7 @@ const button = (label: string) => {
   const node = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(element => element.textContent?.trim() === label);
   if (!node) throw Error("Missing button: " + label); return node;
 };
+const positionCheckbox = () => container.querySelector<HTMLInputElement>(".ct-sim-include-position input")!;
 async function fill(label: string, value: string) {
   await act(async () => {
     container.querySelector<HTMLButtonElement>(`[aria-label="Editar ${label}"]`)?.click();
@@ -86,6 +87,58 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(byLabel<HTMLButtonElement>("Editar VI pata 1").textContent).toBe("40,00");
   expect(container.querySelectorAll(".ct-sim-chart path")).toHaveLength(3);
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
+});
+
+it("uses the last trade when ASK is missing and lets Armado edit the premium", async () => {
+  const quotes = marketState.current.data!.instruments;
+  quotes["call-100"] = { ...quotes["call-100"], ask: undefined, last: 3.75 };
+  await mount();
+  const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
+  expect(buy.disabled).toBe(false);
+  expect(buy.title).toContain("último precio operado ($ 3,75)");
+  expect(buy.querySelector(".ct-opt-quote-value")?.textContent).toBe("—");
+  await act(async () => buy.click());
+  expect(buy.getAttribute("aria-pressed")).toBe("true");
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("3,75");
+  await fill("Precio pata 1", "4,25");
+  await act(async () => byLabel("Precio pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  quotes["call-100"].ask = { price: 5, size: 200 };
+  await mount();
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("4,25");
+});
+
+it.each(["chain", "template"])("keeps a very small last-traded premium editable when loaded from the %s", async source => {
+  marketState.current.data!.instruments["call-100"] = { ask: undefined, last: 0.0000001 };
+  await mount();
+  if (source === "template") {
+    await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+    await act(async () => byLabel<HTMLButtonElement>("Armar Option · Long Call").click());
+  } else {
+    await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  }
+  expect(container.querySelector(".ct-sim-errors")).toBeNull();
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Editar Precio pata 1").click());
+  expect(byLabel<HTMLInputElement>("Precio pata 1").value).toBe("0.0000001");
+});
+
+it("adds a sale with an empty premium when neither BID nor last trade is available", async () => {
+  marketState.current.data!.instruments["put-90"] = {};
+  await mount();
+  const sell = byLabel<HTMLButtonElement>("Vender PUT 90 en simulación");
+  expect(sell.disabled).toBe(false);
+  expect(sell.title).toContain("Ingresá el precio en Armado");
+  await act(async () => sell.click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−1");
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("—");
+  await showAnalysis();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("prima");
+  expect(container.querySelector(".ct-sim-errors button")).toBeNull();
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  await showBuild();
+  await fill("Precio pata 1", "2,5");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
 });
 
 it("pulses each price in its own direction and ignores the first quote after a gap", async () => {
@@ -196,11 +249,9 @@ it("does not overwrite an Armado change with a stale grid change", async () => {
   expect(byLabel("Cantidad total").textContent).toBe("2");
 });
 
-it("keeps expiry available when a native VI is missing and blocks missing quotes", async () => {
+it("keeps expiry available when a native VI is missing", async () => {
   marketState.current.data!.instruments["call-100"].impliedVolatility = undefined;
-  marketState.current.data!.instruments["put-100"].ask = undefined;
   await mount();
-  expect(byLabel<HTMLButtonElement>("Comprar PUT 100 en simulación").disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(container.querySelector(".ct-sim-scenario-results")).toBeNull();
   await showAnalysis();
@@ -228,13 +279,15 @@ it("loads the initial position once when the selected chain is ready", async () 
   await mount();
   expect(readPosition).toHaveBeenCalledTimes(1);
   expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("+2");
-  expect(container.querySelector<HTMLInputElement>(".ct-sim-include-position input")?.checked).toBe(true);
+  expect(positionCheckbox().checked).toBe(false);
 
   await showAnalysis();
   await showBuild();
   await act(async () => button("Limpiar posición").click());
   expect(byLabel<HTMLInputElement>("Cantidad posición CALL 100").value).toBe("");
+  await act(async () => positionCheckbox().click());
   await act(async () => button("Nueva simulación").click());
+  expect(positionCheckbox().checked).toBe(false);
   expect(readPosition).toHaveBeenCalledTimes(1);
 });
 
@@ -244,12 +297,18 @@ it("loads nominal holdings without open options and includes them only while the
   marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
   await mount();
   expect(byLabel<HTMLInputElement>("Nominales del subyacente").value).toBe("100");
+  await showAnalysis();
+  const include = positionCheckbox();
+  expect(include.checked).toBe(false);
+  expect(container.querySelector(".ct-sim-errors")).toBeNull();
+  await act(async () => include.click());
   expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Costo promedio por nominal");
+  await act(async () => button("Corregir posición").click());
+  expect(button("Armado").getAttribute("aria-selected")).toBe("true");
   await fill("Costo promedio por nominal", "90");
   await showAnalysis();
   expect(byLabel("Patas analizadas").textContent).toContain("+100 nominales de GGAL");
   expect([...container.querySelectorAll(".ct-sim-analysis-chart .ct-sim-inspect output")].map(node => node.textContent)).toEqual(["1.000 ARS", "1.000 ARS"]);
-  const include = container.querySelector<HTMLInputElement>(".ct-sim-include-position input")!;
   await act(async () => include.click());
   expect(byLabel("Patas analizadas").textContent).not.toContain("nominales");
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).toBeNull();
@@ -257,6 +316,23 @@ it("loads nominal holdings without open options and includes them only while the
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
   await act(async () => root.render(<OptionsSimulator key="fresh-position" />));
   expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
+});
+
+it("offers to correct the position when its nominal exposure exceeds the precision limit", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [], underlyingQuantity: 10_000_000 });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  await fill("Costo promedio por nominal", "1000000000");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-errors")).toBeNull();
+  await act(async () => positionCheckbox().click());
+  expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("el importe total supera la precisión admitida");
+  await act(async () => button("Corregir posición").click());
+  expect(button("Armado").getAttribute("aria-selected")).toBe("true");
+  await fill("Costo promedio por nominal", "90");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
 });
 
 it("values edited nominal quantities locally and restores the imported quantity and basis on reload", async () => {
@@ -272,6 +348,7 @@ it("values edited nominal quantities locally and restores the imported quantity 
   await fill("Costo promedio por nominal", "95");
   const key = underlyingCostStorageKey("a".repeat(64), marketState.current.catalog!.contracts[0]);
   expect(await readUnderlyingCost(key)).toMatchObject({ quantity: 100, averageCost: "90" });
+  await act(async () => positionCheckbox().click());
   await showAnalysis();
   expect(byLabel("Patas analizadas").textContent).toContain("+200 nominales de GGAL");
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-inspect output")?.textContent).toBe("1.000 ARS");
@@ -327,6 +404,7 @@ it("imports a historical position and preserves its premiums and accounting thro
   expect(container.querySelector('.ct-sim-position')).not.toBeNull();
   expect(byLabel<HTMLInputElement>("Prima histórica CALL 100").value).toBe("");
   expect(container.querySelector('.ct-sim-chart')).toBeNull();
+  await act(async () => positionCheckbox().click());
   await fill("Prima histórica CALL 100", "8");
   await fill("Gastos de la posición", "40");
   await fill("Resultado realizado neto", "200");
@@ -421,10 +499,17 @@ it("edits position in the chain and toggles its effect without discarding the si
   const quantity = byLabel<HTMLInputElement>("Cantidad posición CALL 100");
   expect(chain.contains(quantity)).toBe(true);
   expect(quantity.value).toBe("+2");
-  expect(container.querySelector(".ct-sim-chart")).toBeNull();
-  const include = container.querySelector<HTMLInputElement>(".ct-sim-include-position input")!;
-  await act(async () => include.click());
+  const include = positionCheckbox();
+  expect(include.checked).toBe(false);
   expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("-515 ARS");
+  await act(async () => button("Cotizaciones").click());
+  await showAnalysis();
+  await act(async () => include.click());
+  expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Posición, pata 1, prima");
+  await act(async () => button("Corregir posición").click());
+  expect(button("Armado").getAttribute("aria-selected")).toBe("true");
+  expect(button("Posición actual").getAttribute("aria-pressed")).toBe("true");
+  expect(include.checked).toBe(true);
   await fill("Prima histórica CALL 100", "8");
   await fill("Gastos de la posición", "40");
   await fill("Resultado realizado neto", "200");
@@ -434,6 +519,7 @@ it("edits position in the chain and toggles its effect without discarding the si
   expect(byLabel<HTMLInputElement>("Cantidad posición PUT 90").value).toBe("−3");
   await fill("Prima histórica PUT 90", "2.5");
   await showAnalysis();
+  await act(async () => include.click());
   expect(include.checked).toBe(false);
   expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("-515 ARS");
   expect(byLabel("Patas analizadas").textContent).not.toContain("PUT 90");
@@ -453,6 +539,24 @@ it("edits position in the chain and toggles its effect without discarding the si
   expect(container.querySelectorAll(".ct-sim-legs-card tbody tr")).toHaveLength(1);
 });
 
+it("opens the volatility editor for a valuation error on a historical leg", async () => {
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Cargar posición actual").click());
+  await fill("Prima histórica CALL 100", "8");
+  await act(async () => positionCheckbox().click());
+  await showAnalysis();
+  const details = container.querySelector<HTMLDetailsElement>(".ct-sim-leg-volatilities")!;
+  await act(async () => details.querySelector("summary")!.click());
+  await fill("VI pata 1", "510");
+  await act(async () => details.querySelector("summary")!.click());
+  expect(details.open).toBe(false);
+  expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Posición, pata 1, VI");
+  await act(async () => button("Revisar VI de la posición").click());
+  expect(details.open).toBe(true);
+  await fill("VI pata 1", "40");
+  expect(container.querySelector(".ct-sim-errors")).toBeNull();
+});
+
 it("keeps manual position editing available when the native report fails", async () => {
   readPosition.mockRejectedValueOnce(Error("El reporte no respondió."));
   await mount();
@@ -464,6 +568,7 @@ it("keeps manual position editing available when the native report fails", async
   await act(async () => quantity.blur());
   await fill("Prima histórica PUT 90", "3");
   expect(quantity.value).toBe("−2");
+  await act(async () => positionCheckbox().click());
   expect(container.querySelector(".ct-sim-inspect output")?.textContent).toBe("600 ARS");
   expect(byLabel("Guardado de datos históricos").textContent).toContain("Edición manual");
   expect(write).not.toHaveBeenCalled();
@@ -851,11 +956,37 @@ it("replaces the selectors with eight visual option families and previews varian
   expect(document.activeElement).toBe(byLabel("Elegir estrategia"));
 });
 
-it("disables unavailable template quotes and closes the strategy picker with Escape", async () => {
-  marketState.current.data!.instruments["call-100"].ask = undefined;
+it("uses quoted and last-traded template premiums and leaves unpriced legs editable", async () => {
+  const quotes = marketState.current.data!.instruments;
+  quotes["call-90"].last = 17;
+  quotes["call-100"] = { ...quotes["call-100"], bid: undefined, last: 3.75 };
+  await mount();
+  await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+  await act(async () => button("Butterfly").click());
+  const preview = byLabel("Vista previa de la estrategia");
+  expect(byLabel("Patas de la plantilla").textContent).toContain("Venta 2× CALL 100 · 3,75 (último operado)");
+  expect(preview.querySelector(".ct-sim-payoff-preview")).not.toBeNull();
+
+  quotes["call-110"].ask = undefined;
+  await mount();
+  expect(byLabel("Patas de la plantilla").textContent).toContain("Compra 1× CALL 110 · Precio pendiente");
+  expect(preview.querySelector(".ct-sim-payoff-preview")).toBeNull();
+  expect(preview.textContent).toContain("Completá los precios pendientes en Armado");
+  const apply = byLabel<HTMLButtonElement>("Armar Butterfly · Long Call");
+  expect(apply.disabled).toBe(false);
+  await act(async () => apply.click());
+  expect([1, 2, 3].map(index => byLabel(`Editar Precio pata ${index}`).textContent)).toEqual(["5", "3,75", "—"]);
+  expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+1", "−2", "+1"]);
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  await fill("Precio pata 3", "2,5");
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+});
+
+it("disables crossed template quotes and closes the strategy picker with Escape", async () => {
+  marketState.current.data!.instruments["call-100"] = { bid: { price: 6, size: 100 }, ask: { price: 5, size: 100 }, last: 4 };
   await mount(); await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   expect(byLabel<HTMLButtonElement>("Armar Option · Long Call").disabled).toBe(true);
-  expect(byLabel("Vista previa de la estrategia").textContent).toContain("sin ASK");
+  expect(byLabel("Vista previa de la estrategia").textContent).toContain("cerrado o cruzado");
   await act(async () => byLabel("Selector visual de estrategias").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(container.querySelector('[aria-label="Selector visual de estrategias"]')).toBeNull();
   expect(container.querySelectorAll('.ct-sim-legs-card tbody tr')).toHaveLength(0);

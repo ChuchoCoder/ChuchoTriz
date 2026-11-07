@@ -345,12 +345,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const [view, setView] = useState<"build" | "analysis">("build");
   const [scenarioPoint, setScenarioPoint] = useState<{ context: string; price: string }>();
   const viewport = useRef<HTMLDivElement>(null);
+  const volatilityDetails = useRef<HTMLDetailsElement>(null);
   const [marketToolbar, setMarketToolbar] = useState<HTMLDivElement | null>(null);
   const [input, setInput] = useState<Simulation>(() => ({
     ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [],
   }));
   const [positionMode, setPositionMode] = useState(false);
-  const [includePosition, setIncludePosition] = useState(true);
+  const [includePosition, setIncludePosition] = useState(false);
   const valuationInput = useMemo(() => input.position && (!includePosition || (!input.position.legs.length && !underlyingExposure(input.position)?.quantity && !input.position.underlyingUnavailable))
     ? { ...input, position: undefined, costs: input.adjustmentCosts ?? "0", realized: undefined } : input, [input, includePosition]);
   const allLegs = useMemo(() => simulationLegs(valuationInput), [valuationInput]);
@@ -387,13 +388,13 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const parsed = useMemo(() => parseSimulation(valuationInput), [valuationInput]);
   const deviations = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
   const chainDeviations = useMemo(() => {
-    const { position } = valuationInput;
-    if (deviations || !positionMode || !position?.legs.length) return deviations;
+    const { position } = input;
+    if (!positionMode || !position?.legs.length || (includePosition && deviations)) return deviations;
     // The expected move needs prices and IV, so historical accounting can still be incomplete.
-    const reference = parseSimulation({ ...valuationInput, costs: "0", adjustmentCosts: "0", realized: undefined,
+    const reference = parseSimulation({ ...input, costs: "0", adjustmentCosts: "0", realized: undefined,
       position: { ...position, underlying: undefined, nominalOverride: undefined, underlyingUnavailable: false, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
-    return reference.ok ? standardDeviationLevels(reference.strategy) : undefined;
-  }, [deviations, positionMode, valuationInput]);
+    return reference.ok ? standardDeviationLevels(reference.strategy) : deviations;
+  }, [deviations, includePosition, input, positionMode]);
   const summary = useMemo(() => parsed.ok ? expirySummary(parsed.strategy) : undefined, [parsed]);
   const days = dateDay(input.expiry) - dateDay(input.valuationDate);
   const midpointDays = Math.floor(days / 2);
@@ -429,6 +430,18 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       viewport.current.scrollTop = 0;
       viewport.current.querySelector<HTMLButtonElement>(`[data-view="${next}"]`)?.focus();
     }
+  }
+  function editPositionInChain() {
+    setPositionMode(true);
+    changeView("build");
+    requestAnimationFrame(() => viewport.current?.querySelector<HTMLElement>(".ct-opt-chain-scroll")?.focus());
+  }
+  function editPositionVolatility() {
+    changeView("analysis");
+    const details = volatilityDetails.current;
+    if (!details) return;
+    details.open = true;
+    requestAnimationFrame(() => details.querySelector("summary")?.focus());
   }
   function update(key: keyof Omit<Simulation, "legs">, value: string) {
     setStatus(""); setInput(current => ({ ...current, [key]: value }));
@@ -501,12 +514,16 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const historicalCosts = <PositionCosts input={input} compact={view === "build"}
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
     onNominals={updateNominals} onUnderlyingCost={updateUnderlyingCost}
-    saveStatus={saveStatus} onEdit={view === "analysis" ? () => { setPositionMode(true); changeView("build"); } : undefined}
-    onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setPositionMode(false); setChartZoom(undefined); setStatus(""); }} />;
+    saveStatus={saveStatus} onEdit={view === "analysis" ? editPositionInChain : undefined}
+    onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setPositionMode(false); setIncludePosition(false); setChartZoom(undefined); setStatus(""); }} />;
   const chart = !hasExposure ? <p>{input.position && !includePosition
-    ? "La posición está excluida. Agregá un ajuste o volvé a incluirla para calcular resultados."
+    ? "La posición está excluida. Agregá un ajuste o incluí la posición para calcular resultados."
     : "Armá una estrategia para ver su resultado al vencimiento y teórico."}</p>
-    : !parsed.ok ? <div className="ct-sim-errors" role="alert"><p>Revisá los datos para calcular:</p><ul>{parsed.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>
+    : !parsed.ok ? <div className="ct-sim-errors">
+      <div role="alert"><p>Revisá los datos para calcular:</p><ul>{parsed.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>
+      {parsed.positionCorrections.has("chain") && <button type="button" onClick={editPositionInChain}>Corregir posición</button>}
+      {parsed.positionCorrections.has("volatility") && <button type="button" onClick={editPositionVolatility}>Revisar VI de la posición</button>}
+    </div>
     : !scenarioPriceValid ? <p role="alert">Ingresá un precio de escenario válido entre 0 y 1000000000.</p>
     : chartView && <ResultsChart strategy={chartView.strategy} currency={input.currency} scenarioDate={input.scenarioDate} selectedPrice={selectedPrice} deviations={deviations}
       zoom={zoom} fullRange={chartView.full} outOfRange={chartView.outOfRange} onZoom={level => setChartZoom({ context: scenarioContext, level })}
@@ -610,7 +627,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         slider={<ScenarioSlider label="Deslizar cambio de VI" min={viableVolatilityRange ? minVolatilityShift : 0}
           max={viableVolatilityRange ? maxVolatilityShift : 0} value={numeric(input.volatilityShift)}
           format={value => `${value > 0 ? "+" : ""}${value} pp`} onChange={value => update("volatilityShift", String(value))} />} />
-      <details className="ct-sim-leg-volatilities"><summary>VI por pata</summary>{allLegs.map((leg, index) => <div key={leg.id}>
+      <details ref={volatilityDetails} className="ct-sim-leg-volatilities"><summary>VI por pata</summary>{allLegs.map((leg, index) => <div key={leg.id}>
         <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
         <EditableLegValue label={`VI pata ${index + 1}`} value={leg.volatility} formatValue={formatOptionVolatility} onChange={value => updateLeg(leg.id, "volatility", value)} /><span>%</span>
       </div>)}</details>

@@ -114,19 +114,30 @@ function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number,
   return Math.min(1e9, (Number.MAX_SAFE_INTEGER - costs - Math.abs(realized)) / (contracts * multiplier + Math.abs(nominalQuantity)));
 }
 
-export function parseSimulation(input: Simulation): { ok: true; strategy: Strategy } | { ok: false; errors: string[] } {
+type PositionCorrection = "chain" | "volatility";
+
+export function parseSimulation(input: Simulation): { ok: true; strategy: Strategy } | { ok: false; errors: string[]; positionCorrections: ReadonlySet<PositionCorrection> } {
   const errors: string[] = [];
-  const read = (value: string, label: string, min: number, max: number, integer = false) => {
+  const positionCorrections = new Set<PositionCorrection>();
+  const report = (message: string, correction?: PositionCorrection) => {
+    errors.push(message);
+    if (correction) positionCorrections.add(correction);
+  };
+  const read = (value: string, label: string, min: number, max: number,
+    { integer = false, correction }: { integer?: boolean; correction?: PositionCorrection } = {}) => {
     const result = numeric(value);
     if (!Number.isFinite(result) || result < min || result > max || (integer && !Number.isInteger(result)))
-      errors.push(`${label}: ingresá ${integer ? "un entero" : "un número"} entre ${min} y ${max}, sin separadores de miles.`);
+      report(`${label}: ingresá ${integer ? "un entero" : "un número"} entre ${min} y ${max}, sin separadores de miles.`, correction);
     return result;
   };
+  const accounting = input.position ? "chain" : undefined;
   const spot = read(input.spot, "Precio del subyacente", .000001, 1e9);
   const multiplier = read(input.multiplier, "Factor monetario por contrato", .000001, 100000);
-  const costs = read(input.costs, "Gastos de entrada", 0, 1e12) +
-    (input.position && input.legs.length && input.adjustmentCosts !== undefined ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0);
-  const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12);
+  const entryCosts = read(input.costs, input.position ? "Gastos de la posición" : "Gastos de entrada", 0, 1e12, { correction: accounting });
+  const adjustmentCosts = input.position && input.legs.length && input.adjustmentCosts !== undefined
+    ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0;
+  const costs = entryCosts + adjustmentCosts;
+  const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12, { correction: accounting });
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
   const shift = read(input.volatilityShift, "Cambio de VI", -500, 500);
@@ -138,31 +149,41 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     errors.push("La fecha teórica debe estar entre la fecha de entrada y el vencimiento (hasta 10 años).");
   if (!input.underlying.trim()) errors.push("Indicá un subyacente común para todas las patas.");
   const allLegs = simulationLegs(input);
-  if (input.position?.underlyingUnavailable) errors.push("No se pudieron verificar los nominales del subyacente. Revisá el reporte de Matriz y recargá la tenencia.");
+  if (input.position?.underlyingUnavailable) report("No se pudieron verificar los nominales del subyacente. Revisá el reporte de Matriz y recargá la tenencia.", "chain");
   const holding = underlyingExposure(input.position);
   const underlying = holding?.quantity ? {
-    quantity: read(String(holding.quantity), "Nominales del subyacente", -MAX_CONTRACTS, MAX_CONTRACTS, true),
-    averageCost: read(holding.averageCost, "Costo promedio por nominal", 0, 1e9),
+    quantity: read(String(holding.quantity), "Nominales del subyacente", -MAX_CONTRACTS, MAX_CONTRACTS, { integer: true, correction: "chain" }),
+    averageCost: read(holding.averageCost, "Costo promedio por nominal", 0, 1e9, { correction: "chain" }),
   } : undefined;
-  if ((!allLegs.length && !underlying && !input.position?.underlyingUnavailable) || input.legs.length > MAX_LEGS || (input.position?.legs.length ?? 0) > MAX_LEGS)
-    errors.push(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`);
+  const historicalCount = input.position?.legs.length ?? 0;
+  const tooManyHistoricalLegs = historicalCount > MAX_LEGS;
+  if ((!allLegs.length && !underlying && !input.position?.underlyingUnavailable) || input.legs.length > MAX_LEGS || tooManyHistoricalLegs)
+    report(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`, tooManyHistoricalLegs ? "chain" : undefined);
   const legs = allLegs.map((leg, index): ParsedLeg => {
-    const historical = index < (input.position?.legs.length ?? 0);
-    const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - (input.position?.legs.length ?? 0)}`;
-    if (!["call", "put"].includes(leg.kind) || !["buy", "sell"].includes(leg.side)) errors.push(`${prefix}: elegí tipo y sentido válidos.`);
+    const historical = index < historicalCount;
+    const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - historicalCount}`;
+    const correction = historical ? "chain" : undefined;
+    const volatilityCorrection = historical ? "volatility" : undefined;
+    if (!["call", "put"].includes(leg.kind) || !["buy", "sell"].includes(leg.side)) report(`${prefix}: elegí tipo y sentido válidos.`, correction);
     // Missing native VI blocks the theoretical curve, but expiry needs no volatility.
-    const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500) + shift;
-    if (volatility < 0 || volatility > 500) errors.push(`${prefix}: la VI más el cambio debe estar entre 0% y 500%.`);
-    return { kind: leg.kind, side: leg.side, strike: read(leg.strike, `${prefix}, strike`, .000001, 1e9),
-      premium: read(leg.premium, `${prefix}, prima`, 0, 1e9), contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, true),
+    const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500, { correction: volatilityCorrection }) + shift;
+    if (volatility < 0 || volatility > 500) report(`${prefix}: la VI más el cambio debe estar entre 0% y 500%.`, volatilityCorrection);
+    return { kind: leg.kind, side: leg.side, strike: read(leg.strike, `${prefix}, strike`, .000001, 1e9, { correction }),
+      premium: read(leg.premium, `${prefix}, prima`, 0, 1e9, { correction }),
+      contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, { integer: true, correction }),
       volatility: volatility / 100 };
   });
   const nominalExposure = underlying ? Math.abs(underlying.quantity) * Math.max(spot, explicitMax ?? 0, underlying.averageCost) : 0;
-  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs + Math.abs(realized) + nominalExposure);
-  if (exposure > Number.MAX_SAFE_INTEGER) errors.push("Reducí precios o cantidades: el importe total supera la precisión admitida.");
+  const addExposure = (sum: number, leg: ParsedLeg) =>
+    sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium);
+  const exposure = legs.reduce(addExposure, costs + Math.abs(realized) + nominalExposure);
+  if (exposure > Number.MAX_SAFE_INTEGER) {
+    const positionCausedOverflow = input.position && legs.slice(historicalCount).reduce(addExposure, adjustmentCosts) <= Number.MAX_SAFE_INTEGER;
+    report("Reducí precios o cantidades: el importe total supera la precisión admitida.", positionCausedOverflow ? "chain" : undefined);
+  }
   const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs, realized, underlying?.quantity), spot * 1.25);
   if (rangeMin >= rangeMax) errors.push("El precio máximo del gráfico debe superar al mínimo.");
-  return errors.length ? { ok: false, errors } : { ok: true, strategy: { legs, underlying, multiplier, costs, spot,
+  return errors.length ? { ok: false, errors, positionCorrections } : { ok: true, strategy: { legs, underlying, multiplier, costs, spot,
     years: (expiry - scenario) / 365, rate, dividendYield, rangeMin, rangeMax, realized } };
 }
 

@@ -86,44 +86,70 @@ export function strategyRecipe(choice: StrategyChoice, contracts: readonly Contr
   return { ok: true, legs: legs.map(item => ({ ...item, side: invert ? item.side === "buy" ? "sell" : "buy" : item.side })) };
 }
 
-export function quotePrice(quote: Quote | undefined, side: Side): { ok: true; price: number } | { ok: false; reason: string } {
+export function quotePrice(quote: Quote | undefined, side: Side): { ok: true; price: number } | { ok: false; kind: "missing" | "crossed"; reason: string } {
   const level = quote?.[side === "buy" ? "ask" : "bid"];
   if (!level || !Number.isFinite(level.price) || level.price <= 0 || !Number.isFinite(level.size) || level.size <= 0)
-    return { ok: false, reason: `sin ${side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
-  if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, reason: "BID/ASK cerrado o cruzado." };
+    return { ok: false, kind: "missing", reason: `sin ${side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
+  if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, kind: "crossed", reason: "BID/ASK cerrado o cruzado." };
   return { ok: true, price: level.price };
 }
 
-export function recipePrices(recipe: Recipe, quotes: Record<string, Quote> | undefined, currency: string | undefined): { ok: true; premiums: number[] } | { ok: false; reason: string } {
+export function lastTradedPremium(quote: Quote | undefined) {
+  const last = quote?.last;
+  return last !== undefined && Number.isFinite(last) && last > 0 ? last : undefined;
+}
+
+type PriceResult<T> = { ok: true; price: T } | { ok: false; reason: string };
+
+function collectRecipePrices<T>(recipe: Recipe, quotes: Record<string, Quote> | undefined, currency: string | undefined,
+  resolvePrice: (quote: Quote | undefined, side: Side) => PriceResult<T>): { ok: true; premiums: T[] } | { ok: false; reason: string } {
   if (!recipe.ok) return recipe;
   if (!recipe.legs.length) return { ok: false, reason: "No hay patas para calcular el resultado." };
   const factor = recipe.legs[0].contract.factor;
   if (!Number.isFinite(factor) || factor! <= 0 || recipe.legs.some(item => item.contract.factor !== factor || item.contract.currency !== currency || item.contract.strikeCurrency !== currency))
     return { ok: false, reason: "Faltan factores compatibles o las monedas de prima, ejercicio y subyacente son diferentes." };
-  const premiums: number[] = [];
+  const premiums: T[] = [];
   for (const item of recipe.legs) {
-    const price = quotePrice(quotes?.[item.contract.id], item.side);
+    const price = resolvePrice(quotes?.[item.contract.id], item.side);
     if (!price.ok) return { ok: false, reason: `${item.contract.symbol}: ${price.reason}` };
     premiums.push(price.price);
   }
   return { ok: true, premiums };
 }
 
+export function recipePrices(recipe: Recipe, quotes: Record<string, Quote> | undefined, currency: string | undefined) {
+  return collectRecipePrices(recipe, quotes, currency, quotePrice);
+}
+
+export function recipeDraftPrices(recipe: Recipe, quotes: Record<string, Quote> | undefined, currency: string | undefined) {
+  return collectRecipePrices<{ value: number | undefined; fromLast: boolean }>(recipe, quotes, currency, (quote, side) => {
+    const price = quotePrice(quote, side);
+    if (price.ok) return { ok: true, price: { value: price.price, fromLast: false } };
+    if (!quote || price.kind === "crossed") return price;
+    const last = lastTradedPremium(quote);
+    return { ok: true, price: { value: last, fromLast: last !== undefined } };
+  });
+}
+
 /** Priced expiry P&L for one structure; shares the result engine used by the main chart. */
 export function recipePayoff(recipe: Recipe, quotes: Record<string, Quote> | undefined, spot: number | undefined, currency: string | undefined, costs = 0) {
   if (!recipe.ok) return recipe;
-  if (!recipe.legs.length) return { ok: false as const, reason: "No hay patas para calcular el resultado." };
-  const prices = recipePrices(recipe, quotes, currency);
+  const prices = recipeDraftPrices(recipe, quotes, currency);
   if (!prices.ok) return prices;
   if (!Number.isFinite(spot) || spot! < .000001 || spot! > 1e9 || !Number.isFinite(costs) || costs < 0 || costs > 1e12)
     return { ok: false as const, reason: "Revisá el precio de referencia y los gastos para calcular el resultado." };
   const factor = recipe.legs[0].contract.factor!;
-  const legs = recipe.legs.map((item, index) => ({ kind: item.contract.kind, side: item.side, strike: item.contract.strike,
-    contracts: item.ratio, premium: prices.premiums[index], volatility: NaN }));
-  if (factor < .000001 || factor > 100000 || legs.some(leg => !Number.isInteger(leg.contracts) || leg.contracts <= 0 || !Number.isFinite(leg.strike) || leg.strike < .000001 || leg.strike > 1e9 || leg.premium > 1e9))
+  if (factor < .000001 || factor > 100000 || recipe.legs.some(({ contract, ratio }) =>
+    !Number.isInteger(ratio) || ratio <= 0 || !Number.isFinite(contract.strike) || contract.strike < .000001 || contract.strike > 1e9) ||
+    prices.premiums.some(({ value }) => value !== undefined && value > 1e9))
     return { ok: false as const, reason: "Los contratos superan los límites del modelo." };
-  const exposure = (price: number) => legs.reduce((sum, leg) => sum + leg.contracts * factor * Math.max(price, leg.strike, leg.premium), costs);
+  const exposure = (price: number) => recipe.legs.reduce((sum, { contract, ratio }, index) =>
+    sum + ratio * factor * Math.max(price, contract.strike, prices.premiums[index].value ?? 0), costs);
   if (exposure(spot!) > Number.MAX_SAFE_INTEGER) return { ok: false as const, reason: "El importe bruto supera la precisión admitida." };
+  if (prices.premiums.some(({ value }) => value === undefined))
+    return { ok: false as const, missingPremiums: true, reason: "Completá los precios pendientes en Armado para calcular el resultado." };
+  const legs = recipe.legs.map((item, index) => ({ kind: item.contract.kind, side: item.side, strike: item.contract.strike,
+    contracts: item.ratio, premium: prices.premiums[index].value!, volatility: NaN }));
   const strategy: Strategy = { legs, multiplier: factor, costs, spot: spot!, years: 0, rate: 0, dividendYield: 0, rangeMin: 0, rangeMax: spot! };
   const summary = expirySummary(strategy);
   const anchors = [spot!, ...legs.map(leg => leg.strike), ...summary.equilibria.flatMap(point => [point.from, point.to]).filter(Number.isFinite)];

@@ -49,12 +49,15 @@ reiniciar Chrome. En Armado, **Info** reúne el reporte y el estado de guardado.
 Si falla el guardado, el aviso aparece en la barra de la grilla.
 
 El check **Incluir posición actual en Análisis** está en la barra común de
-**Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
-propios gastos. Al marcarlo, también incluye las patas y los nominales de la
-posición, resta sus gastos y suma el realizado informado. En ambas curvas, los
-nominales aportan la cantidad neta multiplicada por la diferencia entre el precio
-del escenario y el costo promedio por unidad. La fecha del reporte de Matriz aparece en
-**Info** y en **Análisis**. Si está adelantada respecto del reloj local, también
+**Armado** y **Análisis** y empieza desmarcado en cada simulación. El cálculo
+usa solo los ajustes y sus propios gastos hasta que lo marques. Al marcarlo,
+también incluye las patas y los nominales de la posición, resta sus gastos y suma
+el realizado informado. Si un dato de la posición impide el cálculo, el aviso
+ofrece acceso a la grilla de posición o al editor de VI, según el dato a corregir.
+En ambas curvas, los nominales aportan la cantidad neta multiplicada por la
+diferencia entre el precio del escenario y el costo promedio por unidad. La
+fecha del reporte de Matriz aparece en **Info** y en **Análisis**. Si está
+adelantada respecto del reloj local, también
 se muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
 actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.
@@ -135,14 +138,16 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    elige automáticamente en la moneda del subyacente, con preferencia por 24 h y
    un único plazo común; no se mezclan mercados ni se convierten monedas.
 2. Seleccionar un BID para simular venta o un ASK para simular compra. Seleccionar
-   otra vez el mismo lado quita la pata; seleccionar el contrario cambia el lado y
-   copia esa punta. **Estrategia** abre el selector visual: Option, Vertical,
-   Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
+   otra vez el mismo lado quita la pata. Seleccionar el contrario cambia el lado
+   y toma el precio correspondiente. **Estrategia** abre el selector visual con
+   Option, Vertical, Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
    Cada fila permite alternar Long/Short y Call/Put cuando corresponde, o
    Normal/Reversed. El dibujo y las patas se previsualizan sin modificar el armado.
    **Armar** reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
-   Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
-   se explica el motivo. No incluye Calendar, Covered ni Futures.
+   Tanto en la grilla como en las plantillas, si falta la punta se usa el último
+   operado. Si tampoco hay último, completá el precio en **Armado**. El selector
+   deshabilita **Armar** y explica el motivo si la estructura no se puede formar,
+   por ejemplo por strikes insuficientes, factores incompatibles o un libro cruzado.
 3. Las patas se muestran en este orden: chip **C / P**, cantidad con signo,
    fecha de vencimiento (**Diciembre 13**), días (**17d**) y strike. Una cantidad positiva
    representa compra; una negativa representa venta. No hay columna de lado,
@@ -243,12 +248,16 @@ compra dos más alejadas; Short invierte esos lados
 Jade Lizard Normal combina put vendida y call spread vendido; Reversed combina
 put spread vendido y call vendida (Twisted Sister), según la
 [guía de tastylive](https://assets.contentstack.io/v3/assets/blt40263f25ec36953f/blt094f33167a64ab9a/648c7f8b83c7fb90a25f4c77/tastylive-options-strategy-guide-2023.pdf).
-El selector muestra el resultado al vencimiento con primas de entrada (ASK para
-compras, BID para ventas), proporciones de cada pata, factor y gastos. Comparte
-el motor de resultados del gráfico principal; el eje horizontal marca resultado
-cero. Verde indica ganancia y rojo pérdida. Su vista previa incluye máximos
-globales de ganancia/pérdida. Sin precios disponibles, solo se conserva un icono
-esquemático sin eje y se deshabilita la aplicación de la estructura.
+El selector toma ASK para compras y BID para ventas. Si falta una punta, usa el
+último precio operado y lo identifica en la vista previa. **Armar** carga la
+estructura aunque falten precios. Las patas sin punta ni último operado quedan
+con el precio vacío para completar en **Armado**.
+
+Cuando están todas las primas, la vista previa usa las proporciones de cada pata,
+el factor y los gastos para mostrar el resultado al vencimiento y los máximos de
+ganancia y pérdida. Comparte el motor del gráfico principal. El eje horizontal
+marca el resultado cero. Verde indica ganancia y rojo indica pérdida. Si falta
+una prima, el resultado queda pendiente y se conserva el icono esquemático.
 
 `resultado = Σ sentido × contratosDeLaPata × factor × (valor − prima) − gastos`
 
