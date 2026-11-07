@@ -133,8 +133,10 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   const accounting = input.position ? "chain" : undefined;
   const spot = read(input.spot, "Precio del subyacente", .000001, 1e9);
   const multiplier = read(input.multiplier, "Factor monetario por contrato", .000001, 100000);
-  const costs = read(input.costs, input.position ? "Gastos de la posición" : "Gastos de entrada", 0, 1e12, { correction: accounting }) +
-    (input.position && input.legs.length && input.adjustmentCosts !== undefined ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0);
+  const entryCosts = read(input.costs, input.position ? "Gastos de la posición" : "Gastos de entrada", 0, 1e12, { correction: accounting });
+  const adjustmentCosts = input.position && input.legs.length && input.adjustmentCosts !== undefined
+    ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0;
+  const costs = entryCosts + adjustmentCosts;
   const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12, { correction: accounting });
   const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
@@ -153,12 +155,13 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     quantity: read(String(holding.quantity), "Nominales del subyacente", -MAX_CONTRACTS, MAX_CONTRACTS, { integer: true, correction: "chain" }),
     averageCost: read(holding.averageCost, "Costo promedio por nominal", 0, 1e9, { correction: "chain" }),
   } : undefined;
-  const tooManyHistoricalLegs = (input.position?.legs.length ?? 0) > MAX_LEGS;
+  const historicalCount = input.position?.legs.length ?? 0;
+  const tooManyHistoricalLegs = historicalCount > MAX_LEGS;
   if ((!allLegs.length && !underlying && !input.position?.underlyingUnavailable) || input.legs.length > MAX_LEGS || tooManyHistoricalLegs)
     report(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`, tooManyHistoricalLegs ? "chain" : undefined);
   const legs = allLegs.map((leg, index): ParsedLeg => {
-    const historical = index < (input.position?.legs.length ?? 0);
-    const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - (input.position?.legs.length ?? 0)}`;
+    const historical = index < historicalCount;
+    const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - historicalCount}`;
     const correction = historical ? "chain" : undefined;
     const volatilityCorrection = historical ? "volatility" : undefined;
     if (!["call", "put"].includes(leg.kind) || !["buy", "sell"].includes(leg.side)) report(`${prefix}: elegí tipo y sentido válidos.`, correction);
@@ -171,8 +174,13 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
       volatility: volatility / 100 };
   });
   const nominalExposure = underlying ? Math.abs(underlying.quantity) * Math.max(spot, explicitMax ?? 0, underlying.averageCost) : 0;
-  const exposure = legs.reduce((sum, leg) => sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium), costs + Math.abs(realized) + nominalExposure);
-  if (exposure > Number.MAX_SAFE_INTEGER) errors.push("Reducí precios o cantidades: el importe total supera la precisión admitida.");
+  const addExposure = (sum: number, leg: ParsedLeg) =>
+    sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium);
+  const exposure = legs.reduce(addExposure, costs + Math.abs(realized) + nominalExposure);
+  if (exposure > Number.MAX_SAFE_INTEGER) {
+    const positionCausedOverflow = input.position && legs.slice(historicalCount).reduce(addExposure, adjustmentCosts) <= Number.MAX_SAFE_INTEGER;
+    report("Reducí precios o cantidades: el importe total supera la precisión admitida.", positionCausedOverflow ? "chain" : undefined);
+  }
   const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs, realized, underlying?.quantity), spot * 1.25);
   if (rangeMin >= rangeMax) errors.push("El precio máximo del gráfico debe superar al mínimo.");
   return errors.length ? { ok: false, errors, positionCorrections } : { ok: true, strategy: { legs, underlying, multiplier, costs, spot,

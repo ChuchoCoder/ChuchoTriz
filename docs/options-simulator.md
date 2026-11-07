@@ -138,14 +138,16 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    elige automáticamente en la moneda del subyacente, con preferencia por 24 h y
    un único plazo común; no se mezclan mercados ni se convierten monedas.
 2. Seleccionar un BID para simular venta o un ASK para simular compra. Seleccionar
-   otra vez el mismo lado quita la pata; seleccionar el contrario cambia el lado y
-   copia esa punta. **Estrategia** abre el selector visual: Option, Vertical,
-   Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
+   otra vez el mismo lado quita la pata. Seleccionar el contrario cambia el lado
+   y toma el precio correspondiente. **Estrategia** abre el selector visual con
+   Option, Vertical, Butterfly, Ratio Spread, Strangle, Straddle, Iron Condor y Jade Lizard.
    Cada fila permite alternar Long/Short y Call/Put cuando corresponde, o
    Normal/Reversed. El dibujo y las patas se previsualizan sin modificar el armado.
    **Armar** reemplaza las patas con contratos de la cadena y las cantidades de la plantilla.
-   Si faltan strikes, factores o puntas válidas, la flecha queda deshabilitada y
-   se explica el motivo. No incluye Calendar, Covered ni Futures.
+   Tanto en la grilla como en las plantillas, si falta la punta se usa el último
+   operado. Si tampoco hay último, completá el precio en **Armado**. El selector
+   deshabilita **Armar** y explica el motivo si la estructura no se puede formar,
+   por ejemplo por strikes insuficientes, factores incompatibles o un libro cruzado.
 3. Las patas se muestran en este orden: chip **C / P**, cantidad con signo,
    fecha de vencimiento (**Diciembre 13**), días (**17d**) y strike. Una cantidad positiva
    representa compra; una negativa representa venta. No hay columna de lado,

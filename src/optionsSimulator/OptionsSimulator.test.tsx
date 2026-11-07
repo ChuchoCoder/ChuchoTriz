@@ -107,6 +107,21 @@ it("uses the last trade when ASK is missing and lets Armado edit the premium", a
   expect(byLabel("Editar Precio pata 1").textContent).toBe("4,25");
 });
 
+it.each(["chain", "template"])("keeps a very small last-traded premium editable when loaded from the %s", async source => {
+  marketState.current.data!.instruments["call-100"] = { ask: undefined, last: 0.0000001 };
+  await mount();
+  if (source === "template") {
+    await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
+    await act(async () => byLabel<HTMLButtonElement>("Armar Option · Long Call").click());
+  } else {
+    await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  }
+  expect(container.querySelector(".ct-sim-errors")).toBeNull();
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+  await act(async () => byLabel<HTMLButtonElement>("Editar Precio pata 1").click());
+  expect(byLabel<HTMLInputElement>("Precio pata 1").value).toBe("0.0000001");
+});
+
 it("adds a sale with an empty premium when neither BID nor last trade is available", async () => {
   marketState.current.data!.instruments["put-90"] = {};
   await mount();
@@ -301,6 +316,23 @@ it("loads nominal holdings without open options and includes them only while the
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
   await act(async () => root.render(<OptionsSimulator key="fresh-position" />));
   expect(byLabel<HTMLInputElement>("Costo promedio por nominal").value).toBe("90");
+});
+
+it("offers to correct the position when its nominal exposure exceeds the precision limit", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [], underlyingQuantity: 10_000_000 });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  await fill("Costo promedio por nominal", "1000000000");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-errors")).toBeNull();
+  await act(async () => positionCheckbox().click());
+  expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("el importe total supera la precisión admitida");
+  await act(async () => button("Corregir posición").click());
+  expect(button("Armado").getAttribute("aria-selected")).toBe("true");
+  await fill("Costo promedio por nominal", "90");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
 });
 
 it("values edited nominal quantities locally and restores the imported quantity and basis on reload", async () => {

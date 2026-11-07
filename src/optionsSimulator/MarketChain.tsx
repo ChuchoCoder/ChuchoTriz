@@ -4,7 +4,7 @@ import { Catalog, Contract, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
 import { OptionMetricCell } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
-import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
+import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
 import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
 import { importPosition, readPositionSnapshot, setPositionQuantity, startPositionDraft, type PositionSeries } from "./positions";
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
@@ -315,7 +315,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const mismatched = (input.position || allLegs.length) && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || allLegs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
     if (mismatched) { setNotice("Limpiá las patas antes de cambiar el contexto de la simulación o combinar con datos manuales."); return; }
     const leg: Leg = { ...newLeg(existing?.id ?? Math.max(0, ...input.legs.map(item => item.id)) + 1), securityId: contract.id, symbol: contract.symbol,
-      kind: contract.kind, side, strike: String(contract.strike), premium: premium === undefined ? "" : String(premium),
+      kind: contract.kind, side, strike: String(contract.strike), premium: premium === undefined ? "" : formatOptionInput(premium),
       contracts: existing?.contracts ?? "1", volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     const today = localDate();
     if (!allLegs.length && !input.position) onNewStrategy();
@@ -349,7 +349,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const legs = recipe.legs.map((item, index): Leg => {
       const contract = item.contract, quote = strategyQuotes[contract.id], premium = prices.premiums[index].value;
       return { ...newLeg(index + 1), securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side: item.side,
-        strike: String(contract.strike), premium: premium === undefined ? "" : String(premium), contracts: String(item.ratio),
+        strike: String(contract.strike), premium: premium === undefined ? "" : formatOptionInput(premium), contracts: String(item.ratio),
         volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     });
     const today = localDate();

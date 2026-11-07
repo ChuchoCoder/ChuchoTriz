@@ -194,6 +194,14 @@ describe("input validation", () => {
     const parsed = parseSimulation(input);
     expect(parsed.ok && parsed.strategy.legs[0].contracts).toBe(1e10);
   });
+  it("does not attribute an adjustment's precision overflow to an included position", () => {
+    const input = initialSimulation("2026-11-03");
+    input.position = { legs: [], underlying: { quantity: 1, averageCost: "90" } };
+    input.legs[0] = { ...input.legs[0], contracts: "10000000000", premium: "1000000000" };
+    const parsed = parseSimulation(input);
+    expect(parsed).toEqual({ ok: false, errors: [expect.stringContaining("el importe total supera la precisión admitida")],
+      positionCorrections: new Set() });
+  });
   it.each(["", "NaN", "Infinity", "1.000,50", "1,000.50", "1e6", "0x10"])("rejects ambiguous or missing numeric input %s", value => expect(numeric(value)).toBeNaN());
   it("accepts decimal comma and decimal point", () => { expect(numeric("12,5")).toBe(12.5); expect(numeric("12.5")).toBe(12.5); });
   it.each(["2026-02-29", "2026-11-31", "2026-1-01", ""])("rejects invalid date %s", date => expect(dateDay(date)).toBeNaN());
