@@ -88,6 +88,42 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   expect(container.textContent).toContain("GGAL"); expect(write).not.toHaveBeenCalled();
 });
 
+it("uses the last trade when ASK is missing and lets Armado edit the premium", async () => {
+  const quotes = marketState.current.data!.instruments;
+  quotes["call-100"] = { ...quotes["call-100"], ask: undefined, last: 3.75 };
+  await mount();
+  const buy = byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación");
+  expect(buy.disabled).toBe(false);
+  expect(buy.title).toContain("último precio operado ($ 3,75)");
+  expect(buy.querySelector(".ct-opt-quote-value")?.textContent).toBe("—");
+  await act(async () => buy.click());
+  expect(buy.getAttribute("aria-pressed")).toBe("true");
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("3,75");
+  await fill("Precio pata 1", "4,25");
+  await act(async () => byLabel("Precio pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  quotes["call-100"].ask = { price: 5, size: 200 };
+  await mount();
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("4,25");
+});
+
+it("adds a sale with an empty premium when neither BID nor last trade is available", async () => {
+  marketState.current.data!.instruments["put-90"] = {};
+  await mount();
+  const sell = byLabel<HTMLButtonElement>("Vender PUT 90 en simulación");
+  expect(sell.disabled).toBe(false);
+  expect(sell.title).toContain("Ingresá el precio en Armado");
+  await act(async () => sell.click());
+  expect(byLabel("Editar Contratos pata 1").textContent).toBe("−1");
+  expect(byLabel("Editar Precio pata 1").textContent).toBe("—");
+  await showAnalysis();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("prima");
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+  await showBuild();
+  await fill("Precio pata 1", "2,5");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+});
+
 it("pulses each price in its own direction and ignores the first quote after a gap", async () => {
   const snapshot = marketState.current.data!;
   const original = snapshot.instruments["call-100"];
@@ -196,11 +232,9 @@ it("does not overwrite an Armado change with a stale grid change", async () => {
   expect(byLabel("Cantidad total").textContent).toBe("2");
 });
 
-it("keeps expiry available when a native VI is missing and blocks missing quotes", async () => {
+it("keeps expiry available when a native VI is missing", async () => {
   marketState.current.data!.instruments["call-100"].impliedVolatility = undefined;
-  marketState.current.data!.instruments["put-100"].ask = undefined;
   await mount();
-  expect(byLabel<HTMLButtonElement>("Comprar PUT 100 en simulación").disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(container.querySelector(".ct-sim-scenario-results")).toBeNull();
   await showAnalysis();

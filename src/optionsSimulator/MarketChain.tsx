@@ -298,7 +298,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       return legs === current.position.legs ? current : { ...current, position: { ...current.position, legs } };
     });
   }
-  function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote) {
+  function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote, premium: number | undefined) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
     if (existing?.side === side) {
       setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) }));
@@ -313,12 +313,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const allLegs = simulationLegs(input);
     const mismatched = (input.position || allLegs.length) && (input.underlying !== underlying.symbol || input.expiry !== expiry || input.currency !== contract.currency || Number(input.multiplier) !== contract.factor || allLegs.some(leg => !leg.securityId || !selected.some(item => item.id === leg.securityId)));
     if (mismatched) { setNotice("Limpiá las patas antes de cambiar el contexto de la simulación o combinar con datos manuales."); return; }
-    const level = quote[side === "buy" ? "ask" : "bid"];
-    const price = quotePrice(quote, side);
-    if (!price.ok) { setNotice(price.reason); return; }
-    if (!level) return;
     const leg: Leg = { ...newLeg(existing?.id ?? Math.max(0, ...input.legs.map(item => item.id)) + 1), securityId: contract.id, symbol: contract.symbol,
-      kind: contract.kind, side, strike: String(contract.strike), premium: String(level.price),
+      kind: contract.kind, side, strike: String(contract.strike), premium: premium === undefined ? "" : String(premium),
       contracts: existing?.contracts ?? "1", volatility: positive(quote.impliedVolatility) ? String(quote.impliedVolatility) : "" };
     const today = localDate();
     if (!allLegs.length && !input.position) onNewStrategy();
@@ -389,7 +385,10 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const price = quotePrice(quote, side);
     const marked = contract && input.legs.find(leg => leg.securityId === contract.id && leg.side === side);
     const held = contract && input.position?.legs.find(leg => leg.securityId === contract.id && leg.side === side);
-    const available = !!contract && !!quote && !!level && price.ok && !reading.issue;
+    const selectable = !!quote && !reading.issue && (price.ok || price.kind === "missing");
+    const last = positive(quote?.last) ? quote.last : undefined;
+    const fallback = last === undefined ? "Ingresá el precio en Armado." : `Usar último precio operado ($ ${fmt(last)}) como referencia.`;
+    const title = price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}${selectable ? ` ${fallback}` : ""}`;
     const moneyness = contract && itmSpot !== undefined && contract.strike !== itmSpot ? (contract.kind === "call" ? contract.strike < itmSpot : contract.strike > itmSpot) ? "itm" : "otm" : undefined;
     const key = marked && legKey(marked);
     const visible = key !== undefined && key === shownQuote;
@@ -405,12 +404,14 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           setOpenQuote(current => current === key ? undefined : current);
         }
       }}>
-      <button type="button" disabled={!available} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
-        aria-pressed={!!marked} title={price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}`} onClick={() => contract && quote && selectQuote(contract, side, quote)}>
+      <button type="button" disabled={!selectable} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
+        aria-pressed={!!marked} title={title} onClick={() => {
+          if (selectable && contract && quote) selectQuote(contract, side, quote, price.ok ? price.price : last);
+        }}>
         <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : held ? `Pos. ${held.side === "buy" ? "+" : "−"}${held.contracts}` : ""}</span>
         <Fragment key={contract?.id}>
-          <OptionQuoteValue quantity value={available ? level.size : undefined} />
-          <OptionQuoteValue value={available ? level.price : undefined} />
+          <OptionQuoteValue quantity value={selectable && price.ok ? level?.size : undefined} />
+          <OptionQuoteValue value={selectable && price.ok ? price.price : undefined} />
         </Fragment>
       </button>
       {visible && marked && <div ref={quantityBar} className="ct-opt-quantity-bar" role="group" aria-label={`Cantidad de ${side === "buy" ? "compra" : "venta"} ${marked.symbol}`}>

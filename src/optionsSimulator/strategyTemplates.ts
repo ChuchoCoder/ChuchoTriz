@@ -86,11 +86,11 @@ export function strategyRecipe(choice: StrategyChoice, contracts: readonly Contr
   return { ok: true, legs: legs.map(item => ({ ...item, side: invert ? item.side === "buy" ? "sell" : "buy" : item.side })) };
 }
 
-export function quotePrice(quote: Quote | undefined, side: Side): { ok: true; price: number } | { ok: false; reason: string } {
+export function quotePrice(quote: Quote | undefined, side: Side): { ok: true; price: number } | { ok: false; kind: "missing" | "crossed"; reason: string } {
   const level = quote?.[side === "buy" ? "ask" : "bid"];
   if (!level || !Number.isFinite(level.price) || level.price <= 0 || !Number.isFinite(level.size) || level.size <= 0)
-    return { ok: false, reason: `sin ${side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
-  if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, reason: "BID/ASK cerrado o cruzado." };
+    return { ok: false, kind: "missing", reason: `sin ${side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
+  if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, kind: "crossed", reason: "BID/ASK cerrado o cruzado." };
   return { ok: true, price: level.price };
 }
 
