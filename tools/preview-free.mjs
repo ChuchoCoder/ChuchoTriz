@@ -51,7 +51,16 @@ function installMarketFixture() {
     { detailedPositions: [{ tradingSymbol: 'DEMO FIX call 110', totalCurrentSize: -1, totalCollateralSize: 0 }] },
   ] }, { type: 'STOCK', securitiesDetailed: [{ symbolReference: underlying.symbolStr, security: underlying, instrumentCurrentSize: 100,
     detailedPositions: [{ security: underlying, totalCurrentSize: 100 }] }] }] };
-  window.mainStore = { securityStore: { options, underlyingsForMatrix: [underlying], getSecurity: async id => [underlying, ...options].find(s => s.id === id) },
+  const execution = { account: 'DEMO-NO-BROKER', eventSubtype: 'execution_report', execType: 'F', ordStatus: '2',
+    side: '1', securityId: 'call-100', transactTime: '2026-11-06T15:00:00Z', lastQty: 2, lastPx: 10 };
+  const executions = [
+    { ...execution, id: 1 },
+    { ...execution, id: 2, lastQty: 6, lastPx: 16 },
+    { ...execution, id: 3, side: '2', lastQty: 3, lastPx: 12 },
+    { ...execution, id: 4, securityId: 'put-100', side: '2', lastQty: 1, lastPx: 9 },
+  ];
+  window.mainStore = { orderEventStore: { getOrderEventsForAccountReport: async () => executions },
+    securityStore: { options, underlyingsForMatrix: [underlying], getSecurity: async id => [underlying, ...options].find(s => s.id === id) },
     portfolioStore: { detailedPositionReport: positionReport, getDetailedPositionReport: async () => { positionReport.lastCalculation = new Date(); return positionReport; } },
     dmaWebSocket: { addSubscription() {} }, profileStore: { activeAccount: 'DEMO-NO-BROKER' }, webSocketConnectionStatus: true };
 }
