@@ -3,11 +3,23 @@
 El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulador de
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
-Extrínseco Mid, variación y volumen nominal. El armado no envía, modifica ni cancela órdenes.
+Extrínseco Mid, variación, volumen nominal y último precio operado. El armado no envía, modifica ni cancela órdenes.
 Al abrir el simulador se consulta automáticamente la posición de opciones de la
 cuenta activa para el subyacente y vencimiento iniciales. Si hay tenencia, aparece
 en la grilla. Si la cadena está vacía o falla la consulta, quedan disponibles las
 cotizaciones y el botón **Cargar posición**.
+
+**⚙ Config.** reúne el filtro de VI y las casillas para mostrar, ocultar y
+ordenar las columnas laterales. El orden se guarda por sitio y se refleja en
+calls y puts. También podés cambiar una métrica desde su encabezado. BID, ASK,
+VI y Strike quedan fijos. Entre las métricas opcionales están Mid, Spread %,
+fecha y hora de última operación, precio de referencia, valor intrínseco y
+Gamma y Vega teóricas.
+
+Al abrir o cerrar el panel derecho de Matriz, la cadena se ajusta al espacio
+disponible. En modo compacto, BID y ASK muestran precio y cantidad en dos
+líneas. Si la selección de columnas supera el ancho disponible, la cadena
+mantiene el desplazamiento horizontal.
 
 Para acciones y CEDEARs, la barra de **Posición actual** también muestra los
 nominales del subyacente informados por Matriz. La cantidad corresponde al

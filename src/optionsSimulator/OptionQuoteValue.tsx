@@ -27,7 +27,9 @@ export function OptionQuoteValue({ value, quantity = false }: { value?: number; 
     const direction = value > previousValue ? "up" : "down";
     setPulse(current => ({ revision: current.revision + 1, kind: quantity ? "quantity" : direction }));
   }, [quantity, value]);
-  return <span ref={field} key={pulse.revision} className={`${quantity ? "ct-opt-quantity" : "ct-opt-quote-value"}${pulse.kind ? ` ct-opt-quote-changed ct-opt-quote-${pulse.kind}` : ""}`}>
-    {value === undefined ? "—" : `${quantity ? "" : "$ "}${formatOptionNumber(value)}`}
+  const label = value === undefined ? "—" : `${quantity ? "" : "$ "}${formatOptionNumber(value)}`;
+  return <span ref={field} key={pulse.revision} title={value === undefined ? undefined : label}
+    className={`${quantity ? "ct-opt-quantity" : "ct-opt-quote-value"}${pulse.kind ? ` ct-opt-quote-changed ct-opt-quote-${pulse.kind}` : ""}`}>
+    {label}
   </span>;
 }

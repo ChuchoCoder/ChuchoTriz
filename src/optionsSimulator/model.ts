@@ -227,8 +227,8 @@ export function theoreticalPrice(kind: OptionKind, spot: number, strike: number,
   return Math.max(0, kind === "call" ? discountedSpot * normalCdf(d1) - discountedStrike * normalCdf(d2)
     : discountedStrike * normalCdf(-d2) - discountedSpot * normalCdf(-d1));
 }
-/** European BSM theta per calendar day and premium unit; undefined at expiry/zero VI. */
-export function theoreticalTheta(kind: OptionKind, spot: number, strike: number, years: number, volatility: number, rate: number, dividendYield: number): number | undefined {
+/** European BSM sensitivities per premium unit, using calendar-day theta and vega per percentage point of IV. */
+export function theoreticalGreeks(kind: OptionKind, spot: number, strike: number, years: number, volatility: number, rate: number, dividendYield: number) {
   if (![spot, strike, years, volatility, rate, dividendYield].every(Number.isFinite) || spot <= 0 || strike <= 0 || years <= 0 || volatility <= 0) return;
   const sqrt = Math.sqrt(years), d1 = (Math.log(spot / strike) + (rate - dividendYield + volatility * volatility / 2) * years) / (volatility * sqrt);
   const d2 = d1 - volatility * sqrt, sign = kind === "call" ? 1 : -1;
@@ -236,7 +236,13 @@ export function theoreticalTheta(kind: OptionKind, spot: number, strike: number,
   const density = Math.exp(-.5 * d1 * d1) / Math.sqrt(2 * Math.PI);
   const theta = (-discountedSpot * density * volatility / (2 * sqrt) + sign * dividendYield * discountedSpot * normalCdf(sign * d1)
     - sign * rate * discountedStrike * normalCdf(sign * d2)) / 365;
-  return Number.isFinite(theta) ? theta : undefined;
+  const gamma = Math.exp(-dividendYield * years) * density / spot / (volatility * sqrt);
+  const vega = discountedSpot * density * sqrt / 100;
+  return {
+    theta: Number.isFinite(theta) ? theta : undefined,
+    gamma: Number.isFinite(gamma) ? gamma : undefined,
+    vega: Number.isFinite(vega) ? vega : undefined,
+  };
 }
 const direction = (leg: ParsedLeg) => leg.side === "buy" ? 1 : -1;
 export function entryCost(strategy: Strategy): number {

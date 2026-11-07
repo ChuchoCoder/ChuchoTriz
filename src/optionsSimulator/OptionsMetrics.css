@@ -4,16 +4,14 @@
 .ct-sim .ct-opt-metrics-filter input[type=number]{width:62px;text-align:center}
 .ct-sim .ct-opt-metrics-presets{display:flex;gap:3px}.ct-sim .ct-opt-metrics-presets button{border:1px solid var(--ct-border);background:var(--ct-panel);color:var(--ct-muted);border-radius:2px;padding:4px 6px;font-size:10px}
 .ct-sim .ct-opt-metrics-presets button.on{background:#21567e;border-color:#6db2ea;color:white}
-.ct-sim .ct-opt-metrics-grey-key{margin-left:auto;color:var(--ct-muted);display:flex;align-items:center;gap:5px}.ct-sim .ct-opt-metrics-grey-key i{width:12px;height:10px;background:#657184;border-radius:2px}
 .ct-sim .ct-opt-metrics-note{padding:5px 10px;color:var(--ct-muted);font-size:10px;border-bottom:1px solid var(--ct-border);flex-shrink:0}
 .ct-sim .ct-opt-metrics-legends{display:flex;flex-wrap:wrap;gap:5px 18px;padding:7px 8px;flex-shrink:0}
 .ct-sim .ct-opt-metrics-legend{display:flex;align-items:center;gap:6px;flex:1;min-width:330px;font-size:9px;color:var(--ct-muted);white-space:nowrap}
 .ct-sim .ct-opt-metrics-legend strong{color:#83c7f1;font-size:9px}.ct-sim .ct-opt-metrics-legend.put strong{color:#cab4f3}
 .ct-sim .ct-opt-metrics-legend i{width:60px;height:6px;flex-shrink:0;border-radius:2px;background:linear-gradient(90deg,#6fd4a5,#ecda69,#f7a35c,#ef7888)}
 .ct-sim .ct-opt-volume-max{margin-left:auto}
-.ct-sim .ct-opt-chain.ct-opt-metrics-chain{--ct-opt-metric-strike:104px;min-width:1378px;font-size:11px}.ct-sim .ct-opt-chain.ct-opt-metrics-chain.single{min-width:620px}
-.ct-sim .ct-opt-metrics-chain col.theta{width:62px}.ct-sim .ct-opt-metrics-chain col.extrinsic{width:72px}
-.ct-sim .ct-opt-metrics-chain col.nominal{width:76px}.ct-sim .ct-opt-metrics-chain col.change{width:68px}.ct-sim .ct-opt-metrics-chain col.delta{width:58px}.ct-sim .ct-opt-metrics-chain col.iv{width:62px}.ct-sim .ct-opt-metrics-chain col.strike{width:var(--ct-opt-metric-strike)}
+.ct-sim .ct-opt-chain.ct-opt-metrics-chain{font-size:11px}
+.ct-sim .ct-opt-metrics-chain col.strike{width:var(--ct-opt-metric-strike)}
 .ct-sim .ct-opt-metrics-chain .ct-opt-strike{width:var(--ct-opt-metric-strike)}.ct-sim .ct-opt-metrics-chain td{height:36px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-itm-line{grid-template-columns:1fr var(--ct-opt-metric-strike) 1fr}
 .ct-sim .ct-opt-metrics-chain .ct-opt-itm-line.calls-only{grid-template-columns:1fr var(--ct-opt-metric-strike)}
@@ -31,4 +29,22 @@
 .ct-sim .ct-opt-metrics-chain .ct-opt-price .ct-opt-marker{position:absolute;bottom:0;left:3px;font-size:8px;padding:0 2px;line-height:10px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-price.buy .ct-opt-marker{left:auto;right:3px}
 .ct-sim .ct-opt-metrics-chain .ct-opt-price .ct-opt-quantity{font-size:9px}
-@container(max-width:600px){.ct-sim .ct-opt-metrics-legend{min-width:270px;flex-wrap:wrap}.ct-sim .ct-opt-metrics-grey-key{margin-left:0}}
+.ct-sim .ct-opt-compact-chain .ct-opt-metric{padding-inline:3px;overflow:hidden;text-overflow:ellipsis}
+.ct-sim .ct-opt-compact-chain .ct-sim-vi-scale strong{max-width:100%;font-size:8px;white-space:normal;overflow-wrap:anywhere}
+.ct-sim .ct-opt-compact-chain thead th.ct-opt-bid,
+.ct-sim .ct-opt-compact-chain thead th.ct-opt-ask{padding-inline:4px;white-space:nowrap}
+.ct-sim .ct-opt-compact-chain .ct-opt-price > button{
+  grid-template-columns:minmax(0,1fr) auto;grid-template-rows:14px 12px;
+  align-content:center;gap:0 3px;padding:1px 4px;
+}
+.ct-sim .ct-opt-compact-chain .ct-opt-price.buy > button{grid-template-columns:auto minmax(0,1fr)}
+.ct-sim .ct-opt-compact-chain .ct-opt-price .ct-opt-quote-value{grid-column:1/-1}
+.ct-sim .ct-opt-compact-chain .ct-opt-price .ct-opt-quantity{grid-column:2;grid-row:2}
+.ct-sim .ct-opt-compact-chain .ct-opt-price.buy .ct-opt-quantity{grid-column:1}
+.ct-sim .ct-opt-compact-chain .ct-opt-price .ct-opt-marker{position:static;grid-column:1;grid-row:2}
+.ct-sim .ct-opt-compact-chain .ct-opt-price.buy .ct-opt-marker{grid-column:2}
+.ct-sim .ct-opt-compact-chain .ct-opt-price.selected .ct-opt-marker{padding-block:0}
+.ct-sim .ct-opt-compact-chain .ct-opt-price :is(.ct-opt-marker,.ct-opt-quantity,.ct-opt-quote-value){
+  min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+}
+@container(max-width:600px){.ct-sim .ct-opt-metrics-legend{min-width:270px;flex-wrap:wrap}}

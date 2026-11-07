@@ -1,8 +1,8 @@
-import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Catalog, Contract, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
-import { OptionMetricCell } from "./OptionsMetrics";
+import { OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
 import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
@@ -18,6 +18,40 @@ const marketKey = (contract: Contract) => `${contract.currency}|${contract.settl
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
 const quantityPresets = [1, 10, 25, 50, 100];
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
+type ChainColumn = OptionMetricField | "bid" | "ask";
+type OptionalColumn = Exclude<OptionMetricField, "iv">;
+const chainColumns: Record<ChainColumn, { heading: string; compactHeading?: string; label?: string; title?: string; className?: string; width?: number }> = {
+  volume: { heading: "Vol. nom.", label: "Volumen nominal", width: 76 },
+  change: { heading: "Var. %", label: "Variación diaria", width: 68 },
+  lastTradeAt: { heading: "Últ. op.", label: "Fecha y hora de última operación", title: "Fecha y hora de última operación (ART)", width: 126 },
+  delta: { heading: "Delta", width: 58 },
+  theta: { heading: "Θ/d teór.", compactHeading: "Θ/d", label: "Theta teórico por día", title: "Theta teórico BSM por día calendario y unidad de prima", width: 62 },
+  extrinsic: { heading: "Extr. Mid", compactHeading: "Extr.", label: "Extrínseco al Mid", title: "Precio Mid menos intrínseco, por unidad de prima", width: 72 },
+  spreadPercent: { heading: "Spread %", title: "(ASK − BID) ÷ Mid × 100, con ambas puntas válidas", width: 76 },
+  mid: { heading: "Mid", title: "Promedio de BID y ASK con ambas puntas válidas", width: 72 },
+  last: { heading: "Últ.", label: "Último precio operado", title: "Último precio operado informado por Matriz", width: 76 },
+  referencePrice: { heading: "Ref.", label: "Precio de referencia", title: "Precio de referencia informado por Matriz", width: 76 },
+  intrinsic: { heading: "Intrínseco", label: "Valor intrínseco", title: "Valor al ejercicio inmediato con el precio del subyacente y el strike en la misma moneda", width: 85 },
+  gamma: { heading: "Gamma", label: "Gamma teórica", title: "Cambio de Delta por unidad de precio del subyacente. El modelo BSM usa VI nativa, tasa y dividendos de Análisis.", width: 78 },
+  vega: { heading: "Vega", label: "Vega teórica", title: "Cambio de prima por unidad ante +1 punto porcentual de VI. El modelo BSM usa VI nativa, tasa y dividendos de Análisis.", width: 76 },
+  bid: { heading: "BID · Vender", className: "ct-opt-bid" },
+  ask: { heading: "ASK · Comprar", className: "ct-opt-ask" },
+  iv: { heading: "VI", label: "Volatilidad implícita", className: "ct-opt-vi-heading", width: 62 },
+};
+const optionalColumns: OptionalColumn[] = ["volume", "change", "lastTradeAt", "delta", "theta", "extrinsic", "spreadPercent", "mid", "last",
+  "referencePrice", "intrinsic", "gamma", "vega"];
+const defaultColumns: OptionalColumn[] = ["volume", "change", "delta", "theta", "extrinsic", "last"];
+const columnLabel = (column: OptionalColumn) => chainColumns[column].label ?? chainColumns[column].heading;
+const strikeWidth = { regular: 104, compact: 76 };
+function columnWidth(column: ChainColumn, compact: boolean) {
+  const width = chainColumns[column].width;
+  return compact && width !== undefined ? Math.round(width * .77) : width;
+}
+function minimumChainWidth(columns: ChainColumn[], compact: boolean) {
+  const bookWidthPerSide = compact ? 176 : 239;
+  return strikeWidth[compact ? "compact" : "regular"] +
+    2 * (bookWidthPerSide + columns.reduce((total, column) => total + (columnWidth(column, compact) ?? 0), 0));
+}
 function defaultExpiration(dates: string[]) {
   const today = localDate().replaceAll("-", "");
   return dates.find(date => date >= today) ?? dates[0] ?? "";
@@ -72,11 +106,69 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   onPremiumChange(id: number, value: string): void; onPremiumReview(id: number): void;
 }) {
   const grid = useRef<HTMLDivElement>(null);
+  const chainScroll = useRef<HTMLDivElement>(null);
+  const [availableChainWidth, setAvailableChainWidth] = useState(0);
+  useLayoutEffect(() => {
+    const scroll = chainScroll.current;
+    if (!scroll) return;
+    const measure = () => setAvailableChainWidth(scroll.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  }, []);
   const [strikeRows, setStrikeRows] = useState<{ strike: number; top: number; bottom: number }[]>([]);
   const [underlyingId, setUnderlying] = useState("");
   const [expiration, setExpiration] = useState("");
   const [market, setMarket] = useState("");
   const [selectionReady, setSelectionReady] = useState(false);
+  const [savedColumns, setSavedColumns] = useState<OptionalColumn[]>();
+  const chainConfigId = useId();
+  const columnStorageKey = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  const legacyColumnStorageKey = `OptionsSimulatorChainColumnsV1:${location.origin}`;
+  useEffect(() => {
+    let mounted = true;
+    async function restoreColumns() {
+      let columns = defaultColumns;
+      try {
+        const values = await chrome.storage.local.get([columnStorageKey, legacyColumnStorageKey]);
+        const saved: unknown = values[columnStorageKey], legacy: unknown = values[legacyColumnStorageKey];
+        if (Array.isArray(saved)) {
+          columns = [...new Set(saved.filter((item): item is OptionalColumn => optionalColumns.includes(item)))];
+        } else if (Array.isArray(legacy)) {
+          columns = optionalColumns.filter(column => legacy.includes(column));
+        }
+      } catch { /* Use defaults when storage is unavailable. */ }
+      if (mounted) setSavedColumns(columns);
+    }
+    void restoreColumns();
+    return () => { mounted = false; };
+  }, [columnStorageKey, legacyColumnStorageKey]);
+  const visibleColumns = savedColumns ?? defaultColumns;
+  const hiddenColumns = optionalColumns.filter(column => !visibleColumns.includes(column));
+  const callColumns: ChainColumn[] = [...visibleColumns, "bid", "ask", "iv"];
+  const putColumns: ChainColumn[] = ["iv", "bid", "ask", ...visibleColumns.toReversed()];
+  const columnsPerSide = callColumns.length - 1;
+  const regularMinWidth = minimumChainWidth(callColumns, false);
+  const compactChain = availableChainWidth > 0 && availableChainWidth < regularMinWidth;
+  const marketTableStyle = {
+    minWidth: compactChain ? minimumChainWidth(callColumns, true) : regularMinWidth,
+    "--ct-opt-metric-strike": `${strikeWidth[compactChain ? "compact" : "regular"]}px`,
+  } as CSSProperties;
+  async function saveColumns(columns: OptionalColumn[]) {
+    setSavedColumns(columns);
+    try { await chrome.storage.local.set({ [columnStorageKey]: columns }); }
+    catch { /* The current view still works without local storage. */ }
+  }
+  function moveColumn(from: number, to: number) {
+    const columns = visibleColumns.slice();
+    [columns[from], columns[to]] = [columns[to], columns[from]];
+    void saveColumns(columns);
+  }
+  function replaceColumn(current: OptionalColumn, next: OptionalColumn) {
+    void saveColumns(visibleColumns.map(column => column === current ? next : column === next ? current : column));
+  }
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState<string | { announcement: string }>("");
   const [openQuote, setOpenQuote] = useState<string>();
@@ -154,7 +246,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     observer?.observe(scroll);
     scroll.addEventListener("scroll", position, { passive: true });
     return () => { observer?.disconnect(); scroll.removeEventListener("scroll", position); };
-  }, [shownQuote]);
+  }, [shownQuote, visibleColumns, compactChain]);
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
   const strategyQuotes = reading.issue ? undefined : data?.instruments;
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
@@ -210,7 +302,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const observer = new ResizeObserver(position);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [active, editingPosition, strikes.join("|")]);
+  }, [active, editingPosition, visibleColumns, strikes.join("|")]);
   const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue,
     spot, currency: underlying?.currency, rate: numeric(input.rate) / 100, dividendYield: numeric(input.dividendYield) / 100 });
   function change(field: "underlying" | "expiration", value: string) {
@@ -360,8 +452,6 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setNotice("");
     return true;
   }
-  const metricCell = (contract: Contract | undefined, field: "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic", kind: "call" | "put") =>
-    <OptionMetricCell contract={contract} field={field} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />;
   const positionCell = (kind: "call" | "put", strike: number, field: "quantity" | "premium") => {
     const entries = positionSeries.filter(series => series.kind === kind && series.strike === strike);
     const held = entries.some(series => positionLegs.some(leg => leg.securityId === series.id));
@@ -427,26 +517,78 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       </div>}
     </td>;
   };
+  const chainCells = (columns: ChainColumn[], contract: Contract | undefined, kind: "call" | "put") =>
+    columns.map(column => column === "bid" || column === "ask"
+      ? <Fragment key={column}>{quoteCell(contract, column === "bid" ? "sell" : "buy")}</Fragment>
+      : <OptionMetricCell key={column} contract={contract} field={column} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />);
+  const columnWidths = (columns: ChainColumn[]) => columns.map(column => <col key={column} style={{ width: columnWidth(column, compactChain) }} />);
+  const columnHeadings = (columns: ChainColumn[], side: "Calls" | "Puts") => columns.map((column, index) => {
+    const { heading, compactHeading, title, className } = chainColumns[column];
+    if (column === "bid" || column === "ask" || column === "iv") {
+      return <th key={column} scope="col" title={title} className={className}>{heading}</th>;
+    }
+    return <th key={`optional-${index}`} scope="col" className="ct-opt-configurable-heading">
+      <select data-ct-inline-editor aria-label={`Cambiar columna ${columnLabel(column)} de ${side}`} disabled={!savedColumns} value={column}
+        title={title ? `${title} · Elegir columna` : `${columnLabel(column)} · Elegir columna`}
+        onChange={event => replaceColumn(column, event.target.value as OptionalColumn)}>
+        {optionalColumns.map(item => <option key={item} value={item}>
+          {item === column ? (compactChain && compactHeading ? compactHeading : heading)
+            : columnLabel(item) + (visibleColumns.includes(item) ? " (intercambiar)" : "")}
+        </option>)}
+      </select>
+    </th>;
+  });
   const money = (value: number | undefined) => value === undefined ? "—" : `${fmt(value)} ${underlying?.currency ?? ""}`;
   const viLegend = (kind: "call" | "put") => {
     const scale = metrics.scales[kind];
-    const range = scale.min === undefined || scale.max === undefined ? "—"
-      : scale.min === scale.max ? `${formatOptionVolatility(scale.min)} %` : `${formatOptionVolatility(scale.min)}–${formatOptionVolatility(scale.max)} %`;
-    return <span className="ct-sim-vi-scale" title={`${scale.included}/${scale.total} VI ${viEnabled ? `de operaciones de los últimos ${viMinutes} min` : "con dato"}. Gris: fuera de la escala.`}>
+    const formatRange = (format: (value: number) => string) => scale.min === undefined || scale.max === undefined ? "—"
+      : scale.min === scale.max ? `${format(scale.min)} %` : `${format(scale.min)}–${format(scale.max)} %`;
+    const fullRange = formatRange(formatOptionVolatility);
+    const range = compactChain ? formatRange(value => fmt(value, 1)) : fullRange;
+    return <span className="ct-sim-vi-scale" title={`${fullRange} · ${scale.included}/${scale.total} VI ${viEnabled ? `de operaciones de los últimos ${viMinutes} min` : "con dato"}. Gris: fuera de la escala.`}>
       <i aria-hidden="true" /><strong>{range}</strong></span>;
   };
   const sigmaKey = deviations && deviations.move > 0 && <span className="ct-opt-sigma-key" title={`Desvíos de la simulación · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${daysToExpiry(input.expiry, input.scenarioDate)} días restantes. Solo se dibujan los niveles dentro de los strikes de la cadena.`}>
     <i className="ct-opt-sigma-1">±1σ</i> <i className="ct-opt-sigma-2">±2σ</i></span>;
   const spotOutsideGrid = spot !== undefined && (itmSpot === undefined || spot < (strikes[0] ?? Infinity) || spot > (strikes.at(-1) ?? -Infinity));
-  const viSettings = <details className="ct-sim-market-settings"><summary aria-label="Configurar filtro de VI" title="Configurar filtro y escala de VI">⚙ VI</summary><div className="ct-sim-market-settings-panel">
-    <div className="ct-opt-metrics-filter" role="group" aria-label="Filtro temporal de VI">
-      <label><input type="checkbox" checked={viEnabled} onChange={event => setViEnabled(event.target.checked)} />Filtrar VI por última operación</label>
-      <label>Últimos<input aria-label="Antigüedad máxima de la operación en minutos" type="number" min="1" step="1" disabled={!viEnabled} value={viMinutes} onChange={event => setViMinutes(event.target.value)} />min</label>
-      <div className="ct-opt-metrics-presets">{[15, 30, 60].map(value => <button type="button" key={value} className={viMinutes === String(value) ? "on" : ""} disabled={!viEnabled} onClick={() => setViMinutes(String(value))}>{value} min</button>)}</div>
-      <span className="ct-opt-metrics-grey-key"><i aria-hidden="true" />Gris: excluida de la escala</span>
+  const chainConfig = <>
+    <button type="button" className="ct-opt-config-trigger" popoverTarget={chainConfigId} disabled={!savedColumns}
+      aria-label="Configurar cadena de opciones" title="Configurar columnas y filtro de VI"><span aria-hidden="true">⚙</span> Config.</button>
+    <div id={chainConfigId} popover="auto" role="group" aria-label="Configuración de la cadena" className="ct-opt-chain-config" data-ct-inline-editor>
+      <strong>Filtro de VI</strong>
+      <div className="ct-opt-metrics-filter" role="group" aria-label="Filtro temporal de VI">
+        <div className="ct-opt-metrics-quick-filter">
+          <label><input type="checkbox" checked={viEnabled} onChange={event => setViEnabled(event.target.checked)} />Filtrar VI por última operación</label>
+          <div className="ct-opt-metrics-presets">{[15, 30, 60].map(value => <button type="button" key={value} className={viMinutes === String(value) ? "on" : ""} disabled={!viEnabled} onClick={() => setViMinutes(String(value))}>{value} min</button>)}</div>
+        </div>
+        <label>Últimos<input aria-label="Antigüedad máxima de la operación en minutos" type="number" min="1" step="1" disabled={!viEnabled} value={viMinutes} onChange={event => setViMinutes(event.target.value)} />min</label>
+      </div>
+      {viEnabled && !metrics.windowValid && <div className="ct-opt-metrics-note" role="status">Ingresá minutos enteros mayores que cero.</div>}
+      <div className="ct-opt-config-columns" role="group" aria-label="Columnas de cotizaciones">
+        <strong>Columnas de cotizaciones</strong>
+        <ol className="ct-opt-column-options">
+          {[...visibleColumns, ...hiddenColumns].map((column, index) => {
+            const shown = index < visibleColumns.length;
+            return <li key={column}>
+              <label title={chainColumns[column].title}>
+                <input type="checkbox" checked={shown} onChange={event => void saveColumns(event.target.checked
+                  ? [...visibleColumns, column] : visibleColumns.filter(item => item !== column))} />
+                {columnLabel(column)}
+              </label>
+              {shown && <>
+                <button type="button" disabled={index === 0} aria-label={`Mover ${columnLabel(column)} hacia el borde`}
+                  title="Mover hacia el borde" onClick={() => moveColumn(index, index - 1)}>↑</button>
+                <button type="button" disabled={index === visibleColumns.length - 1} aria-label={`Mover ${columnLabel(column)} hacia el centro`}
+                  title="Mover hacia el centro" onClick={() => moveColumn(index, index + 1)}>↓</button>
+              </>}
+            </li>;
+          })}
+        </ol>
+      </div>
+      <button type="button" onClick={() => void saveColumns(defaultColumns)}>Restablecer columnas</button>
+      <button type="button" popoverTarget={chainConfigId} popoverTargetAction="hide">Listo</button>
     </div>
-    <div className="ct-opt-metrics-note">{viEnabled && !metrics.windowValid ? "Ingresá minutos enteros mayores que cero." : "VI nativa de Matriz. La antigüedad usa la última operación; una lectura local no acredita vigencia bursátil."}</div>
-  </div></details>;
+  </>;
   return <section className="ct-sim-card ct-options ct-sim-market">{toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
@@ -474,29 +616,31 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     </fieldset>}
     {notice && (typeof notice === "string" ? <p role="status" className="ct-sim-chain-notice">{notice}</p>
       : <span role="status" className="ct-sim-sr">{notice.announcement}</span>)}
-    <div className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" aria-busy={loadingPosition} tabIndex={0}>
-      <div ref={grid} className={`ct-opt-chain-grid${editingPosition ? " ct-opt-position-grid" : ""}`}><table className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : "ct-opt-chain ct-opt-metrics-chain"}>
+    <div ref={chainScroll} className="ct-table-scroll ct-opt-chain-scroll" role="region" aria-label="Cadena de opciones" aria-busy={loadingPosition} tabIndex={0}>
+      <div ref={grid} className={`ct-opt-chain-grid${editingPosition ? " ct-opt-position-grid" : ""}`}><table
+        className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : `ct-opt-chain ct-opt-metrics-chain${compactChain ? " ct-opt-compact-chain" : ""}`}
+        style={editingPosition ? undefined : marketTableStyle}>
         {editingPosition ? <><colgroup><col /><col /><col className="strike" /><col /><col /></colgroup>
           <thead><tr><th scope="col" title="Cantidad de Calls · + compra, − venta">CALLS · Cant.</th><th scope="col" title="Prima histórica por unidad de Calls">Prima histórica</th>
             <th className="ct-opt-strike" scope="col">Strike</th><th scope="col" title="Cantidad de Puts · + compra, − venta">PUTS · Cant.</th><th scope="col" title="Prima histórica por unidad de Puts">Prima histórica</th></tr></thead>
         </> : <>
-        <colgroup><col className="nominal" /><col className="change" /><col className="delta" /><col className="theta" /><col className="extrinsic" /><col /><col /><col className="iv" /><col className="strike" /><col className="iv" /><col /><col /><col className="extrinsic" /><col className="theta" /><col className="delta" /><col className="change" /><col className="nominal" /></colgroup>
+        <colgroup>{columnWidths(callColumns)}<col className="strike" />{columnWidths(putColumns)}</colgroup>
         <thead><tr className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
-          <th colSpan={7} className="ct-opt-calls-heading">CALLS</th>
+          <th colSpan={columnsPerSide} className="ct-opt-calls-heading">CALLS</th>
           <th className="ct-opt-vi-heading">{viLegend("call")}</th>
-          <th className="ct-opt-strike">{viSettings}</th>
+          <th className="ct-opt-strike">{active && chainConfig}</th>
           <th className="ct-opt-vi-heading">{viLegend("put")}</th>
-          <th colSpan={7}><div className="ct-sim-chain-group">PUTS {sigmaKey}</div></th>
-        </tr><tr><th>Vol. nom.</th><th>Var. %</th><th>Delta</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th className="ct-opt-vi-heading">VI</th><th className="ct-opt-strike">Strike</th><th className="ct-opt-vi-heading">VI</th><th className="ct-opt-bid">BID · Vender</th><th className="ct-opt-ask">ASK · Comprar</th><th title="Precio Mid menos intrínseco, por unidad de prima">Extr. Mid</th><th title="Theta teórico BSM por día calendario y unidad de prima">Θ/d teór.</th><th>Delta</th><th>Var. %</th><th>Vol. nom.</th></tr></thead></>}
+          <th colSpan={columnsPerSide}><div className="ct-sim-chain-group">PUTS {sigmaKey}</div></th>
+        </tr><tr>{columnHeadings(callColumns, "Calls")}<th scope="col" className="ct-opt-strike">Strike</th>{columnHeadings(putColumns, "Puts")}</tr></thead></>}
         <tbody>{strikes.map(strike => {
           const call = editingPosition ? undefined : unique("call", strike), put = editingPosition ? undefined : unique("put", strike);
           return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}>
             {editingPosition ? <>{positionCell("call", strike, "quantity")}{positionCell("call", strike, "premium")}</>
-              : <>{metricCell(call, "volume", "call")}{metricCell(call, "change", "call")}{metricCell(call, "delta", "call")}{metricCell(call, "theta", "call")}{metricCell(call, "extrinsic", "call")}{quoteCell(call, "sell")}{quoteCell(call, "buy")}{metricCell(call, "iv", "call")}</>}
+              : chainCells(callColumns, call, "call")}
             <th scope="row" className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
             {editingPosition ? <>{positionCell("put", strike, "quantity")}{positionCell("put", strike, "premium")}</>
-              : <>{metricCell(put, "iv", "put")}{quoteCell(put, "sell")}{quoteCell(put, "buy")}{metricCell(put, "extrinsic", "put")}{metricCell(put, "theta", "put")}{metricCell(put, "delta", "put")}{metricCell(put, "change", "put")}{metricCell(put, "volume", "put")}</>}
-          </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 5 : 17}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
+              : chainCells(putColumns, put, "put")}
+          </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 5 : 2 * callColumns.length + 1}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}

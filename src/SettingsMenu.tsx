@@ -129,6 +129,11 @@ export function SettingsMenu() {
       aria-label="Configuración de ChuchoTriz" hidden={!open}
       onKeyDownCapture={event => {
         if (event.key !== "Escape") return;
+        const popover = typeof HTMLElement.prototype.hidePopover === "function"
+          ? event.currentTarget.querySelector<HTMLElement>('[popover="auto"]:popover-open') : null;
+        if (popover) {
+          event.preventDefault(); event.stopPropagation(); popover.hidePopover(); return;
+        }
         if (event.target instanceof Element && event.target.closest("[data-ct-inline-editor]")) return;
         if (event.target instanceof HTMLInputElement && event.target.getAttribute("role") === "searchbox" && event.target.value) return;
         event.preventDefault(); event.stopPropagation(); close();
