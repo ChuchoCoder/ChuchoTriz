@@ -49,12 +49,15 @@ reiniciar Chrome. En Armado, **Info** reúne el reporte y el estado de guardado.
 Si falla el guardado, el aviso aparece en la barra de la grilla.
 
 El check **Incluir posición actual en Análisis** está en la barra común de
-**Armado** y **Análisis**. Al desmarcarlo, el cálculo usa solo los ajustes y sus
-propios gastos. Al marcarlo, también incluye las patas y los nominales de la
-posición, resta sus gastos y suma el realizado informado. En ambas curvas, los
-nominales aportan la cantidad neta multiplicada por la diferencia entre el precio
-del escenario y el costo promedio por unidad. La fecha del reporte de Matriz aparece en
-**Info** y en **Análisis**. Si está adelantada respecto del reloj local, también
+**Armado** y **Análisis** y empieza desmarcado en cada simulación. El cálculo
+usa solo los ajustes y sus propios gastos hasta que lo marques. Al marcarlo,
+también incluye las patas y los nominales de la posición, resta sus gastos y suma
+el realizado informado. Si un dato de la posición impide el cálculo, el aviso
+ofrece acceso a la grilla de posición o al editor de VI, según el dato a corregir.
+En ambas curvas, los nominales aportan la cantidad neta multiplicada por la
+diferencia entre el precio del escenario y el costo promedio por unidad. La
+fecha del reporte de Matriz aparece en **Info** y en **Análisis**. Si está
+adelantada respecto del reloj local, también
 se muestra la hora de consulta. Cada importación actualiza el reporte nativo. Si cambia la cantidad de
 una serie, se conserva su prima y se muestra un aviso con la cantidad anterior y
 actual. El aviso persiste hasta editar la prima o pulsar **Prima revisada**.
