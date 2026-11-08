@@ -1,11 +1,14 @@
-import type { Contract as OptionContract, Quote as OptionMarketMetrics, Snapshot as OptionsSnapshot } from "./market";
-import { dateDay, intrinsic, theoreticalTheta } from "./model";
+import { lastTradedPremium, type Contract as OptionContract, type Quote as OptionMarketMetrics, type Snapshot as OptionsSnapshot } from "./market";
+import { dateDay, intrinsic, theoreticalGreeks } from "./model";
 
 export const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const positive = (value: unknown): value is number => finiteMetric(value) && value > 0;
 const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 const day = (time: number) => dateFormat.format(time);
-export interface MetricCell extends OptionMarketMetrics { eligible: boolean; reason: string; theta?: number; extrinsic?: number }
+export interface MetricCell extends OptionMarketMetrics {
+  eligible: boolean; reason: string; theta?: number; extrinsic?: number; mid?: number; spreadPercent?: number;
+  intrinsic?: number; gamma?: number; vega?: number;
+}
 export interface MetricScale { min?: number; max?: number; volumeMax: number; included: number; total: number }
 export function deriveOptionMetrics(contracts: OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
   settings: { now: number; minutes: string; enabled: boolean; available: boolean; spot?: number; currency?: string; rate?: number; dividendYield?: number }) {
@@ -26,9 +29,15 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
     const years = nowValid ? (dateDay(contract.expiration.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3")) - dateDay(day(settings.now))) / 365 : NaN;
     const modelValid = comparable && years > 0 && years <= 10 && positive(vi) && vi <= 500 && finiteMetric(settings.rate) && settings.rate >= -1 && settings.rate <= 10
       && finiteMetric(settings.dividendYield) && settings.dividendYield >= 0 && settings.dividendYield <= 1;
-    const theta = modelValid ? theoreticalTheta(contract.kind, settings.spot!, contract.strike, years, vi! / 100, settings.rate!, settings.dividendYield!) : undefined;
-    const validBook = raw?.bid && raw.ask && positive(raw.bid.price) && positive(raw.ask.price) && positive(raw.bid.size) && positive(raw.ask.size) && raw.bid.price < raw.ask.price;
-    const extrinsic = comparable && validBook ? (raw!.bid!.price / 2 + raw!.ask!.price / 2) - intrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
+    const greeks = modelValid ? theoreticalGreeks(contract.kind, settings.spot!, contract.strike, years, vi! / 100, settings.rate!, settings.dividendYield!) : undefined;
+    const bid = raw?.bid, ask = raw?.ask;
+    let mid: number | undefined, spreadPercent: number | undefined;
+    if (settings.available && bid && ask && positive(bid.price) && positive(ask.price) && positive(bid.size) && positive(ask.size) && bid.price < ask.price) {
+      mid = bid.price / 2 + ask.price / 2;
+      spreadPercent = (ask.price - bid.price) / mid * 100;
+    }
+    const intrinsicValue = comparable ? intrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
+    const extrinsic = intrinsicValue !== undefined && mid !== undefined ? mid - intrinsicValue : undefined;
     let reason = "", eligible = false;
     if (!settings.available || !nowValid) reason = "Sin lectura de mercado vigente";
     else if (!positive(vi)) reason = "VI no disponible o no válida";
@@ -43,8 +52,11 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
       reason = `Última operación hace ${age.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min${eligible ? "" : ` · supera ${parsed} min`}`;
     }
     const cell: MetricCell = { impliedVolatility: vi, lastTradeAt: stamp, nominalVolume: volume,
+      last: settings.available ? lastTradedPremium(raw) : undefined, mid, spreadPercent,
+      referencePrice: settings.available && positive(raw?.referencePrice) ? raw.referencePrice : undefined,
       delta: finiteMetric(raw?.delta) ? raw.delta : undefined,
-      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, theta, extrinsic, eligible, reason };
+      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, ...greeks,
+      intrinsic: intrinsicValue, extrinsic, eligible, reason };
     byId[contract.id] = cell;
     const scale = scales[contract.kind]; scale.total++;
     if (volume !== undefined && settings.available) scale.volumeMax = Math.max(scale.volumeMax, volume);

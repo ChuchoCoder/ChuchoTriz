@@ -62,6 +62,45 @@
 .ct-sim .ct-opt-price.buy .ct-opt-quote-value { grid-column:1; text-align:left; }
 .ct-sim .ct-opt-price.buy .ct-opt-quantity { text-align:left; }
 .ct-sim .ct-opt-chain { min-width:750px; }
+.ct-sim .ct-opt-chain .ct-opt-config-trigger { min-height:22px; padding:1px 7px; font-size:11px; }
+.ct-sim .ct-opt-chain-config {
+  width:min(520px, calc(100vw - 20px)); max-height:min(610px, 68dvh); overflow:auto;
+  padding:12px; border:1px solid var(--sim-border); border-radius:6px;
+  background:var(--sim-card); color:var(--sim-text); box-shadow:0 6px 20px #0005;
+  font-size:12px; font-weight:400; text-align:left;
+}
+@supports (position-area:block-end) {
+  .ct-sim .ct-opt-chain-config[popover] {
+    position-area:block-end; position-try-fallbacks:flip-block;
+    inset:auto; margin:4px 0;
+  }
+}
+.ct-sim dialog.ct-opt-chain-config { position:fixed; inset:0; margin:auto; }
+.ct-sim dialog.ct-opt-chain-config::backdrop { background:transparent; }
+.ct-sim .ct-opt-chain-config .ct-opt-metrics-filter { gap:8px; padding:6px 0; }
+.ct-sim .ct-opt-metrics-quick-filter { display:flex; align-items:center; gap:8px; max-width:100%; }
+.ct-sim .ct-opt-metrics-quick-filter input[type="checkbox"] { flex:none; }
+.ct-sim .ct-opt-metrics-quick-filter .ct-opt-metrics-presets { flex:none; }
+.ct-sim .ct-opt-chain-config .ct-opt-metrics-note { padding:5px 0 8px; }
+.ct-sim .ct-opt-chain-config label { flex-direction:row; align-items:center; }
+.ct-sim .ct-opt-chain-config input[type="checkbox"] { width:auto; height:auto; padding:0; }
+.ct-sim .ct-opt-config-columns { margin-top:10px; }
+.ct-sim .ct-opt-column-options { padding:0; margin:0 0 12px; list-style:none; }
+.ct-sim .ct-opt-column-options li { display:grid; grid-template-columns:1fr repeat(2, 26px); align-items:center; min-height:24px; gap:5px; margin:4px 0; }
+.ct-sim .ct-opt-column-options label { gap:7px; font-size:12px; cursor:pointer; }
+.ct-sim .ct-opt-column-options input { flex:none; margin:0; accent-color:var(--sim-accent); }
+.ct-sim .ct-opt-column-options button { min-height:24px; padding:0; margin:0; }
+.ct-sim .ct-opt-chain-config > button + button { margin-inline-start:6px; }
+.ct-sim .ct-opt-metrics-chain .ct-opt-configurable-heading { position:relative; padding:0 2px; }
+.ct-sim .ct-opt-configurable-heading::after { content:"▾"; position:absolute; right:5px; top:50%; transform:translateY(-50%); pointer-events:none; }
+.ct-sim .ct-opt-configurable-heading select {
+  appearance:none; height:24px; padding:0 13px 0 2px; border-color:transparent;
+  background:transparent; color:inherit; text-align:right; font:inherit; cursor:pointer;
+}
+.ct-sim .ct-opt-configurable-heading select:hover:enabled { border-color:var(--sim-accent); color:var(--sim-text); }
+.ct-sim .ct-opt-configurable-heading option { background:var(--sim-card); color:var(--sim-text); text-align:left; }
+.ct-sim .ct-opt-compact-chain .ct-opt-configurable-heading::after { right:3px; }
+.ct-sim .ct-opt-compact-chain .ct-opt-configurable-heading select { padding-inline:1px 10px; }
 .ct-sim .ct-opt-chain-grid.ct-opt-position-grid { display:block; width:496px; margin-inline:auto; }
 .ct-sim .ct-opt-position-chain { --ct-opt-metric-strike:104px; min-width:0; font-size:11px; }
 .ct-sim .ct-opt-position-chain col.strike { width:var(--ct-opt-metric-strike); }

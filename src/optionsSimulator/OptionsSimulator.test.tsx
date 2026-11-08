@@ -9,7 +9,7 @@ import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string } }));
-vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
+vi.mock("./market", async original => ({ ...await original<typeof import("./market")>(), useOptionMarket: () => marketState.current }));
 const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
   readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
@@ -21,14 +21,17 @@ vi.mock("./positions", async original => ({ ...await original<typeof import("./p
 }));
 let root: Root, container: HTMLDivElement;
 let stored: Record<string, unknown>, write: ReturnType<typeof vi.fn>;
+let storageListeners: Set<(changes: Record<string, chrome.storage.StorageChange>, area: string) => void>;
 const expiry = addDays(localDate(), 30);
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   stored = {};
+  storageListeners = new Set();
   write = vi.fn(async value => { Object.assign(stored, value); });
   readPosition.mockReset();
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
-  vi.stubGlobal("chrome", { storage: { local: { get: vi.fn(async () => stored), set: write } } });
+  vi.stubGlobal("chrome", { storage: { local: { get: vi.fn(async () => stored), set: write },
+    onChanged: { addListener: storageListeners.add.bind(storageListeners), removeListener: storageListeners.delete.bind(storageListeners) } } });
   const contracts: Catalog["contracts"] = [80, 90, 100, 110, 120].flatMap(strike => (["call", "put"] as const).map(kind => ({
     id: `${kind}-${strike}`, symbol: `${kind.toUpperCase()} ${strike}`, underlyingId: "GGAL", kind, strike,
     expiration: expiry.replaceAll("-", ""), currency: "ARS", strikeCurrency: "ARS", settlement: "2", factor: 100,
@@ -78,7 +81,7 @@ it("mirrors the Premium calls/strike/puts chain and copies ASK/BID into editable
   await mount();
   const groupHeaders = container.querySelectorAll('.ct-opt-chain thead tr:first-child th:not(.ct-opt-vi-heading)');
   expect(Array.from(groupHeaders).map(node => node.textContent?.split(/\s/)[0])).toEqual(["CALLS", "⚙", "PUTS"]);
-  expect(byLabel("Configurar filtro de VI").closest("th")).toBe(groupHeaders[1]);
+  expect(byLabel("Configurar cadena de opciones").closest("th")).toBe(groupHeaders[1]);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   await act(async () => byLabel<HTMLButtonElement>("Vender PUT 90 en simulación").click());
   expect(byLabel<HTMLButtonElement>("Editar Prima pata 1").textContent).toBe("5");
@@ -139,6 +142,100 @@ it("adds a sale with an empty premium when neither BID nor last trade is availab
   await fill("Precio pata 1", "2,5");
   await showAnalysis();
   expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+});
+
+it("reorders and replaces mirrored chain columns while keeping the book, IV and strike fixed", async () => {
+  const quotes = marketState.current.data!.instruments;
+  quotes.GGAL.last = 105;
+  quotes["call-100"].last = 3.75;
+  quotes["call-100"].referencePrice = 3.5;
+  quotes["call-90"].bid = { price: 1.001, size: 100 };
+  quotes["call-90"].ask = { price: 1.002, size: 100 };
+  quotes["call-90"].impliedVolatility = 5;
+  quotes["put-100"].ask = undefined;
+  quotes["put-100"].impliedVolatility = undefined;
+  await mount();
+  expect(byLabel("Último precio operado CALL 100").textContent).toBe("3,75");
+  expect(byLabel("Último precio operado PUT 100").textContent).toBe("—");
+  const choose = async (label: string, value: string) => act(async () => {
+    const select = byLabel<HTMLSelectElement>(label);
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const headers = () => [...container.querySelectorAll(".ct-opt-chain thead tr:last-child th")].map(node =>
+    node.querySelector("select")?.selectedOptions[0]?.textContent ?? node.textContent);
+  const checkbox = (label: string) => [...byLabel("Columnas de cotizaciones").querySelectorAll("label")]
+    .find(node => node.textContent?.trim() === label)!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  expect(checkbox("Volumen nominal").checked).toBe(true);
+  expect(checkbox("Gamma teórica").checked).toBe(false);
+  await choose("Cambiar columna Último precio operado de Calls", "referencePrice");
+  expect(byLabel("Precio de referencia CALL 100").textContent).toBe("3,5");
+  expect(byLabel("Precio de referencia PUT 100").textContent).toBe("—");
+  await choose("Cambiar columna Precio de referencia de Puts", "delta");
+  expect(headers().slice(0, 6)).toEqual(["Vol. nom.", "Var. %", "Ref.", "Θ/d teór.", "Extr. Mid", "Delta"]);
+  await act(async () => byLabel<HTMLButtonElement>("Mover Precio de referencia hacia el borde").click());
+  await act(async () => checkbox("Volumen nominal").click());
+  for (const label of ["Valor intrínseco", "Gamma teórica", "Vega teórica", "Mid", "Spread %", "Fecha y hora de última operación"]) {
+    await act(async () => checkbox(label).click());
+  }
+  await act(async () => root.render(null));
+  await mount();
+  expect(checkbox("Volumen nominal").checked).toBe(false);
+  expect(checkbox("Gamma teórica").checked).toBe(true);
+  const outside = ["Ref.", "Var. %", "Θ/d teór.", "Extr. Mid", "Delta", "Intrínseco", "Gamma", "Vega", "Mid", "Spread %", "Últ. op."];
+  expect(headers()).toEqual([...outside, "BID · Vender", "ASK · Comprar", "VI", "Strike", "VI", "BID · Vender", "ASK · Comprar", ...outside.toReversed()]);
+  expect(container.querySelectorAll(".ct-opt-chain tr[data-option-strike]:first-child > *")).toHaveLength(headers().length);
+  expect(container.querySelector(".ct-opt-itm-boundary td")?.getAttribute("colspan")).toBe(String(headers().length));
+  expect(container.querySelector(".ct-opt-calls-heading")?.getAttribute("colspan")).toBe("13");
+  const headerOptions = Array.from(byLabel<HTMLSelectElement>("Cambiar columna Precio de referencia de Calls").options, option => option.value);
+  expect(headerOptions.filter(column => ["bid", "ask", "iv", "strike"].includes(column))).toEqual([]);
+  expect(byLabel("Mid CALL 100").textContent).toBe("4,5");
+  expect(byLabel("Mid CALL 90").textContent).toBe("1,0015");
+  expect(byLabel("Spread % CALL 100").textContent).toBe("22,22 %");
+  expect(byLabel("Mid PUT 100").textContent).toBe("—");
+  expect(byLabel("Spread % PUT 100").textContent).toBe("—");
+  expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("5");
+  expect(byLabel("Valor intrínseco PUT 100").textContent).toBe("0");
+  expect(byLabel("Gamma teórica CALL 100").textContent).not.toBe("—");
+  expect(byLabel("Gamma teórica CALL 90").textContent).toMatch(/E[-−]\d+$/);
+  expect(byLabel("Vega teórica CALL 100").textContent).not.toBe("—");
+  expect(byLabel("Gamma teórica PUT 100").textContent).toBe("—");
+  expect(byLabel("Última operación CALL 100").getAttribute("title")).toMatch(/ART$/);
+  quotes.GGAL.last = 100.0125;
+  await mount();
+  expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,0125");
+  expect(byLabel("Valor intrínseco CALL 100").title).toBe("0,0125");
+  await act(async () => button("Restablecer columnas").click());
+  expect(byLabel("Último precio operado CALL 100").textContent).toBe("3,75");
+  expect(byLabel("Configurar cadena de opciones")).toBeTruthy();
+});
+
+it("restores a prior visibility preference while retaining the now fixed IV columns", async () => {
+  stored[`OptionsSimulatorChainColumnsV1:${location.origin}`] = ["last", "delta"];
+  await mount();
+  const headings = container.querySelectorAll(".ct-opt-chain thead tr:last-child th");
+  expect(headings).toHaveLength(11);
+  expect(Array.from(headings, heading => heading.querySelector("select")?.value ?? heading.textContent))
+    .toEqual(["delta", "last", "BID · Vender", "ASK · Comprar", "VI", "Strike", "VI", "BID · Vender", "ASK · Comprar", "last", "delta"]);
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("syncs external column changes and applies edits to the latest saved order", async () => {
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  stored[key] = ["last"];
+  await mount();
+  await act(async () => {
+    stored[key] = ["last", "gamma"];
+    storageListeners.forEach(listener => listener({ [key]: { newValue: stored[key] } }, "local"));
+  });
+  const config = byLabel("Columnas de cotizaciones");
+  const checkbox = (label: string) => [...config.querySelectorAll("label")]
+    .find(node => node.textContent?.trim() === label)!.querySelector<HTMLInputElement>("input")!;
+  expect(checkbox("Gamma teórica").checked).toBe(true);
+  stored[key] = ["last", "gamma", "referencePrice"];
+  await act(async () => checkbox("Vega teórica").click());
+  expect(stored[key]).toEqual(["last", "gamma", "referencePrice", "vega"]);
+  expect(checkbox("Precio de referencia").checked).toBe(true);
 });
 
 it("pulses each price in its own direction and ignores the first quote after a gap", async () => {
@@ -551,8 +648,12 @@ it("opens the volatility editor for a valuation error on a historical leg", asyn
   await act(async () => details.querySelector("summary")!.click());
   expect(details.open).toBe(false);
   expect(container.querySelector(".ct-sim-errors")?.textContent).toContain("Posición, pata 1, VI");
-  await act(async () => button("Revisar VI de la posición").click());
+  await act(async () => {
+    button("Revisar VI de la posición").click();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  });
   expect(details.open).toBe(true);
+  expect(document.activeElement).toBe(details.querySelector("summary"));
   await fill("VI pata 1", "40");
   expect(container.querySelector(".ct-sim-errors")).toBeNull();
 });
@@ -705,9 +806,22 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
 
 
 
-it("removes market references during a disconnect and keeps the VI controls folded initially", async () => {
+it("groups VI and columns in the chain settings and removes market references during a disconnect", async () => {
   await mount();
-  expect(byLabel("Configurar filtro de VI").closest("details")!.open).toBe(false);
+  const config = byLabel<HTMLDialogElement>("Configuración de la cadena");
+  const trigger = byLabel<HTMLButtonElement>("Configurar cadena de opciones");
+  expect(trigger.getAttribute("aria-controls")).toBe(config.id);
+  expect(config.localName).toBe("dialog");
+  const open = vi.fn(), close = vi.fn();
+  Object.defineProperties(config, { showModal: { value: open }, close: { value: close } });
+  await act(async () => trigger.click());
+  expect(open).toHaveBeenCalledOnce();
+  expect(config.contains(byLabel("Columnas de cotizaciones"))).toBe(true);
+  expect(config.contains(byLabel("Filtro temporal de VI"))).toBe(true);
+  await act(async () => button("15 min").click());
+  expect(byLabel<HTMLInputElement>("Antigüedad máxima de la operación en minutos").value).toBe("15");
+  await act(async () => button("Listo").click());
+  expect(close).toHaveBeenCalledOnce();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").disabled).toBe(false);
   marketState.current = { catalog: marketState.current.catalog, issue: "Disconnected" };
@@ -1279,7 +1393,7 @@ it("removes the library and entry menus without reading or overwriting saved str
   expect(byLabel("Theta teórico CALL 100").textContent).not.toBe("—");
   expect(byLabel("Extrínseco CALL 100").textContent).toBe("4,5");
   expect(byLabel("Extrínseco PUT 100").textContent).toBe("4,5");
-  expect(container.querySelector('.ct-opt-chain thead th')?.getAttribute('colspan')).toBe('7');
+  expect(container.querySelector('.ct-opt-chain thead th')?.getAttribute('colspan')).toBe('8');
   const headers = [...container.querySelectorAll('.ct-sim-legs-card thead th')].map(node => node.textContent);
   expect(headers).not.toContain('Theta'); expect(headers).not.toContain('Extrínseco');
 });
