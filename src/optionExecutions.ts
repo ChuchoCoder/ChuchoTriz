@@ -71,9 +71,12 @@ export function executionFormatters(preference: ExecutionLocale = "auto", langua
     ? languages.find(language => new Intl.NumberFormat(language).format(1.1).includes(".")) ?? "en-US"
     : preference;
   const numbers = new Intl.NumberFormat(locale, { maximumFractionDigits: 4 });
-  const dates = new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" });
+  const dateFields = { year: "numeric", month: "2-digit", day: "2-digit" } as const;
+  const dates = new Intl.DateTimeFormat(locale, dateFields);
+  const expirations = new Intl.DateTimeFormat(locale, { ...dateFields, timeZone: "UTC" });
   return {
     date: (value: number) => dates.format(value),
+    expiration: (value: string) => expirations.format(Date.parse(value)),
     number: (value: number) => numbers.format(value),
     quantity: (value: number) => Number.isInteger(value) ? String(value) : numbers.format(value),
   };
@@ -82,7 +85,7 @@ export function executionFormatters(preference: ExecutionLocale = "auto", langua
 export function executionClipboard(rows: OptionExecution[], scope: OptionKind | "both", averaged: boolean,
   format = executionFormatters()): string {
   const line = (row: OptionExecution) => [
-    format.date(row.timestamp), format.quantity(row.quantity), format.number(row.strike), format.number(row.price),
+    format.expiration(row.expiration), format.quantity(row.quantity), format.number(row.strike), format.number(row.price),
   ].join("\t");
   if (scope !== "both") return rows.filter(row => row.kind === scope).map(line).join("\n");
 

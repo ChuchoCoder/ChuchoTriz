@@ -38,7 +38,7 @@ La pestaña **Operaciones de opciones** consulta el reporte de ejecuciones de la
 cuenta activa al pulsar **Actualizar desde Matriz**. El identificador de cuenta
 y los eventos originales quedan dentro de Matriz. La pestaña conserva en memoria
 los datos de las ejecuciones de opciones mientras está abierta. Al pulsar
-**Copiar**, coloca fecha, cantidad con signo, strike y precio en el portapapeles.
+**Copiar**, coloca vencimiento, cantidad con signo, base y prima en el portapapeles.
 La preferencia de formato regional se guarda en `chrome.storage.local` dentro del
 perfil de Chrome.
 

@@ -85,8 +85,13 @@
       }
       const key = String(id);
       if (seen.has(key)) continue;
-      seen.add(key);
       const expiration = maturityDateStr.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+      const expirationTime = Date.parse(expiration);
+      if (!Number.isFinite(expirationTime) || new Date(expirationTime).toISOString().slice(0, 10) !== expiration) {
+        unmatched++;
+        continue;
+      }
+      seen.add(key);
       rows.push({ securityId, symbol, underlying, expiration, kind, strike, currency, strikeCurrency: strikeCurrency ?? "",
         settlement, timestamp, quantity: side === "1" ? quantity : -quantity, price });
     }
