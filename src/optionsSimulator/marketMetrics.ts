@@ -1,10 +1,27 @@
 import { lastTradedPremium, type Contract as OptionContract, type Quote as OptionMarketMetrics, type Snapshot as OptionsSnapshot } from "./market";
-import { dateDay, intrinsic, theoreticalGreeks } from "./model";
+import { dateDay, theoreticalGreeks } from "./model";
 
 export const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const positive = (value: unknown): value is number => finiteMetric(value) && value > 0;
 const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 const day = (time: number) => dateFormat.format(time);
+
+function decimalPrice(price: number) {
+  const [significand, exponent = "0"] = String(price).split("e");
+  const [whole, fraction = ""] = significand.split(".");
+  return { units: BigInt(whole + fraction), scale: fraction.length - Number(exponent) };
+}
+
+/** Subtract the quoted decimals before converting back to a number. */
+function quotedIntrinsic(kind: OptionContract["kind"], spot: number, strike: number) {
+  const [high, low] = kind === "call" ? [spot, strike] : [strike, spot];
+  if (high <= low) return 0;
+  const left = decimalPrice(high), right = decimalPrice(low);
+  const scale = Math.max(left.scale, right.scale);
+  const difference = left.units * 10n ** BigInt(scale - left.scale) - right.units * 10n ** BigInt(scale - right.scale);
+  return Number(`${difference}e${-scale}`);
+}
+
 export interface MetricCell extends OptionMarketMetrics {
   eligible: boolean; reason: string; theta?: number; extrinsic?: number; mid?: number; spreadPercent?: number;
   intrinsic?: number; gamma?: number; vega?: number;
@@ -36,7 +53,7 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
       mid = bid.price / 2 + ask.price / 2;
       spreadPercent = (ask.price - bid.price) / mid * 100;
     }
-    const intrinsicValue = comparable ? intrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
+    const intrinsicValue = comparable ? quotedIntrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
     const extrinsic = intrinsicValue !== undefined && mid !== undefined ? mid - intrinsicValue : undefined;
     let reason = "", eligible = false;
     if (!settings.available || !nowValid) reason = "Sin lectura de mercado vigente";
