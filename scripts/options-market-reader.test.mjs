@@ -13,7 +13,8 @@ function fixture() {
     md: { lst: 5.5, von: 1000, seq: 10, lstdStr: '2026-11-03T17:00:00Z' }, impliedVolatility: 40 + i, greeks: { ggd: i ? -.5 : .5 }, change: 0,
   }));
   const securities = new Map([underlying, ...contracts].map(s => [s.id, s]));
-  const store = { securityStore: { options: contracts, underlyingsForMatrix: [underlying], getSecurity: async id => { calls.push(id); return securities.get(id); } },
+  const store = { securityStore: { options: contracts, underlyingsForMatrix: [underlying], findSecurityFromId: id => securities.get(id),
+    getSecurity: async id => { calls.push(id); return securities.get(id); } },
     dmaWebSocket: { addSubscription: (topic, ids) => subscriptions.push({ topic, ids }) }, profileStore: { activeAccount: 'PRIVATE_ACCOUNT' }, webSocketConnectionStatus: true };
   for (const key of ['orderStore', 'positionStore', 'balanceStore', 'orderEntryStore']) Object.defineProperty(store, key, { get() { throw Error(`Forbidden access: ${key}`); } });
   const window = { mainStore: store, addEventListener: (_event, fn) => listeners.push(fn), postMessage: msg => replies.push(msg) };
@@ -25,7 +26,7 @@ function fixture() {
     await listeners[0]({ source: window, data: { channel: 'test', kind: 'request', id, method, params, ...other } });
     return replies.find(reply => reply.id === id);
   }
-  return { call, window, document, store, calls, subscriptions, contracts, underlying, replies, listeners };
+  return { call, window, document, store, calls, subscriptions, contracts, underlying, replies, listeners, securities };
 }
 test('projects catalog, native metrics, monetary factor and mirrored book with no private account data', async () => {
   const f = fixture(), catalog = (await f.call('catalog')).result;
@@ -43,6 +44,31 @@ test('never exposes execution or arbitrary store methods', async () => {
   for (const method of ['orders', 'sendOrder', 'cancelOrder', 'replaceOrder', 'hello', 'constructor', '__proto__', 'getSecurity'])
     assert.match((await f.call(method)).error, /Método no permitido/);
   assert.equal(f.calls.length, 0); assert.equal(f.subscriptions.length, 0);
+});
+test('reads only catalog-verified ARS cauciones, using last traded TNA and timestamp', async () => {
+  const f = fixture(), stamp = '2026-11-03T17:00:00Z';
+  function caucion(days, patch = {}) {
+    const id = `bm_MERV_PESOS_${days}D`;
+    f.securities.set(id, { id, marketId: 'bm', cfiCode: 'RPXXXX', currency: 'ARS', symbolStr: `PESOS - ${days}D`,
+      md: { lst: 30, bid: 29, lstdStr: stamp }, ...patch });
+  }
+  caucion(7); caucion(6, { currency: 'USD' }); caucion(5, { md: { bid: 30, lstdStr: stamp } });
+  caucion(4, { md: { lst: 30, lstdStr: '2026-02-30T17:00:00Z' } }); caucion(2);
+  const first = (await f.call('caucion', { ids: ['GGAL', 'option-0'] })).result;
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), [{ currency: 'ARS', days: 7, tna: 30, tradedAt: Date.parse(stamp) }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.subscriptions)), [{ topic: 'md', ids: ['md.bm_MERV_PESOS_7D', 'md.bm_MERV_PESOS_5D', 'md.bm_MERV_PESOS_4D'] }]);
+  assert.equal((await f.call('caucion')).result.length, 1);
+  assert.equal(f.subscriptions.length, 1);
+  assert.equal(f.calls.length, 0);
+  caucion(7, { md: { lst: 30, lstdStr: '2026-11-03T16:00:00Z' } });
+  assert.equal((await f.call('caucion')).result.length, 0);
+  f.document.body.innerText = 'Versión: 4.24.1';
+  assert.equal((await f.call('caucion')).result.length, 0);
+  f.document.body.innerText = 'Versión: 4.24.4';
+  f.store.securityStore.findSecurityFromId = () => { throw Error('PRIVATE_NATIVE_MESSAGE'); };
+  assert.equal((await f.call('caucion')).error, 'Referencia de caución no disponible.');
+  f.store.webSocketConnectionStatus = false;
+  assert.equal((await f.call('caucion')).error, 'Referencia de caución no disponible.');
 });
 test('rejects unknown instruments and does not infer a missing factor or foreign strike currency', async () => {
   const f = fixture(); f.contracts[0].refData.roundLot = undefined; f.contracts[1].refData.strikeCurrency = 'USD';

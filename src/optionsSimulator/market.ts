@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { isRecentCaucionTrade, selectCaucionReference, type CaucionReference, type CaucionTrade } from "./caucionRate";
+
+const supportedMarketHost = /^(?:.+\.)?xoms\.com\.ar$|^remarkets\.matriz\.com\.ar$|^127\.0\.0\.1$/;
 export interface Contract {
   id: string; symbol: string; underlyingId: string; kind: "call" | "put"; strike: number;
   expiration: string; currency: "ARS" | "USD"; strikeCurrency?: string; settlement: string; factor?: number;
@@ -45,7 +48,7 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext", params = {}): Promise<T> {
     await this.ready;
     if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
@@ -68,13 +71,40 @@ export class MarketReader {
   }
 }
 
+export function useCaucionMarket(active: boolean) {
+  const [reference, setReference] = useState<CaucionReference>();
+  useEffect(() => {
+    setReference(undefined);
+    if (!active || !supportedMarketHost.test(location.hostname)) return;
+    const reader = new MarketReader();
+    let closed = false, timer: ReturnType<typeof setTimeout>;
+    const clearExpired = () => setReference(current => current && isRecentCaucionTrade(current.tradedAt, Date.now()) ? current : undefined);
+    const tick = async () => {
+      try {
+        const trades = await reader.call<CaucionTrade[]>("caucion");
+        if (closed) return;
+        const next = selectCaucionReference(Array.isArray(trades) && trades.length <= 5 ? trades : [], Date.now());
+        setReference(previous => previous?.days === next?.days && previous?.tradedAt === next?.tradedAt && previous?.tna === next?.tna ? previous : next);
+      } catch {
+        if (!closed) setReference(undefined);
+      } finally {
+        if (!closed) timer = setTimeout(() => void tick(), 5000);
+      }
+    };
+    document.addEventListener("visibilitychange", clearExpired);
+    void tick();
+    return () => { closed = true; clearTimeout(timer); document.removeEventListener("visibilitychange", clearExpired); reader.dispose(); };
+  }, [active]);
+  return active && reference && isRecentCaucionTrade(reference.tradedAt, Date.now()) ? reference : undefined;
+}
+
 export function useOptionMarket(active: boolean, underlyingId: string, ids: string[]) {
   const [state, setState] = useState<{ catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string }>({});
   const sequence = useRef<{ context?: number; highest: Map<string, number> }>({ highest: new Map() });
   const selectionKey = JSON.stringify([...new Set(ids)].sort());
   useEffect(() => {
     if (!active) return;
-    if (!/^(?:.+\.)?xoms\.com\.ar$|^remarkets\.matriz\.com\.ar$|^127\.0\.0\.1$/.test(location.hostname)) {
+    if (!supportedMarketHost.test(location.hostname)) {
       setState({ issue: "Abrí el simulador desde el icono de ChuchoTriz dentro de Matriz para ver la cadena de mercado." }); return;
     }
     let closed = false, timer: ReturnType<typeof setTimeout>;

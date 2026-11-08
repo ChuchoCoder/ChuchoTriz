@@ -93,6 +93,7 @@ function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; c
           <p>Modelo BSM (neutral al riesgo) · Tasa {fmt(details.rate * 100, 2)} % · Dividendos {fmt(details.dividendYield * 100, 2)} %</p>
         </> : <p>Probabilidades y griegas teóricas no disponibles.
           {cell?.eligible && " Revisá el spot, el vencimiento y los parámetros de Análisis."}</p>}
+        {cell?.rateSource && <p>{cell.rateSource}</p>}
         <p>{tradeStatus}</p>
         {cell?.eligible && !color && <p>Sin rango suficiente para una escala comparativa.</p>}
       </> : "Probabilidades y griegas de la opción"}

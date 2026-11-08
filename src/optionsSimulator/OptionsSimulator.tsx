@@ -7,6 +7,8 @@ import ToolbarIcon from "../ToolbarIcon";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
+import { useCaucionMarket } from "./market";
+import { caucionReferenceLabel } from "./caucionRate";
 
 // A native double click delivers two click events: 1 + 9 makes ten in total.
 const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 9 : 1;
@@ -178,7 +180,8 @@ function scenarioPriceAt(spot: number, factor: number) {
 }
 
 function hasTheoreticalResult(strategy: Strategy) {
-  return strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
+  return strategy.years === 0 || !strategy.legs.length ||
+    (Number.isFinite(strategy.rate) && strategy.legs.every(leg => Number.isFinite(leg.volatility)));
 }
 
 type DeviationReference = ReturnType<typeof standardDeviationLevels>;
@@ -282,7 +285,9 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
   };
   return <>
     {toolbar}
-    {!hasTheory && <p role="status" className="ct-sim-hint">{compact ? "Teórico no disponible: falta VI." : "Teórico no disponible: completá la VI de cada pata en Análisis → VI por pata. El resultado al vencimiento no necesita VI."}</p>}
+    {!hasTheory && <p role="status" className="ct-sim-hint">{!Number.isFinite(strategy.rate)
+      ? "Teórico no disponible: caución sin dato reciente. Podés usar una tasa manual en Supuestos de valuación."
+      : compact ? "Teórico no disponible: falta VI." : "Teórico no disponible: completá la VI de cada pata en Análisis → VI por pata. El resultado al vencimiento no necesita VI."}</p>}
     <svg ref={svg} className="ct-sim-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Resultado de la estrategia según el precio del subyacente"
       onClick={event => onPriceChange(pointerPrice(event))}>
       <title>Resultado total en {currency}. Hacé clic o tocá el gráfico para fijar el precio.</title>
@@ -337,14 +342,14 @@ function ResultsChart({ strategy, currency, scenarioDate, selectedPrice, onPrice
     <div className="ct-sim-inspect">
       <div className="ct-sim-selected-price"><span>{compact ? "Precio" : "Precio fijado"}</span><strong aria-label="Precio fijado">{fmt(price)} {currency}</strong></div>
       <div><span>Al vencimiento</span><output className={expiryResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{fmt(expiryResult)} {currency}</output></div>
-      <div title={`Teórico · ${scenarioDate}`}><span>{compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span><output className={theoreticalResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{hasTheory ? `${fmt(theoreticalResult)} ${currency}` : "Sin VI"}</output></div>
+      <div title={`Teórico · ${scenarioDate}`}><span>{compact ? "Teórico" : `Teórico · ${scenarioDate}`}</span><output className={theoreticalResult >= 0 ? "ct-sim-profit" : "ct-sim-loss"}>{hasTheory ? `${fmt(theoreticalResult)} ${currency}` : Number.isFinite(strategy.rate) ? "Sin VI" : "Sin tasa"}</output></div>
     </div>
     {!cursorVisible && <p className="ct-sim-hint">El precio evaluado está fuera del rango visible. Ampliá el rango para ubicarlo en el gráfico.</p>}
     {outOfRange && <p className="ct-sim-hint">Hay strikes o equilibrios fuera del rango visible. Usá − para ampliar.</p>}
   </>;
 }
 
-export default function OptionsSimulator({ active = true }: { active?: boolean }) {
+export default function OptionsSimulator({ active = true, marketReference = false }: { active?: boolean; marketReference?: boolean }) {
   const [view, setView] = useState<"build" | "analysis">("build");
   const [scenarioPoint, setScenarioPoint] = useState<{ context: string; price: string }>();
   const viewport = useRef<HTMLDivElement>(null);
@@ -353,13 +358,25 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const [input, setInput] = useState<Simulation>(() => ({
     ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [],
   }));
+  const [automaticCaucion, setAutomaticCaucion] = useState(true);
+  const [chainContext, setChainContext] = useState<{ currency?: Simulation["currency"]; version: string }>();
+  const [usdRate, setUsdRate] = useState("0");
+  const supportsCaucion = marketReference && (!chainContext || chainContext.version === "4.24.4");
+  const useAutomaticCaucion = supportsCaucion && automaticCaucion;
+  const caucion = useCaucionMarket(active && useAutomaticCaucion);
+  const rateOverride = useAutomaticCaucion && input.currency === "ARS" ? caucion?.annualRate ?? NaN : undefined;
   const [positionMode, setPositionMode] = useState(false);
   const [includePosition, setIncludePosition] = useState(false);
-  const valuationInput = useMemo(() => input.position && (!includePosition || (!input.position.legs.length && !underlyingExposure(input.position)?.quantity && !input.position.underlyingUnavailable))
-    ? { ...input, position: undefined, costs: input.adjustmentCosts ?? "0", realized: undefined } : input, [input, includePosition]);
+  const valuationInput = useMemo(() => {
+    const base = input.currency === "USD" ? { ...input, rate: usdRate } : input;
+    return base.position && (!includePosition || (!base.position.legs.length && !underlyingExposure(base.position)?.quantity && !base.position.underlyingUnavailable))
+      ? { ...base, position: undefined, costs: base.adjustmentCosts ?? "0", realized: undefined } : base;
+  }, [input, includePosition, usdRate]);
   const allLegs = useMemo(() => simulationLegs(valuationInput), [valuationInput]);
   const holding = underlyingExposure(valuationInput.position);
   const hasExposure = !!(allLegs.length || holding?.quantity || valuationInput.position?.underlyingUnavailable);
+  const rateCurrency = hasExposure ? input.currency : chainContext?.currency ?? input.currency;
+  const automaticRate = useAutomaticCaucion && rateCurrency === "ARS";
   const [chartZoom, setChartZoom] = useState<{ context: string; level: number }>();
   const [status, setStatus] = useState("");
   const [saveStatus, setSaveStatus] = useState<{ message: string; error?: boolean }>({ message: "" });
@@ -388,16 +405,16 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
   const [strikeMarket, setStrikeMarket] = useState<StrikeMarket>();
   const menusId = useId();
   const nextId = useRef(3);
-  const parsed = useMemo(() => parseSimulation(valuationInput), [valuationInput]);
+  const parsed = useMemo(() => parseSimulation(valuationInput, rateOverride), [valuationInput, rateOverride]);
   const deviations = useMemo(() => parsed.ok ? standardDeviationLevels(parsed.strategy) : undefined, [parsed]);
   const chainDeviations = useMemo(() => {
     const { position } = input;
     if (!positionMode || !position?.legs.length || (includePosition && deviations)) return deviations;
     // The expected move needs prices and IV, so historical accounting can still be incomplete.
-    const reference = parseSimulation({ ...input, costs: "0", adjustmentCosts: "0", realized: undefined,
-      position: { ...position, underlying: undefined, nominalOverride: undefined, underlyingUnavailable: false, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } });
+    const reference = parseSimulation({ ...input, rate: input.currency === "USD" ? usdRate : input.rate, costs: "0", adjustmentCosts: "0", realized: undefined,
+      position: { ...position, underlying: undefined, nominalOverride: undefined, underlyingUnavailable: false, legs: position.legs.map(leg => ({ ...leg, premium: "0" })) } }, rateOverride);
     return reference.ok ? standardDeviationLevels(reference.strategy) : deviations;
-  }, [deviations, includePosition, input, positionMode]);
+  }, [deviations, includePosition, input, positionMode, rateOverride, usdRate]);
   const summary = useMemo(() => parsed.ok ? expirySummary(parsed.strategy) : undefined, [parsed]);
   const days = dateDay(input.expiry) - dateDay(input.valuationDate);
   const midpointDays = Math.floor(days / 2);
@@ -518,7 +535,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     onCosts={value => update("costs", value)} onRealized={value => update("realized", value)}
     onNominals={updateNominals} onUnderlyingCost={updateUnderlyingCost}
     saveStatus={saveStatus} onEdit={view === "analysis" ? editPositionInChain : undefined}
-    onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] }); setPositionMode(false); setIncludePosition(false); setChartZoom(undefined); setStatus(""); }} />;
+    onReset={() => { setInput({ ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [] });
+      setUsdRate("0"); setAutomaticCaucion(true); setPositionMode(false); setIncludePosition(false); setChartZoom(undefined); setStatus(""); }} />;
   const chart = !hasExposure ? <p>{input.position && !includePosition
     ? "La posición está excluida. Agregá un ajuste o incluí la posición para calcular resultados."
     : "Armá una estrategia para ver su resultado al vencimiento y teórico."}</p>
@@ -546,6 +564,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </div>
     <span role="status" className="ct-sim-sr">{status}</span>
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} toolbar={marketToolbar} input={input} setInput={setInput} onStrikeMarket={setStrikeMarket} onNewStrategy={() => setChartZoom(undefined)}
+      automaticCaucion={useAutomaticCaucion} caucion={caucion} usdRate={usdRate} onMarketContext={setChainContext}
       deviationReference={chainDeviations} positionMode={positionMode} setPositionMode={setPositionMode} positionAccounting={view === "build" ? historicalCosts : undefined}
       onPremiumChange={(id, value) => updateLeg(id, "premium", value)} onPremiumReview={reviewPremium} />
     <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-leg-toolbar"><h3>{input.position ? "Ajustes simulados" : "Patas"}</h3>
@@ -650,8 +669,20 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
           format={offset => baseDatesValid ? formatOptionExpiry(addDays(input.valuationDate, offset)) : "Fecha no disponible"}
           onChange={offset => update("scenarioDate", addDays(input.valuationDate, offset))} />} />
       </div>
+      </>}
       <details className="ct-sim-scenario-advanced"><summary>Supuestos de valuación</summary>
-      {manualStrategy && <>
+      {supportsCaucion && rateCurrency === "ARS" && <label className="ct-sim-field">Origen de la tasa
+        <select aria-label="Origen de la tasa" value={automaticRate ? "automatic" : "manual"}
+          onChange={event => setAutomaticCaucion(event.target.value === "automatic")}>
+          <option value="automatic">Automática · Caución ARS</option><option value="manual">Manual</option>
+        </select>
+      </label>}
+      {automaticRate ? <p className="ct-sim-hint" aria-label="Tasa automática de valuación">{caucion
+        ? `${fmt(caucion.annualRate * 100)} % anual continua · ${caucionReferenceLabel(caucion)}`
+        : "Caución sin dato reciente. Podés elegir una tasa manual."}</p>
+        : <Field label="Tasa anual continua %" title={`Tasa manual en ${rateCurrency}`}
+          value={rateCurrency === "USD" ? usdRate : input.rate} onChange={rateCurrency === "USD" ? setUsdRate : value => update("rate", value)} />}
+      {hasExposure && <>{manualStrategy && <>
         <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />
         <Field label="Vencimiento" type="date" value={input.expiry} min={input.valuationDate} onChange={expiry => {
           setStatus("");
@@ -665,9 +696,9 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
         <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
         <EditableLegValue label={`Prima pata ${index + 1}`} value={leg.premium} onChange={value => updateLeg(leg.id, "premium", value)} />
       </div>)}</details>
-      <Field label="Tasa anual continua %" value={input.rate} onChange={value => update("rate", value)} />
       <Field label="Dividendos anuales continuos %" value={input.dividendYield} onChange={value => update("dividendYield", value)} />
-      </details></>}
+      </>}
+      </details>
     {view === "analysis" && historicalCosts}
     </section><section className="ct-sim-card ct-sim-results" aria-label="Resultados de la simulación">
       {(!parsed.ok || !summary) ? view === "analysis" && chart : <>
