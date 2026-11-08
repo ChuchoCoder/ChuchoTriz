@@ -39,6 +39,11 @@ issues públicos. Usar el canal privado habitual con el propietario.
   y moneda. Los ajustes de nominales y su costo quedan en el borrador. Las pruebas
   verifican cancelación, cambios de cuenta,
   serialización, datos incompletos y ausencia de cuerpos o errores privados.
+  `options-executions-reader.js` consulta las ejecuciones de la cuenta activa
+  al pulsar **Actualizar desde Matriz**. Solo devuelve los campos necesarios
+  para la vista y el token opaco de contexto. Si se cierra la pestaña, expira
+  la lectura o cambia la cuenta, el lector descarta el resultado y deja
+  de iniciar búsquedas de instrumentos.
   Se revisan CSP, frames y exposición a otras extensiones.
   La ausencia de CSP conserva los valores predeterminados de Chrome MV3.
 - free-files.json enumera cada archivo autorizado. Cada incorporación requiere

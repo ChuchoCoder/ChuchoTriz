@@ -8,7 +8,7 @@
     "build": "npm run check:free && tsc && vite build && node scripts/check-free.mjs --dist",
     "preview": "vite preview",
     "watch": "tsc && vite build --watch",
-    "test": "vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs",
+    "test": "vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs",
     "check:free": "node scripts/check-free.mjs",
     "package:free": "npm run build && node scripts/package-free.mjs",
     "security:lint": "eslint \"src/**/*.{ts,tsx,js,jsx,mjs,cjs}\" \"public/**/*.{ts,tsx,js,jsx,mjs,cjs}\" --no-error-on-unmatched-pattern --max-warnings=0",

@@ -40,6 +40,18 @@ Seleccioná BID/ASK para incorporar patas simuladas, ajustá cantidades con sign
 explorá el gráfico con distintos precios, fechas y VI. No envía órdenes al mercado.
 Ver [uso, fuentes y supuestos del simulador](docs/options-simulator.md).
 
+En **Configuración → Operaciones de opciones**, pulsá **Actualizar desde Matriz**
+para consultar las ejecuciones disponibles en el reporte de la cuenta activa.
+Las operaciones se muestran por subyacente y vencimiento, con Calls a la
+izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** calcula
+el precio promedio ponderado por serie y mantiene compras y ventas separadas.
+Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
+Fecha, Cantidad, Strike y Precio del procesador para pegar en una planilla.
+En **Formato regional**, elegí **Automático**, **Argentina** o **Estados Unidos**
+según la configuración de tu planilla. La elección ajusta la fecha y los números
+de la tabla y de la copia, y se guarda en el perfil de Chrome.
+Esta lectura está habilitada para Matriz 4.24.4.
+
 Compatible con `https://*.xoms.com.ar/*` y `https://remarkets.matriz.com.ar/*`.
 
 ## Instalar

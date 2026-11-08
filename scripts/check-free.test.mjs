@@ -35,6 +35,9 @@ test('accepts exactly the scoped options market reader and rejects broader page 
   assert.doesNotThrow(() => assertManifest({ ...manifest(), web_accessible_resources: [
     { ...resource, resources: ['options-market-reader.js', 'options-position-reader.js'] },
   ] }));
+  assert.doesNotThrow(() => assertManifest({ ...manifest(), web_accessible_resources: [
+    { ...resource, resources: ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js'] },
+  ] }));
   for (const change of [
     { resources: ['options-market-reader.js', 'other.js'] }, { matches: ['<all_urls>'] },
     { extension_ids: ['*'] }, { resources: ['https://remote.example/code.js'] },

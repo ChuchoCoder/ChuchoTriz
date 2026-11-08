@@ -1,0 +1,51 @@
+.ct-operations {
+  --ops-bg: #151d2b;
+  --ops-field: #202b3d;
+  --ops-text: #e8edf6;
+  --ops-border: #64748b;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+  color-scheme: dark;
+  color: var(--ops-text);
+  background: var(--ops-bg);
+}
+.ct-free-settings-panel[data-color-scheme="light"] .ct-operations {
+  --ops-bg: #f5f6fa;
+  --ops-field: #fff;
+  --ops-text: #202837;
+  --ops-border: #7b8494;
+  color-scheme: light;
+}
+.ct-operations-toolbar, .ct-operations-toolbar label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ct-operations-toolbar button, .ct-operations-toolbar select {
+  min-height: 30px;
+  padding: 3px 8px;
+  border: 1px solid var(--ops-border);
+  border-radius: 4px;
+  color: inherit;
+  background: var(--ops-field);
+  font: inherit;
+}
+.ct-operations-toolbar button { display: inline-flex; align-items: center; gap: 6px; }
+.ct-operations-toolbar button svg { flex-shrink: 0; }
+.ct-operations-toolbar button:not(:disabled) { cursor: pointer; }
+.ct-operations-toolbar button:disabled { opacity: .55; }
+.ct-operations p { margin: 0; }
+.ct-operations-group { padding: 10px; border: 1px solid var(--ops-border); border-radius: 6px; }
+.ct-operations-heading { justify-content: space-between; margin-bottom: 8px; }
+.ct-operations-heading h3, .ct-operations-heading h4 { margin: 0; color: inherit; font: inherit; font-weight: 700; }
+.ct-operations-heading h3 span { font-weight: 400; }
+.ct-operations-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 370px), 1fr)); gap: 10px; }
+.ct-operations-side { min-width: 0; padding: 8px; border: 1px solid var(--ops-border); border-radius: 4px; }
+.ct-operations-pagination { margin-top: 8px; }
+.ct-operations p.ct-operations-copy-status { margin-bottom: 8px; }
+.ct-operations p.ct-operations-empty { padding: 4px 8px; }
+.ct-operations-table { overflow: auto; }
+.ct-operations-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ct-operations-table th, .ct-operations-table td { padding: 4px 8px; border-bottom: 1px solid var(--ops-border); text-align: right; white-space: nowrap; }
+.ct-operations-table th:nth-child(-n+2), .ct-operations-table td:nth-child(-n+2) { text-align: left; }

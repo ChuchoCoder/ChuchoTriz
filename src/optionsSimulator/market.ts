@@ -34,26 +34,26 @@ export class MarketReader {
     clearTimeout(task.timer); this.pending.delete(msg.id);
     if (typeof msg.error === "string") task.reject(Error(msg.error)); else task.resolve(msg.result);
   };
-  constructor(private resource: "options-market-reader.js" | "options-position-reader.js" = "options-market-reader.js") {
-    this.channel = `chuchotriz-options-${resource === "options-position-reader.js" ? "position" : "market"}-${crypto.randomUUID()}`;
+  constructor(private resource: "options-market-reader.js" | "options-position-reader.js" | "options-executions-reader.js" = "options-market-reader.js") {
+    this.channel = `chuchotriz-${resource}-${crypto.randomUUID()}`;
     window.addEventListener("message", this.receive);
     this.script.dataset.channel = this.channel;
     this.script.src = chrome.runtime.getURL(resource);
     this.ready = new Promise((resolve, reject) => {
       this.releaseReady = resolve;
-      this.script.onload = () => resolve(); this.script.onerror = () => reject(Error("No se pudo cargar el lector de mercado. Recargá Matriz."));
+      this.script.onload = () => resolve(); this.script.onerror = () => reject(Error("No se pudo cargar el lector de Matriz. Recargá Matriz."));
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "positions" | "verifyPositionContext", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext", params = {}): Promise<T> {
     await this.ready;
     if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(id); window.postMessage({ channel: this.channel, kind: "retire", id }, location.origin);
-        reject(Error("La lectura de mercado no respondió a tiempo."));
-      }, this.resource === "options-position-reader.js" ? 15000 : 5000);
+        reject(Error("La lectura de Matriz no respondió a tiempo."));
+      }, this.resource === "options-market-reader.js" ? 5000 : 15000);
       this.pending.set(id, { resolve: value => resolve(value as T), reject, timer });
       window.postMessage({ channel: this.channel, kind: "request", id, method, params }, location.origin);
     });
