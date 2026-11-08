@@ -60,4 +60,4 @@
 .ct-operations-table { overflow: auto; }
 .ct-operations-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .ct-operations-table th, .ct-operations-table td { padding: 4px 8px; border-bottom: 1px solid var(--ops-border); text-align: right; white-space: nowrap; }
-.ct-operations-table th:nth-child(-n+2), .ct-operations-table td:nth-child(-n+2) { text-align: left; }
+.ct-operations-table th:first-child, .ct-operations-table td:first-child { text-align: left; }

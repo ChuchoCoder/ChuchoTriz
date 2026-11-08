@@ -72,9 +72,9 @@ function OperationsSide({ label, rows, averaged, format, disabled, notice, onCop
     </div>
     <CopyError notice={notice} />
     {rows.length ? <div className="ct-operations-table"><table aria-label={label}>
-      <thead><tr><th>Fecha</th><th>Serie</th><th>Cantidad</th><th>Strike</th><th>{averaged ? "Precio promedio" : "Precio"}</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Cantidad</th><th>Strike</th><th>{averaged ? "Precio promedio" : "Precio"}</th></tr></thead>
       <tbody>{rows.slice(page * pageSize, (page + 1) * pageSize).map((row, index) => <tr key={index}>
-        <td>{format.date(row.timestamp)}</td><td>{row.symbol}</td><td>{format.quantity(row.quantity)}</td>
+        <td>{format.date(row.timestamp)}</td><td>{format.quantity(row.quantity)}</td>
         <td>{format.number(row.strike)}</td><td>{format.number(row.price)}</td>
       </tr>)}</tbody>
     </table></div> : <p className="ct-operations-empty">Sin ejecuciones de {label.toLowerCase()}.</p>}
