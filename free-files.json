@@ -108,6 +108,7 @@
   "src/optionsSimulator/StrategyPicker.tsx",
   "src/optionsSimulator/strategyTemplates.test.ts",
   "src/optionsSimulator/strategyTemplates.ts",
+  "src/ToolbarIcon.tsx",
   "src/PresetBook.test.ts",
   "src/PresetBook.ts",
   "src/PresetSession.test.ts",

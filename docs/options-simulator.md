@@ -4,10 +4,11 @@ El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulado
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
 Extrínseco Mid, variación, volumen nominal y último precio operado. El armado no envía, modifica ni cancela órdenes.
-Al abrir el simulador se consulta automáticamente la posición de opciones de la
-cuenta activa para el subyacente y vencimiento iniciales. Si hay tenencia, aparece
-en la grilla. Si la cadena está vacía o falla la consulta, quedan disponibles las
-cotizaciones y el botón **Cargar posición**.
+El simulador abre en **Cotizaciones** y muestra ambos modos en la barra.
+La primera vez que entrás a **Posición actual** en una simulación, se consulta
+la tenencia de la cuenta activa para el subyacente y vencimiento seleccionados.
+Si el reporte está vacío o falla la consulta, podés completar la posición a mano.
+Al alternar entre los modos, el borrador conserva los cambios que ingresaste.
 
 **⚙ Config.** reúne el filtro de VI y las casillas para mostrar, ocultar y
 ordenar las columnas laterales. El orden se guarda por sitio y se refleja en
@@ -593,7 +594,7 @@ disponible para lectores de pantalla y ya no altera la posición del botón.
 
 Para repetir el recorrido, ejecutar `npm run package:free`, iniciar
 `tools/preview-free.mjs` con `CHUCHOTRIZ_PREVIEW_PORT=60472` y seleccionar
-`http://127.0.0.1:60472/fixture` en el perfil compartido de ChuchoTriz. Pasar la
+`http://127.0.0.1:60472/fixture?scenario=regression` en el perfil compartido de ChuchoTriz. Pasar la
 función de `tools/validate-options-simulator.playwright.js` al argumento `code`
 de `browser_run_code_unsafe`. Si el navegador está oculto, se puede activar
 temporalmente `Emulation.setFocusEmulationEnabled` en el tab de la fixture y

@@ -3,6 +3,7 @@ import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, 
   newLeg, numeric, parseSignedQuantity, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain, { SignedQuantityInput } from "./MarketChain";
+import ToolbarIcon from "../ToolbarIcon";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
@@ -120,7 +121,9 @@ function PositionCosts({ input, onCosts, onRealized, onNominals, onUnderlyingCos
   const { reportedAt, capturedAt, underlying, nominalOverride, underlyingUnavailable } = input.position;
   const exposure = underlyingExposure(input.position);
   const reportDateAhead = reportedAt !== undefined && capturedAt !== undefined && reportedAt > capturedAt + 300000;
-  const reset = <button type="button" onClick={onReset} title="Descarta el borrador y habilita otro subyacente o vencimiento.">Nueva simulación</button>;
+  const reset = <button type="button" className="ct-tool-icon-button" onClick={onReset} title="Descarta el borrador y habilita otro subyacente o vencimiento.">
+    <ToolbarIcon name="new" />Nueva simulación
+  </button>;
   const status = <small role="status" aria-label="Guardado de datos históricos">{input.position.storage ? saveStatus.message : "Edición manual en este borrador."}</small>;
   const report = <>
     {reportedAt !== undefined && <small>Reporte de Matriz · {new Date(reportedAt).toLocaleString("es-AR")}</small>}
@@ -538,7 +541,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       const next = event.key === "Home" ? "build" : event.key === "End" ? "analysis" : view === "build" ? "analysis" : "build";
       changeView(next);
     }}>{([ ["build", "Armado"], ["analysis", "Análisis"] ] as const).map(([key, label]) => <button key={key} type="button" role="tab" data-view={key}
-      id={`${menusId}-${key}-tab`} aria-controls={`${menusId}-${key}-panel`} aria-selected={view === key} tabIndex={view === key ? 0 : -1} onClick={() => changeView(key)}>{label}</button>)}</div>
+      className="ct-tool-icon-button" id={`${menusId}-${key}-tab`} aria-controls={`${menusId}-${key}-panel`}
+      aria-selected={view === key} tabIndex={view === key ? 0 : -1} onClick={() => changeView(key)}><ToolbarIcon name={key} />{label}</button>)}</div>
     </div>
     <span role="status" className="ct-sim-sr">{status}</span>
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} toolbar={marketToolbar} input={input} setInput={setInput} onStrikeMarket={setStrikeMarket} onNewStrategy={() => setChartZoom(undefined)}
@@ -553,7 +557,8 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
             title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
               : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↓" : "↑"}</button>;
         })}</div></div>)}</div>
-      <button type="button" className="ct-sim-clear-legs" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"} onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}>Limpiar</button></div>
+      <button type="button" className="ct-sim-clear-legs ct-tool-icon-button" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"}
+        onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
         <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-price" /><col className="ct-sim-leg-remove" /></colgroup>
         <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th title="Prima de entrada por unidad">Precio</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
@@ -602,7 +607,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
       {!!input.legs.length && <StrategyPriceControl input={input} market={strikeMarket} entry={input.position ? undefined : summary?.entry} maxProfit={summary?.maxProfit} maxLoss={summary?.maxLoss} onChange={changeEntryPrice} />}
     </section>
     {view === "build" && <section className="ct-sim-card ct-sim-quick-results" aria-label="Resultado rápido del armado">
-      <div className="ct-sim-section-heading"><h3>Resultado rápido</h3><button type="button" title={`Supuestos: ${input.scenarioDate} · Cambio de VI ${formatOptionVolatility(numeric(input.volatilityShift))} pp`} onClick={() => changeView("analysis")}>Análisis →</button></div>
+      <div className="ct-sim-section-heading"><h3>Resultado rápido</h3>
+        <button type="button" className="ct-tool-icon-button" title={`Supuestos: ${input.scenarioDate} · Cambio de VI ${formatOptionVolatility(numeric(input.volatilityShift))} pp`}
+          onClick={() => changeView("analysis")}><ToolbarIcon name="analysis" />Análisis →</button>
+      </div>
       {chart}
     </section>}</div></div>
     <div id={`${menusId}-analysis-panel`} role="tabpanel" aria-labelledby={`${menusId}-analysis-tab`} hidden={view !== "analysis"} className="ct-sim-analysis-panel">

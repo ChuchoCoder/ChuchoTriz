@@ -1,8 +1,8 @@
 // Pass this function to the shared ChuchoTriz Playwright MCP browser_run_code_unsafe.
-// Requires tools/preview-free.mjs on port 60472. Reuses the selected preview tab;
+// Requires the regression scenario in tools/preview-free.mjs. Reuses the selected preview tab;
 // never launches a browser, loads broker pages, or exercises execution APIs.
 async (page) => {
-  if (!page.url().startsWith('http://127.0.0.1:60472/')) throw Error('Select the local simulator preview tab first.');
+  if (!/^http:\/\/127\.0\.0\.1:\d+\/fixture\?scenario=regression$/.test(page.url())) throw Error('Select the local simulator regression scenario first.');
   const checks = [], interactions = { pointer: 0, dom: 0 };
   const assert = (ok, message) => { if (!ok) throw Error(message); };
   const json = value => JSON.stringify(value, (_, item) => typeof item === 'number' && !Number.isFinite(item) ? String(item) : item);
