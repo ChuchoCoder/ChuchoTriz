@@ -57,3 +57,15 @@ it("derives per-unit theta and Mid extrinsic only with compatible inputs, retain
   expect(deriveOptionMetrics(pool, data, { ...context, available: false }).byId['call-90'].theta).toBeUndefined();
   expect(deriveOptionMetrics(pool, data, { ...context, now: Date.parse('2026-11-20T18:00:00Z') }).byId['call-90'].theta).toBeUndefined();
 });
+
+it.each([
+  [10000.01, 10000, .01],
+  [1000, 1000.001, .001],
+  [1000000000.01, 1000000000, .01],
+  [1.25e-7, 1e-7, 2.5e-8],
+])("uses the quoted decimal difference for spot %s and strike %s", (spot, strike, expected) => {
+  const pool = contracts.slice(0, 2).map(contract => ({ ...contract, strike, strikeCurrency: "ARS" }));
+  const result = deriveOptionMetrics(pool, sample(), { ...settings, spot, currency: "ARS" });
+  expect(pool.map(contract => result.byId[contract.id].intrinsic))
+    .toEqual(spot > strike ? [expected, 0] : [0, expected]);
+});

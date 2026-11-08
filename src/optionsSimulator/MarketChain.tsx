@@ -45,11 +45,13 @@ const columnLabel = (column: OptionalColumn) => chainColumns[column].label ?? ch
 const storedColumnOrder = (saved: unknown) => Array.isArray(saved)
   ? [...new Set(saved.filter((item): item is OptionalColumn => optionalColumns.includes(item)))]
   : undefined;
+type ColumnEdit = (columns: OptionalColumn[]) => OptionalColumn[];
 
 function useChainColumnPreferences() {
   const [savedColumns, setSavedColumns] = useState<OptionalColumn[]>();
-  const currentColumns = useRef<OptionalColumn[]>(undefined);
-  const unsaved = useRef(false);
+  const confirmedColumns = useRef<OptionalColumn[]>(undefined);
+  const pendingEdits = useRef<ColumnEdit[]>([]);
+  const writing = useRef(false);
   const writes = useRef(Promise.resolve());
   const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
   const legacyKey = `OptionsSimulatorChainColumnsV1:${location.origin}`;
@@ -59,21 +61,26 @@ function useChainColumnPreferences() {
     return storedColumnOrder(values[key]) ?? (Array.isArray(legacy)
       ? optionalColumns.filter(column => legacy.includes(column)) : defaultColumns);
   }
+  function applyPendingEdits(columns: OptionalColumn[]) {
+    return pendingEdits.current.reduce((order, edit) => edit(order), columns);
+  }
   function publish(columns: OptionalColumn[]) {
-    currentColumns.current = columns;
-    setSavedColumns(columns);
+    confirmedColumns.current = columns;
+    const visible = applyPendingEdits(columns);
+    setSavedColumns(visible);
+    return visible;
   }
   useEffect(() => {
     let mounted = true;
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === "local" && key in changes && !unsaved.current) {
-        publish(storedColumnOrder(changes[key].newValue) ?? defaultColumns);
-      }
+      // A local write can emit its change event before the promise resolves.
+      if (area !== "local" || !(key in changes) || writing.current) return;
+      publish(storedColumnOrder(changes[key].newValue) ?? defaultColumns);
     };
     const storageEvents = globalThis.chrome?.storage?.onChanged;
     storageEvents?.addListener(onChanged);
     void readColumns().catch(() => defaultColumns).then(columns => {
-      if (mounted && !currentColumns.current) publish(columns);
+      if (mounted && !confirmedColumns.current) publish(columns);
     });
     return () => {
       mounted = false;
@@ -81,16 +88,30 @@ function useChainColumnPreferences() {
     };
   }, [key, legacyKey]);
 
-  function saveColumns(edit: (columns: OptionalColumn[]) => OptionalColumn[]) {
+  function saveColumns(edit: ColumnEdit) {
+    pendingEdits.current.push(edit);
+    publish(confirmedColumns.current ?? defaultColumns);
     async function save() {
-      const local = currentColumns.current ?? defaultColumns;
-      const previous = unsaved.current ? local : await readColumns().catch(() => local);
-      const columns = edit(previous);
-      publish(columns);
+      if (!pendingEdits.current.length) return;
+      let previous: OptionalColumn[];
+      try {
+        previous = await readColumns();
+      } catch {
+        // Keep the edits pending until the shared order can be read.
+        return;
+      }
+      const batchSize = pendingEdits.current.length;
+      const columns = publish(previous);
+      writing.current = true;
       try {
         await chrome.storage.local.set({ [key]: columns });
-        unsaved.current = false;
-      } catch { unsaved.current = true; }
+        pendingEdits.current.splice(0, batchSize);
+        publish(columns);
+      } catch {
+        // Retry the same edits on the next change.
+      } finally {
+        writing.current = false;
+      }
     }
     writes.current = writes.current.then(async () => {
       // Read, edit and write under one lock shared by tabs of this Matriz origin.
@@ -98,7 +119,13 @@ function useChainColumnPreferences() {
       else await save();
     });
   }
-  return { savedColumns, saveColumns };
+  function resetColumns() {
+    const shown = applyPendingEdits(confirmedColumns.current ?? defaultColumns);
+    // A reset applies to the layout the user saw when they requested it.
+    saveColumns(columns => columns.length === shown.length && columns.every((column, index) => column === shown[index])
+      ? defaultColumns : columns);
+  }
+  return { savedColumns, saveColumns, resetColumns };
 }
 
 const strikeWidth = { regular: 104, compact: 76 };
@@ -182,7 +209,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [expiration, setExpiration] = useState("");
   const [market, setMarket] = useState("");
   const [selectionReady, setSelectionReady] = useState(false);
-  const { savedColumns, saveColumns } = useChainColumnPreferences();
+  const { savedColumns, saveColumns, resetColumns } = useChainColumnPreferences();
   const chainConfigId = useId();
   const configDialog = useRef<HTMLDialogElement>(null);
   const nativePopover = typeof HTMLElement.prototype.showPopover === "function";
@@ -628,7 +655,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           })}
         </ol>
       </div>
-      <button type="button" onClick={() => saveColumns(() => defaultColumns)}>Restablecer columnas</button>
+      <button type="button" onClick={resetColumns}>Restablecer columnas</button>
       <button type="button" popoverTarget={nativePopover ? chainConfigId : undefined} popoverTargetAction={nativePopover ? "hide" : undefined}
         onClick={nativePopover ? undefined : () => configDialog.current?.close()}>Listo</button>
   </>;

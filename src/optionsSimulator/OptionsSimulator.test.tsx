@@ -205,6 +205,11 @@ it("reorders and replaces mirrored chain columns while keeping the book, IV and 
   await mount();
   expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,0125");
   expect(byLabel("Valor intrínseco CALL 100").title).toBe("0,0125");
+  marketState.current.catalog!.contracts.find(contract => contract.id === "call-100")!.strike = 10000;
+  quotes.GGAL.last = 10000.01;
+  await mount();
+  expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,01");
+  expect(byLabel("Valor intrínseco CALL 100").title).toBe("0,01");
   await act(async () => button("Restablecer columnas").click());
   expect(byLabel("Último precio operado CALL 100").textContent).toBe("3,75");
   expect(byLabel("Configurar cadena de opciones")).toBeTruthy();
@@ -236,6 +241,66 @@ it("syncs external column changes and applies edits to the latest saved order", 
   await act(async () => checkbox("Vega teórica").click());
   expect(stored[key]).toEqual(["last", "gamma", "referencePrice", "vega"]);
   expect(checkbox("Precio de referencia").checked).toBe(true);
+});
+
+it("replays pending column edits once on the latest saved order after storage errors", async () => {
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  stored[key] = ["last", "delta", "gamma"];
+  await mount();
+  write.mockRejectedValueOnce(Error("Storage write failed"));
+  await act(async () => byLabel<HTMLButtonElement>("Mover Gamma teórica hacia el borde").click());
+  expect(stored[key]).toEqual(["last", "delta", "gamma"]);
+  const syncOrder = (order: string[]) => {
+    stored[key] = order;
+    storageListeners.forEach(listener => listener({ [key]: { newValue: order } }, "local"));
+  };
+  await act(async () => syncOrder(["last", "delta", "gamma", "referencePrice"]));
+  const checkbox = (label: string) => [...byLabel("Columnas de cotizaciones").querySelectorAll("label")]
+    .find(node => node.textContent?.trim() === label)!.querySelector<HTMLInputElement>("input")!;
+  expect(checkbox("Precio de referencia").checked).toBe(true);
+  vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(Error("Storage read failed"));
+  await act(async () => checkbox("Vega teórica").click());
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(checkbox("Vega teórica").checked).toBe(true);
+  stored[key] = ["referencePrice", "last", "delta", "gamma"];
+  write.mockImplementationOnce(async values => syncOrder(values[key]));
+  await act(async () => checkbox("Mid").click());
+  const expected = ["referencePrice", "last", "gamma", "delta", "vega", "mid"];
+  expect(stored[key]).toEqual(expected);
+  const visible = container.querySelectorAll<HTMLSelectElement>(".ct-opt-chain thead tr:last-child select");
+  expect(Array.from(visible).slice(0, expected.length).map(select => select.value)).toEqual(expected);
+});
+
+it("drops a failed reset if another tab saves a different order before retry", async () => {
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  stored[key] = ["last", "delta"];
+  await mount();
+  write.mockRejectedValueOnce(Error("Storage write failed"));
+  await act(async () => button("Restablecer columnas").click());
+  expect(stored[key]).toEqual(["last", "delta"]);
+  await act(async () => {
+    stored[key] = ["delta", "last", "referencePrice"];
+    storageListeners.forEach(listener => listener({ [key]: { newValue: stored[key] } }, "local"));
+  });
+  const vega = [...byLabel("Columnas de cotizaciones").querySelectorAll("label")]
+    .find(node => node.textContent?.trim() === "Vega teórica")!.querySelector("input")!;
+  await act(async () => vega.click());
+  expect(stored[key]).toEqual(["delta", "last", "referencePrice", "vega"]);
+});
+
+it("preserves a reset queued after a move while storage is still reading", async () => {
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  stored[key] = ["last", "delta"];
+  await mount();
+  let finishRead: (values: Record<string, unknown>) => void = () => {};
+  vi.mocked(chrome.storage.local.get).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+  await act(async () => {
+    byLabel<HTMLButtonElement>("Mover Delta hacia el borde").click();
+    button("Restablecer columnas").click();
+  });
+  expect(write).not.toHaveBeenCalled();
+  await act(async () => finishRead(stored));
+  expect(stored[key]).toEqual(["volume", "change", "delta", "theta", "extrinsic", "last"]);
 });
 
 it("pulses each price in its own direction and ignores the first quote after a gap", async () => {
