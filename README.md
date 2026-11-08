@@ -46,6 +46,9 @@ Elegí subyacente, vencimiento y Calls o Puts. **Agrupar por strike** calcula
 el precio promedio ponderado y mantiene compras y ventas separadas.
 **Copiar vista** y **Copiar Calls y Puts** generan las columnas tabuladas
 Fecha, Cantidad, Strike y Precio del procesador para pegar en una planilla.
+En **Formato regional**, elegí **Automático**, **Argentina** o **Estados Unidos**
+según la configuración de tu planilla. La elección ajusta la fecha y los números
+de la tabla y de la copia, y se guarda en el perfil de Chrome.
 Esta lectura está habilitada para Matriz 4.24.4.
 
 Compatible con `https://*.xoms.com.ar/*` y `https://remarkets.matriz.com.ar/*`.

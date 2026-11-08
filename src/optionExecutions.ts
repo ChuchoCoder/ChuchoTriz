@@ -1,4 +1,9 @@
 export type OptionKind = "call" | "put";
+export type ExecutionLocale = "auto" | "es-AR" | "en-US";
+
+export function normalizeExecutionLocale(value: unknown): ExecutionLocale {
+  return value === "es-AR" || value === "en-US" ? value : "auto";
+}
 
 export interface OptionExecution {
   symbol: string;
@@ -36,8 +41,10 @@ export function summarizeExecutions(executions: OptionExecution[], averaged: boo
   return [...rows].sort((a, b) => a.strike - b.strike || b.price - a.price);
 }
 
-export function executionFormatters(languages: readonly string[] = navigator.languages) {
-  const locale = languages.find(language => new Intl.NumberFormat(language).format(1.1).includes(".")) ?? "en-US";
+export function executionFormatters(preference: ExecutionLocale = "auto", languages: readonly string[] = navigator.languages) {
+  const locale = preference === "auto"
+    ? languages.find(language => new Intl.NumberFormat(language).format(1.1).includes(".")) ?? "en-US"
+    : preference;
   const numbers = new Intl.NumberFormat(locale, { maximumFractionDigits: 4 });
   const dates = new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" });
   return {

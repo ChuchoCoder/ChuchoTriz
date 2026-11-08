@@ -127,6 +127,38 @@ function createForm(cantidad = "") {
   };
 }
 
+it("guarda el formato regional de operaciones y lo recupera al volver a abrir la pestaña", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const { default: OptionsOperations } = await import("./OptionsOperations");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const storageKey = "OptionsOperationsLocale";
+  const saved: Record<string, unknown> = {};
+  const set = vi.fn(async (value: Record<string, unknown>) => { Object.assign(saved, value); });
+  vi.stubGlobal("chrome", { storage: { ...chrome.storage, local: { get: async () => ({ ...saved }), set } } });
+  const select = () => host.querySelector<HTMLSelectElement>("select")!;
+  try {
+    await act(async () => { root.render(<OptionsOperations embedded />); });
+    expect(select().value).toBe("auto");
+    await act(async () => {
+      select().value = "es-AR";
+      select().dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(set).toHaveBeenCalledWith({ [storageKey]: "es-AR" });
+    expect(select().value).toBe("es-AR");
+
+    await act(async () => { root.render(null); });
+    await act(async () => { root.render(<OptionsOperations embedded />); });
+    expect(select().value).toBe("es-AR");
+    await act(async () => {
+      const onChanged = vi.mocked(chrome.storage.onChanged.addListener).mock.lastCall![0];
+      onChanged({ [storageKey]: { oldValue: "es-AR", newValue: "en-US" } }, "local");
+    });
+    expect(select().value).toBe("en-US");
+  } finally { await act(async () => { root.unmount(); }); }
+});
+
 function presetButton(form: HTMLElement, text: string) {
   const button = [...form.querySelectorAll<HTMLButtonElement>(".ButtonPreset")].find(preset => preset.textContent === text);
   expect(button).toBeDefined();

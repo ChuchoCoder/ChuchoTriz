@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MarketReader } from "./optionsSimulator/market";
-import { executionClipboard, executionFormatters, summarizeExecutions, type OptionExecution, type OptionKind } from "./optionExecutions";
+import { executionClipboard, executionFormatters, normalizeExecutionLocale, summarizeExecutions, type ExecutionLocale, type OptionExecution, type OptionKind } from "./optionExecutions";
 import "./OptionsOperations.css";
 
 interface ExecutionReport {
@@ -10,6 +10,7 @@ interface ExecutionReport {
 }
 
 const pageSize = 200;
+const localeKey = "OptionsOperationsLocale";
 const contextChanged = "Cambió la cuenta o la sesión de Matriz. Volvé a cargar las operaciones.";
 
 export default function OptionsOperations({ embedded }: { embedded: boolean }) {
@@ -23,7 +24,44 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
   const [kindChoice, setKind] = useState<OptionKind>();
   const [averaged, setAveraged] = useState(false);
   const [pageChoice, setPage] = useState(0);
-  const format = useMemo(() => executionFormatters(), []);
+  const [locale, setLocale] = useState<ExecutionLocale>("auto");
+  const [localePending, setLocalePending] = useState(true);
+  const [localeIssue, setLocaleIssue] = useState("");
+  const localeRevision = useRef(0);
+  const format = useMemo(() => executionFormatters(locale), [locale]);
+
+  useEffect(() => {
+    if (!embedded) return;
+    let active = true;
+    const revision = localeRevision.current;
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== "local" || !Object.hasOwn(changes, localeKey)) return;
+      localeRevision.current++;
+      setLocale(normalizeExecutionLocale(changes[localeKey].newValue));
+      setLocaleIssue("");
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    void chrome.storage.local.get(localeKey).then(values => {
+      if (active && revision === localeRevision.current) setLocale(normalizeExecutionLocale(values[localeKey]));
+    }).catch(() => {
+      if (active && revision === localeRevision.current) setLocaleIssue("No se pudo leer el formato guardado. Se usa Automático.");
+    }).finally(() => { if (active) setLocalePending(false); });
+    return () => { active = false; chrome.storage.onChanged.removeListener(onChanged); };
+  }, [embedded]);
+
+  async function saveLocale(value: string) {
+    const next = normalizeExecutionLocale(value);
+    const revision = localeRevision.current;
+    setLocalePending(true);
+    setLocaleIssue("");
+    setFeedback("");
+    try {
+      await chrome.storage.local.set({ [localeKey]: next });
+      if (revision === localeRevision.current) setLocale(next);
+    } catch {
+      setLocaleIssue("No se pudo guardar el formato regional. Volvé a intentar.");
+    } finally { setLocalePending(false); }
+  }
 
   useEffect(() => () => {
     reader.current?.dispose();
@@ -120,7 +158,14 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
         onChange={event => { setExpiration(event.target.value); setKind(undefined); setPage(0); setFeedback(""); }}>
         {expirations.map(value => <option key={value}>{value}</option>)}
       </select></label>}
+      <label>Formato regional <select value={locale} disabled={busy || localePending}
+        onChange={event => void saveLocale(event.target.value)}>
+        <option value="auto">Automático</option>
+        <option value="es-AR">Argentina (1.234,56)</option>
+        <option value="en-US">Estados Unidos (1,234.56)</option>
+      </select></label>
     </div>
+    {localeIssue && <p role="alert">{localeIssue}</p>}
     {!report && !busy && !issue && <p>Actualizá para ver las ejecuciones de opciones de la cuenta activa.</p>}
     {report?.unmatched ? <p role="status">{report.unmatched} {report.unmatched === 1 ? "ejecución quedó fuera" : "ejecuciones quedaron fuera"} porque faltan datos para identificarlas o copiarlas.</p> : null}
     {report && !report.rows.length && <p>No hay ejecuciones de opciones disponibles en el reporte de Matriz.</p>}
@@ -130,8 +175,8 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
           disabled={busy} onClick={() => { setKind(value); setPage(0); setFeedback(""); }}>{value === "call" ? "Calls" : "Puts"}</button>)}
         <label><input type="checkbox" checked={averaged} disabled={busy}
           onChange={event => { setAveraged(event.target.checked); setPage(0); setFeedback(""); }} /> Agrupar por strike</label>
-        <button type="button" disabled={busy || !visible.length} onClick={() => void copy(kind)}>Copiar vista</button>
-        <button type="button" disabled={busy} onClick={() => void copy("both")}>Copiar Calls y Puts</button>
+        <button type="button" disabled={busy || localePending || !visible.length} onClick={() => void copy(kind)}>Copiar vista</button>
+        <button type="button" disabled={busy || localePending} onClick={() => void copy("both")}>Copiar Calls y Puts</button>
       </div>
       {visible.length ? <div className="ct-operations-table"><table>
         <thead><tr><th>Fecha</th><th>Serie</th><th>Cantidad</th><th>Strike</th><th>{averaged ? "Precio promedio" : "Precio"}</th></tr></thead>

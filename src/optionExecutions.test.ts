@@ -26,7 +26,7 @@ describe("operaciones de opciones", () => {
 
   it("conserva la salida tabulada sin encabezados de columnas y los títulos del modo combinado", () => {
     const rows = [execution, { ...execution, kind: "put" as const, quantity: -1000, price: 1.23456 }];
-    const format = executionFormatters(["es-AR", "en-US"]);
+    const format = executionFormatters("auto", ["es-AR", "en-US"]);
     expect(executionClipboard(rows, "call", false, format)).toBe("11/06/2026\t2\t1,234.5\t10");
     expect(executionClipboard(rows, "both", true, format)).toBe(
       "OPERACIONES CALLS (CON PROMEDIOS)\n11/06/2026\t2\t1,234.5\t10\n\n" +
@@ -35,5 +35,14 @@ describe("operaciones de opciones", () => {
     expect(executionClipboard([execution], "both", false, format)).toBe(
       "OPERACIONES CALLS (SIN PROMEDIOS)\n11/06/2026\t2\t1,234.5\t10",
     );
+  });
+
+  it("respeta la región elegida en la fecha, el strike y el precio sin cambiar el TSV", () => {
+    const rows = [{ ...execution, quantity: -1000, price: 1.23456 }];
+    expect(executionClipboard(rows, "call", false, executionFormatters("es-AR", ["en-US"])))
+      .toBe("06/11/2026\t-1000\t1.234,5\t1,2346");
+    expect(executionClipboard(rows, "call", false, executionFormatters("en-US", ["en-GB"])))
+      .toBe("11/06/2026\t-1000\t1,234.5\t1.2346");
+    expect(executionFormatters("auto", ["es-AR"]).number(1234.5)).toBe("1,234.5");
   });
 });
