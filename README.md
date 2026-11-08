@@ -46,7 +46,7 @@ Las operaciones se muestran por subyacente y vencimiento, con Calls a la
 izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** calcula
 el precio promedio ponderado por serie y mantiene compras y ventas separadas.
 Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
-Fecha, Cantidad, Strike y Precio del procesador para pegar en una planilla.
+Vencimiento, Cantidad, Base y Prima para pegar en una planilla.
 En **Formato regional**, elegí **Automático**, **Argentina** o **Estados Unidos**
 según la configuración de tu planilla. La elección ajusta la fecha y los números
 de la tabla y de la copia, y se guarda en el perfil de Chrome.

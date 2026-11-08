@@ -121,14 +121,15 @@ test('rejects a late native report before looking up any instruments', async () 
 
 test('keeps valid executions when a lookup returns the wrong instrument or a malformed expiration', async () => {
   const f = fixture();
-  f.rows.push({ ...event, id: 12, securityId: 'invalid-expiration' });
-  f.mainStore.securityStore.getSecurity = async id => id === 'invalid-expiration'
-    ? { ...call, id, refData: { ...call.refData, maturityDateStr: 20261218 } }
+  f.rows.push({ ...event, id: 12, securityId: 'invalid-expiration' }, { ...event, id: 13, securityId: 'invalid-date' });
+  const maturities = new Map([['invalid-expiration', 20261218], ['invalid-date', '20260230']]);
+  f.mainStore.securityStore.getSecurity = async id => maturities.has(id)
+    ? { ...call, id, refData: { ...call.refData, maturityDateStr: maturities.get(id) } }
     : call;
   const { result } = await f.request();
   assert.equal(result.rows.length, 2);
   assert.ok(result.rows.every(row => row.symbol === call.symbolStr));
-  assert.equal(result.unmatched, 5);
+  assert.equal(result.unmatched, 6);
 });
 
 for (const interruption of ['detach', 'retire', 'account change', 'timeout']) {

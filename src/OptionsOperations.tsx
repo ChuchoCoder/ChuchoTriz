@@ -13,12 +13,14 @@ type CopyScope = OptionKind | "both";
 type CopyNotice = { group: string; scope: CopyScope; error?: boolean };
 
 const pageSize = 200;
+const copyConfirmationMs = 1600;
 const localeKey = "OptionsOperationsLocale";
 const contextChanged = "Cambió la cuenta o la sesión de Matriz. Volvé a cargar las operaciones.";
 
 const iconPaths = {
   refresh: "M20 11a8 8 0 1 0-2 6m2-12v6h-6",
   copy: "M8 8h12v12H8zM16 8V4H4v12h4",
+  check: "m5 12 4 4L19 6",
   previous: "m15 6-6 6 6 6",
   next: "m9 6 6 6-6 6",
 };
@@ -28,10 +30,26 @@ function OperationIcon({ icon }: { icon: keyof typeof iconPaths }) {
     stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={iconPaths[icon]} /></svg>;
 }
 
-function CopyStatus({ notice }: { notice?: CopyNotice }) {
-  if (!notice) return null;
-  return <p className="ct-operations-copy-status" role={notice.error ? "alert" : "status"}>
-    {notice.error ? "No se pudo copiar. Volvé a intentar con Matriz en primer plano." : "Operaciones copiadas al portapapeles."}
+function CopyButton({ label, disabled, notice, onCopy }: {
+  label: string;
+  disabled: boolean;
+  notice?: CopyNotice;
+  onCopy(): void;
+}) {
+  const copied = !!notice && !notice.error;
+  return <button type="button" disabled={disabled} className="ct-operations-copy-button" data-copied={copied || undefined} onClick={onCopy}>
+    <OperationIcon icon={copied ? "check" : "copy"} />
+    <span className="ct-operations-copy-label">
+      <span aria-hidden="true">{label}</span>
+      <span aria-live="polite">{copied ? "Copiado!" : label}</span>
+    </span>
+  </button>;
+}
+
+function CopyError({ notice }: { notice?: CopyNotice }) {
+  if (!notice?.error) return null;
+  return <p className="ct-operations-copy-error" role="alert">
+    No se pudo copiar. Volvé a intentar con Matriz en primer plano.
   </p>;
 }
 
@@ -50,13 +68,13 @@ function OperationsSide({ label, rows, averaged, format, disabled, notice, onCop
   return <div className="ct-operations-side">
     <div className="ct-operations-toolbar ct-operations-heading">
       <h4>{label}</h4>
-      <button type="button" disabled={disabled || !rows.length} onClick={onCopy}><OperationIcon icon="copy" />Copiar {label}</button>
+      <CopyButton label={`Copiar ${label}`} disabled={disabled || !rows.length} notice={notice} onCopy={onCopy} />
     </div>
-    <CopyStatus notice={notice} />
+    <CopyError notice={notice} />
     {rows.length ? <div className="ct-operations-table"><table aria-label={label}>
-      <thead><tr><th>Fecha</th><th>Serie</th><th>Cantidad</th><th>Strike</th><th>{averaged ? "Precio promedio" : "Precio"}</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Cantidad</th><th>Strike</th><th>{averaged ? "Precio promedio" : "Precio"}</th></tr></thead>
       <tbody>{rows.slice(page * pageSize, (page + 1) * pageSize).map((row, index) => <tr key={index}>
-        <td>{format.date(row.timestamp)}</td><td>{row.symbol}</td><td>{format.quantity(row.quantity)}</td>
+        <td>{format.date(row.timestamp)}</td><td>{format.quantity(row.quantity)}</td>
         <td>{format.number(row.strike)}</td><td>{format.number(row.price)}</td>
       </tr>)}</tbody>
     </table></div> : <p className="ct-operations-empty">Sin ejecuciones de {label.toLowerCase()}.</p>}
@@ -80,6 +98,12 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
   const [localeIssue, setLocaleIssue] = useState("");
   const localeRevision = useRef(0);
   const format = useMemo(() => executionFormatters(locale), [locale]);
+
+  useEffect(() => {
+    if (!copyNotice || copyNotice.error) return;
+    const timer = setTimeout(() => setCopyNotice(current => current === copyNotice ? undefined : current), copyConfirmationMs);
+    return () => clearTimeout(timer);
+  }, [copyNotice]);
 
   useEffect(() => {
     if (!embedded) return;
@@ -207,20 +231,22 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
     {report?.unmatched ? <p role="status">{report.unmatched} {report.unmatched === 1 ? "ejecución quedó fuera" : "ejecuciones quedaron fuera"} porque faltan datos para identificarlas o copiarlas.</p> : null}
     {report && !report.rows.length && <p>No hay ejecuciones de opciones disponibles en el reporte de Matriz.</p>}
     {issue && <p role="alert">{issue}</p>}
-    {groups.map(group => <section key={group.key} className="ct-operations-group" aria-label={`${group.underlying}, vencimiento ${group.expiration}`}>
-      <div className="ct-operations-toolbar ct-operations-heading">
-        <h3>{group.underlying} <span>· Vencimiento <time dateTime={group.expiration}>{group.expiration}</time></span></h3>
-        <button type="button" disabled={busy || localePending} onClick={() => void copy(group, "both")}>
-          <OperationIcon icon="copy" />Copiar Calls y Puts
-        </button>
-      </div>
-      <CopyStatus notice={copyNotice?.group === group.key && copyNotice.scope === "both" ? copyNotice : undefined} />
-      <div className="ct-operations-sides" key={String(averaged)}>
-        {(["call", "put"] as const).map(kind => <OperationsSide key={kind} label={kind === "call" ? "Calls" : "Puts"}
-          rows={group.rows.filter(row => row.kind === kind)} averaged={averaged} format={format}
-          disabled={busy || localePending} notice={copyNotice?.group === group.key && copyNotice.scope === kind ? copyNotice : undefined}
-          onCopy={() => void copy(group, kind)} />)}
-      </div>
-    </section>)}
+    {groups.map(group => {
+      const notice = copyNotice?.group === group.key ? copyNotice : undefined;
+      const combinedNotice = notice?.scope === "both" ? notice : undefined;
+      return <section key={group.key} className="ct-operations-group" aria-label={`${group.underlying}, vencimiento ${group.expiration}`}>
+        <div className="ct-operations-toolbar ct-operations-heading">
+          <h3>{group.underlying} <span>· Vencimiento <time dateTime={group.expiration}>{group.expiration}</time></span></h3>
+          <CopyButton label="Copiar Calls y Puts" disabled={busy || localePending} notice={combinedNotice} onCopy={() => void copy(group, "both")} />
+        </div>
+        <CopyError notice={combinedNotice} />
+        <div className="ct-operations-sides" key={String(averaged)}>
+          {(["call", "put"] as const).map(kind => <OperationsSide key={kind} label={kind === "call" ? "Calls" : "Puts"}
+            rows={group.rows.filter(row => row.kind === kind)} averaged={averaged} format={format}
+            disabled={busy || localePending} notice={notice?.scope === kind ? notice : undefined}
+            onCopy={() => void copy(group, kind)} />)}
+        </div>
+      </section>;
+    })}
   </section>;
 }
