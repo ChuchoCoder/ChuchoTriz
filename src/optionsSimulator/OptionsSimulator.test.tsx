@@ -201,6 +201,9 @@ it("reorders and replaces mirrored chain columns while keeping the book, IV and 
   expect(byLabel("Vega teórica CALL 100").textContent).not.toBe("—");
   expect(byLabel("Gamma teórica PUT 100").textContent).toBe("—");
   expect(byLabel("Última operación CALL 100").getAttribute("title")).toMatch(/ART$/);
+  const viFallback = byLabel("VI CALL 100").querySelector(".ct-opt-iv-value");
+  expect(viFallback?.tagName).toBe("SPAN");
+  expect(viFallback?.getAttribute("title")).toContain("CALL 100");
   quotes.GGAL.last = 100.0125;
   await mount();
   expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,0125");

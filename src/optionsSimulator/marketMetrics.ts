@@ -24,7 +24,8 @@ function quotedIntrinsic(kind: OptionContract["kind"], spot: number, strike: num
 
 export interface MetricCell extends OptionMarketMetrics {
   eligible: boolean; reason: string; theta?: number; extrinsic?: number; mid?: number; spreadPercent?: number;
-  intrinsic?: number; gamma?: number; vega?: number;
+  intrinsic?: number; gamma?: number; vega?: number; viTradeStatus?: string;
+  viDetails?: NonNullable<ReturnType<typeof theoreticalGreeks>> & { spot: number; days: number; rate: number; dividendYield: number };
 }
 export interface MetricScale { min?: number; max?: number; volumeMax: number; included: number; total: number }
 export function deriveOptionMetrics(contracts: OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
@@ -32,6 +33,8 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
   const parsed = /^\d+$/.test(settings.minutes) ? Number(settings.minutes) : NaN;
   const windowValid = Number.isSafeInteger(parsed) && parsed > 0;
   const nowValid = finiteMetric(settings.now) && settings.now >= 0 && !Number.isNaN(new Date(settings.now).getTime());
+  const today = nowValid ? day(settings.now) : "";
+  const todayDay = dateDay(today);
   const byId: Record<string, MetricCell> = {};
   const scales: Record<"call" | "put", MetricScale> = {
     call: { volumeMax: 0, included: 0, total: 0 }, put: { volumeMax: 0, included: 0, total: 0 },
@@ -43,7 +46,8 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
     const volume = finiteMetric(raw?.nominalVolume) && raw.nominalVolume >= 0 ? raw.nominalVolume : undefined;
     const comparable = settings.available && positive(settings.spot) && positive(contract.strike) && ["ARS", "USD"].includes(settings.currency ?? "")
       && contract.currency === settings.currency && contract.strikeCurrency === settings.currency;
-    const years = nowValid ? (dateDay(contract.expiration.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3")) - dateDay(day(settings.now))) / 365 : NaN;
+    const days = dateDay(contract.expiration.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3")) - todayDay;
+    const years = days / 365;
     const modelValid = comparable && years > 0 && years <= 10 && positive(vi) && vi <= 500 && finiteMetric(settings.rate) && settings.rate >= -1 && settings.rate <= 10
       && finiteMetric(settings.dividendYield) && settings.dividendYield >= 0 && settings.dividendYield <= 1;
     const greeks = modelValid ? theoreticalGreeks(contract.kind, settings.spot!, contract.strike, years, vi! / 100, settings.rate!, settings.dividendYield!) : undefined;
@@ -55,24 +59,31 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
     }
     const intrinsicValue = comparable ? quotedIntrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
     const extrinsic = intrinsicValue !== undefined && mid !== undefined ? mid - intrinsicValue : undefined;
+    const tradeIssue = stamp === undefined ? "Sin fecha verificable de última operación"
+      : stamp > settings.now ? "Fecha de operación posterior al reloj actual"
+      : nowValid && day(stamp) !== today ? "Última operación de otra fecha" : undefined;
+    const age = stamp === undefined ? NaN : (settings.now - stamp) / 60000;
+    const tradeStatus = tradeIssue ?? `Última operación hace ${age.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min`;
     let reason = "", eligible = false;
     if (!settings.available || !nowValid) reason = "Sin lectura de mercado vigente";
     else if (!positive(vi)) reason = "VI no disponible o no válida";
     else if (!settings.enabled) { eligible = true; reason = "Filtro temporal desactivado"; }
     else if (!windowValid) reason = "Ingresá minutos enteros mayores que cero";
-    else if (stamp === undefined) reason = "Sin fecha verificable de última operación";
-    else if (stamp > settings.now) reason = "Fecha de operación posterior al reloj actual";
-    else if (day(stamp) !== day(settings.now)) reason = "Última operación de otra fecha";
+    else if (tradeIssue) reason = tradeIssue;
     else {
-      const age = (settings.now - stamp) / 60000;
       eligible = age <= parsed;
-      reason = `Última operación hace ${age.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min${eligible ? "" : ` · supera ${parsed} min`}`;
+      reason = `${tradeStatus}${eligible ? "" : ` · supera ${parsed} min`}`;
     }
     const cell: MetricCell = { impliedVolatility: vi, lastTradeAt: stamp, nominalVolume: volume,
       last: settings.available ? lastTradedPremium(raw) : undefined, mid, spreadPercent,
       referencePrice: settings.available && positive(raw?.referencePrice) ? raw.referencePrice : undefined,
       delta: finiteMetric(raw?.delta) ? raw.delta : undefined,
-      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, ...greeks,
+      changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined,
+      theta: greeks?.theta, gamma: greeks?.gamma, vega: greeks?.vega,
+      viTradeStatus: eligible && !settings.enabled ? `${tradeStatus} · ${reason}` : undefined,
+      viDetails: eligible && stamp !== undefined && stamp <= settings.now && greeks && Number.isFinite(greeks.probabilityItm) ? {
+        ...greeks, spot: settings.spot!, days, rate: settings.rate!, dividendYield: settings.dividendYield!,
+      } : undefined,
       intrinsic: intrinsicValue, extrinsic, eligible, reason };
     byId[contract.id] = cell;
     const scale = scales[contract.kind]; scale.total++;

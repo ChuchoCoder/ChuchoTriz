@@ -230,6 +230,10 @@ regresión de secuencias oculta las referencias. Las métricas son las de Matriz
 no se infiere VI desde precios. La escala de VI conserva el filtro de operación
 reciente y sus ventanas de 15/30/60 minutos. La hora de lectura local no es un
 timestamp de bolsa, y una cotización observada no acredita vigencia ni ejecución.
+Con el filtro activo, el detalle de VI muestra las probabilidades teóricas de
+Black–Scholes–Merton y las griegas solo para operaciones dentro de esa ventana.
+Con el filtro desactivado, indica la fecha o antigüedad de la última operación y
+requiere un timestamp verificable para mostrar los cálculos.
 
 Los factores monetarios se toman de los metadatos nativos:
 `totalAmountFactor × contractMultiplier × roundLot`. Se exige factor positivo,

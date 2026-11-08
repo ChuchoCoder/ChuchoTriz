@@ -130,7 +130,8 @@ export function SettingsMenu() {
       onKeyDownCapture={event => {
         if (event.key !== "Escape") return;
         const popover = typeof HTMLElement.prototype.hidePopover === "function"
-          ? event.currentTarget.querySelector<HTMLElement>('[popover="auto"]:popover-open') : null;
+          ? event.currentTarget.querySelector<HTMLElement>('[popover="hint"]:popover-open')
+            ?? event.currentTarget.querySelector<HTMLElement>('[popover="auto"]:popover-open') : null;
         if (popover) {
           event.preventDefault(); event.stopPropagation(); popover.hidePopover(); return;
         }

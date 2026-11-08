@@ -104,6 +104,7 @@ describe("European theoretical prices", () => {
       const price = (spot: number, years: number, iv: number) => theoreticalPrice(kind, spot, 107, years, iv, .2, .03);
       const greeks = theoreticalGreeks(kind, 93, 107, .7, .35, .2, .03);
       const timeStep = 1e-5, spotStep = .1, ivStep = 1e-4;
+      expect(greeks?.theoreticalDelta).toBeCloseTo((price(93 + spotStep, .7, .35) - price(93 - spotStep, .7, .35)) / (2 * spotStep), 5);
       expect(greeks?.theta).toBeCloseTo((price(93, .7 - timeStep, .35) - price(93, .7 + timeStep, .35)) / (2 * timeStep * 365), 6);
       expect(greeks?.gamma).toBeCloseTo((price(93 + spotStep, .7, .35) - 2 * price(93, .7, .35) + price(93 - spotStep, .7, .35)) / spotStep ** 2, 5);
       expect(greeks?.vega).toBeCloseTo((price(93, .7, .35 + ivStep) - price(93, .7, .35 - ivStep)) / (2 * ivStep * 100), 5);
@@ -111,6 +112,14 @@ describe("European theoretical prices", () => {
     expect(theoreticalGreeks("call", 100, 100, 0, .2, 0, 0)).toBeUndefined();
     expect(theoreticalGreeks("call", 100, 100, 1, 0, 0, 0)).toBeUndefined();
     expect(theoreticalGreeks("call", 100, 100, 1, NaN, 0, 0)).toBeUndefined();
+  });
+  it("estimates terminal moneyness from d2 for calls and puts", () => {
+    const call = theoreticalGreeks("call", 100, 100, 1, .2, .05, 0)!;
+    const put = theoreticalGreeks("put", 100, 100, 1, .2, .05, 0)!;
+    expect(call.probabilityItm).toBeCloseTo(.55961769, 6);
+    expect(call.probabilityOtm).toBe(put.probabilityItm);
+    expect(put.probabilityOtm).toBe(call.probabilityItm);
+    expect(call.probabilityItm + call.probabilityOtm).toBeCloseTo(1, 12);
   });
   it("matches the standard S=K=100, r=5%, sigma=20%, T=1 benchmark", () => {
     expect(theoreticalPrice("call", 100, 100, 1, .2, .05, 0)).toBeCloseTo(10.45058, 4);
