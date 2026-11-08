@@ -26,11 +26,18 @@
 .ct-sim .ct-opt-iv-detail {
   --ct-vi-width:min(320px, calc(100vw - 16px));
   position-anchor:var(--ct-vi-anchor);
-  position:fixed; inset:auto; top:anchor(bottom); left:clamp(8px, calc(anchor(center) - var(--ct-vi-width) / 2), calc(100vw - var(--ct-vi-width) - 8px));
-  position-try-fallbacks:flip-block; position-visibility:anchors-visible;
-  margin:4px 0; box-sizing:border-box; width:var(--ct-vi-width); max-height:45dvh; overflow:auto;
+  position:fixed; inset:auto; top:anchor(top); right:anchor(left);
+  position-try-fallbacks:flip-block, flip-inline, flip-inline flip-block, --ct-vi-below, --ct-vi-below flip-block;
+  position-visibility:anchors-visible;
+  margin:0 6px; box-sizing:border-box; width:var(--ct-vi-width); max-height:45dvh; overflow:auto;
   padding:9px 11px; border:1px solid var(--sim-border); border-radius:6px; background:var(--sim-card); color:var(--sim-text);
   box-shadow:0 6px 20px #0005; font-size:12px; line-height:1.3; text-align:left; white-space:normal; overflow-wrap:anywhere;
+}
+@position-try --ct-vi-below {
+  inset:auto;
+  top:anchor(bottom);
+  left:clamp(8px, calc(anchor(center) - var(--ct-vi-width) / 2), calc(100vw - var(--ct-vi-width) - 8px));
+  margin:4px 0;
 }
 .ct-sim .ct-opt-iv-detail header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 8px; margin-bottom:6px; }
 .ct-sim .ct-opt-iv-detail dl { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:5px 8px; margin:3px 0 6px; padding-bottom:6px; border-bottom:1px solid var(--sim-border); }
