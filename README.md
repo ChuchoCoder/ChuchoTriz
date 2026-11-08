@@ -42,9 +42,10 @@ Ver [uso, fuentes y supuestos del simulador](docs/options-simulator.md).
 
 En **Configuración → Operaciones de opciones**, pulsá **Actualizar desde Matriz**
 para consultar las ejecuciones disponibles en el reporte de la cuenta activa.
-Elegí subyacente, vencimiento y Calls o Puts. **Agrupar por strike** calcula
+Las operaciones se muestran por subyacente y vencimiento, con Calls a la
+izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** calcula
 el precio promedio ponderado y mantiene compras y ventas separadas.
-**Copiar vista** y **Copiar Calls y Puts** generan las columnas tabuladas
+Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
 Fecha, Cantidad, Strike y Precio del procesador para pegar en una planilla.
 En **Formato regional**, elegí **Automático**, **Argentina** o **Estados Unidos**
 según la configuración de tu planilla. La elección ajusta la fecha y los números

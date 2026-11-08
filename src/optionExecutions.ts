@@ -19,6 +19,30 @@ export interface OptionExecution {
   price: number;
 }
 
+export interface ExecutionGroup {
+  key: string;
+  underlying: string;
+  expiration: string;
+  rows: OptionExecution[];
+}
+
+export function groupExecutions(executions: OptionExecution[], averaged: boolean): ExecutionGroup[] {
+  const groups = new Map<string, ExecutionGroup>();
+  for (const row of executions) {
+    const { underlying, expiration } = row;
+    const key = JSON.stringify([underlying, expiration]);
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, underlying, expiration, rows: [] };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.underlying.localeCompare(b.underlying) || a.expiration.localeCompare(b.expiration))
+    .map(group => ({ ...group, rows: summarizeExecutions(group.rows, averaged) }));
+}
+
 export function summarizeExecutions(executions: OptionExecution[], averaged: boolean): OptionExecution[] {
   let rows = executions;
   if (averaged) {

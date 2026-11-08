@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { executionClipboard, executionFormatters, summarizeExecutions, type OptionExecution } from "./optionExecutions";
+import { executionClipboard, executionFormatters, groupExecutions, summarizeExecutions, type OptionExecution } from "./optionExecutions";
 
 const execution: OptionExecution = {
   symbol: "GFGC1234", underlying: "GGAL", expiration: "2026-12-18", kind: "call",
@@ -8,6 +8,22 @@ const execution: OptionExecution = {
 };
 
 describe("operaciones de opciones", () => {
+  it("agrupa por subyacente y vencimiento y limita la copia a ese grupo y lado", () => {
+    const groups = groupExecutions([
+      { ...execution, expiration: "2027-02-19", quantity: 9 },
+      { ...execution, underlying: "YPFD", quantity: 7 },
+      execution,
+      { ...execution, quantity: 6, price: 16 },
+      { ...execution, kind: "put", quantity: -3, price: 8 },
+    ], true);
+    expect(groups.map(({ underlying, expiration }) => [underlying, expiration])).toEqual([
+      ["GGAL", "2026-12-18"], ["GGAL", "2027-02-19"], ["YPFD", "2026-12-18"],
+    ]);
+    const format = executionFormatters("en-US");
+    expect(executionClipboard(groups[0].rows, "call", true, format)).toBe("11/06/2026\t8\t1,234.5\t14.5");
+    expect(executionClipboard(groups[0].rows, "put", true, format)).toBe("11/06/2026\t-3\t1,234.5\t8");
+  });
+
   it("separa ejecuciones y pondera compras y ventas por separado en cada strike", () => {
     const rows = [
       execution,
