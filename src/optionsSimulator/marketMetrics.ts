@@ -1,4 +1,4 @@
-import type { Contract as OptionContract, Quote as OptionMarketMetrics, Snapshot as OptionsSnapshot } from "./market";
+import { lastTradedPremium, type Contract as OptionContract, type Quote as OptionMarketMetrics, type Snapshot as OptionsSnapshot } from "./market";
 import { dateDay, intrinsic, theoreticalGreeks } from "./model";
 
 export const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -52,7 +52,7 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
       reason = `Última operación hace ${age.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min${eligible ? "" : ` · supera ${parsed} min`}`;
     }
     const cell: MetricCell = { impliedVolatility: vi, lastTradeAt: stamp, nominalVolume: volume,
-      last: settings.available && positive(raw?.last) ? raw.last : undefined, mid, spreadPercent,
+      last: settings.available ? lastTradedPremium(raw) : undefined, mid, spreadPercent,
       referencePrice: settings.available && positive(raw?.referencePrice) ? raw.referencePrice : undefined,
       delta: finiteMetric(raw?.delta) ? raw.delta : undefined,
       changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined, ...greeks,

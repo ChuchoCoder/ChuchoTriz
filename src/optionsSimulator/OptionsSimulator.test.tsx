@@ -9,7 +9,7 @@ import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string } }));
-vi.mock("./market", () => ({ useOptionMarket: () => marketState.current }));
+vi.mock("./market", async original => ({ ...await original<typeof import("./market")>(), useOptionMarket: () => marketState.current }));
 const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
   readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
@@ -21,14 +21,17 @@ vi.mock("./positions", async original => ({ ...await original<typeof import("./p
 }));
 let root: Root, container: HTMLDivElement;
 let stored: Record<string, unknown>, write: ReturnType<typeof vi.fn>;
+let storageListeners: Set<(changes: Record<string, chrome.storage.StorageChange>, area: string) => void>;
 const expiry = addDays(localDate(), 30);
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   stored = {};
+  storageListeners = new Set();
   write = vi.fn(async value => { Object.assign(stored, value); });
   readPosition.mockReset();
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(), reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: 2 }] });
-  vi.stubGlobal("chrome", { storage: { local: { get: vi.fn(async () => stored), set: write } } });
+  vi.stubGlobal("chrome", { storage: { local: { get: vi.fn(async () => stored), set: write },
+    onChanged: { addListener: storageListeners.add.bind(storageListeners), removeListener: storageListeners.delete.bind(storageListeners) } } });
   const contracts: Catalog["contracts"] = [80, 90, 100, 110, 120].flatMap(strike => (["call", "put"] as const).map(kind => ({
     id: `${kind}-${strike}`, symbol: `${kind.toUpperCase()} ${strike}`, underlyingId: "GGAL", kind, strike,
     expiration: expiry.replaceAll("-", ""), currency: "ARS", strikeCurrency: "ARS", settlement: "2", factor: 100,
@@ -198,6 +201,10 @@ it("reorders and replaces mirrored chain columns while keeping the book, IV and 
   expect(byLabel("Vega teórica CALL 100").textContent).not.toBe("—");
   expect(byLabel("Gamma teórica PUT 100").textContent).toBe("—");
   expect(byLabel("Última operación CALL 100").getAttribute("title")).toMatch(/ART$/);
+  quotes.GGAL.last = 100.0125;
+  await mount();
+  expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,0125");
+  expect(byLabel("Valor intrínseco CALL 100").title).toBe("0,0125");
   await act(async () => button("Restablecer columnas").click());
   expect(byLabel("Último precio operado CALL 100").textContent).toBe("3,75");
   expect(byLabel("Configurar cadena de opciones")).toBeTruthy();
@@ -211,6 +218,24 @@ it("restores a prior visibility preference while retaining the now fixed IV colu
   expect(Array.from(headings, heading => heading.querySelector("select")?.value ?? heading.textContent))
     .toEqual(["delta", "last", "BID · Vender", "ASK · Comprar", "VI", "Strike", "VI", "BID · Vender", "ASK · Comprar", "last", "delta"]);
   expect(write).not.toHaveBeenCalled();
+});
+
+it("syncs external column changes and applies edits to the latest saved order", async () => {
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  stored[key] = ["last"];
+  await mount();
+  await act(async () => {
+    stored[key] = ["last", "gamma"];
+    storageListeners.forEach(listener => listener({ [key]: { newValue: stored[key] } }, "local"));
+  });
+  const config = byLabel("Columnas de cotizaciones");
+  const checkbox = (label: string) => [...config.querySelectorAll("label")]
+    .find(node => node.textContent?.trim() === label)!.querySelector<HTMLInputElement>("input")!;
+  expect(checkbox("Gamma teórica").checked).toBe(true);
+  stored[key] = ["last", "gamma", "referencePrice"];
+  await act(async () => checkbox("Vega teórica").click());
+  expect(stored[key]).toEqual(["last", "gamma", "referencePrice", "vega"]);
+  expect(checkbox("Precio de referencia").checked).toBe(true);
 });
 
 it("pulses each price in its own direction and ignores the first quote after a gap", async () => {
@@ -783,13 +808,20 @@ it("edits compact cells on click, accepts on Enter or blur, and restores the ori
 
 it("groups VI and columns in the chain settings and removes market references during a disconnect", async () => {
   await mount();
-  const config = byLabel("Configuración de la cadena");
-  expect(byLabel("Configurar cadena de opciones").getAttribute("popovertarget")).toBe(config.id);
-  expect(config.getAttribute("popover")).toBe("auto");
+  const config = byLabel<HTMLDialogElement>("Configuración de la cadena");
+  const trigger = byLabel<HTMLButtonElement>("Configurar cadena de opciones");
+  expect(trigger.getAttribute("aria-controls")).toBe(config.id);
+  expect(config.localName).toBe("dialog");
+  const open = vi.fn(), close = vi.fn();
+  Object.defineProperties(config, { showModal: { value: open }, close: { value: close } });
+  await act(async () => trigger.click());
+  expect(open).toHaveBeenCalledOnce();
   expect(config.contains(byLabel("Columnas de cotizaciones"))).toBe(true);
   expect(config.contains(byLabel("Filtro temporal de VI"))).toBe(true);
   await act(async () => button("15 min").click());
   expect(byLabel<HTMLInputElement>("Antigüedad máxima de la operación en minutos").value).toBe("15");
+  await act(async () => button("Listo").click());
+  expect(close).toHaveBeenCalledOnce();
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   expect(byLabel<HTMLButtonElement>("Tomar precio Mid de la estrategia").disabled).toBe(false);
   marketState.current = { catalog: marketState.current.catalog, issue: "Disconnected" };

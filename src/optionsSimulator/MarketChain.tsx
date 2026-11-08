@@ -1,8 +1,8 @@
 import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Catalog, Contract, Quote, useOptionMarket } from "./market";
+import { Catalog, Contract, lastTradedPremium, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
-import { OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
+import { extraMetricLabels, OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
 import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
@@ -10,7 +10,7 @@ import { importPosition, readPositionSnapshot, setPositionQuantity, startPositio
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
-import { lastTradedPremium, preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
+import { preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
 import type { StrikeMarket } from "./strategyAdjustments";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -30,10 +30,10 @@ const chainColumns: Record<ChainColumn, { heading: string; compactHeading?: stri
   spreadPercent: { heading: "Spread %", title: "(ASK − BID) ÷ Mid × 100, con ambas puntas válidas", width: 76 },
   mid: { heading: "Mid", title: "Promedio de BID y ASK con ambas puntas válidas", width: 72 },
   last: { heading: "Últ.", label: "Último precio operado", title: "Último precio operado informado por Matriz", width: 76 },
-  referencePrice: { heading: "Ref.", label: "Precio de referencia", title: "Precio de referencia informado por Matriz", width: 76 },
-  intrinsic: { heading: "Intrínseco", label: "Valor intrínseco", title: "Valor al ejercicio inmediato con el precio del subyacente y el strike en la misma moneda", width: 85 },
-  gamma: { heading: "Gamma", label: "Gamma teórica", title: "Cambio de Delta por unidad de precio del subyacente. El modelo BSM usa VI nativa, tasa y dividendos de Análisis.", width: 78 },
-  vega: { heading: "Vega", label: "Vega teórica", title: "Cambio de prima por unidad ante +1 punto porcentual de VI. El modelo BSM usa VI nativa, tasa y dividendos de Análisis.", width: 76 },
+  referencePrice: { heading: "Ref.", label: extraMetricLabels.referencePrice, title: "Precio de referencia informado por Matriz", width: 76 },
+  intrinsic: { heading: "Intrínseco", label: extraMetricLabels.intrinsic, title: "Valor al ejercicio inmediato con el precio del subyacente y el strike en la misma moneda", width: 85 },
+  gamma: { heading: "Gamma", label: extraMetricLabels.gamma, title: "Cambio de Delta por unidad de precio del subyacente. El modelo BSM usa VI nativa, tasa y dividendos de Análisis.", width: 78 },
+  vega: { heading: "Vega", label: extraMetricLabels.vega, title: "Cambio de prima por unidad ante +1 punto porcentual de VI. El modelo BSM usa VI nativa, tasa y dividendos de Análisis.", width: 76 },
   bid: { heading: "BID · Vender", className: "ct-opt-bid" },
   ask: { heading: "ASK · Comprar", className: "ct-opt-ask" },
   iv: { heading: "VI", label: "Volatilidad implícita", className: "ct-opt-vi-heading", width: 62 },
@@ -42,6 +42,65 @@ const optionalColumns: OptionalColumn[] = ["volume", "change", "lastTradeAt", "d
   "referencePrice", "intrinsic", "gamma", "vega"];
 const defaultColumns: OptionalColumn[] = ["volume", "change", "delta", "theta", "extrinsic", "last"];
 const columnLabel = (column: OptionalColumn) => chainColumns[column].label ?? chainColumns[column].heading;
+const storedColumnOrder = (saved: unknown) => Array.isArray(saved)
+  ? [...new Set(saved.filter((item): item is OptionalColumn => optionalColumns.includes(item)))]
+  : undefined;
+
+function useChainColumnPreferences() {
+  const [savedColumns, setSavedColumns] = useState<OptionalColumn[]>();
+  const currentColumns = useRef<OptionalColumn[]>(undefined);
+  const unsaved = useRef(false);
+  const writes = useRef(Promise.resolve());
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  const legacyKey = `OptionsSimulatorChainColumnsV1:${location.origin}`;
+  async function readColumns() {
+    const values = await chrome.storage.local.get([key, legacyKey]);
+    const legacy = values[legacyKey];
+    return storedColumnOrder(values[key]) ?? (Array.isArray(legacy)
+      ? optionalColumns.filter(column => legacy.includes(column)) : defaultColumns);
+  }
+  function publish(columns: OptionalColumn[]) {
+    currentColumns.current = columns;
+    setSavedColumns(columns);
+  }
+  useEffect(() => {
+    let mounted = true;
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "local" && key in changes && !unsaved.current) {
+        publish(storedColumnOrder(changes[key].newValue) ?? defaultColumns);
+      }
+    };
+    const storageEvents = globalThis.chrome?.storage?.onChanged;
+    storageEvents?.addListener(onChanged);
+    void readColumns().catch(() => defaultColumns).then(columns => {
+      if (mounted && !currentColumns.current) publish(columns);
+    });
+    return () => {
+      mounted = false;
+      storageEvents?.removeListener(onChanged);
+    };
+  }, [key, legacyKey]);
+
+  function saveColumns(edit: (columns: OptionalColumn[]) => OptionalColumn[]) {
+    async function save() {
+      const local = currentColumns.current ?? defaultColumns;
+      const previous = unsaved.current ? local : await readColumns().catch(() => local);
+      const columns = edit(previous);
+      publish(columns);
+      try {
+        await chrome.storage.local.set({ [key]: columns });
+        unsaved.current = false;
+      } catch { unsaved.current = true; }
+    }
+    writes.current = writes.current.then(async () => {
+      // Read, edit and write under one lock shared by tabs of this Matriz origin.
+      if (navigator.locks) await navigator.locks.request(key, save).catch(save);
+      else await save();
+    });
+  }
+  return { savedColumns, saveColumns };
+}
+
 const strikeWidth = { regular: 104, compact: 76 };
 function columnWidth(column: ChainColumn, compact: boolean) {
   const width = chainColumns[column].width;
@@ -123,32 +182,14 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [expiration, setExpiration] = useState("");
   const [market, setMarket] = useState("");
   const [selectionReady, setSelectionReady] = useState(false);
-  const [savedColumns, setSavedColumns] = useState<OptionalColumn[]>();
+  const { savedColumns, saveColumns } = useChainColumnPreferences();
   const chainConfigId = useId();
-  const columnStorageKey = `OptionsSimulatorChainColumnsV2:${location.origin}`;
-  const legacyColumnStorageKey = `OptionsSimulatorChainColumnsV1:${location.origin}`;
-  useEffect(() => {
-    let mounted = true;
-    async function restoreColumns() {
-      let columns = defaultColumns;
-      try {
-        const values = await chrome.storage.local.get([columnStorageKey, legacyColumnStorageKey]);
-        const saved: unknown = values[columnStorageKey], legacy: unknown = values[legacyColumnStorageKey];
-        if (Array.isArray(saved)) {
-          columns = [...new Set(saved.filter((item): item is OptionalColumn => optionalColumns.includes(item)))];
-        } else if (Array.isArray(legacy)) {
-          columns = optionalColumns.filter(column => legacy.includes(column));
-        }
-      } catch { /* Use defaults when storage is unavailable. */ }
-      if (mounted) setSavedColumns(columns);
-    }
-    void restoreColumns();
-    return () => { mounted = false; };
-  }, [columnStorageKey, legacyColumnStorageKey]);
+  const configDialog = useRef<HTMLDialogElement>(null);
+  const nativePopover = typeof HTMLElement.prototype.showPopover === "function";
   const visibleColumns = savedColumns ?? defaultColumns;
   const hiddenColumns = optionalColumns.filter(column => !visibleColumns.includes(column));
   const callColumns: ChainColumn[] = [...visibleColumns, "bid", "ask", "iv"];
-  const putColumns: ChainColumn[] = ["iv", "bid", "ask", ...visibleColumns.toReversed()];
+  const putColumns: ChainColumn[] = ["iv", "bid", "ask", ...visibleColumns.slice().reverse()];
   const columnsPerSide = callColumns.length - 1;
   const regularMinWidth = minimumChainWidth(callColumns, false);
   const compactChain = availableChainWidth > 0 && availableChainWidth < regularMinWidth;
@@ -156,18 +197,19 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     minWidth: compactChain ? minimumChainWidth(callColumns, true) : regularMinWidth,
     "--ct-opt-metric-strike": `${strikeWidth[compactChain ? "compact" : "regular"]}px`,
   } as CSSProperties;
-  async function saveColumns(columns: OptionalColumn[]) {
-    setSavedColumns(columns);
-    try { await chrome.storage.local.set({ [columnStorageKey]: columns }); }
-    catch { /* The current view still works without local storage. */ }
-  }
-  function moveColumn(from: number, to: number) {
-    const columns = visibleColumns.slice();
-    [columns[from], columns[to]] = [columns[to], columns[from]];
-    void saveColumns(columns);
+  function moveColumn(column: OptionalColumn, direction: -1 | 1) {
+    saveColumns(previous => {
+      const from = previous.indexOf(column), to = from + direction;
+      if (from < 0 || to < 0 || to >= previous.length) return previous;
+      const columns = previous.slice();
+      [columns[from], columns[to]] = [columns[to], columns[from]];
+      return columns;
+    });
   }
   function replaceColumn(current: OptionalColumn, next: OptionalColumn) {
-    void saveColumns(visibleColumns.map(column => column === current ? next : column === next ? current : column));
+    saveColumns(columns => columns.includes(current)
+      ? columns.map(column => column === current ? next : column === next ? current : column)
+      : columns);
   }
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState<string | { announcement: string }>("");
@@ -551,10 +593,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const sigmaKey = deviations && deviations.move > 0 && <span className="ct-opt-sigma-key" title={`Desvíos de la simulación · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${daysToExpiry(input.expiry, input.scenarioDate)} días restantes. Solo se dibujan los niveles dentro de los strikes de la cadena.`}>
     <i className="ct-opt-sigma-1">±1σ</i> <i className="ct-opt-sigma-2">±2σ</i></span>;
   const spotOutsideGrid = spot !== undefined && (itmSpot === undefined || spot < (strikes[0] ?? Infinity) || spot > (strikes.at(-1) ?? -Infinity));
-  const chainConfig = <>
-    <button type="button" className="ct-opt-config-trigger" popoverTarget={chainConfigId} disabled={!savedColumns}
-      aria-label="Configurar cadena de opciones" title="Configurar columnas y filtro de VI"><span aria-hidden="true">⚙</span> Config.</button>
-    <div id={chainConfigId} popover="auto" role="group" aria-label="Configuración de la cadena" className="ct-opt-chain-config" data-ct-inline-editor>
+  const chainConfigContents = <>
       <strong>Filtro de VI</strong>
       <div className="ct-opt-metrics-filter" role="group" aria-label="Filtro temporal de VI">
         <div className="ct-opt-metrics-quick-filter">
@@ -571,23 +610,36 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
             const shown = index < visibleColumns.length;
             return <li key={column}>
               <label title={chainColumns[column].title}>
-                <input type="checkbox" checked={shown} onChange={event => void saveColumns(event.target.checked
-                  ? [...visibleColumns, column] : visibleColumns.filter(item => item !== column))} />
+                <input type="checkbox" checked={shown} onChange={event => {
+                  const checked = event.target.checked;
+                  saveColumns(columns => checked
+                    ? columns.includes(column) ? columns : [...columns, column]
+                    : columns.filter(item => item !== column));
+                }} />
                 {columnLabel(column)}
               </label>
               {shown && <>
                 <button type="button" disabled={index === 0} aria-label={`Mover ${columnLabel(column)} hacia el borde`}
-                  title="Mover hacia el borde" onClick={() => moveColumn(index, index - 1)}>↑</button>
+                  title="Mover hacia el borde" onClick={() => moveColumn(column, -1)}>↑</button>
                 <button type="button" disabled={index === visibleColumns.length - 1} aria-label={`Mover ${columnLabel(column)} hacia el centro`}
-                  title="Mover hacia el centro" onClick={() => moveColumn(index, index + 1)}>↓</button>
+                  title="Mover hacia el centro" onClick={() => moveColumn(column, 1)}>↓</button>
               </>}
             </li>;
           })}
         </ol>
       </div>
-      <button type="button" onClick={() => void saveColumns(defaultColumns)}>Restablecer columnas</button>
-      <button type="button" popoverTarget={chainConfigId} popoverTargetAction="hide">Listo</button>
-    </div>
+      <button type="button" onClick={() => saveColumns(() => defaultColumns)}>Restablecer columnas</button>
+      <button type="button" popoverTarget={nativePopover ? chainConfigId : undefined} popoverTargetAction={nativePopover ? "hide" : undefined}
+        onClick={nativePopover ? undefined : () => configDialog.current?.close()}>Listo</button>
+  </>;
+  const configAttributes = { id: chainConfigId, "aria-label": "Configuración de la cadena", className: "ct-opt-chain-config", "data-ct-inline-editor": true };
+  const chainConfig = <>
+    <button type="button" className="ct-opt-config-trigger" popoverTarget={nativePopover ? chainConfigId : undefined} disabled={!savedColumns}
+      aria-controls={chainConfigId} aria-haspopup={nativePopover ? undefined : "dialog"} onClick={nativePopover ? undefined : () => configDialog.current?.showModal()}
+      aria-label="Configurar cadena de opciones" title="Configurar columnas y filtro de VI"><span aria-hidden="true">⚙</span> Config.</button>
+    {nativePopover
+      ? <div {...configAttributes} popover="auto" role="group">{chainConfigContents}</div>
+      : <dialog {...configAttributes} ref={configDialog}>{chainConfigContents}</dialog>}
   </>;
   return <section className="ct-sim-card ct-options ct-sim-market">{toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>

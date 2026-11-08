@@ -38,7 +38,7 @@
   align-content:center;gap:0 3px;padding:1px 4px;
 }
 .ct-sim .ct-opt-compact-chain .ct-opt-price.buy > button{grid-template-columns:auto minmax(0,1fr)}
-.ct-sim .ct-opt-compact-chain .ct-opt-price .ct-opt-quote-value{grid-column:1/-1}
+.ct-sim .ct-opt-compact-chain .ct-opt-price:is(.buy,.sell) .ct-opt-quote-value{grid-column:1/-1}
 .ct-sim .ct-opt-compact-chain .ct-opt-price .ct-opt-quantity{grid-column:2;grid-row:2}
 .ct-sim .ct-opt-compact-chain .ct-opt-price.buy .ct-opt-quantity{grid-column:1}
 .ct-sim .ct-opt-compact-chain .ct-opt-price .ct-opt-marker{position:static;grid-column:1;grid-row:2}

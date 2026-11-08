@@ -70,11 +70,13 @@
   font-size:12px; font-weight:400; text-align:left;
 }
 @supports (position-area:block-end) {
-  .ct-sim .ct-opt-chain-config {
+  .ct-sim .ct-opt-chain-config[popover] {
     position-area:block-end; position-try-fallbacks:flip-block;
     inset:auto; margin:4px 0;
   }
 }
+.ct-sim dialog.ct-opt-chain-config { position:fixed; inset:0; margin:auto; }
+.ct-sim dialog.ct-opt-chain-config::backdrop { background:transparent; }
 .ct-sim .ct-opt-chain-config .ct-opt-metrics-filter { gap:8px; padding:6px 0; }
 .ct-sim .ct-opt-metrics-quick-filter { display:flex; align-items:center; gap:8px; max-width:100%; }
 .ct-sim .ct-opt-metrics-quick-filter input[type="checkbox"] { flex:none; }

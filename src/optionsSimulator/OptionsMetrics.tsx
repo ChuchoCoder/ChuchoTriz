@@ -12,7 +12,7 @@ const formatSensitivity = (value: number) => value.toLocaleString("es-AR", value
 export type OptionMetricField = "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic" | "last" | "mid" | "spreadPercent" | "lastTradeAt"
   | "referencePrice" | "intrinsic" | "gamma" | "vega";
 
-const extraMetricLabels = {
+export const extraMetricLabels = {
   referencePrice: "Precio de referencia", intrinsic: "Valor intrínseco", gamma: "Gamma teórica", vega: "Vega teórica",
 };
 
@@ -22,7 +22,8 @@ export function OptionMetricCell({ contract, field, cell, scale }: {
   const symbol = contract?.symbol ?? "Contrato no disponible";
   if (field === "referencePrice" || field === "intrinsic" || field === "gamma" || field === "vega") {
     const value = cell?.[field];
-    const format = field === "referencePrice" ? fmt : field === "intrinsic" ? formatOptionAmount : formatSensitivity;
+    const format = field === "referencePrice" ? fmt : field === "intrinsic"
+      ? (amount: number) => fmt(Number(amount.toPrecision(12))) : formatSensitivity;
     const text = value === undefined ? undefined : format(value);
     return <td className="ct-opt-metric" aria-label={`${extraMetricLabels[field]} ${symbol}`} title={text}>{text ?? "—"}</td>;
   }
