@@ -6,6 +6,7 @@ export function normalizeExecutionLocale(value: unknown): ExecutionLocale {
 }
 
 export interface OptionExecution {
+  securityId: string;
   symbol: string;
   underlying: string;
   expiration: string;
@@ -48,7 +49,7 @@ export function summarizeExecutions(executions: OptionExecution[], averaged: boo
   if (averaged) {
     const groups = new Map<string, { first: OptionExecution; quantity: number; notional: number }>();
     for (const row of executions) {
-      const key = JSON.stringify([row.underlying, row.expiration, row.kind, row.strike, row.currency,
+      const key = JSON.stringify([row.securityId, row.underlying, row.expiration, row.kind, row.strike, row.currency,
         row.strikeCurrency, row.settlement, Math.sign(row.quantity)]);
       const group = groups.get(key);
       if (group) {

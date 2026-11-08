@@ -44,7 +44,7 @@ En **Configuración → Operaciones de opciones**, pulsá **Actualizar desde Mat
 para consultar las ejecuciones disponibles en el reporte de la cuenta activa.
 Las operaciones se muestran por subyacente y vencimiento, con Calls a la
 izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** calcula
-el precio promedio ponderado y mantiene compras y ventas separadas.
+el precio promedio ponderado por serie y mantiene compras y ventas separadas.
 Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
 Fecha, Cantidad, Strike y Precio del procesador para pegar en una planilla.
 En **Formato regional**, elegí **Automático**, **Argentina** o **Estados Unidos**

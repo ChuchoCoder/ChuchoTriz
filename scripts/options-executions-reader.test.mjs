@@ -16,6 +16,7 @@ const event = { id: 1, orderId: 'PRIVATE_ORDER', account, eventSubtype: 'executi
 function fixture() {
   const replies = [], calls = [];
   let listener, uid = 0, id = 0;
+  let now = Date.now();
   const rows = [
     event,
     { ...event, id: 2, ordStatus: '2', lastQty: 3, lastPx: 11, cumQty: 53 },
@@ -44,7 +45,8 @@ function fixture() {
     Object.defineProperty(mainStore, field, { get() { throw Error('Unrelated account capability'); } });
   const window = { mainStore, addEventListener: (_, fn) => { listener = fn; }, postMessage: message => replies.push(message) };
   const document = { currentScript: { dataset: { channel: 'test' } }, body: { innerText: 'Versión: 4.24.4' } };
-  runInNewContext(source, { window, document, location: { origin }, crypto: { randomUUID: () => `context-${++uid}` } });
+  runInNewContext(source, { window, document, location: { origin }, crypto: { randomUUID: () => `context-${++uid}` },
+    Date: class extends Date { static now() { return now; } } });
 
   function message(data) { return listener({ origin, source: window, data: { channel: 'test', ...data } }); }
   async function request(method = 'executions', params) {
@@ -52,7 +54,7 @@ function fixture() {
     await message({ kind: 'request', id: requestId, method, params });
     return replies.find(reply => reply.id === requestId);
   }
-  return { mainStore, document, calls, replies, message, request, rows };
+  return { mainStore, document, calls, replies, message, request, rows, advance: milliseconds => { now += milliseconds; } };
 }
 
 test('projects distinct execution events for the active account without cumulative quantities or private fields', async () => {
@@ -66,7 +68,7 @@ test('projects distinct execution events for the active account without cumulati
   assert.deepEqual(JSON.parse(JSON.stringify(result.rows.map(row => [row.kind, row.quantity, row.price]))), [
     ['call', 2, 10.25], ['call', 3, 11], ['put', -4, 8],
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(result.rows[0])), { symbol: 'GFGC1234', underlying: 'GGAL',
+  assert.deepEqual(JSON.parse(JSON.stringify(result.rows[0])), { securityId: call.id, symbol: 'GFGC1234', underlying: 'GGAL',
     expiration: '2026-12-18', kind: 'call', strike: 1234.5, currency: 'ARS', strikeCurrency: '',
     settlement: '2', timestamp: Date.parse(event.transactTime), quantity: 2, price: 10.25 });
 });
@@ -106,6 +108,17 @@ test('drops an in-flight report when the panel closes', async () => {
   assert.equal(await pending, undefined);
 });
 
+test('rejects a late native report before looking up any instruments', async () => {
+  const f = fixture();
+  let release;
+  f.mainStore.orderEventStore.getOrderEventsForAccountReport = () => new Promise(resolve => { release = resolve; });
+  f.mainStore.securityStore.getSecurity = () => assert.fail('The expired request must not look up instruments');
+  const pending = f.request();
+  f.advance(15001);
+  release(f.rows);
+  assert.match((await pending).error, /tiempo de espera/);
+});
+
 test('keeps valid executions when a lookup returns the wrong instrument or a malformed expiration', async () => {
   const f = fixture();
   f.rows.push({ ...event, id: 12, securityId: 'invalid-expiration' });
@@ -118,7 +131,7 @@ test('keeps valid executions when a lookup returns the wrong instrument or a mal
   assert.equal(result.unmatched, 5);
 });
 
-for (const interruption of ['detach', 'retire', 'account change']) {
+for (const interruption of ['detach', 'retire', 'account change', 'timeout']) {
   test(`stops looking up more instruments after ${interruption}`, async () => {
     const f = fixture(), lookups = [];
     let release, started;
@@ -131,11 +144,13 @@ for (const interruption of ['detach', 'retire', 'account change']) {
     const pending = f.request();
     await lookupStarted;
     if (interruption === 'account change') f.mainStore.profileStore.activeAccount = 'OTHER_ACCOUNT';
+    else if (interruption === 'timeout') f.advance(15001);
     else await f.message({ kind: interruption, id: 1 });
     release(put);
     const reply = await pending;
     assert.deepEqual(lookups, [put.id]);
     if (interruption === 'account change') assert.match(reply.error, /Cambió la cuenta/);
+    else if (interruption === 'timeout') assert.match(reply.error, /tiempo de espera/);
     else assert.equal(reply, undefined);
   });
 }

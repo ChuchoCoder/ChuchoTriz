@@ -55,6 +55,7 @@
         continue;
       }
       if (!byId.has(securityId)) {
+        assertCurrent();
         const security = await securities.getSecurity(securityId).catch(() => undefined);
         assertCurrent();
         byId.set(securityId, security);
@@ -86,7 +87,7 @@
       if (seen.has(key)) continue;
       seen.add(key);
       const expiration = maturityDateStr.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
-      rows.push({ symbol, underlying, expiration, kind, strike, currency, strikeCurrency: strikeCurrency ?? "",
+      rows.push({ securityId, symbol, underlying, expiration, kind, strike, currency, strikeCurrency: strikeCurrency ?? "",
         settlement, timestamp, quantity: side === "1" ? quantity : -quantity, price });
     }
     return { rows, unmatched };
@@ -114,10 +115,11 @@
       check(msg.method === "executions", "Método no permitido por el lector de operaciones.");
       check(!channels.get(msg.channel), "Hay una lectura de operaciones pendiente.");
       const current = context();
-      operation = { id: msg.id };
+      operation = { id: msg.id, deadline: Date.now() + 14000 };
       channels.set(msg.channel, operation);
       const assertCurrent = () => {
         check(channels.get(msg.channel) === operation, "Lectura de operaciones cerrada.");
+        check(Date.now() <= operation.deadline, "La lectura de operaciones superó el tiempo de espera.");
         check(context().contextId === current.contextId, contextChanged);
       };
       const report = await current.events.getOrderEventsForAccountReport(current.account);
