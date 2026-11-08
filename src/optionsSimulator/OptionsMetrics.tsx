@@ -8,6 +8,8 @@ const tradeTimeFormat = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Ar
 const fmt = (value: number, precision?: number) => formatOptionNumber(value === 0 ? 0 : value, precision);
 const formatSensitivity = (value: number) => value.toLocaleString("es-AR", value !== 0 && (value < .0001 || value >= 10000)
   ? { notation: "scientific", maximumSignificantDigits: 4 } : { maximumSignificantDigits: 5 });
+const formatTooltipGamma = (value: number) => value > 0 && value < 1e-12 ? "<0,000000000001"
+  : value.toLocaleString("es-AR", { maximumSignificantDigits: 5 });
 const formatProbability = (value: number) => value < .001 ? "<0,1 %" : value > .999 ? ">99,9 %" : `${fmt(value * 100, 1)} %`;
 
 function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; cell?: MetricCell; scale: MetricScale }) {
@@ -70,7 +72,7 @@ function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; c
           <dl>
             <div><dt>Delta</dt><dd><strong>{fmt(details.theoreticalDelta, 4)}</strong><small>Prima por +1 unidad de precio</small></dd></div>
             <div><dt>Theta</dt><dd><strong>{details.theta === undefined ? "—" : formatOptionAmount(details.theta)}</strong><small>Prima por día calendario</small></dd></div>
-            <div><dt>Gamma</dt><dd><strong>{details.gamma === undefined ? "—" : formatSensitivity(details.gamma)}</strong><small>Delta por +1 unidad de precio</small></dd></div>
+            <div><dt>Gamma</dt><dd><strong>{details.gamma === undefined ? "—" : formatTooltipGamma(details.gamma)}</strong><small>Delta por +1 unidad de precio</small></dd></div>
             <div><dt>Vega</dt><dd><strong>{details.vega === undefined ? "—" : formatSensitivity(details.vega)}</strong><small>Prima por +1 punto de VI</small></dd></div>
           </dl>
           <p>Subyacente {fmt(details.spot)} {strikeCurrency} · {details.days} días al vencimiento</p>
