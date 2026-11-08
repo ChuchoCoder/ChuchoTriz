@@ -1,4 +1,4 @@
-import type { Contract, Quote } from "./market";
+import { lastTradedPremium, type Contract, type Quote } from "./market";
 import { expirySummary, intrinsic, resultAt, type OptionKind, type Side, type Strategy } from "./model";
 
 export type StrategyFamily = "option" | "vertical" | "butterfly" | "ratio" | "strangle" | "straddle" | "iron-condor" | "jade-lizard";
@@ -92,11 +92,6 @@ export function quotePrice(quote: Quote | undefined, side: Side): { ok: true; pr
     return { ok: false, kind: "missing", reason: `sin ${side === "buy" ? "ASK" : "BID"} disponible para copiar.` };
   if (quote?.bid && quote.ask && quote.bid.price >= quote.ask.price) return { ok: false, kind: "crossed", reason: "BID/ASK cerrado o cruzado." };
   return { ok: true, price: level.price };
-}
-
-export function lastTradedPremium(quote: Quote | undefined) {
-  const last = quote?.last;
-  return last !== undefined && Number.isFinite(last) && last > 0 ? last : undefined;
 }
 
 type PriceResult<T> = { ok: true; price: T } | { ok: false; reason: string };

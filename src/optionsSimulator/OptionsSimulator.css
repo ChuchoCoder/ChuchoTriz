@@ -25,9 +25,6 @@
 .ct-sim-view-tabs button { min-height: 27px; padding: 3px 12px; font-size: 12px; border-color: transparent; background: transparent; color: var(--sim-muted); }
 .ct-sim-view-tabs button[aria-selected="true"] { color: var(--sim-card); border-color: var(--sim-accent); background: var(--sim-accent); font-weight: 700; }
 .ct-sim-market-layout[hidden], .ct-sim-analysis-panel[hidden] { display: none; }
-.ct-sim-market-settings > summary { list-style: none; cursor: pointer; padding: 1px 7px; border: 1px solid var(--sim-border); border-radius: 4px; font-size: 11px; color: var(--sim-accent); background: var(--sim-field); white-space: nowrap; }
-.ct-sim-market-settings > summary::-webkit-details-marker { display: none; }
-.ct-sim-market-settings[open] > summary { border-color: var(--sim-accent); }
 .ct-sim label { color: inherit; font: inherit; margin: 0; }
 .ct-sim input, .ct-sim select { display: block; width: 100%; min-width: 0; height: 34px; border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-field); color: var(--sim-text); padding: 5px 9px; font: inherit; }
 .ct-sim input::placeholder { color: var(--sim-muted); opacity: 1; }
@@ -173,7 +170,6 @@
 .ct-sim-vi-scale { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; vertical-align: middle; }
 .ct-sim-vi-scale i { width: 40px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #6fd4a5, #ecda69, #f7a35c, #ef7888); }
 .ct-sim-vi-scale strong { font-size: 9px; line-height: 1.2; white-space: nowrap; }
-.ct-sim-market-settings { position: relative; display: inline-block; }
 .ct-sim .ct-sim-strategy-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 27px; padding: 3px 8px; font-size: 11px; }
 .ct-sim .ct-sim-strategy-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
 .ct-sim-strategy-picker { position: fixed; inset: auto; margin: 0; padding: 10px; max-width: calc(100vw - 16px); overflow-y: auto; scrollbar-width: thin; color: var(--sim-text); background: var(--sim-card); border: 1px solid var(--sim-border); border-radius: 7px; box-shadow: 0 8px 30px #0007; font: 13px/1.4 "Lato", system-ui, sans-serif; }
@@ -204,10 +200,6 @@
 .ct-sim-strategy-preview li { padding: 3px 6px; border: 1px solid var(--sim-border); border-radius: 3px; }
 .ct-sim-strategy-preview small { display: block; margin-top: 8px; color: var(--sim-muted); font-size: 10px; }
 .ct-sim-strategy-preview .ct-sim-strategy-unavailable { color: var(--sim-loss); }
-.ct-sim-market-settings-panel { position: absolute; z-index: 6; left: 50%; top: calc(100% + 3px); transform: translateX(-50%); width: min(430px, calc(100vw - 24px)); text-align: left; border: 1px solid var(--sim-border); border-radius: 5px; background: var(--sim-card); box-shadow: 0 6px 20px #0005; }
-.ct-sim .ct-sim-market-settings-panel .ct-opt-metrics-filter { align-items: center; gap: 8px; padding: 10px; }
-.ct-sim .ct-sim-market-settings-panel label { flex-direction: row; align-items: center; }
-.ct-sim .ct-sim-market-settings-panel .ct-opt-metrics-grey-key { margin-left: 0; }
 .ct-sim-market .ct-opt-chain { display: table; table-layout: fixed; }
 .ct-sim-market .ct-opt-chain th:first-child, .ct-sim-market .ct-opt-chain th:last-child { width: auto; }
 .ct-sim-market .ct-opt-chain caption { display: none; }
