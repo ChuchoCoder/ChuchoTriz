@@ -58,6 +58,27 @@ it("derives per-unit theta and Mid extrinsic only with compatible inputs, retain
   expect(deriveOptionMetrics(pool, data, { ...context, now: Date.parse('2026-11-20T18:00:00Z') }).byId['call-90'].theta).toBeUndefined();
 });
 
+it("shows the VI model details only with compatible inputs and an eligible trade", () => {
+  const pool = contracts.map(contract => ({ ...contract, strikeCurrency: "ARS" }));
+  const data = sample();
+  data["call-100"].lastTradeAt = now - 31 * 60000;
+  const context = { ...settings, spot: 100, currency: "ARS", rate: .2, dividendYield: .01 };
+  const result = deriveOptionMetrics(pool, data, context);
+  expect(result.byId["call-100"].viDetails).toBeUndefined();
+  expect(result.byId["call-100"].theta).toBeDefined();
+  expect(result.byId["put-100"].viDetails).toMatchObject({ spot: 100, days: 17, rate: .2, dividendYield: .01 });
+  expect(result.byId["put-100"].viDetails!.theoreticalDelta).toBeLessThan(0);
+  expect(result.byId["put-100"].delta).toBe(0);
+  expect(deriveOptionMetrics(pool, data, { ...context, enabled: false }).byId["call-100"].viDetails).toBeDefined();
+  data["call-100"].lastTradeAt = now - 86400000;
+  const previous = deriveOptionMetrics(pool, data, { ...context, enabled: false }).byId["call-100"];
+  expect(previous.viDetails).toBeDefined();
+  expect(previous.viTradeStatus).toContain("Última operación de otra fecha");
+  data["call-100"].lastTradeAt = now + 1;
+  expect(deriveOptionMetrics(pool, data, { ...context, enabled: false }).byId["call-100"].viDetails).toBeUndefined();
+  expect(deriveOptionMetrics(pool, data, { ...context, currency: "USD" }).byId["put-100"].viDetails).toBeUndefined();
+});
+
 it.each([
   [10000.01, 10000, .01],
   [1000, 1000.001, .001],

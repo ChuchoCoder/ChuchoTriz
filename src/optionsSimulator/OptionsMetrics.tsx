@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, useRef, useState, type CSSProperties } from "react";
 import { formatOptionAmount, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { MetricCell, MetricScale } from "./marketMetrics";
 import { viGradeColor } from "./marketMetrics";
@@ -8,6 +8,81 @@ const tradeTimeFormat = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Ar
 const fmt = (value: number, precision?: number) => formatOptionNumber(value === 0 ? 0 : value, precision);
 const formatSensitivity = (value: number) => value.toLocaleString("es-AR", value !== 0 && (value < .0001 || value >= 10000)
   ? { notation: "scientific", maximumSignificantDigits: 4 } : { maximumSignificantDigits: 5 });
+const formatProbability = (value: number) => value < .001 ? "<0,1 %" : value > .999 ? ">99,9 %" : `${fmt(value * 100, 1)} %`;
+
+function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; cell?: MetricCell; scale: MetricScale }) {
+  const id = useId();
+  const anchor = `--ct-vi-${id.replace(/[^\w-]/g, "")}`;
+  const panel = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pinned = useRef(false);
+  const [open, setOpen] = useState(false);
+  const { symbol, kind, strike, strikeCurrency } = contract;
+  const color = viGradeColor(cell, scale), value = cell?.impliedVolatility;
+  const details = cell?.viDetails;
+  const price = `${fmt(strike)}${strikeCurrency ? ` ${strikeCurrency}` : ""}`;
+  const stamp = cell?.lastTradeAt === undefined ? undefined : tradeTimeFormat.format(cell.lastTradeAt);
+  const label = value === undefined ? "VI sin dato" : `VI ${formatOptionVolatility(value)} %`;
+
+  function show() {
+    clearTimeout(leaveTimer.current);
+    if (panel.current?.showPopover && !panel.current.matches(":popover-open")) panel.current.showPopover();
+  }
+
+  function scheduleClose() {
+    clearTimeout(leaveTimer.current);
+    leaveTimer.current = setTimeout(() => {
+      if (!pinned.current && !trigger.current?.matches(":focus-visible") && panel.current?.matches(":popover-open")) panel.current.hidePopover();
+    }, 120);
+  }
+
+  return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`} style={{ "--ct-vi-anchor": anchor } as CSSProperties}>
+    <button ref={trigger} type="button" className={`ct-opt-iv-value${color ? "" : " excluded"}`} data-grading={color ? "included" : "excluded"}
+      style={color ? { "--ct-iv": color } as CSSProperties : undefined}
+      aria-label={`${label} · ${symbol}`} aria-controls={id} aria-expanded={open} aria-describedby={open ? id : undefined}
+      onPointerEnter={event => { if (event.pointerType === "mouse") show(); }} onPointerLeave={scheduleClose}
+      onFocus={show} onBlur={scheduleClose} onClick={() => {
+        if (pinned.current) { panel.current?.hidePopover?.(); return; }
+        pinned.current = true;
+        show();
+      }}>
+      {value === undefined ? "—" : `${formatOptionVolatility(value)} %`}
+    </button>
+    <div ref={panel} id={id} className="ct-opt-iv-detail" role="tooltip" popover="hint"
+      onPointerEnter={() => clearTimeout(leaveTimer.current)} onPointerLeave={scheduleClose}
+      onToggle={event => {
+        const visible = event.newState === "open";
+        if (!visible) pinned.current = false;
+        setOpen(visible);
+      }}>
+      {open && <>
+        <header><strong>{symbol}</strong><span>{label}</span></header>
+        {details ? <>
+          <strong>Probabilidad estimada al vencimiento</strong>
+          <dl>
+            <div><dt>ITM · Con valor intrínseco</dt><dd><strong>{formatProbability(details.probabilityItm)}</strong>
+              <small>Subyacente {kind === "call" ? "por encima" : "por debajo"} de {price}</small></dd></div>
+            <div><dt>OTM · Sin valor intrínseco</dt><dd><strong>{formatProbability(details.probabilityOtm)}</strong>
+              <small>Subyacente {kind === "call" ? "por debajo" : "por encima"} de {price}</small></dd></div>
+          </dl>
+          <strong>Griegas teóricas de la opción</strong>
+          <dl>
+            <div><dt>Delta</dt><dd><strong>{fmt(details.theoreticalDelta, 4)}</strong><small>Prima por +1 unidad de precio</small></dd></div>
+            <div><dt>Theta</dt><dd><strong>{details.theta === undefined ? "—" : formatOptionAmount(details.theta)}</strong><small>Prima por día calendario</small></dd></div>
+            <div><dt>Gamma</dt><dd><strong>{details.gamma === undefined ? "—" : formatSensitivity(details.gamma)}</strong><small>Delta por +1 unidad de precio</small></dd></div>
+            <div><dt>Vega</dt><dd><strong>{details.vega === undefined ? "—" : formatSensitivity(details.vega)}</strong><small>Prima por +1 punto de VI</small></dd></div>
+          </dl>
+          <p>Subyacente {fmt(details.spot)} {strikeCurrency} · {details.days} días al vencimiento</p>
+          <p>Modelo BSM · Tasa {fmt(details.rate * 100, 2)} % · Dividendos {fmt(details.dividendYield * 100, 2)} %</p>
+        </> : <p>Probabilidades y griegas teóricas no disponibles.
+          {cell?.eligible && " Revisá el spot, el vencimiento y los parámetros de Análisis."}</p>}
+        <p>{cell?.viTradeStatus ?? cell?.reason ?? "Sin datos"}{stamp && ` · ${stamp} ART`}</p>
+        {cell?.eligible && !color && <p>Sin rango suficiente para una escala comparativa.</p>}
+      </>}
+    </div>
+  </td>;
+}
 
 export type OptionMetricField = "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic" | "last" | "mid" | "spreadPercent" | "lastTradeAt"
   | "referencePrice" | "intrinsic" | "gamma" | "vega";
@@ -51,12 +126,8 @@ export function OptionMetricCell({ contract, field, cell, scale }: {
     </td>;
   }
   if (field === "iv") {
-    const color = viGradeColor(cell, scale), value = cell?.impliedVolatility;
-    const reason = cell?.eligible && !color ? "Sin rango suficiente para una escala comparativa" : cell?.reason ?? "Sin datos";
-    const stamp = cell?.lastTradeAt === undefined ? "" : ` · Última operación: ${tradeTimeFormat.format(cell.lastTradeAt)} ART`;
-    return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}><span className={`ct-opt-iv-value${color ? "" : " excluded"}`} data-grading={color ? "included" : "excluded"}
-      style={color ? { "--ct-iv": color } as CSSProperties : undefined} title={`${symbol} · ${reason}${stamp}${color ? "" : " · Fuera de la escala"}`}>
-      {value === undefined ? "—" : `${formatOptionVolatility(value)} %`}</span></td>;
+    return contract ? <VolatilityCell key={contract.id} contract={contract} cell={cell} scale={scale} />
+      : <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}><span className="ct-opt-iv-value excluded" data-grading="excluded">—</span></td>;
   }
   if (field === "volume") {
     const value = cell?.nominalVolume, percent = value === undefined || scale.volumeMax === 0 ? 0 : value / scale.volumeMax * 100;

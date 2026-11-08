@@ -234,14 +234,18 @@ export function theoreticalGreeks(kind: OptionKind, spot: number, strike: number
   const d2 = d1 - volatility * sqrt, sign = kind === "call" ? 1 : -1;
   const discountedSpot = spot * Math.exp(-dividendYield * years), discountedStrike = strike * Math.exp(-rate * years);
   const density = Math.exp(-.5 * d1 * d1) / Math.sqrt(2 * Math.PI);
-  const theta = (-discountedSpot * density * volatility / (2 * sqrt) + sign * dividendYield * discountedSpot * normalCdf(sign * d1)
-    - sign * rate * discountedStrike * normalCdf(sign * d2)) / 365;
+  const cdfD1 = normalCdf(sign * d1), probabilityItm = normalCdf(sign * d2);
+  const theta = (-discountedSpot * density * volatility / (2 * sqrt) + sign * dividendYield * discountedSpot * cdfD1
+    - sign * rate * discountedStrike * probabilityItm) / 365;
   const gamma = Math.exp(-dividendYield * years) * density / spot / (volatility * sqrt);
   const vega = discountedSpot * density * sqrt / 100;
   return {
     theta: Number.isFinite(theta) ? theta : undefined,
     gamma: Number.isFinite(gamma) ? gamma : undefined,
     vega: Number.isFinite(vega) ? vega : undefined,
+    theoreticalDelta: sign * Math.exp(-dividendYield * years) * cdfD1,
+    probabilityItm,
+    probabilityOtm: normalCdf(-sign * d2),
   };
 }
 const direction = (leg: ParsedLeg) => leg.side === "buy" ? 1 : -1;
