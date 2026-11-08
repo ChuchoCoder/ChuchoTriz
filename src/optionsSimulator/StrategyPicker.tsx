@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import ToolbarIcon from "../ToolbarIcon";
 import type { Contract, Quote } from "./market";
 import { formatOptionAmount, formatOptionNumber as fmt } from "./format";
 import { initialChoice, recipeDraftPrices, recipePayoff, strategyDescription, strategyFamilies, strategyGlyph, strategyLabel, strategyRecipe,
@@ -85,7 +86,10 @@ export default function StrategyPicker({ active, contracts, quotes, spot, curren
   const cash = current.payoff.ok ? current.payoff.summary.entry : undefined;
   return <>
     <button ref={trigger} className="ct-sim-strategy-trigger" type="button" aria-label="Elegir estrategia" aria-haspopup="dialog" aria-controls={panelId} aria-expanded={open}
-      onClick={() => open ? close(true) : setOpen(true)}>Estrategia <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+      onClick={() => open ? close(true) : setOpen(true)}>
+      <ToolbarIcon name="strategy" />Estrategia
+      <svg className="ct-sim-strategy-chevron" aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>
     {open && <div ref={panel} id={panelId} popover="manual" role="dialog" aria-label="Selector visual de estrategias" data-ct-inline-editor className="ct-sim-strategy-picker"
       onKeyDown={event => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); return; }

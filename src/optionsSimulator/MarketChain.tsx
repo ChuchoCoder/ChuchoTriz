@@ -10,6 +10,7 @@ import { importPosition, readPositionSnapshot, setPositionQuantity, startPositio
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
+import ToolbarIcon from "../ToolbarIcon";
 import { preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
 import type { StrikeMarket } from "./strategyAdjustments";
 
@@ -245,7 +246,6 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const quantityBar = useRef<HTMLDivElement>(null);
   const [loadingPosition, setLoadingPosition] = useState(false);
   const positionRequest = useRef<AbortController | null>(null);
-  const initialPositionAttempted = useRef(false);
   const latestInput = useRef(input);
   latestInput.current = input;
   useEffect(() => () => positionRequest.current?.abort(), [active, input.position?.capturedAt]);
@@ -389,25 +389,24 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     try { await chrome.storage.local.set({ [selectionKey]: { underlyingId, expiration } }); }
     catch { /* The current selection still works without local storage. */ }
   }
-  async function loadPosition(draft = input, automatic = false) {
-    if (!underlying || positionRequest.current) return;
+  const canLoadPosition = comparable && selected.length <= 160;
+  const positionQuotesReady = !!data && selected.every(contract => !!data.instruments[contract.id]);
+  const canOpenPosition = canLoadPosition && (positionQuotesReady || !!reading.issue);
+  async function loadPosition(draft = input) {
+    if (!underlying || !canLoadPosition || positionRequest.current) return;
     const request = new AbortController();
     positionRequest.current = request;
-    initialPositionAttempted.current = true;
     setLoadingPosition(true); setNotice("");
     try {
       const { snapshot, saved, savedUnderlying, costStorageUnavailable } = await readPositionSnapshot(selected, request.signal);
       if (request.signal.aborted) return;
       const current = latestInput.current;
-      if (automatic && current.position) return;
-      const base = automatic ? startPositionDraft(current, selected, underlying.symbol, spot) : current.position ? current : draft;
+      const base = current.position ? current : draft;
       const next = importPosition(snapshot, selected, data?.instruments, base, underlying.symbol, spot, saved, savedUnderlying, costStorageUnavailable);
       const hasPosition = !!(next.position?.legs.length || next.position?.underlying?.quantity);
       const underlyingUnavailable = next.position?.underlyingUnavailable;
       setNotice(hasPosition || underlyingUnavailable ? { announcement: "Reporte recibido. Revisá la posición actual en la grilla." }
         : "No hay posición abierta en esta cadena. Podés ingresar una posición manual.");
-      if (automatic && !hasPosition && !underlyingUnavailable) return;
-      if (automatic) setPositionMode(true);
       onNewStrategy();
       setOpenQuote(undefined);
       setInput(next);
@@ -416,20 +415,15 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     } finally {
       if (positionRequest.current === request) {
         positionRequest.current = null;
-        if (automatic && request.signal.aborted) initialPositionAttempted.current = false;
         setLoadingPosition(false);
+        if (request.signal.aborted) setNotice("Se interrumpió la consulta de posición. Usá Recargar tenencia para volver a consultar.");
       }
     }
   }
-  const canLoadPosition = comparable && selected.length <= 160;
-  const selectedMarketKey = JSON.stringify([...new Set([underlyingId, ...selected.map(contract => contract.id)])].sort());
-  useEffect(() => {
-    if (active && selectionReady && canLoadPosition && data && !reading.issue && reading.selectionKey === selectedMarketKey &&
-      !loadingPosition && !input.position && !initialPositionAttempted.current) void loadPosition(input, true);
-  }, [active, selectionReady, canLoadPosition, data, reading.issue, reading.selectionKey, selectedMarketKey, loadingPosition, input.position]);
   function openPosition() {
-    if (!underlying) return;
+    if (loadingPosition || editingPosition) return;
     if (input.position) { setPositionMode(true); setOpenQuote(undefined); setNotice(""); return; }
+    if (!underlying || !canOpenPosition) return;
     try {
       const draft = startPositionDraft(input, selected, underlying.symbol, spot);
       setInput(draft);
@@ -672,14 +666,21 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
       <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
-    {!editingPosition && <StrategyPicker active={active} contracts={selected} quotes={strategyQuotes} spot={spot} currency={underlying?.currency}
-      costs={numeric(input.position ? input.adjustmentCosts ?? "0" : input.costs)}
-      context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />}
-    {input.position ? <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">
-      <button type="button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>Cotizaciones</button>
-      <button type="button" aria-pressed={editingPosition} disabled={loadingPosition} onClick={openPosition}>Posición actual</button>
-    </div> : <button type="button" disabled={!canLoadPosition || loadingPosition} onClick={openPosition}
-      aria-label="Cargar posición actual" title="Leer la posición de la cuenta activa para este subyacente y vencimiento">{loadingPosition ? "Cargando posición…" : "Cargar posición"}</button>}
+    <div className="ct-sim-strategy-slot" inert={editingPosition}>
+      <StrategyPicker active={!editingPosition} contracts={selected} quotes={strategyQuotes} spot={spot} currency={underlying?.currency}
+        costs={numeric(input.position ? input.adjustmentCosts ?? "0" : input.costs)}
+        context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />
+    </div>
+    <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">
+      <button type="button" className="ct-tool-icon-button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>
+        <ToolbarIcon name="quotes" />Cotizaciones
+      </button>
+      <button type="button" className="ct-tool-icon-button" aria-pressed={editingPosition}
+        disabled={loadingPosition || (!input.position && !canOpenPosition)} onClick={openPosition}
+        title={!input.position && canLoadPosition && !canOpenPosition ? "Esperando las cotizaciones de la cadena." : undefined}>
+        <ToolbarIcon name="position" />Posición actual
+      </button>
+    </div>
     <span className="ct-sim-chain-counts">
       <span>{strikes.length} ejercicios</span>
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
@@ -689,9 +690,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {reading.issue && <p role="status" className="ct-sim-error ct-sim-chain-notice">{reading.issue}</p>}
     {editingPosition && <fieldset className="ct-sim-position-toolbar" aria-label="Controles de posición" disabled={loadingPosition}>
       {positionAccounting}
-      <button type="button" onClick={clearPosition} title="Vacía la posición y sus costos del borrador. Conserva los ajustes.">Limpiar posición</button>
-      <button type="button" disabled={!canLoadPosition} onClick={() => void loadPosition()}>
-        {loadingPosition ? "Cargando posición…" : "Recargar tenencia"}</button>
+      <button type="button" className="ct-tool-icon-button" onClick={clearPosition} title="Vacía la posición y sus costos del borrador. Conserva los ajustes.">
+        <ToolbarIcon name="clear" />Limpiar posición
+      </button>
+      <button type="button" className="ct-tool-icon-button" disabled={!canLoadPosition} onClick={() => void loadPosition()}>
+        <ToolbarIcon name="refresh" />{loadingPosition ? "Cargando posición…" : "Recargar tenencia"}
+      </button>
     </fieldset>}
     {notice && (typeof notice === "string" ? <p role="status" className="ct-sim-chain-notice">{notice}</p>
       : <span role="status" className="ct-sim-sr">{notice.announcement}</span>)}

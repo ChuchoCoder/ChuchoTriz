@@ -15,12 +15,16 @@
 .ct-sim *, .ct-sim *::before, .ct-sim *::after { box-sizing: border-box; }
 .ct-tools-embedded .ct-sim { display: flex; flex: 1; flex-direction: column; min-height: 0; scrollbar-gutter: stable; }
 .ct-sim-topbar { position: relative; display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; margin-bottom: 6px; }
+.ct-tool-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.ct-tool-icon, .ct-sim-strategy-chevron { flex: none; }
 .ct-sim-market-controls { flex: 1 1 auto; min-width: 0; }
 .ct-sim label.ct-sim-include-position { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
 .ct-sim .ct-sim-include-position input { width: auto; height: auto; margin: 0; accent-color: var(--sim-accent); }
 .ct-sim-market-toolbar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .ct-sim-market-toolbar > label { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 11px; }
 .ct-sim-market-toolbar > label select { width: auto; max-width: 150px; height: 27px; padding: 2px 4px; font-size: 11px; }
+.ct-sim-strategy-slot { display: inline-flex; }
+.ct-sim-strategy-slot[inert] { visibility: hidden; }
 .ct-sim-view-tabs { display: flex; gap: 3px; }
 .ct-sim-view-tabs button { min-height: 27px; padding: 3px 12px; font-size: 12px; border-color: transparent; background: transparent; color: var(--sim-muted); }
 .ct-sim-view-tabs button[aria-selected="true"] { color: var(--sim-card); border-color: var(--sim-accent); background: var(--sim-accent); font-weight: 700; }
@@ -171,7 +175,7 @@
 .ct-sim-vi-scale i { width: 40px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #6fd4a5, #ecda69, #f7a35c, #ef7888); }
 .ct-sim-vi-scale strong { font-size: 9px; line-height: 1.2; white-space: nowrap; }
 .ct-sim .ct-sim-strategy-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 27px; padding: 3px 8px; font-size: 11px; }
-.ct-sim .ct-sim-strategy-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
+.ct-sim .ct-sim-strategy-trigger[aria-expanded="true"] .ct-sim-strategy-chevron { transform: rotate(180deg); }
 .ct-sim-strategy-picker { position: fixed; inset: auto; margin: 0; padding: 10px; max-width: calc(100vw - 16px); overflow-y: auto; scrollbar-width: thin; color: var(--sim-text); background: var(--sim-card); border: 1px solid var(--sim-border); border-radius: 7px; box-shadow: 0 8px 30px #0007; font: 13px/1.4 "Lato", system-ui, sans-serif; }
 .ct-sim-strategy-picker > header { display: flex; justify-content: space-between; align-items: start; gap: 12px; padding: 0 0 8px; }
 .ct-sim-strategy-picker > header small { display: block; color: var(--sim-muted); font-size: 10px; margin-top: 3px; }
