@@ -574,8 +574,9 @@ it("rolls a sold call from Posición actual into both simulated quote cells and 
   await act(async () => button("Posición actual").click());
   await fill("Prima histórica CALL 100", "7");
   await act(async () => byLabel<HTMLButtonElement>("Rolar posición CALL 100").click());
-  await act(async () => byLabel<HTMLButtonElement>("Rolar a CALL 110").click());
-  await fill("Gastos del rolado", "100");
+  await act(async () => byLabel<HTMLButtonElement>("Rolar a 110").click());
+  expect(byLabel<HTMLInputElement>("Gastos del rolado (%)").value).toBe("0,2");
+  await fill("Gastos del rolado (%)", "1,5");
   await act(async () => button("Usar mínimo sin débito").click());
   expect(byLabel<HTMLInputElement>("Contratos a vender en rolado").value).toBe("3");
   expect(byLabel("Operaciones del rolado").textContent).toContain("+2 contratos");
@@ -588,7 +589,7 @@ it("rolls a sold call from Posición actual into both simulated quote cells and 
   expect(positionCheckbox().checked).toBe(true);
   await showAnalysis();
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).not.toBeNull();
-  expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("100");
+  expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("33");
 });
 
 it("shows Calls and Puts actions on opposite edges and rolls a bought put into Análisis", async () => {
@@ -610,7 +611,7 @@ it("shows Calls and Puts actions on opposite edges and rolls a bought put into A
   await fill("Prima histórica CALL 90", "3");
   await fill("Prima histórica PUT 100", "7");
   await act(async () => put.click());
-  await act(async () => byLabel<HTMLButtonElement>("Rolar a PUT 110").click());
+  await act(async () => byLabel<HTMLButtonElement>("Rolar a 110").click());
   await act(async () => button("Usar máximo sin débito").click());
   expect(byLabel<HTMLInputElement>("Contratos a comprar en rolado").value).toBe("2");
   expect(byLabel("Operaciones del rolado").textContent).toContain("Vender para cerrarVenta−2 contratos");

@@ -14,16 +14,16 @@ const market = (): StrikeMarket => {
   }])) };
 };
 
-describe("rolling a sold position", () => {
+describe("rolling an option position", () => {
   const sold = () => ({ ...input(), legs: [], position: { legs: [{ ...input().legs[1], contracts: "10", volatility: "40" }] } });
-  it("finds either direction and prices the minimum at ASK/BID plus costs", () => {
+  it("finds either direction and prices the minimum at ASK/BID with fees on both legs", () => {
     const draft = sold(), book = market();
     book.quotes["call-110"].bid!.price = 8;
-    const candidates = rollCandidates(draft, "call-100", 100, book);
+    const candidates = rollCandidates(draft, "call-100", .2, book);
     expect(candidates.ok && candidates.candidates.map(item => item.contract.strike)).toEqual([80, 90, 110, 120]);
     expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(14);
-    expect(buildRoll(draft, "call-100", "call-110", 14, 100, book)).toMatchObject({
-      ok: true, net: 100, adjustmentCosts: "100", legs: [
+    expect(buildRoll(draft, "call-100", "call-110", 14, .2, book)).toMatchObject({
+      ok: true, net: 155.6, costs: 44.4, adjustmentCosts: "44.4", legs: [
         { securityId: "call-100", side: "buy", contracts: "10", premium: "11", volatility: "50", rollCloseOf: "call-100" },
         { securityId: "call-110", side: "sell", contracts: "14", premium: "8" },
       ],
@@ -64,24 +64,23 @@ describe("rolling a sold position", () => {
     book.quotes["put-100"].bid = { price: 10, size: 10 };
     book.quotes["put-90"].ask = { price: 4, size: 30 };
     book.quotes["put-90"].bid = { price: 3, size: 30 };
-    const maximum = (costs: number) => {
-      const roll = rollCandidates(draft, "put-100", costs, book);
+    const maximum = (feePercent: number) => {
+      const roll = rollCandidates(draft, "put-100", feePercent, book);
       return roll.ok && roll.candidates.find(candidate => candidate.contract.id === "put-90")?.maximum;
     };
-    expect(maximum(200)).toBe(24);
-    expect(maximum(400)).toBe(24);
-    expect(maximum(400.001)).toBe(23);
-    expect(maximum(9600)).toBe(1);
-    expect(maximum(9600.001)).toBeUndefined();
-    expect(buildRoll(draft, "put-100", "put-90", 24, 400, book)).toMatchObject({
-      ok: true, net: 0, legs: [
+    expect(maximum(2)).toBe(24);
+    expect(maximum(2.05)).toBe(23);
+    expect(maximum(92.3)).toBe(1);
+    expect(maximum(92.31)).toBeUndefined();
+    expect(buildRoll(draft, "put-100", "put-90", 24, 2, book)).toMatchObject({
+      ok: true, net: 8, costs: 392, legs: [
         { securityId: "put-100", side: "sell", contracts: "10", premium: "10", rollCloseOf: "put-100" },
         { securityId: "put-90", side: "buy", contracts: "24", premium: "4" },
       ],
     });
-    expect(buildRoll(draft, "put-100", "put-90", 25, 200, book)).toMatchObject({ ok: true, net: -200 });
+    expect(buildRoll(draft, "put-100", "put-90", 25, .2, book)).toMatchObject({ ok: true, net: -40 });
     book.quotes["put-90"].ask.size = 20;
-    expect(maximum(200)).toBe(20);
+    expect(maximum(2)).toBe(20);
     expect(buildRoll(draft, "put-100", "put-90", 21, 0, book).ok).toBe(false);
     book.quotes["put-100"].bid.size = 9;
     expect(rollCandidates(draft, "put-100", 0, book).ok).toBe(false);
@@ -95,6 +94,10 @@ describe("rolling a sold position", () => {
     book.quotes["call-110"].impliedVolatility = 900;
     const candidates = rollCandidates(draft, "call-100", 0, book);
     expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(9);
+    const withFees = rollCandidates(draft, "call-100", .2, book);
+    expect(withFees.ok && withFees.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(10);
+    expect(buildRoll(draft, "call-100", "call-110", 9, .2, book)).toMatchObject({ ok: true, net: -.000036 });
+    expect(buildRoll(draft, "call-100", "call-110", 10, 100, book).ok).toBe(false);
     expect(buildRoll(draft, "call-100", "call-110", 8, 0, book)).toMatchObject({ ok: true, net: -.001 });
     expect(buildRoll(draft, "call-100", "call-110", 9, 0, book)).toMatchObject({ ok: true, net: 0,
       legs: [{ volatility: "50" }, { volatility: "" }] });

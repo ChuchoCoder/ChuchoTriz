@@ -12,7 +12,7 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
   const title = useId();
   const [targetId, setTargetId] = useState("");
   const [quantity, setQuantity] = useState(source.contracts);
-  const [costs, setCosts] = useState("0");
+  const [feePercent, setFeePercent] = useState("0,2");
   useLayoutEffect(() => {
     const panel = dialog.current;
     if (panel?.showModal) panel.showModal();
@@ -29,10 +29,10 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
   const openVerb = short ? "Vender" : "Comprar";
   const closeVerb = short ? "Recompra" : "Venta de cierre";
   const openBook = short ? "BID" : "ASK";
-  const roll = rollCandidates(input, source.securityId!, numeric(costs), market);
+  const roll = rollCandidates(input, source.securityId!, numeric(feePercent), market);
   const target = roll.ok ? roll.candidates.find(candidate => candidate.contract.id === targetId) : undefined;
   const qty = numeric(quantity);
-  const draft = buildRoll(input, source.securityId!, targetId, qty, numeric(costs), market);
+  const draft = buildRoll(input, source.securityId!, targetId, qty, numeric(feePercent), market);
   const noDebitQuantity = short
     ? target?.minimum !== undefined && target.minimum <= (target.max ?? 0) ? target.minimum : undefined
     : target?.maximum || undefined;
@@ -57,27 +57,35 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
     <div className="ct-roll-layout">
       <section className="ct-roll-destinations" aria-labelledby={`${title}-destinations`}>
         <h4 id={`${title}-destinations`}>Strike de destino</h4>
-        <p className="ct-roll-hint">Elegí otra base del mismo vencimiento.</p>
+        <p className="ct-roll-hint">Mismo vencimiento · Importes en {currency}</p>
         {roll.ok && <div className="ct-roll-table"><table aria-label="Bases de destino del rolado">
-          <colgroup><col className="ct-roll-strike-col" /><col className="ct-roll-price-col" /><col /><col /></colgroup>
-          <thead><tr><th scope="col">Base</th><th scope="col">{openBook}</th><th scope="col">Flujo 1 a 1</th><th scope="col">{short ? "Mín." : "Máx."} sin débito</th></tr></thead>
+          <colgroup><col className="ct-roll-strike-col" /><col className="ct-roll-price-col" /><col className="ct-roll-flow-col" /><col /></colgroup>
+          <thead><tr><th scope="col">Strike</th><th scope="col">{openBook}</th><th scope="col">Flujo 1 a 1</th><th scope="col" aria-label={`${short ? "Mínimo" : "Máximo"} sin débito`} title={`${short ? "Mínimo" : "Máximo"} sin débito`}>{short ? "Mín." : "Máx."} s/déb.</th></tr></thead>
           <tbody>{roll.candidates.map(candidate => {
             const { contract, price, max, minimum, maximum, oneForOne, reason } = candidate;
             const limit = short ? minimum : maximum;
             const limitLabel = limit && limit <= (max ?? 0) ? fmt(limit)
               : short && minimum !== undefined ? "Sin profundidad" : !short && price !== undefined && max ? "Requiere débito" : "—";
+            const strike = fmt(contract.strike);
+            const flowClass = oneForOne === undefined || oneForOne === 0 ? undefined : oneForOne > 0 ? "ct-sim-profit" : "ct-sim-loss";
+            const flow = oneForOne === undefined ? "—" : `${oneForOne > 0 ? "+" : ""}${fmt(oneForOne, Math.abs(oneForOne) < .01 ? 12 : 2)}`;
             return <tr key={contract.id} className={contract.id === targetId ? "selected" : undefined}>
-              <th scope="row"><button type="button" disabled={price === undefined || !max} aria-label={`Rolar a ${contract.symbol}`}
-                aria-pressed={contract.id === targetId} onClick={() => setTargetId(contract.id)}>{fmt(contract.strike)} <small>{contract.symbol}</small></button></th>
-              <td>{price === undefined ? reason : fmt(price)}</td>
-              <td>{oneForOne === undefined ? "—" : money(oneForOne)}</td>
-              <td>{limitLabel}</td>
+              <th scope="row"><button type="button" disabled={price === undefined || !max} aria-label={`Rolar a ${strike}`} title={reason ?? strike}
+                aria-pressed={contract.id === targetId} onClick={() => setTargetId(contract.id)}>{strike}</button></th>
+              <td title={reason ?? (price === undefined ? undefined : fmt(price))}>{price === undefined ? "—" : fmt(price)}</td>
+              <td className={flowClass}
+                title={oneForOne === undefined ? undefined : money(oneForOne)}>{flow}</td>
+              <td title={limitLabel}>{limitLabel}</td>
             </tr>;
           })}</tbody>
         </table>{!roll.candidates.length && <p>Sin otra base compatible en la cadena.</p>}</div>}
       </section>
       <section className="ct-roll-details" aria-labelledby={`${title}-operations`}>
         <h4 id={`${title}-operations`}>Operaciones</h4>
+        <label className="ct-roll-field">Gastos del rolado (%)
+          <input aria-label="Gastos del rolado (%)" title="Porcentaje sobre el importe bruto de cada pata"
+            type="text" inputMode="decimal" value={feePercent} onChange={event => setFeePercent(event.target.value)} />
+        </label>
         {roll.ok && <div className="ct-roll-operations" aria-label="Operaciones del rolado">
           {operation(short ? "Recomprar para cerrar" : "Vender para cerrar", roll.closeSide, roll.quantity, roll.source.strike,
             roll.closeBook.toUpperCase(), roll.closePrice)}
@@ -92,12 +100,9 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
           <button type="button" disabled={noDebitQuantity === undefined}
             onClick={() => setQuantity(String(noDebitQuantity))}>Usar {noDebitLabel} sin débito</button>
         </div>
-        <label className="ct-roll-field">Gastos del rolado ({currency})
-          <input aria-label="Gastos del rolado" type="number" min="0" step="any" value={costs} onChange={event => setCosts(event.target.value)} />
-        </label>
         <div aria-live="polite">
           {draft.ok ? <p><strong>{draft.net > 0 ? "Crédito" : draft.net < 0 ? "Débito" : "Flujo"} neto estimado · {money(Math.abs(draft.net))}</strong>
-            <br />{closeVerb} {money(roll.ok ? roll.close : 0)} · {short ? "Venta" : "Compra"} de apertura {money(draft.openingAmount)} · Gastos {money(numeric(costs))}</p>
+            <br />{closeVerb} {money(roll.ok ? roll.close : 0)} · {short ? "Venta" : "Compra"} de apertura {money(draft.openingAmount)} · Gastos {money(draft.costs)}</p>
             : (!roll.ok || targetId) && <p>{!roll.ok ? roll.reason : draft.reason}</p>}
           {nominal !== undefined && <p>{fmt(nominal)} nominales en la nueva {short ? "venta" : "compra"}{excess !== undefined && excess > 0
             ? ` · ${fmt(excess)} exceden la tenencia informada si solo se considera esta venta` : ""}</p>}

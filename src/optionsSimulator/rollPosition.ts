@@ -14,18 +14,24 @@ function decimal(value: number) {
   return { units: BigInt(integer + fraction), places: fraction.length - Number(exponent) };
 }
 
-function rollCash(closeQuantity: number, factor: number, closePrice: number, openPrice: number, costs: number, openingSide: Leg["side"]) {
-  const lot = decimal(factor), close = decimal(closePrice), open = decimal(openPrice), fee = decimal(costs);
-  const places = Math.max(lot.places + close.places, lot.places + open.places, fee.places);
+function rollCash(closeQuantity: number, factor: number, closePrice: number, openPrice: number, feePercent: number, openingSide: Leg["side"]) {
+  const lot = decimal(factor), close = decimal(closePrice), open = decimal(openPrice), fee = decimal(feePercent);
+  const places = Math.max(lot.places + close.places, lot.places + open.places);
   const scaled = (units: bigint, from: number) => units * 10n ** BigInt(places - from);
   const closeAmount = scaled(BigInt(closeQuantity) * lot.units * close.units, lot.places + close.places);
   const openUnit = scaled(lot.units * open.units, lot.places + open.places);
+  const percentPlaces = fee.places + 2;
+  const percentScale = 10n ** BigInt(percentPlaces);
   const direction = openingSide === "sell" ? 1n : -1n;
-  const balance = -direction * closeAmount - scaled(fee.units, fee.places);
+  // Charge the same percentage on each leg's gross amount, with exact decimal sizing.
+  const balance = closeAmount * (-direction * percentScale - fee.units);
+  const netOpenUnit = openUnit * (direction * percentScale - fee.units);
+  const amount = (units: bigint) => Number(`${units}e${-(places + percentPlaces)}`);
   return {
-    minimum: openingSide === "sell" ? Number((-balance + openUnit - 1n) / openUnit) : undefined,
-    maximum: openingSide === "buy" && balance >= openUnit ? Number(balance / openUnit) : undefined,
-    net: (quantity: number) => Number(`${balance + direction * BigInt(quantity) * openUnit}e${-places}`),
+    minimum: openingSide === "sell" ? Number((-balance + netOpenUnit - 1n) / netOpenUnit) : undefined,
+    maximum: openingSide === "buy" && balance >= -netOpenUnit ? Number(balance / -netOpenUnit) : undefined,
+    net: (quantity: number) => amount(balance + BigInt(quantity) * netOpenUnit),
+    costs: (quantity: number) => amount((closeAmount + BigInt(quantity) * openUnit) * fee.units),
   };
 }
 
@@ -60,15 +66,17 @@ function rollContext(input: Simulation, sourceId: string, market?: StrikeMarket)
   return { ok: true as const, market, source, quantity, factor, closeSide, openSide, closeBook, closePrice: closePrice.price };
 }
 
-export function rollCandidates(input: Simulation, sourceId: string, costs: number, market?: StrikeMarket) {
+export function rollCandidates(input: Simulation, sourceId: string, feePercent: number, market?: StrikeMarket) {
   const context = rollContext(input, sourceId, market);
   if (!context.ok) return context;
   const { source, quantity, factor, closePrice, openSide } = context;
   const close = quantity * factor * closePrice;
   const openBook = openSide === "sell" ? "bid" : "ask";
   const bookLabel = openBook.toUpperCase();
-  if (!Number.isFinite(costs) || costs < 0 || costs > 1e12 || (close + costs) * 100 > Number.MAX_SAFE_INTEGER)
-    return fail("Revisá los gastos y el importe de cierre.");
+  if (!Number.isFinite(feePercent) || feePercent < 0 || feePercent >= 100)
+    return fail("Ingresá un porcentaje de gastos desde 0 y menor que 100.");
+  if (close * (1 + feePercent / 100) * 100 > Number.MAX_SAFE_INTEGER)
+    return fail("Revisá el importe de cierre.");
   const seriesByStrike = new Map<number, number>();
   for (const contract of context.market.contracts) if (contract.kind === source.kind)
     seriesByStrike.set(contract.strike, (seriesByStrike.get(contract.strike) ?? 0) + 1);
@@ -85,7 +93,7 @@ export function rollCandidates(input: Simulation, sourceId: string, costs: numbe
       if (!price.ok || price.price > 1e9 || !level) return { contract, reason: `Sin ${bookLabel} válido` };
       if (level.depthUnverified) return { contract, reason: `Profundidad ${bookLabel} sin verificar` };
       const max = Math.min(MAX_CONTRACTS, Math.floor(level.size));
-      const flow = rollCash(quantity, factor, closePrice, price.price, costs, openSide);
+      const flow = rollCash(quantity, factor, closePrice, price.price, feePercent, openSide);
       return { contract, price: price.price, max, minimum: flow.minimum,
         maximum: flow.maximum === undefined ? undefined : Math.min(max, flow.maximum),
         oneForOne: quantity <= max ? flow.net(quantity) : undefined };
@@ -93,13 +101,15 @@ export function rollCandidates(input: Simulation, sourceId: string, costs: numbe
   return { ...context, candidates, close, openBook };
 }
 
-export function buildRoll(input: Simulation, sourceId: string, targetId: string, quantity: number, costs: number, market?: StrikeMarket) {
-  const roll = rollCandidates(input, sourceId, costs, market);
+export function buildRoll(input: Simulation, sourceId: string, targetId: string, quantity: number, feePercent: number, market?: StrikeMarket) {
+  const roll = rollCandidates(input, sourceId, feePercent, market);
   if (!roll.ok) return roll;
   const target = roll.candidates.find(candidate => candidate.contract.id === targetId);
   if (!target || target.price === undefined) return fail(`Elegí una base de destino con ${roll.openBook.toUpperCase()} disponible.`);
   if (!validQuantity(quantity) || quantity > target.max) return fail(`Ingresá una cantidad entera que entre en el ${roll.openBook.toUpperCase()} disponible.`);
   const previousCosts = input.legs.length ? numeric(input.adjustmentCosts ?? "0") : 0;
+  const cash = rollCash(roll.quantity, roll.factor, roll.closePrice, target.price, feePercent, roll.openSide);
+  const costs = cash.costs(quantity);
   const adjustmentCosts = previousCosts + costs;
   const openingAmount = quantity * roll.factor * target.price;
   if (!Number.isFinite(previousCosts) || previousCosts < 0 || adjustmentCosts > 1e12 ||
@@ -115,6 +125,5 @@ export function buildRoll(input: Simulation, sourceId: string, targetId: string,
   const close = { ...leg(roll.source, roll.market.quotes[sourceId], id, roll.closeSide, roll.quantity, roll.closePrice), rollCloseOf: sourceId };
   const legs = [close,
     leg(target.contract, roll.market.quotes[targetId], id + 1, roll.openSide, quantity, target.price)];
-  return { ok: true as const, legs, adjustmentCosts: rollDecimal(adjustmentCosts), openingAmount,
-    net: rollCash(roll.quantity, roll.factor, roll.closePrice, target.price, costs, roll.openSide).net(quantity) };
+  return { ok: true as const, legs, adjustmentCosts: rollDecimal(adjustmentCosts), openingAmount, costs, net: cash.net(quantity) };
 }

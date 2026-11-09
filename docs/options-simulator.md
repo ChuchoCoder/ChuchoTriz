@@ -53,7 +53,8 @@ para cualquier posición comprada o vendida. Para una posición vendida usa el
 ASK de la recompra y el BID de la nueva venta, con un mínimo de contratos sin
 débito. Para una posición comprada usa el BID del cierre y el ASK de la nueva
 compra, con un máximo de contratos que alcanza a financiar el cierre.
-El cálculo incluye los gastos y el armado exige profundidad para ambas patas. **Cargar en
+El cálculo aplica el porcentaje de gastos a los importes brutos de ambas patas
+(0,2 % por defecto) y el armado exige profundidad para ambas. **Cargar en
 Cotizaciones** agrega las dos patas como ajustes y activa **Incluir posición
 actual en Análisis**. La prima histórica sigue siendo necesaria para calcular
 el resultado de la posición desde su costo.

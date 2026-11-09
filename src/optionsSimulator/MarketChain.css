@@ -176,7 +176,7 @@
   width:auto; min-height:22px; height:auto; margin-inline:auto; padding:1px 4px; border-radius:4px; font-size:10px;
 }
 .ct-sim .ct-roll-picker {
-  width:min(800px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow-y:auto;
+  width:min(920px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow-y:auto;
   padding:12px; border:1px solid var(--sim-border); border-radius:8px;
   background:var(--sim-card); color:var(--sim-text); font-size:12px; overflow-wrap:anywhere;
 }
@@ -187,7 +187,7 @@
 .ct-sim .ct-roll-picker header { justify-content:space-between; }
 .ct-sim .ct-roll-picker :is(h3,h4,p) { margin:0; }
 .ct-sim .ct-roll-picker h4 { font-size:12px; }
-.ct-sim .ct-roll-picker header span, .ct-sim .ct-roll-hint, .ct-sim .ct-roll-table small { color:var(--sim-muted); }
+.ct-sim .ct-roll-picker header span, .ct-sim .ct-roll-hint { color:var(--sim-muted); }
 .ct-sim .ct-roll-layout {
   display:grid; grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr); gap:12px; align-items:start;
   margin-top:8px;
@@ -202,14 +202,19 @@
 .ct-sim .ct-roll-table table {
   width:100%; min-width:0; table-layout:fixed; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums;
 }
-.ct-sim .ct-roll-strike-col { width:34%; }
-.ct-sim .ct-roll-price-col { width:20%; }
+.ct-sim .ct-roll-strike-col { width:21%; }
+.ct-sim .ct-roll-price-col { width:23%; }
+.ct-sim .ct-roll-flow-col { width:29%; }
 .ct-sim .ct-roll-table thead { position:sticky; top:0; background:var(--sim-card); }
-.ct-sim .ct-roll-table :is(th,td) { text-align:right; padding:3px 4px; border-bottom:1px solid var(--sim-border); }
+.ct-sim .ct-roll-table :is(th,td) {
+  text-align:right; padding:3px 4px; border-bottom:1px solid var(--sim-border);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 .ct-sim .ct-roll-table th:first-child { text-align:left; }
 .ct-sim .ct-roll-picker button { min-width:0; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 .ct-sim .ct-roll-table tbody th button {
   width:100%; min-height:22px; padding:1px 4px; font-size:11px; text-align:left;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .ct-sim .ct-roll-table tr.selected { background:var(--sim-field); }
 .ct-sim .ct-roll-operations { display:grid; gap:5px; }
