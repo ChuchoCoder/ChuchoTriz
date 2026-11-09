@@ -19,7 +19,7 @@ export default function ChuchoTrizTools({ embedded = false, active = true, heade
   </nav>;
   return <div className={`ct-tools${embedded ? " ct-tools-embedded" : ""}`}>
     {embedded ? <header className="ct-free-settings-header"><h1>ChuchoTriz</h1>{navigation}{headerAction}</header> : navigation}
-    <div id={`${id}-simulator`} className="ct-tools-content" hidden={tab !== "simulator"}><OptionsSimulator active={active && tab === "simulator"} /></div>
+    <div id={`${id}-simulator`} className="ct-tools-content" hidden={tab !== "simulator"}><OptionsSimulator active={active && tab === "simulator"} marketReference={embedded} /></div>
     <div id={`${id}-executions`} className="ct-tools-content" hidden={tab !== "executions"}>
       {active && tab === "executions" && <OptionsOperations embedded={embedded} />}
     </div>

@@ -116,7 +116,7 @@ function maximumChartPrice(legs: ParsedLeg[], multiplier: number, costs: number,
 
 type PositionCorrection = "chain" | "volatility";
 
-export function parseSimulation(input: Simulation): { ok: true; strategy: Strategy } | { ok: false; errors: string[]; positionCorrections: ReadonlySet<PositionCorrection> } {
+export function parseSimulation(input: Simulation, automaticRate?: number): { ok: true; strategy: Strategy } | { ok: false; errors: string[]; positionCorrections: ReadonlySet<PositionCorrection> } {
   const errors: string[] = [];
   const positionCorrections = new Set<PositionCorrection>();
   const report = (message: string, correction?: PositionCorrection) => {
@@ -138,7 +138,7 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0;
   const costs = entryCosts + adjustmentCosts;
   const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12, { correction: accounting });
-  const rate = read(input.rate, "Tasa anual", -100, 1000) / 100;
+  const rate = automaticRate ?? read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
   const shift = read(input.volatilityShift, "Cambio de VI", -500, 500);
   const rangeMin = input.rangeMin === undefined ? spot * .75 : read(input.rangeMin, "Precio mínimo del gráfico", 0, 1e9);

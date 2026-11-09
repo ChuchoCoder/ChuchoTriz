@@ -7,9 +7,12 @@ import { Catalog, Contract, Quote, Snapshot } from "./market";
 import { positionStorageKey, readPositionAccounting, readUnderlyingCost, underlyingCostStorageKey } from "./positionStorage";
 import { addDays, localDate } from "./model";
 import { formatOptionExpiry } from "./format";
+import type { CaucionReference } from "./caucionRate";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string } }));
-vi.mock("./market", async original => ({ ...await original<typeof import("./market")>(), useOptionMarket: () => marketState.current }));
+const caucionState = vi.hoisted(() => ({ current: undefined as CaucionReference | undefined, supported: undefined as boolean | undefined }));
+vi.mock("./market", async original => ({ ...await original<typeof import("./market")>(), useOptionMarket: () => marketState.current,
+  useCaucionMarket: (active: boolean) => ({ supported: caucionState.supported, reference: active ? caucionState.current : undefined }) }));
 const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
   readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
@@ -26,6 +29,8 @@ const expiry = addDays(localDate(), 30);
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   stored = {};
+  caucionState.current = undefined;
+  caucionState.supported = undefined;
   storageListeners = new Set();
   write = vi.fn(async value => { Object.assign(stored, value); });
   readPosition.mockReset();
@@ -66,9 +71,78 @@ async function fill(label: string, value: string) {
     node.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
-async function mount() { await act(async () => root.render(<OptionsSimulator />)); }
+async function mount(marketReference = false) { await act(async () => root.render(<OptionsSimulator marketReference={marketReference} />)); }
 async function showAnalysis() { await act(async () => button("Análisis").click()); }
 async function showBuild() { await act(async () => button("Armado").click()); }
+
+it("keeps manual valuation before caución support is confirmed and enables it without the options catalogue", async () => {
+  marketState.current = {};
+  caucionState.supported = false;
+  await mount(true);
+  await act(async () => button("+ Pata manual").click());
+  await showAnalysis();
+  expect(container.querySelector('[aria-label="Origen de la tasa"]')).toBeNull();
+  expect(byLabel("Tasa anual continua %").title).toBe("Tasa manual en ARS");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).not.toBeNull();
+  caucionState.supported = true;
+  await mount(true);
+  expect(byLabel<HTMLSelectElement>("Origen de la tasa").value).toBe("automatic");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).toBeNull();
+});
+
+it("uses an automatic ARS reference, keeps expiry results if it disappears, and restores the manual override", async () => {
+  caucionState.current = { currency: "ARS", days: 6, tna: 30, tradedAt: Date.now(), annualRate: .299 };
+  await mount(true);
+  await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
+  await showAnalysis();
+  expect(byLabel("Tasa automática de valuación").textContent).toContain("29,9 % anual continua · Caución ARS 6 días");
+  expect(container.querySelector(".ct-sim-theory-line")).not.toBeNull();
+  caucionState.current = undefined;
+  await mount(true);
+  expect(byLabel("Tasa automática de valuación").textContent).toContain("sin dato reciente");
+  expect(container.querySelector(".ct-sim-chart")).not.toBeNull();
+  expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
+  const source = byLabel<HTMLSelectElement>("Origen de la tasa");
+  async function switchSource(value: string) {
+    await act(async () => { source.value = value; source.dispatchEvent(new Event("change", { bubbles: true })); });
+  }
+  await switchSource("manual");
+  await fill("Tasa anual continua %", "25");
+  expect(container.querySelector(".ct-sim-theory-line")).not.toBeNull();
+  await switchSource("automatic");
+  expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
+  await switchSource("manual");
+  expect(byLabel<HTMLInputElement>("Tasa anual continua %").value).toBe("25");
+  await switchSource("automatic");
+  caucionState.supported = false;
+  await mount(true);
+  expect(container.querySelector('[aria-label="Origen de la tasa"]')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Tasa anual continua %").value).toBe("25");
+});
+
+it("uses the chain currency before adding legs and keeps the ARS and USD manual rates separate", async () => {
+  marketState.current.catalog!.underlyings.push({ id: "USD-DEMO", symbol: "USD-DEMO", currency: "USD" });
+  await mount(true);
+  async function selectUnderlying(value: string) {
+    const control = byLabel<HTMLSelectElement>("Subyacente de opciones");
+    await act(async () => { control.value = value; control.dispatchEvent(new Event("change", { bubbles: true })); });
+  }
+  await selectUnderlying("USD-DEMO");
+  await showAnalysis();
+  expect(container.querySelector('[aria-label="Origen de la tasa"]')).toBeNull();
+  expect(byLabel("Tasa anual continua %").title).toBe("Tasa manual en USD");
+  await fill("Tasa anual continua %", "4");
+  await showBuild();
+  await selectUnderlying("GGAL");
+  await showAnalysis();
+  const source = byLabel<HTMLSelectElement>("Origen de la tasa");
+  await act(async () => { source.value = "manual"; source.dispatchEvent(new Event("change", { bubbles: true })); });
+  await fill("Tasa anual continua %", "25");
+  await showBuild();
+  await selectUnderlying("USD-DEMO");
+  await showAnalysis();
+  expect(byLabel<HTMLInputElement>("Tasa anual continua %").value).toBe("4");
+});
 async function clickChartAt(fraction: number) {
   const chart = container.querySelector<SVGSVGElement>('.ct-sim-chart')!;
   const [, , width, height] = chart.getAttribute('viewBox')!.split(' ').map(Number);

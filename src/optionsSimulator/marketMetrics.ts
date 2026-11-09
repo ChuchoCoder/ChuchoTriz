@@ -24,12 +24,13 @@ function quotedIntrinsic(kind: OptionContract["kind"], spot: number, strike: num
 
 export interface MetricCell extends OptionMarketMetrics {
   eligible: boolean; reason: string; theta?: number; extrinsic?: number; mid?: number; spreadPercent?: number;
-  intrinsic?: number; gamma?: number; vega?: number; viTradeStatus?: string;
+  intrinsic?: number; gamma?: number; vega?: number; viTradeStatus?: string; rateSource?: string;
   viDetails?: NonNullable<ReturnType<typeof theoreticalGreeks>> & { spot: number; days: number; rate: number; dividendYield: number };
 }
 export interface MetricScale { min?: number; max?: number; volumeMax: number; included: number; total: number }
 export function deriveOptionMetrics(contracts: OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
-  settings: { now: number; minutes: string; enabled: boolean; available: boolean; spot?: number; currency?: string; rate?: number; dividendYield?: number }) {
+  settings: { now: number; minutes: string; enabled: boolean; available: boolean; spot?: number; currency?: string;
+    rate?: number; rateSource?: string; dividendYield?: number }) {
   const parsed = /^\d+$/.test(settings.minutes) ? Number(settings.minutes) : NaN;
   const windowValid = Number.isSafeInteger(parsed) && parsed > 0;
   const nowValid = finiteMetric(settings.now) && settings.now >= 0 && !Number.isNaN(new Date(settings.now).getTime());
@@ -79,7 +80,7 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
       referencePrice: settings.available && positive(raw?.referencePrice) ? raw.referencePrice : undefined,
       delta: finiteMetric(raw?.delta) ? raw.delta : undefined,
       changePercent: finiteMetric(raw?.changePercent) ? raw.changePercent : undefined,
-      theta: greeks?.theta, gamma: greeks?.gamma, vega: greeks?.vega,
+      theta: greeks?.theta, gamma: greeks?.gamma, vega: greeks?.vega, rateSource: settings.rateSource,
       viTradeStatus: eligible && !settings.enabled ? `${tradeStatus} · ${reason}` : undefined,
       viDetails: eligible && stamp !== undefined && stamp <= settings.now && greeks && Number.isFinite(greeks.probabilityItm) ? {
         ...greeks, spot: settings.spot!, days, rate: settings.rate!, dividendYield: settings.dividendYield!,
