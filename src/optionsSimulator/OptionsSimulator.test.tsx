@@ -113,6 +113,11 @@ it("uses an automatic ARS reference, keeps expiry results if it disappears, and 
   expect(container.querySelector(".ct-sim-theory-line")).toBeNull();
   await switchSource("manual");
   expect(byLabel<HTMLInputElement>("Tasa anual continua %").value).toBe("25");
+  await switchSource("automatic");
+  caucionState.supported = false;
+  await mount(true);
+  expect(container.querySelector('[aria-label="Origen de la tasa"]')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Tasa anual continua %").value).toBe("25");
 });
 
 it("uses the chain currency before adding legs and keeps the ARS and USD manual rates separate", async () => {

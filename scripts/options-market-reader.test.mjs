@@ -74,8 +74,10 @@ test('reports caución support independently of catalogue and connection availab
   await expectSupport(true);
   f.store.webSocketConnectionStatus = false;
   await expectSupport(true);
-  f.document.body.innerText = 'Versión: 4.24.1';
-  await expectSupport(false);
+  for (const version of ['4.24.1', '4.24.4-beta', '4.24.4+otra']) {
+    f.document.body.innerText = `Versión: ${version}`;
+    await expectSupport(false);
+  }
 });
 test('rejects unknown instruments and does not infer a missing factor or foreign strike currency', async () => {
   const f = fixture(); f.contracts[0].refData.roundLot = undefined; f.contracts[1].refData.strikeCurrency = 'USD';

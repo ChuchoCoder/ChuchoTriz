@@ -9,7 +9,7 @@
   let previousContext, revision = 0, signature, catalogRevision = 0, active;
   const finite = value => typeof value === "number" && Number.isFinite(value) ? value : undefined;
   const positive = value => finite(value) !== undefined && value > 0;
-  const marketVersion = () => document.body.innerText.match(/Versi[oó]n:\s*([\d.]+)/)?.[1];
+  const marketVersion = () => document.body.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1];
   function context(version = marketVersion()) {
     const ms = window.mainStore;
     if (!["4.24.1", "4.24.4"].includes(version)) throw Error("Versión de Matriz no verificada para lectura de opciones.");

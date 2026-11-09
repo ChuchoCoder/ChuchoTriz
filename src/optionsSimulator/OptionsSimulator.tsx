@@ -374,7 +374,8 @@ export default function OptionsSimulator({ active = true, marketReference = fals
   const rateCurrency = hasExposure ? input.currency : chainContext?.currency ?? input.currency;
   const { supported: caucionSupported, reference: caucion } = useCaucionMarket(active && marketReference && automaticCaucion &&
     chainContext?.version !== "4.24.1" && (rateCurrency === "ARS" || chainContext?.currency === "ARS"));
-  const supportsCaucion = marketReference && (chainContext ? chainContext.version === "4.24.4" : caucionSupported === true);
+  const supportsCaucion = marketReference && chainContext?.version !== "4.24.1" &&
+    (caucionSupported ?? (chainContext?.version === "4.24.4"));
   const useAutomaticCaucion = supportsCaucion && automaticCaucion;
   const rateOverride = useAutomaticCaucion && input.currency === "ARS" ? caucion?.annualRate ?? NaN : undefined;
   const automaticRate = useAutomaticCaucion && rateCurrency === "ARS";
