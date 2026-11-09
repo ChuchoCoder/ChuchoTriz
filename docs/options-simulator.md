@@ -4,6 +4,10 @@ El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulado
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
 Extrínseco Mid, variación, volumen nominal y último precio operado. El armado no envía, modifica ni cancela órdenes.
+**Cargar Op.** precarga instrumento, cantidad y precio del ASK para compra o del
+BID para venta. El icono de cada pata usa su precio y cantidad editados.
+La precarga está disponible para opciones en pesos a 24 h. Revisá los datos y
+confirmá la operación desde Matriz.
 El simulador abre en **Cotizaciones** y muestra ambos modos en la barra.
 La primera vez que entrás a **Posición actual** en una simulación, se consulta
 la tenencia de la cuenta activa para el subyacente y vencimiento seleccionados.
@@ -184,12 +188,16 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    anterior. Las patas manuales permiten editar también tipo y strike.
    La VI de cada pata se conserva y se edita desde **Análisis → VI por pata**,
    con dos decimales al mostrarla y precisión original al editarla.
-   Los botones **Strike ↓/↑** desplazan todas las patas a la base contigua del
+   Los botones **Strike ↑/↓** desplazan todas las patas a la base contigua del
    mismo tipo y vencimiento, copiando BID para ventas, ASK para compras y VI del
    destino. El ajuste es completo o no se aplica: no salta bases con contratos
    ambiguos, factores incompatibles o sin la punta requerida. En estrategias
    totalmente manuales el paso de strike es un punto, conservando prima y VI;
    no se mezcla este ajuste con patas de la cadena.
+   **Ancho** acerca o separa los dos strikes extremos un paso por lado. Conserva
+   las patas intermedias y requiere que los strikes se mantengan separados y en
+   el mismo orden. Las patas de la cadena toman la prima y VI de su nueva base.
+   Las patas manuales conservan su prima y VI.
    **Cantidad −/+** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
    3:6:3; bajar vuelve una unidad de esa proporción. Doble clic ajusta diez
    unidades de proporción en total (1:2:1 → 11:22:11). No baja cantidades a cero.
@@ -248,6 +256,8 @@ regresión de secuencias oculta las referencias. Las métricas son las de Matriz
 no se infiere VI desde precios. La escala de VI conserva el filtro de operación
 reciente y sus ventanas de 15/30/60 minutos. La hora de lectura local no es un
 timestamp de bolsa, y una cotización observada no acredita vigencia ni ejecución.
+En navegadores con soporte de popovers, abrí el detalle de VI con clic, Enter o
+Espacio y cerralo con otro clic, un clic afuera o Escape.
 Con el filtro activo, el detalle de VI muestra las probabilidades teóricas de
 Black–Scholes–Merton y las griegas solo para operaciones dentro de esa ventana.
 Con el filtro desactivado, indica la fecha o antigüedad de la última operación y

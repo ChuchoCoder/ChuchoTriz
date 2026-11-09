@@ -10,6 +10,13 @@ export interface Catalog {
   contextRevision: number; catalogRevision: number; version: string; excluded: number;
   underlyings: { id: string; symbol: string; currency: string }[]; contracts: Contract[];
 }
+export function optionTicketRestriction(contract: Contract, contracts: readonly Contract[]): string | undefined {
+  // Matriz lists these option symbols without a settlement suffix.
+  if (contract.currency !== "ARS" || contract.settlement !== "2") return "Carga disponible para opciones en pesos a 24 h";
+  if (contracts.some(item => item.symbol === contract.symbol && item.id !== contract.id)) {
+    return "Más de un contrato comparte este símbolo";
+  }
+}
 type QuoteLevel = { price: number; size: number; depthUnverified?: true };
 export interface Quote {
   bid?: QuoteLevel; ask?: QuoteLevel;

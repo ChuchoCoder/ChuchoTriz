@@ -28,6 +28,6 @@ export function formatOptionExpiry(expiry: string, monthStyle: "long" | "short" 
 }
 
 /** Editable numeric fields accept ordinary decimals, including very small prices. */
-export function formatOptionInput(value: number): string {
-  return value.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 15 });
+export function formatOptionInput(value: number, maximumSignificantDigits = 15): string {
+  return value.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits });
 }

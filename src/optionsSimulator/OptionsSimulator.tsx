@@ -1,13 +1,15 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_LEGS,
-  newLeg, numeric, openRollContracts, parseSignedQuantity, parseSimulation, resultAt, rollFees, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure } from "./model";
+  newLeg, numeric, openRollContracts, parseSignedQuantity, parseSimulation, resultAt, rollFees, simulationLegs, Simulation,
+  standardDeviationLevels, Strategy, underlyingExposure, validOptionTicketValues } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain, { SignedQuantityInput } from "./MarketChain";
 import ToolbarIcon from "../ToolbarIcon";
+import { preloadOptionTicket } from "../Matriz";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
-import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
+import { adjustStrategyQuantity, adjustStrategyWidth, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
-import { useCaucionMarket } from "./market";
+import { optionTicketRestriction, useCaucionMarket, type Contract } from "./market";
 import { caucionReferenceLabel } from "./caucionRate";
 
 // A native double click delivers two click events: 1 + 9 makes ten in total.
@@ -362,10 +364,15 @@ export default function OptionsSimulator({ active = true, marketReference = fals
     ...initialSimulation(), underlying: "", spot: "", rangeMin: undefined, rangeMax: undefined, legs: [],
   }));
   const [automaticCaucion, setAutomaticCaucion] = useState(true);
-  const [chainContext, setChainContext] = useState<{ currency?: Simulation["currency"]; version: string }>();
+  const [chainContext, setChainContext] = useState<{ currency?: Simulation["currency"]; version: string; ticketCatalog?: Contract[] }>();
+  const [ticketNotice, setTicketNotice] = useState("");
+  const [loadingTicket, setLoadingTicket] = useState(false);
+  const ticketRequest = useRef<AbortController>(undefined);
+  useEffect(() => () => ticketRequest.current?.abort(), [active, view]);
   const [usdRate, setUsdRate] = useState("0");
   const [positionMode, setPositionMode] = useState(false);
   const [includePosition, setIncludePosition] = useState(false);
+  useEffect(() => { setTicketNotice(""); }, [active, input.legs, positionMode, view]);
   const valuationInput = useMemo(() => {
     const base = input.currency === "USD" ? { ...input, rate: usdRate } : input;
     return base.position && (!includePosition || (!base.position.legs.length && !underlyingExposure(base.position)?.quantity && !base.position.underlyingUnavailable))
@@ -495,12 +502,18 @@ export default function OptionsSimulator({ active = true, marketReference = fals
       return result.ok ? result.legs[0] : leg;
     }) }));
   }
-  function adjust(kind: "strike" | "quantity", direction: -1 | 1, steps = 1) {
+  function strategyAdjustment(draft: Simulation, kind: "strike" | "quantity" | "width", direction: -1 | 1, steps = 1) {
+    if (kind === "strike") return shiftStrategyStrikes(draft, direction, strikeMarket);
+    if (kind === "width") return adjustStrategyWidth(draft, direction, strikeMarket);
+    return adjustStrategyQuantity(draft.legs, direction, steps);
+  }
+  function adjust(kind: "strike" | "quantity" | "width", direction: -1 | 1, steps = 1) {
     setInput(current => {
-      const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction, steps);
+      const result = strategyAdjustment(current, kind, direction, steps);
       return result.ok ? { ...current, legs: result.legs } : current;
     });
-    setStatus(kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
+    setStatus(kind === "width" ? "Ancho de la estrategia ajustado."
+      : kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
       : input.legs.some(leg => leg.securityId) ? "Strikes desplazados a bases contiguas. Primas y VI copiadas de esta lectura."
       : "Strikes manuales desplazados un punto; primas y VI conservadas.");
   }
@@ -510,6 +523,43 @@ export default function OptionsSimulator({ active = true, marketReference = fals
       const result = setStrategyPrice(current.position ? { ...current, costs: current.adjustmentCosts ?? "0" } : current, position, strikeMarket);
       return result.ok ? { ...current, legs: result.legs } : current;
     });
+  }
+  async function loadTicket(contract: Contract, side: Leg["side"], price: number, quantity: number) {
+    if (ticketRequest.current || !validOptionTicketValues(price, quantity)) return;
+    const request = new AbortController();
+    ticketRequest.current = request;
+    setLoadingTicket(true);
+    setTicketNotice("");
+    try {
+      await preloadOptionTicket(contract.symbol, price, quantity, request.signal);
+      const action = side === "buy" ? "Comprar" : "Vender";
+      setTicketNotice(`${contract.symbol} · ${formatOptionNumber(quantity)} a ${formatOptionNumber(price)}. Revisá el Mini Order Form y elegí ${action}.`);
+    } catch (error) {
+      if (!request.signal.aborted) {
+        const reason = error instanceof Error ? error.message : "La carga quedó incompleta.";
+        setTicketNotice(`${reason} Revisá los datos del Mini Order Form.`);
+      }
+    } finally {
+      ticketRequest.current = undefined;
+      setLoadingTicket(false);
+    }
+  }
+  function legTicketButton(leg: Leg, index: number) {
+    const catalog = chainContext?.ticketCatalog;
+    const contract = catalog?.find(item => item.id === leg.securityId && item.symbol === leg.symbol &&
+      item.currency === input.currency && item.expiration === input.expiry.replaceAll("-", ""));
+    const price = numeric(leg.premium);
+    const quantity = numeric(leg.contracts);
+    const unavailable = contract && catalog ? optionTicketRestriction(contract, catalog)
+      : "La pata debe corresponder a un instrumento de la cadena.";
+    const invalidValues = !validOptionTicketValues(price, quantity);
+    const label = `Cargar ${leg.side === "buy" ? "compra" : "venta"} de la pata ${index + 1} en el Mini Order Form`;
+    return <button type="button" className="ct-sim-load-leg" aria-label={label}
+      title={unavailable ?? (invalidValues ? "Ingresá un precio positivo y una cantidad entera válida." : label)}
+      disabled={!active || loadingTicket || !!unavailable || invalidValues}
+      onClick={() => { if (contract && !invalidValues) void loadTicket(contract, leg.side, price, quantity); }}>
+      <ToolbarIcon name="loadTicket" />
+    </button>;
   }
   const fmt = (amount: number) => formatOptionAmount(amount, input.currency);
   const money = (value: number) => `${fmt(value)} ${input.currency}`;
@@ -574,21 +624,31 @@ export default function OptionsSimulator({ active = true, marketReference = fals
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} toolbar={marketToolbar} input={input} setInput={setInput} onStrikeMarket={setStrikeMarket} onNewStrategy={() => setChartZoom(undefined)}
       onIncludePosition={() => setIncludePosition(true)}
       automaticCaucion={useAutomaticCaucion} caucion={caucion} usdRate={usdRate} onMarketContext={setChainContext}
+      loadingTicket={loadingTicket} onLoadTicket={loadTicket}
       deviationReference={chainDeviations} positionMode={positionMode} setPositionMode={setPositionMode} positionAccounting={view === "build" ? historicalCosts : undefined}
       onPremiumChange={(id, value) => updateLeg(id, "premium", value)} onPremiumReview={reviewPremium} />
     <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-leg-toolbar"><h3>{input.position ? "Ajustes simulados" : "Patas"}</h3>
       <div className="ct-sim-quick-adjustments" aria-label="Ajustar toda la estrategia">{([ ["strike", "Strike"], ["quantity", "Cantidad"] ] as const).map(([kind, label]) =>
         <div key={kind} className="ct-sim-adjustment-group" role="group" aria-label={label}><span>{kind === "quantity" ? "Cant." : label}</span><div>{([-1, 1] as const).map(direction => {
-          const result = kind === "strike" ? shiftStrategyStrikes(input, direction, strikeMarket) : adjustStrategyQuantity(input.legs, direction);
+          const result = strategyAdjustment(input, kind, direction);
           const action = `${direction < 0 ? "Bajar" : "Subir"} ${kind === "strike" ? "strikes" : "cantidades"} de toda la estrategia`;
           return <button key={direction} type="button" aria-label={action} disabled={!result.ok} onClick={event => adjust(kind, direction, kind === "quantity" ? quantityClickSteps(event.detail) : 1)}
             title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
-              : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↓" : "↑"}</button>;
-        })}</div></div>)}</div>
+              : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↑" : "↓"}</button>;
+        })}</div></div>)}
+        <div className="ct-sim-adjustment-group" role="group" aria-label="Ancho"><span>Ancho</span><div>{([-1, 1] as const).map(direction => {
+          const result = strategyAdjustment(input, "width", direction);
+          const label = direction < 0 ? "Reducir el ancho de la estrategia" : "Aumentar el ancho de la estrategia";
+          return <button key={direction} type="button" className="ct-tool-icon-button" aria-label={label}
+            disabled={!result.ok} title={result.ok ? label : result.reason} onClick={() => adjust("width", direction)}>
+            <ToolbarIcon name={direction < 0 ? "narrowWidth" : "widenWidth"} />
+          </button>;
+        })}</div></div>
+      </div>
       <button type="button" className="ct-sim-clear-legs ct-tool-icon-button" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"}
         onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
-        <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-price" /><col className="ct-sim-leg-remove" /></colgroup>
+        <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-price" /><col className="ct-sim-leg-actions-col" /></colgroup>
         <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th title="Prima de entrada por unidad">Precio</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
         <tbody>{input.legs.map((leg, index) => <tr key={leg.id}>
           <td>{leg.securityId
@@ -616,8 +676,12 @@ export default function OptionsSimulator({ active = true, marketReference = fals
               : <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />}
           </th>
           <td><EditableLegValue label={`Precio pata ${index + 1}`} value={leg.premium} onChange={value => updateLeg(leg.id, "premium", value)} /></td>
-          <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
+          <td><div className="ct-sim-leg-actions">
+            {legTicketButton(leg, index)}
+            <button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button>
+          </div></td>
         </tr>)}</tbody></table></div>
+      {ticketNotice && <p role="status" className="ct-sim-chain-notice">{ticketNotice}</p>}
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
         const id = nextId.current++;

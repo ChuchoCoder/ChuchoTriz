@@ -1,12 +1,12 @@
 import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Catalog, Contract, lastTradedPremium, Quote, useOptionMarket } from "./market";
+import { Catalog, Contract, lastTradedPremium, optionTicketRestriction, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
 import { caucionReferenceLabel, type CaucionReference } from "./caucionRate";
 import { extraMetricLabels, OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, validOptionTicketValues, type standardDeviationLevels } from "./model";
 import { importPosition, readPositionSnapshot, setPositionQuantity, startPositionDraft, type PositionSeries } from "./positions";
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
@@ -20,6 +20,7 @@ const positive = (value: unknown): value is number => typeof value === "number" 
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
 const quantityPresets = [1, 10, 25, 50, 100];
+const loadTicketText = "Cargar Op.";
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
 type ChainColumn = OptionMetricField | "bid" | "ask";
 type OptionalColumn = Exclude<OptionMetricField, "iv">;
@@ -187,7 +188,7 @@ function PositionPremium({ label, leg, disabled, onChange, onReview }: {
 
 export default function MarketChain({ active, toolbar, input, setInput, onStrikeMarket, onNewStrategy, deviationReference,
   positionMode, setPositionMode, positionAccounting, onPremiumChange, onPremiumReview, onIncludePosition,
-  automaticCaucion, caucion, usdRate, onMarketContext }: {
+  automaticCaucion, caucion, usdRate, onMarketContext, loadingTicket, onLoadTicket }: {
   active: boolean; toolbar: HTMLDivElement | null; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
   onStrikeMarket(market: StrikeMarket | undefined): void;
   onNewStrategy(): void;
@@ -196,7 +197,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   onPremiumChange(id: number, value: string): void; onPremiumReview(id: number): void;
   onIncludePosition(): void;
   automaticCaucion: boolean; caucion?: CaucionReference; usdRate: string;
-  onMarketContext(context: { currency?: Simulation["currency"]; version: string }): void;
+  onMarketContext(context: { currency?: Simulation["currency"]; version: string; ticketCatalog?: Contract[] }): void;
+  loadingTicket: boolean;
+  onLoadTicket(contract: Contract, side: Leg["side"], price: number, quantity: number): void;
 }) {
   const [rollSource, setRollSource] = useState<Leg>();
   const quotesTrigger = useRef<HTMLButtonElement>(null);
@@ -335,10 +338,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
   const underlyingCurrency = underlying?.currency;
   const marketVersion = catalog?.version;
+  const ticketCatalog = reading.issue ? undefined : catalog?.contracts;
   useEffect(() => {
-    if (active && marketVersion) onMarketContext({ version: marketVersion,
+    if (active && marketVersion) onMarketContext({ version: marketVersion, ticketCatalog,
       currency: underlyingCurrency === "ARS" || underlyingCurrency === "USD" ? underlyingCurrency : undefined });
-  }, [active, underlyingCurrency, marketVersion, onMarketContext]);
+  }, [active, underlyingCurrency, marketVersion, onMarketContext, ticketCatalog]);
   const spot = positive(spotQuote?.last) ? spotQuote.last : undefined;
   const changePercent = spotQuote?.changePercent;
   const spotChange = changePercent !== undefined && Number.isFinite(changePercent)
@@ -577,6 +581,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const key = marked && legKey(marked);
     const visible = key !== undefined && key === shownQuote;
     const quantity = marked ? numeric(marked.contracts) : NaN;
+    const ticketRestriction = visible && contract && catalog ? optionTicketRestriction(contract, catalog.contracts) : undefined;
+    const ticketLabel = `${loadTicketText} · ${side === "buy" ? "compra" : "venta"} de ${contract?.symbol} en el Mini Order Form`;
     return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}
       onMouseEnter={() => { if (key) setOpenQuote(key); }}
       onMouseLeave={() => {
@@ -607,6 +613,13 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
             changeQuoteQuantity(marked, preset);
           }}>{preset}</button>)}
         <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
+        <button type="button" className="ct-opt-load-ticket" aria-label={ticketLabel}
+          title={ticketRestriction ?? (!price.ok ? price.reason : ticketLabel)}
+          disabled={!selectable || !price.ok || !!ticketRestriction || !validOptionTicketValues(price.price, quantity) || loadingTicket}
+          onClick={() => { if (contract && price.ok) onLoadTicket(contract, side, price.price, quantity); }}>
+          <ToolbarIcon name="loadTicket" />
+          <span>{loadTicketText}</span>
+        </button>
       </div>}
     </td>;
   };

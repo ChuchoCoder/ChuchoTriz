@@ -10,8 +10,8 @@ Extensión de Chrome que agrega botones de cantidades rápidas al Mini Order For
 de Matriz. Configurá tus presets, elegí cuánto mostrar y reutilizalos al cambiar
 de instrumento.
 
-**ChuchoTriz completa cantidades. La revisión y confirmación de órdenes se
-realizan desde Matriz.**
+**El simulador puede precargar instrumento, cantidad y precio en el Mini Order
+Form. La revisión y confirmación de órdenes se realizan desde Matriz.**
 
 [Instalar](#instalar) · [Cómo se usa](#cómo-se-usa) ·
 [Configurar presets](#configurar-presets) · [Desarrollo](#desarrollo-y-verificación) ·

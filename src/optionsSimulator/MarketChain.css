@@ -170,6 +170,9 @@
 .ct-sim .ct-opt-quantity-bar button:hover:enabled { background:var(--ct-panel); }
 .ct-sim .ct-opt-quantity-total { padding-inline:3px; min-width:7ch; text-align:center; }
 .ct-sim .ct-opt-quantity-total output { font-weight:700; }
+.ct-sim .ct-opt-quantity-bar .ct-opt-load-ticket {
+  display:inline-flex; align-items:center; gap:4px; padding-inline:6px; align-self:stretch;
+}
 .ct-sim .ct-opt-chain-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; padding:6px 8px; font-size:10px; color:var(--ct-muted); gap:8px; }
 .ct-sim .ct-opt-chain-footer button { background:var(--ct-panel); color:var(--ct-text); padding:3px 7px; border:1px solid var(--ct-border); border-radius:2px; }
 .ct-sim .ct-opt-position-chain .ct-opt-roll-trigger {

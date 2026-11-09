@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { formatOptionAmount, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { MetricCell, MetricScale } from "./marketMetrics";
 import { viGradeColor } from "./marketMetrics";
@@ -11,20 +11,16 @@ const formatSensitivity = (value: number) => value.toLocaleString("es-AR", value
 const formatTooltipGamma = (value: number) => value > 0 && value < 1e-12 ? "<0,000000000001"
   : value.toLocaleString("es-AR", { maximumSignificantDigits: 5 });
 const formatProbability = (value: number) => value < .001 ? "<0,1 %" : value > .999 ? ">99,9 %" : `${fmt(value * 100, 1)} %`;
-const supportsAnchoredViDetail = (() => {
-  if (typeof document === "undefined" || !globalThis.CSS?.supports("right", "anchor(left)")) return false;
+const viPopover = (() => {
+  if (typeof HTMLElement === "undefined" || typeof HTMLElement.prototype.showPopover !== "function") return;
   const probe = document.createElement("div");
   probe.setAttribute("popover", "hint");
-  return probe.popover === "hint";
+  return probe.popover === "hint" ? "hint" : "auto";
 })();
 
 function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; cell?: MetricCell; scale: MetricScale }) {
   const id = useId();
   const anchor = `--ct-vi-${id.replace(/[^\w-]/g, "")}`;
-  const panel = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pinned = useRef(false);
   const [open, setOpen] = useState(false);
   const { symbol, kind, strike, strikeCurrency } = contract;
   const color = viGradeColor(cell, scale), value = cell?.impliedVolatility;
@@ -37,41 +33,17 @@ function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; c
   const badge = { className: `ct-opt-iv-value${color ? "" : " excluded"}`, "data-grading": color ? "included" : "excluded",
     style: color ? { "--ct-iv": color } as CSSProperties : undefined };
 
-  function show() {
-    clearTimeout(leaveTimer.current);
-    if (panel.current?.showPopover && !panel.current.matches(":popover-open")) panel.current.showPopover();
-  }
-
-  function scheduleClose() {
-    clearTimeout(leaveTimer.current);
-    leaveTimer.current = setTimeout(() => {
-      if (!pinned.current && !trigger.current?.matches(":focus-visible") && panel.current?.matches(":popover-open:not(:focus-within)")) panel.current.hidePopover();
-    }, 120);
-  }
-
-  if (!supportsAnchoredViDetail) return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}>
-    <span {...badge} title={`${symbol} · ${tradeStatus}${color ? "" : " · Fuera de la escala"}`}>{text}</span>
+  if (!viPopover) return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}>
+    <span {...badge}>{text}</span>
   </td>;
 
   return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`} style={{ "--ct-vi-anchor": anchor } as CSSProperties}>
-    <button ref={trigger} type="button" {...badge}
-      aria-label={`${label} · ${symbol}`} aria-controls={id} aria-expanded={open} aria-describedby={id}
-      onPointerEnter={event => { if (event.pointerType === "mouse") show(); }} onPointerLeave={scheduleClose}
-      onFocus={event => { if (!panel.current?.contains(event.relatedTarget)) show(); }} onBlur={scheduleClose} onClick={() => {
-        if (pinned.current) { panel.current?.hidePopover?.(); return; }
-        pinned.current = true;
-        show();
-      }}>
+    <button type="button" {...badge} popoverTarget={id}
+      aria-label={`${label} · ${symbol}`} aria-controls={id} aria-expanded={open} aria-describedby={id}>
       {text}
     </button>
-    <div ref={panel} id={id} className="ct-opt-iv-detail" role="tooltip" popover="hint"
-      onPointerEnter={() => clearTimeout(leaveTimer.current)} onPointerLeave={scheduleClose}
-      onBlur={scheduleClose}
-      onToggle={event => {
-        const visible = event.newState === "open";
-        if (!visible) pinned.current = false;
-        setOpen(visible);
-      }}>
+    <div id={id} className="ct-opt-iv-detail" role="tooltip" popover={viPopover}
+      onToggle={event => setOpen(event.newState === "open")}>
       {open ? <>
         <header><strong>{symbol}</strong><span>{label}</span></header>
         {details ? <>

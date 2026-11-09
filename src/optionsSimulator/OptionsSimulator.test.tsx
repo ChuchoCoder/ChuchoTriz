@@ -177,6 +177,7 @@ it("uses the last trade when ASK is missing and lets Armado edit the premium", a
   await act(async () => buy.click());
   expect(buy.getAttribute("aria-pressed")).toBe("true");
   expect(byLabel("Editar Precio pata 1").textContent).toBe("3,75");
+  expect(byLabel<HTMLButtonElement>("Cargar Op. · compra de CALL 100 en el Mini Order Form").disabled).toBe(true);
   await fill("Precio pata 1", "4,25");
   await act(async () => byLabel("Precio pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   quotes["call-100"].ask = { price: 5, size: 200 };
@@ -277,7 +278,7 @@ it("reorders and replaces mirrored chain columns while keeping the book, IV and 
   expect(byLabel("Última operación CALL 100").getAttribute("title")).toMatch(/ART$/);
   const viFallback = byLabel("VI CALL 100").querySelector(".ct-opt-iv-value");
   expect(viFallback?.tagName).toBe("SPAN");
-  expect(viFallback?.getAttribute("title")).toContain("CALL 100");
+  expect(viFallback?.hasAttribute("title")).toBe(false);
   quotes.GGAL.last = 100.0125;
   await mount();
   expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,0125");
@@ -431,7 +432,10 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
   await act(async () => buy.click());
   expect(bar()?.parentElement).toBe(buy.parentElement);
   expect(bar()?.firstElementChild?.textContent).toBe("Cant.");
-  expect([...bar()!.querySelectorAll("button")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100"]);
+  expect([...bar()!.querySelectorAll("button:not(.ct-opt-load-ticket)")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100"]);
+  const loadTicket = byLabel("Cargar Op. · compra de CALL 100 en el Mini Order Form");
+  expect(bar()?.lastElementChild).toBe(loadTicket);
+  expect(loadTicket.textContent).toBe("Cargar Op.");
   expect(byLabel("Cantidad total").textContent).toBe("1");
   await act(async () => {
     byLabel<HTMLButtonElement>("Fijar 50 contratos").click();
@@ -455,6 +459,106 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
   expect(bar()).toBeNull();
   expect(buy.getAttribute("aria-pressed")).toBe("false");
   expect(byLabel("Editar Contratos pata 1").textContent).toBe("−100");
+});
+
+it.each([
+  { side: "compra", action: "Comprar", symbol: "CALL 100", id: "call-100", bookSide: "ask", price: 47.2 },
+  { side: "venta", action: "Vender", symbol: "PUT 90", id: "put-90", bookSide: "bid", price: 4.6 },
+] as const)("preloads the selected $side from the grid or the edited leg without activating a native order action", async ({
+  side, action, symbol, id, bookSide, price,
+}) => {
+  const ticket = document.createElement("div");
+  ticket.id = "MiniOrderForm";
+  ticket.innerHTML = `
+    <input id="rc_select_2" aria-controls="native-list" aria-expanded="false">
+    <div class="ant-form-item MiniOrderFormQuantity-price-input"><div class="ant-input-number-input-wrap"><input value="3"></div></div>
+    <div class="ant-form-item MiniOrderFormQuantity-amount-input"><div class="ant-input-number-input-wrap"><input value="10"></div></div>
+    <button class="ButtonComprar">COMPRAR</button><button class="ButtonVender">VENDER</button>
+    <div class="ant-select-dropdown"><div id="native-list"></div>
+      <div class="ant-select-item-option" title="${symbol} CI"></div>
+      <div class="ant-select-item-option" title="${symbol}"></div>
+    </div>`;
+  document.body.append(ticket);
+  try {
+    vi.spyOn(ticket, "getClientRects").mockReturnValue([new DOMRect()] as unknown as DOMRectList);
+    const instrument = ticket.querySelector<HTMLInputElement>("#rc_select_2")!;
+    const [priceInput, quantityInput] = ticket.querySelectorAll<HTMLInputElement>(".ant-input-number-input-wrap input");
+    instrument.addEventListener("input", () => instrument.setAttribute("aria-expanded", "true"));
+    const wrong = vi.fn(), select = vi.fn(), submit = vi.fn();
+    ticket.querySelector("[title$=' CI']")!.addEventListener("click", wrong);
+    ticket.querySelector(`[title="${symbol}"]`)!.addEventListener("click", () => {
+      instrument.setAttribute("aria-expanded", "false");
+      setTimeout(() => {
+        select();
+        for (const input of [priceInput, quantityInput]) {
+          input.value = "";
+          input.removeAttribute("aria-valuenow");
+        }
+        priceInput.focus();
+      }, 25);
+    });
+    ticket.querySelectorAll("button").forEach(button => button.addEventListener("click", submit));
+    for (const input of [priceInput, quantityInput]) {
+      input.addEventListener("input", () => queueMicrotask(() => {
+        input.setAttribute("aria-valuenow", input.value.replace(",", "."));
+      }));
+    }
+
+    await mount();
+    await act(async () => byLabel<HTMLButtonElement>(`${action} ${symbol} en simulación`).click());
+    await act(async () => byLabel<HTMLButtonElement>("Fijar 25 contratos").click());
+    // The book can move after creating the simulated leg.
+    marketState.current.data!.instruments[id][bookSide]!.price = price;
+    await mount();
+    await act(async () => {
+      byLabel<HTMLButtonElement>(`Cargar Op. · ${side} de ${symbol} en el Mini Order Form`).click();
+      await vi.waitFor(() => expect(quantityInput.value).toBe("25"));
+    });
+    expect(instrument.value).toBe(symbol);
+    expect(priceInput.value).toBe(String(price).replace(".", ","));
+    expect(quantityInput.value).toBe("25");
+    expect(document.activeElement).toBe(quantityInput);
+    expect(container.textContent).toContain(`Revisá el Mini Order Form y elegí ${action}.`);
+    expect(wrong).not.toHaveBeenCalled();
+    expect(select).toHaveBeenCalledOnce();
+
+    const legButton = () => byLabel<HTMLButtonElement>(`Cargar ${side} de la pata 1 en el Mini Order Form`);
+    expect(legButton().textContent).toBe("");
+    expect(legButton().querySelector("svg")).not.toBeNull();
+    await fill("Precio pata 1", "0");
+    expect(legButton().disabled).toBe(true);
+    const editedPrice = side === "venta" ? "6,75" : "0,00000012";
+    await fill("Precio pata 1", editedPrice);
+    await fill("Contratos pata 1", side === "venta" ? "-10000000001" : "10000000001");
+    const quote = byLabel<HTMLButtonElement>(`${action} ${symbol} en simulación`);
+    await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(byLabel<HTMLButtonElement>(`Cargar Op. · ${side} de ${symbol} en el Mini Order Form`).disabled).toBe(true);
+    expect(legButton().disabled).toBe(true);
+    await fill("Contratos pata 1", "++17");
+    expect(legButton().disabled).toBe(true);
+    expect(container.textContent).not.toContain("Revisá el Mini Order Form y elegí");
+    await fill("Contratos pata 1", side === "venta" ? "-17" : "17,0");
+    await act(async () => byLabel("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(legButton().disabled).toBe(false);
+    await act(async () => {
+      legButton().click();
+      await vi.waitFor(() => expect(quantityInput.value).toBe("17"));
+    });
+    expect(instrument.value).toBe(symbol);
+    expect(priceInput.value).toBe(editedPrice);
+    expect(quantityInput.value).toBe("17");
+    expect(container.textContent).toContain(`Revisá el Mini Order Form y elegí ${action}.`);
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(submit).not.toHaveBeenCalled();
+  } finally {
+    ticket.remove();
+  }
+});
+
+it("keeps the leg ticket action disabled for a manually entered instrument", async () => {
+  await mount();
+  await act(async () => button("+ Pata manual").click());
+  expect(byLabel<HTMLButtonElement>("Cargar compra de la pata 1 en el Mini Order Form").disabled).toBe(true);
 });
 
 it("closes the active Armado editor and replaces its quantity from the grid", async () => {
@@ -1466,7 +1570,12 @@ it("adjusts all quantities proportionally and shifts the whole strategy to nativ
   const upQuantity = () => byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia");
   const downQuantity = () => byLabel<HTMLButtonElement>("Bajar cantidades de toda la estrategia");
   const upStrike = () => byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia");
+  const wider = () => byLabel<HTMLButtonElement>("Aumentar el ancho de la estrategia");
+  const narrower = () => byLabel<HTMLButtonElement>("Reducir el ancho de la estrategia");
   expect(upQuantity().disabled).toBe(true); expect(upStrike().disabled).toBe(true);
+  expect(upStrike().textContent).toBe("↓");
+  expect(byLabel("Bajar strikes de toda la estrategia").textContent).toBe("↑");
+  expect(wider().disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   await act(async () => byLabel<HTMLButtonElement>("Armar Butterfly · Long Call").click());
   expect(downQuantity().disabled).toBe(true);
@@ -1474,6 +1583,11 @@ it("adjusts all quantities proportionally and shifts the whole strategy to nativ
   expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+3", "−6", "+3"]);
   await act(async () => downQuantity().click());
   expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+2", "−4", "+2"]);
+  expect(narrower().disabled).toBe(true);
+  await act(async () => wider().click());
+  expect([1, 2, 3].map(index => byLabel(`Strike pata ${index}`).textContent)).toEqual(["80", "100", "120"]);
+  await act(async () => narrower().click());
+  expect([1, 2, 3].map(index => byLabel(`Strike pata ${index}`).textContent)).toEqual(["90", "100", "110"]);
   await act(async () => upStrike().click());
   expect([...container.querySelectorAll('.ct-sim-leg-strike')].map(node => node.textContent)).toEqual(["100", "110", "120"]);
   expect([1, 2, 3].map(index => byLabel(`Editar Prima pata ${index}`).textContent)).toEqual(["5", "8", "2"]);

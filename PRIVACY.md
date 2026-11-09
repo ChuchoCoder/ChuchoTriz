@@ -4,6 +4,8 @@ Esta declaración describe la extensión ChuchoTriz.
 
 ChuchoTriz lee el instrumento, precio y cantidad del Mini Order Form de Matriz
 para mostrar presets y completar las cantidades cuando el usuario lo habilita.
+Al pulsar la acción de carga del simulador, copia el instrumento, la cantidad y
+el precio de la operación elegida al Mini Order Form.
 Completar el formulario no envía una orden: la confirmación corresponde a Matriz.
 
 Los presets por instrumento y la preferencia de autocompletar se guardan en

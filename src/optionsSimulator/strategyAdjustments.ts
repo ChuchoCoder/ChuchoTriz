@@ -8,6 +8,7 @@ export interface StrikeMarket {
   underlying: string; expiry: string; currency: string; contracts: Contract[]; quotes: Record<string, Quote>;
 }
 const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
+const validStrike = (strike: number) => Number.isFinite(strike) && strike >= .000001 && strike <= 1e9;
 
 function nativeContext(input: Simulation, market?: StrikeMarket): { ok: true; market: StrikeMarket; contracts: Contract[] } | { ok: false; reason: string } {
   if (!market || input.underlying !== market.underlying || input.expiry !== market.expiry || input.currency !== market.currency)
@@ -42,36 +43,69 @@ export function adjustStrategyQuantity(legs: Leg[], direction: -1 | 1, steps = 1
   return { ok: true, legs: legs.map((leg, index) => ({ ...leg, contracts: String(next[index]) })) };
 }
 
-/** Atomic move to adjacent listed strikes; manual-only strategies use a step of one. */
-export function shiftStrategyStrikes(input: Simulation, direction: -1 | 1, market?: StrikeMarket): Adjustment {
+function moveStrategyStrikes(input: Simulation, directions: readonly (-1 | 0 | 1)[], market?: StrikeMarket): Adjustment {
   if (!input.legs.length) return fail("Agregá patas a la estrategia.");
   const native = input.legs.filter(leg => leg.securityId);
   if (!native.length) {
     const strikes = input.legs.map(leg => numeric(leg.strike));
-    if (strikes.some(strike => !Number.isFinite(strike) || strike <= 0 || strike > 1e9 || strike + direction <= 0 || strike + direction > 1e9))
+    if (strikes.some((strike, index) => !validStrike(strike) || !validStrike(strike + directions[index])))
       return fail("No se pueden desplazar todos los strikes manuales un punto en ese sentido.");
-    return { ok: true, legs: input.legs.map((leg, index) => ({ ...leg, strike: formatOptionInput(strikes[index] + direction) })) };
+    return { ok: true, legs: input.legs.map((leg, index) => directions[index] === 0 ? leg
+      : { ...leg, strike: formatOptionInput(strikes[index] + directions[index]) }) };
   }
   if (native.length !== input.legs.length) return fail("Para mover strikes, usá todas las patas de la cadena o todas manuales.");
   const context = nativeContext(input, market);
   if (!context.ok) return context;
   const source = context.market;
-  const targets: Contract[] = [];
-  for (const current of context.contracts) {
+  const targets: { contract: Contract; index: number }[] = [];
+  for (const [index, current] of context.contracts.entries()) {
+    const direction = directions[index];
+    if (!direction) continue;
     const strikes = [...new Set(source.contracts.filter(contract => contract.kind === current.kind).map(contract => contract.strike))].sort((a, b) => a - b);
     const next = strikes[strikes.indexOf(current.strike) + direction];
     const candidates = source.contracts.filter(contract => contract.kind === current.kind && contract.strike === next);
     if (candidates.length !== 1) return fail("Falta una base contigua única para alguna pata en ese sentido.");
+    if (!validStrike(next)) return fail("El strike de destino está fuera del rango admitido.");
     if (candidates[0].factor !== numeric(input.multiplier)) return fail("El contrato de destino tiene otro factor monetario.");
-    targets.push(candidates[0]);
+    targets.push({ contract: candidates[0], index });
   }
-  const prices = recipePrices({ ok: true, legs: targets.map((contract, index) => ({ contract, side: input.legs[index].side, ratio: 1 })) }, source.quotes, input.currency);
+  const prices = recipePrices({ ok: true, legs: targets.map(({ contract, index }) => ({ contract, side: input.legs[index].side, ratio: 1 })) },
+    source.quotes, input.currency);
   if (!prices.ok) return prices;
-  return { ok: true, legs: input.legs.map((leg, index) => {
-    const contract = targets[index], iv = source.quotes[contract.id].impliedVolatility;
-    return { ...leg, securityId: contract.id, symbol: contract.symbol, strike: String(contract.strike), premium: String(prices.premiums[index]),
-      volatility: iv !== undefined && Number.isFinite(iv) && iv >= 0 ? String(iv) : "" };
-  }) };
+  if (prices.premiums.some(premium => premium > 1e9)) return fail("La prima de destino supera el máximo admitido.");
+  const legs = [...input.legs];
+  targets.forEach(({ contract, index }, targetIndex) => {
+    const iv = source.quotes[contract.id].impliedVolatility;
+    legs[index] = { ...legs[index], securityId: contract.id, symbol: contract.symbol, strike: formatOptionInput(contract.strike, 21),
+      premium: formatOptionInput(prices.premiums[targetIndex], 21),
+      volatility: iv !== undefined && Number.isFinite(iv) && iv >= 0 && iv <= 500 ? formatOptionInput(iv, 21) : "" };
+  });
+  return { ok: true, legs };
+}
+
+/** Atomic move to adjacent listed strikes; manual-only strategies use a step of one. */
+export function shiftStrategyStrikes(input: Simulation, direction: -1 | 1, market?: StrikeMarket): Adjustment {
+  return moveStrategyStrikes(input, input.legs.map(() => direction), market);
+}
+
+export function adjustStrategyWidth(input: Simulation, direction: -1 | 1, market?: StrikeMarket): Adjustment {
+  const strikes = input.legs.map(leg => numeric(leg.strike));
+  const distinct = [...new Set(strikes)].sort((a, b) => a - b);
+  if (distinct.length < 2 || distinct.some(strike => !validStrike(strike))) {
+    return fail("Ingresá al menos dos strikes distintos y válidos para ajustar el ancho.");
+  }
+  const low = distinct[0], high = distinct[distinct.length - 1];
+  const lowDirection = direction === 1 ? -1 : 1;
+  const directions = strikes.map(strike => strike === low ? lowDirection : strike === high ? direction : 0);
+  const result = moveStrategyStrikes(input, directions, market);
+  if (!result.ok) return result;
+  const moved = result.legs.map(leg => numeric(leg.strike));
+  const boundaries = distinct.map(strike => new Set(moved.filter((_, index) => strikes[index] === strike)));
+  const next = boundaries.map(group => [...group][0]);
+  if (boundaries.some(group => group.size !== 1) || next.some((strike, index) => index > 0 && strike <= next[index - 1])) {
+    return fail("Los extremos deben mantenerse separados y en el mismo orden.");
+  }
+  return result;
 }
 
 export function strategyPriceReferences(input: Simulation, market?: StrikeMarket) {

@@ -85,6 +85,11 @@ export const MAX_LEGS = 16;
 export const MAX_CONTRACTS = 1e10;
 const dayMs = 86_400_000;
 
+export function validOptionTicketValues(price: number, quantity: number): boolean {
+  return Number.isFinite(price) && price > 0 && price <= 1e9 &&
+    Number.isSafeInteger(quantity) && quantity > 0 && quantity <= MAX_CONTRACTS;
+}
+
 // Decimal comma and decimal point are accepted; grouping separators are deliberately rejected.
 export function numeric(value: string): number {
   return /^-?\d+(?:[.,]\d+)?$/.test(value.trim()) ? Number(value.trim().replace(",", ".")) : NaN;

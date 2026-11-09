@@ -6,7 +6,7 @@ import { checkFree, filesIn } from '../scripts/check-free.mjs';
 
 checkFree({ built: true });
 const dist = new URL('../dist/', import.meta.url);
-const number = (field, id, value) => `<div class="ant-form-item ${field}"><div class="ant-input-number-input-wrap"><input id="${id}" value="${value}"></div></div>`;
+const number = (field, id, label, value) => `<div class="ant-form-item ${field}"><label for="${id}">${label}</label><div class="ant-input-number-input-wrap"><input id="${id}" value="${value}"></div></div>`;
 function renderFixture(regression) {
   const files = filesIn(fileURLToPath(dist));
   const main = files.find(path => /^assets\/src-main\.tsx-[\w-]+\.js$/.test(path));
@@ -18,11 +18,14 @@ ${styles}<style>@media(max-width:600px){#ToolPanel{display:none}#MiniOrderForm{r
 <nav class="DirectAccessBar" style="position:fixed;left:0;top:40px;bottom:0;width:40px;background:#303843"><a class="Item" href="#favoritos" style="color:white">F</a></nav>
 <aside id="ToolPanel" style="position:fixed;right:0;top:40px;bottom:0;width:180px;background:#303843">Herramientas simuladas</aside>
 <main style="margin:50px 190px 150px 50px"><h1>Mini Order Form · DATOS SIMULADOS</h1><p>Esta página no se conecta a ningún broker.</p><p>Versión: 4.24.4</p></main>
-<div id="MiniOrderForm" class="ExpandedForm" style="position:fixed;bottom:0;left:40px;right:180px;height:130px"><form><input id="rc_select_2" value="AL30 (CI)" aria-label="Instrumento">
-${number('MiniOrderFormQuantity-price-input', 'precio', '70000')}
-${number('MiniOrderFormQuantity-amount-input', 'cantidad', '')}
-${number('amount-show__div', 'mostrar', '')}</form>
+<div id="MiniOrderForm" class="ExpandedForm" style="position:fixed;bottom:0;left:40px;right:180px;height:130px">
+<form style="display:flex;flex-wrap:wrap;gap:6px 12px">
+<div><label for="rc_select_2">Instrumento</label><br><input id="rc_select_2" value="AL30 (CI)" aria-controls="demo-ticket-list" aria-expanded="false"></div>
+${number('MiniOrderFormQuantity-price-input', 'precio', 'Precio', '70000')}
+${number('MiniOrderFormQuantity-amount-input', 'cantidad', 'Cantidad', '')}
+${number('amount-show__div', 'mostrar', 'Cantidad a mostrar', '')}</form>
 <div class="MiniOrderForm_buttonsBlock"><button class="ButtonLimpiar" onclick="document.querySelector('#cantidad').value='';document.querySelector('#mostrar').value=''">Limpiar</button></div></div>
+<div class="ant-select-dropdown ant-select-dropdown-hidden" hidden><div id="demo-ticket-list"></div></div>
 <script src="/market-fixture.js${regression ? '?scenario=regression' : ''}"></script><script type="module" src="/${main}"></script></body></html>`;
 }
 
@@ -58,6 +61,41 @@ function installMarketFixture(regression) {
       md: { lst: price, bid: price - spread, bsz: 200, ask: price + spread, asz: 150, seq: 10, von: strike * 10, lstdStr: new Date(Date.now() - (strike === strikes[0] ? 45 : 2) * 60000).toISOString() },
     };
   }));
+  const instrument = document.getElementById('rc_select_2');
+  const list = document.getElementById('demo-ticket-list');
+  const dropdown = list.parentElement;
+  const symbols = new Set(options.map(option => option.symbolStr));
+  instrument.addEventListener('input', () => {
+    const symbol = instrument.value;
+    list.replaceChildren();
+    instrument.setAttribute('aria-expanded', String(symbols.has(symbol)));
+    dropdown.hidden = !symbols.has(symbol);
+    dropdown.classList.toggle('ant-select-dropdown-hidden', dropdown.hidden);
+    if (!symbols.has(symbol)) return;
+    const option = document.createElement('div');
+    option.className = 'ant-select-item-option';
+    option.title = symbol;
+    option.textContent = symbol;
+    option.addEventListener('click', () => {
+      instrument.setAttribute('aria-expanded', 'false');
+      dropdown.hidden = true;
+      dropdown.classList.add('ant-select-dropdown-hidden');
+      setTimeout(() => {
+        const price = document.getElementById('precio');
+        for (const id of ['precio', 'cantidad', 'mostrar']) {
+          const input = document.getElementById(id);
+          input.value = '';
+          input.removeAttribute('aria-valuenow');
+        }
+        price.focus();
+      }, 25);
+    });
+    list.append(option);
+  });
+  for (const id of ['precio', 'cantidad']) {
+    const input = document.getElementById(id);
+    input.addEventListener('input', () => input.setAttribute('aria-valuenow', input.value.replace(',', '.')));
+  }
   const positionReport = { lastCalculation: new Date(), types: [{ type: 'STOCK_OPTION_CALL', securitiesDetailed: [
     { detailedPositions: [{ tradingSymbol: `DEMO FIX call ${spot}`, totalCurrentSize: 2, totalCollateralSize: 0 }] },
     { detailedPositions: [{ tradingSymbol: `DEMO FIX call ${spot + step}`, totalCurrentSize: -1, totalCollateralSize: 0 }] },
