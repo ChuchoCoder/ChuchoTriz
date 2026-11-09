@@ -176,27 +176,54 @@
   width:auto; min-height:22px; height:auto; margin-inline:auto; padding:1px 4px; border-radius:4px; font-size:10px;
 }
 .ct-sim .ct-roll-picker {
-  box-sizing:border-box; width:min(640px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto;
+  width:min(800px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow-y:auto;
   padding:12px; border:1px solid var(--sim-border); border-radius:8px;
-  background:var(--sim-card); color:var(--sim-text); font-size:12px;
+  background:var(--sim-card); color:var(--sim-text); font-size:12px; overflow-wrap:anywhere;
 }
 .ct-sim .ct-roll-picker::backdrop { background:#0007; }
 .ct-sim .ct-roll-picker header, .ct-sim .ct-roll-picker footer, .ct-sim .ct-roll-controls {
-  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 10px;
+  display:flex; flex-wrap:wrap; align-items:center; gap:5px 8px;
 }
-.ct-sim .ct-roll-picker header h3, .ct-sim .ct-roll-picker p { margin:4px 0; }
-.ct-sim .ct-roll-picker header span, .ct-sim .ct-roll-table small { color:var(--sim-muted); }
-.ct-sim .ct-roll-field { display:flex; align-items:center; gap:6px; margin:6px 0; }
-.ct-sim .ct-roll-field input { width:105px; min-width:0; }
-.ct-sim .ct-roll-table { max-height:30dvh; overflow:auto; margin:7px 0; }
-.ct-sim .ct-roll-table table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-.ct-sim .ct-roll-table :is(th,td) { text-align:right; padding:4px; border-bottom:1px solid var(--sim-border); }
+.ct-sim .ct-roll-picker header { justify-content:space-between; }
+.ct-sim .ct-roll-picker :is(h3,h4,p) { margin:0; }
+.ct-sim .ct-roll-picker h4 { font-size:12px; }
+.ct-sim .ct-roll-picker header span, .ct-sim .ct-roll-hint, .ct-sim .ct-roll-table small { color:var(--sim-muted); }
+.ct-sim .ct-roll-layout {
+  display:grid; grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr); gap:12px; align-items:start;
+  margin-top:8px;
+}
+.ct-sim .ct-roll-destinations, .ct-sim .ct-roll-details { display:grid; min-width:0; gap:5px; }
+.ct-sim .ct-roll-details { border-inline-start:1px solid var(--sim-border); padding-inline-start:12px; }
+.ct-sim .ct-roll-field { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+.ct-sim .ct-roll-field input { width:76px; min-width:0; max-width:100%; }
+.ct-sim .ct-roll-table {
+  min-width:0; max-height:min(48dvh, 26rem); overflow-y:auto; scrollbar-gutter:stable;
+}
+.ct-sim .ct-roll-table table {
+  width:100%; min-width:0; table-layout:fixed; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums;
+}
+.ct-sim .ct-roll-strike-col { width:34%; }
+.ct-sim .ct-roll-price-col { width:20%; }
+.ct-sim .ct-roll-table thead { position:sticky; top:0; background:var(--sim-card); }
+.ct-sim .ct-roll-table :is(th,td) { text-align:right; padding:3px 4px; border-bottom:1px solid var(--sim-border); }
 .ct-sim .ct-roll-table th:first-child { text-align:left; }
-.ct-sim .ct-roll-table tbody th button { width:auto; min-height:22px; padding:2px 5px; font-size:11px; white-space:normal; }
+.ct-sim .ct-roll-picker button { min-width:0; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.ct-sim .ct-roll-table tbody th button {
+  width:100%; min-height:22px; padding:1px 4px; font-size:11px; text-align:left;
+}
 .ct-sim .ct-roll-table tr.selected { background:var(--sim-field); }
-.ct-sim .ct-roll-operations { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:8px; margin:8px 0; }
-.ct-sim .ct-roll-operations > div { border:1px solid var(--sim-border); border-radius:5px; padding:6px; }
-.ct-sim .ct-roll-chips { display:flex; flex-wrap:wrap; gap:3px; margin-top:3px; }
-.ct-sim .ct-roll-chips span { background:var(--sim-field); border-radius:4px; padding:2px 4px; font-weight:600; }
-.ct-sim .ct-roll-picker footer { margin-top:10px; }
+.ct-sim .ct-roll-operations { display:grid; gap:5px; }
+.ct-sim .ct-roll-operations > div { border:1px solid var(--sim-border); border-radius:5px; padding:4px 5px; }
+.ct-sim .ct-roll-chips { display:flex; flex-wrap:wrap; gap:3px; margin-top:2px; }
+.ct-sim .ct-roll-chips span { min-width:0; background:var(--sim-field); border-radius:4px; padding:1px 4px; font-weight:600; }
+.ct-sim .ct-roll-picker footer {
+  position:sticky; bottom:0; justify-content:flex-end; margin-top:8px; padding-top:5px;
+  background:var(--sim-card); border-top:1px solid var(--sim-border);
+}
+.ct-sim .ct-roll-picker footer span { flex:1 1 14rem; }
 .ct-sim .ct-roll-picker .ct-roll-apply { background:var(--sim-accent); color:var(--sim-card); font-weight:700; }
+@media (max-width:620px) {
+  .ct-sim .ct-roll-layout { grid-template-columns:minmax(0, 1fr); gap:8px; }
+  .ct-sim .ct-roll-details { border-inline-start:0; padding-inline-start:0; }
+  .ct-sim .ct-roll-table { max-height:min(32dvh, 13rem); }
+}

@@ -54,46 +54,58 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
     onCancel={event => { event.preventDefault(); close(); }}
     onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
     <header><h3 id={title}>Rolar {kind} {source.strike}</h3><span>{input.underlying} · {input.expiry}</span></header>
-    <p>Elegí otra base del mismo vencimiento. Las dos patas se cargan como ajustes simulados.</p>
-    <label className="ct-roll-field">Gastos del rolado ({currency})
-      <input aria-label="Gastos del rolado" type="number" min="0" step="any" value={costs} onChange={event => setCosts(event.target.value)} />
-    </label>
-    {roll.ok && <div className="ct-roll-table"><table aria-label="Bases de destino del rolado">
-      <thead><tr><th scope="col">Base</th><th scope="col">{openBook}</th><th scope="col">Flujo 1 a 1</th><th scope="col">{short ? "Mín." : "Máx."} sin débito</th></tr></thead>
-      <tbody>{roll.candidates.map(candidate => {
-        const { contract, price, max, minimum, maximum, oneForOne, reason } = candidate;
-        const limit = short ? minimum : maximum;
-        const limitLabel = limit && limit <= (max ?? 0) ? fmt(limit)
-          : short && minimum !== undefined ? "Sin profundidad" : !short && price !== undefined && max ? "Requiere débito" : "—";
-        return <tr key={contract.id} className={contract.id === targetId ? "selected" : undefined}>
-          <th scope="row"><button type="button" disabled={price === undefined || !max} aria-label={`Rolar a ${contract.symbol}`}
-            aria-pressed={contract.id === targetId} onClick={() => setTargetId(contract.id)}>{fmt(contract.strike)} <small>{contract.symbol}</small></button></th>
-          <td>{price === undefined ? reason : fmt(price)}</td>
-          <td>{oneForOne === undefined ? "—" : money(oneForOne)}</td>
-          <td>{limitLabel}</td>
-        </tr>;
-      })}</tbody>
-    </table>{!roll.candidates.length && <p>Sin otra base compatible en la cadena.</p>}</div>}
-    <div className="ct-roll-controls">
-      <label className="ct-roll-field">{openVerb} contratos
-        <input aria-label={`Contratos a ${openVerb.toLowerCase()} en rolado`} type="number" min="1" max={target?.max} step="1" value={quantity} onChange={event => setQuantity(event.target.value)} />
-      </label>
-      <button type="button" disabled={noDebitQuantity === undefined}
-        onClick={() => setQuantity(String(noDebitQuantity))}>Usar {noDebitLabel} sin débito</button>
+    <div className="ct-roll-layout">
+      <section className="ct-roll-destinations" aria-labelledby={`${title}-destinations`}>
+        <h4 id={`${title}-destinations`}>Strike de destino</h4>
+        <p className="ct-roll-hint">Elegí otra base del mismo vencimiento.</p>
+        {roll.ok && <div className="ct-roll-table"><table aria-label="Bases de destino del rolado">
+          <colgroup><col className="ct-roll-strike-col" /><col className="ct-roll-price-col" /><col /><col /></colgroup>
+          <thead><tr><th scope="col">Base</th><th scope="col">{openBook}</th><th scope="col">Flujo 1 a 1</th><th scope="col">{short ? "Mín." : "Máx."} sin débito</th></tr></thead>
+          <tbody>{roll.candidates.map(candidate => {
+            const { contract, price, max, minimum, maximum, oneForOne, reason } = candidate;
+            const limit = short ? minimum : maximum;
+            const limitLabel = limit && limit <= (max ?? 0) ? fmt(limit)
+              : short && minimum !== undefined ? "Sin profundidad" : !short && price !== undefined && max ? "Requiere débito" : "—";
+            return <tr key={contract.id} className={contract.id === targetId ? "selected" : undefined}>
+              <th scope="row"><button type="button" disabled={price === undefined || !max} aria-label={`Rolar a ${contract.symbol}`}
+                aria-pressed={contract.id === targetId} onClick={() => setTargetId(contract.id)}>{fmt(contract.strike)} <small>{contract.symbol}</small></button></th>
+              <td>{price === undefined ? reason : fmt(price)}</td>
+              <td>{oneForOne === undefined ? "—" : money(oneForOne)}</td>
+              <td>{limitLabel}</td>
+            </tr>;
+          })}</tbody>
+        </table>{!roll.candidates.length && <p>Sin otra base compatible en la cadena.</p>}</div>}
+      </section>
+      <section className="ct-roll-details" aria-labelledby={`${title}-operations`}>
+        <h4 id={`${title}-operations`}>Operaciones</h4>
+        {roll.ok && <div className="ct-roll-operations" aria-label="Operaciones del rolado">
+          {operation(short ? "Recomprar para cerrar" : "Vender para cerrar", roll.closeSide, roll.quantity, roll.source.strike,
+            roll.closeBook.toUpperCase(), roll.closePrice)}
+          {target?.price !== undefined
+            ? operation(`${openVerb} para abrir`, roll.openSide, qty, target.contract.strike, openBook, target.price)
+            : <div className="ct-roll-hint">{openVerb} para abrir · Elegí el strike de destino.</div>}
+        </div>}
+        <div className="ct-roll-controls">
+          <label className="ct-roll-field">{openVerb} contratos
+            <input aria-label={`Contratos a ${openVerb.toLowerCase()} en rolado`} type="number" min="1" max={target?.max} step="1" value={quantity} onChange={event => setQuantity(event.target.value)} />
+          </label>
+          <button type="button" disabled={noDebitQuantity === undefined}
+            onClick={() => setQuantity(String(noDebitQuantity))}>Usar {noDebitLabel} sin débito</button>
+        </div>
+        <label className="ct-roll-field">Gastos del rolado ({currency})
+          <input aria-label="Gastos del rolado" type="number" min="0" step="any" value={costs} onChange={event => setCosts(event.target.value)} />
+        </label>
+        <div aria-live="polite">
+          {draft.ok ? <p><strong>{draft.net > 0 ? "Crédito" : draft.net < 0 ? "Débito" : "Flujo"} neto estimado · {money(Math.abs(draft.net))}</strong>
+            <br />{closeVerb} {money(roll.ok ? roll.close : 0)} · {short ? "Venta" : "Compra"} de apertura {money(draft.openingAmount)} · Gastos {money(numeric(costs))}</p>
+            : (!roll.ok || targetId) && <p>{!roll.ok ? roll.reason : draft.reason}</p>}
+          {nominal !== undefined && <p>{fmt(nominal)} nominales en la nueva {short ? "venta" : "compra"}{excess !== undefined && excess > 0
+            ? ` · ${fmt(excess)} exceden la tenencia informada si solo se considera esta venta` : ""}</p>}
+        </div>
+      </section>
     </div>
-    {roll.ok && <div className="ct-roll-operations" aria-label="Operaciones del rolado">
-      {operation(short ? "Recomprar para cerrar" : "Vender para cerrar", roll.closeSide, roll.quantity, roll.source.strike,
-        roll.closeBook.toUpperCase(), roll.closePrice)}
-      {target?.price !== undefined && operation(`${openVerb} para abrir`, roll.openSide, qty, target.contract.strike, openBook, target.price)}
-    </div>}
-    <div aria-live="polite">
-      {draft.ok ? <p><strong>{draft.net > 0 ? "Crédito" : draft.net < 0 ? "Débito" : "Flujo"} neto estimado · {money(Math.abs(draft.net))}</strong>
-        <br />{closeVerb} {money(roll.ok ? roll.close : 0)} · {short ? "Venta" : "Compra"} de apertura {money(draft.openingAmount)} · Gastos {money(numeric(costs))}</p>
-        : <p>{!roll.ok ? roll.reason : targetId ? draft.reason : "Elegí una base de destino para ver el flujo del rolado."}</p>}
-      {nominal !== undefined && <p>{fmt(nominal)} nominales en la nueva {short ? "venta" : "compra"}{excess !== undefined && excess > 0
-        ? ` · ${fmt(excess)} exceden la tenencia informada si solo se considera esta venta` : ""}</p>}
-    </div>
-    <footer><button type="button" onClick={close}>Cancelar</button>
+    <footer><span className="ct-roll-hint">Las dos patas se cargan como ajustes simulados.</span>
+      <button type="button" onClick={close}>Cancelar</button>
       <button type="button" className="ct-roll-apply" disabled={!draft.ok}
         onClick={() => { if (draft.ok) { dialog.current?.close?.(); onApply(draft); } }}>Cargar en Cotizaciones →</button></footer>
   </dialog>;
