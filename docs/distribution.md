@@ -45,3 +45,9 @@ La publicación queda sujeta a la revisión de Google:
 Los controles adicionales de dependencias, workflows, inyección y secretos están
 documentados en [SECURITY.md](../SECURITY.md). Mantener un único propietario
 humano, `@chuchocoder`, y los checks obligatorios de GitHub.
+
+## Pruebas de la versión instalada
+
+Antes de un PR o release, seguir la [guía manual](manual-regression.md),
+registrar el commit probado y vincular el reporte en el PR. Distinguir pruebas
+con fixture de integración con Matriz y declarar los casos pendientes.
