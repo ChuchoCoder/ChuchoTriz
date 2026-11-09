@@ -278,7 +278,7 @@ it("reorders and replaces mirrored chain columns while keeping the book, IV and 
   expect(byLabel("Última operación CALL 100").getAttribute("title")).toMatch(/ART$/);
   const viFallback = byLabel("VI CALL 100").querySelector(".ct-opt-iv-value");
   expect(viFallback?.tagName).toBe("SPAN");
-  expect(viFallback?.getAttribute("title")).toContain("CALL 100");
+  expect(viFallback?.hasAttribute("title")).toBe(false);
   quotes.GGAL.last = 100.0125;
   await mount();
   expect(byLabel("Valor intrínseco CALL 100").textContent).toBe("0,0125");
@@ -471,8 +471,8 @@ it.each([
   ticket.id = "MiniOrderForm";
   ticket.innerHTML = `
     <input id="rc_select_2" aria-controls="native-list" aria-expanded="false">
-    <div class="ant-form-item MiniOrderFormQuantity-price-input"><div class="ant-input-number-input-wrap"><input></div></div>
-    <div class="ant-form-item MiniOrderFormQuantity-amount-input"><div class="ant-input-number-input-wrap"><input></div></div>
+    <div class="ant-form-item MiniOrderFormQuantity-price-input"><div class="ant-input-number-input-wrap"><input value="3"></div></div>
+    <div class="ant-form-item MiniOrderFormQuantity-amount-input"><div class="ant-input-number-input-wrap"><input value="10"></div></div>
     <button class="ButtonComprar">COMPRAR</button><button class="ButtonVender">VENDER</button>
     <div class="ant-select-dropdown"><div id="native-list"></div>
       <div class="ant-select-item-option" title="${symbol} CI"></div>
@@ -486,10 +486,17 @@ it.each([
     instrument.addEventListener("input", () => instrument.setAttribute("aria-expanded", "true"));
     const wrong = vi.fn(), select = vi.fn(), submit = vi.fn();
     ticket.querySelector("[title$=' CI']")!.addEventListener("click", wrong);
-    ticket.querySelector(`[title="${symbol}"]`)!.addEventListener("click", () => queueMicrotask(() => {
-      select();
+    ticket.querySelector(`[title="${symbol}"]`)!.addEventListener("click", () => {
       instrument.setAttribute("aria-expanded", "false");
-    }));
+      setTimeout(() => {
+        select();
+        for (const input of [priceInput, quantityInput]) {
+          input.value = "";
+          input.removeAttribute("aria-valuenow");
+        }
+        priceInput.focus();
+      }, 25);
+    });
     ticket.querySelectorAll("button").forEach(button => button.addEventListener("click", submit));
     for (const input of [priceInput, quantityInput]) {
       input.addEventListener("input", () => queueMicrotask(() => {
@@ -503,7 +510,10 @@ it.each([
     // The book can move after creating the simulated leg.
     marketState.current.data!.instruments[id][bookSide]!.price = price;
     await mount();
-    await act(async () => byLabel<HTMLButtonElement>(`Cargar Op. · ${side} de ${symbol} en el Mini Order Form`).click());
+    await act(async () => {
+      byLabel<HTMLButtonElement>(`Cargar Op. · ${side} de ${symbol} en el Mini Order Form`).click();
+      await vi.waitFor(() => expect(quantityInput.value).toBe("25"));
+    });
     expect(instrument.value).toBe(symbol);
     expect(priceInput.value).toBe(String(price).replace(".", ","));
     expect(quantityInput.value).toBe("25");
@@ -517,16 +527,25 @@ it.each([
     expect(legButton().querySelector("svg")).not.toBeNull();
     await fill("Precio pata 1", "0");
     expect(legButton().disabled).toBe(true);
-    await fill("Precio pata 1", "6,75");
+    const editedPrice = side === "venta" ? "6,75" : "0,00000012";
+    await fill("Precio pata 1", editedPrice);
+    await fill("Contratos pata 1", side === "venta" ? "-10000000001" : "10000000001");
+    const quote = byLabel<HTMLButtonElement>(`${action} ${symbol} en simulación`);
+    await act(async () => quote.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(byLabel<HTMLButtonElement>(`Cargar Op. · ${side} de ${symbol} en el Mini Order Form`).disabled).toBe(true);
+    expect(legButton().disabled).toBe(true);
     await fill("Contratos pata 1", "++17");
     expect(legButton().disabled).toBe(true);
     expect(container.textContent).not.toContain("Revisá el Mini Order Form y elegí");
     await fill("Contratos pata 1", side === "venta" ? "-17" : "17,0");
     await act(async () => byLabel("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     expect(legButton().disabled).toBe(false);
-    await act(async () => legButton().click());
+    await act(async () => {
+      legButton().click();
+      await vi.waitFor(() => expect(quantityInput.value).toBe("17"));
+    });
     expect(instrument.value).toBe(symbol);
-    expect(priceInput.value).toBe("6,75");
+    expect(priceInput.value).toBe(editedPrice);
     expect(quantityInput.value).toBe("17");
     expect(container.textContent).toContain(`Revisá el Mini Order Form y elegí ${action}.`);
     expect(select).toHaveBeenCalledTimes(2);

@@ -4,6 +4,10 @@ El simulador se abre desde el icono de ChuchoTriz en Matriz, pestaña **Simulado
 opciones**. La cadena conserva el diseño de Premium: calls a la izquierda, strike
 central y puts a la derecha, con BID/ASK, cantidades, VI, delta, Theta teórico,
 Extrínseco Mid, variación, volumen nominal y último precio operado. El armado no envía, modifica ni cancela órdenes.
+**Cargar Op.** precarga instrumento, cantidad y precio del ASK para compra o del
+BID para venta. El icono de cada pata usa su precio y cantidad editados.
+La precarga está disponible para opciones en pesos a 24 h. Revisá los datos y
+confirmá la operación desde Matriz.
 El simulador abre en **Cotizaciones** y muestra ambos modos en la barra.
 La primera vez que entrás a **Posición actual** en una simulación, se consulta
 la tenencia de la cuenta activa para el subyacente y vencimiento seleccionados.
@@ -233,6 +237,8 @@ regresión de secuencias oculta las referencias. Las métricas son las de Matriz
 no se infiere VI desde precios. La escala de VI conserva el filtro de operación
 reciente y sus ventanas de 15/30/60 minutos. La hora de lectura local no es un
 timestamp de bolsa, y una cotización observada no acredita vigencia ni ejecución.
+En navegadores con soporte de popovers, abrí el detalle de VI con clic, Enter o
+Espacio y cerralo con otro clic, un clic afuera o Escape.
 Con el filtro activo, el detalle de VI muestra las probabilidades teóricas de
 Black–Scholes–Merton y las griegas solo para operaciones dentro de esa ventana.
 Con el filtro desactivado, indica la fecha o antigüedad de la última operación y

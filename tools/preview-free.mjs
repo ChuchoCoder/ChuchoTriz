@@ -76,11 +76,20 @@ function installMarketFixture(regression) {
     option.className = 'ant-select-item-option';
     option.title = symbol;
     option.textContent = symbol;
-    option.addEventListener('click', () => queueMicrotask(() => {
+    option.addEventListener('click', () => {
       instrument.setAttribute('aria-expanded', 'false');
       dropdown.hidden = true;
       dropdown.classList.add('ant-select-dropdown-hidden');
-    }));
+      setTimeout(() => {
+        const price = document.getElementById('precio');
+        for (const id of ['precio', 'cantidad', 'mostrar']) {
+          const input = document.getElementById(id);
+          input.value = '';
+          input.removeAttribute('aria-valuenow');
+        }
+        price.focus();
+      }, 25);
+    });
     list.append(option);
   });
   for (const id of ['precio', 'cantidad']) {

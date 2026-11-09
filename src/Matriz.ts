@@ -71,6 +71,7 @@ export async function preloadOptionTicket(symbol: string, price: number, quantit
                 observer.disconnect();
                 clearTimeout(timeout);
                 request.signal.removeEventListener("abort", abort);
+                document.removeEventListener("focusin", check, true);
             };
             const fail = (message: string) => { stop(); reject(Error(message)); };
             const abort = () => fail(interrupted);
@@ -82,6 +83,7 @@ export async function preloadOptionTicket(symbol: string, price: number, quantit
             const observer = new MutationObserver(check);
             const timeout = setTimeout(() => fail(reason), timeoutMs);
             request.signal.addEventListener("abort", abort);
+            document.addEventListener("focusin", check, true);
             observer.observe(document.body, { childList: true, subtree: true, attributes: true,
                 attributeFilter: ["aria-expanded", "aria-valuenow", "class", "title", "disabled", "value"] });
             check();
@@ -94,8 +96,10 @@ export async function preloadOptionTicket(symbol: string, price: number, quantit
     document.addEventListener("keydown", userInteracted, true);
     try {
         instrument.focus();
+        if (!current()) throw Error(interrupted);
         // Trigger a fresh search even when the same contract is already in the form.
         if (instrument.value === symbol) setInputValue(instrument, "", "input");
+        if (!current()) throw Error(interrupted);
         setInputValue(instrument, symbol, "input");
         const option = await waitFor(() => {
             if (instrument.getAttribute("aria-expanded") !== "true") return;
@@ -112,14 +116,17 @@ export async function preloadOptionTicket(symbol: string, price: number, quantit
 
         const fields = await waitFor(() => {
             const priceInput = findInput(precioSelector), quantityInput = findInput(cantidadSelector);
-            if (selected() && priceInput && !priceInput.disabled && quantityInput && !quantityInput.disabled) {
+            // Matriz clears the draft and focuses Precio after resolving the selected security.
+            // Closing the dropdown alone can happen before that lookup completes.
+            if (selected() && priceInput && document.activeElement === priceInput && !priceInput.disabled &&
+                !priceInput.value && quantityInput && !quantityInput.disabled && !quantityInput.value) {
                 return { priceInput, quantityInput };
             }
-        }, `Matriz no pudo seleccionar ${symbol} para cargar la orden.`);
+        }, `Matriz no confirmó ${symbol} para cargar la orden.`, 2500);
         const { priceInput, quantityInput } = fields;
         requireCurrent();
         if (!selected() || findInput(precioSelector) !== priceInput) throw Error(interrupted);
-        setInputValue(priceInput, String(price).replace(".", ","), "input");
+        setInputValue(priceInput, price.toLocaleString("es-AR", { useGrouping: false, maximumSignificantDigits: 21 }), "input");
         await waitFor(() => selected() && accepts(priceInput, precioSelector, price) ? true : undefined,
             "Matriz no aceptó el precio indicado.");
 

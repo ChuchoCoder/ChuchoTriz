@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_CONTRACTS, MAX_LEGS,
-  newLeg, numeric, parseSignedQuantity, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure } from "./model";
+import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_LEGS,
+  newLeg, numeric, parseSignedQuantity, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure, validOptionTicketValues } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain, { SignedQuantityInput } from "./MarketChain";
 import ToolbarIcon from "../ToolbarIcon";
@@ -513,7 +513,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
     });
   }
   async function loadTicket(contract: Contract, side: Leg["side"], price: number, quantity: number) {
-    if (ticketRequest.current) return;
+    if (ticketRequest.current || !validOptionTicketValues(price, quantity)) return;
     const request = new AbortController();
     ticketRequest.current = request;
     setLoadingTicket(true);
@@ -540,8 +540,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
     const quantity = numeric(leg.contracts);
     const unavailable = contract && catalog ? optionTicketRestriction(contract, catalog)
       : "La pata debe corresponder a un instrumento de la cadena.";
-    const invalidValues = !Number.isFinite(price) || price <= 0 || price > 1e9 ||
-      !Number.isSafeInteger(quantity) || quantity <= 0 || quantity > MAX_CONTRACTS;
+    const invalidValues = !validOptionTicketValues(price, quantity);
     const label = `Cargar ${leg.side === "buy" ? "compra" : "venta"} de la pata ${index + 1} en el Mini Order Form`;
     return <button type="button" className="ct-sim-load-leg" aria-label={label}
       title={unavailable ?? (invalidValues ? "Ingresá un precio positivo y una cantidad entera válida." : label)}

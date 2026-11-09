@@ -11,11 +11,11 @@ const formatSensitivity = (value: number) => value.toLocaleString("es-AR", value
 const formatTooltipGamma = (value: number) => value > 0 && value < 1e-12 ? "<0,000000000001"
   : value.toLocaleString("es-AR", { maximumSignificantDigits: 5 });
 const formatProbability = (value: number) => value < .001 ? "<0,1 %" : value > .999 ? ">99,9 %" : `${fmt(value * 100, 1)} %`;
-const supportsAnchoredViDetail = (() => {
-  if (typeof document === "undefined" || !globalThis.CSS?.supports("right", "anchor(left)")) return false;
+const viPopover = (() => {
+  if (typeof HTMLElement === "undefined" || typeof HTMLElement.prototype.showPopover !== "function") return;
   const probe = document.createElement("div");
   probe.setAttribute("popover", "hint");
-  return probe.popover === "hint";
+  return probe.popover === "hint" ? "hint" : "auto";
 })();
 
 function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; cell?: MetricCell; scale: MetricScale }) {
@@ -33,17 +33,16 @@ function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; c
   const badge = { className: `ct-opt-iv-value${color ? "" : " excluded"}`, "data-grading": color ? "included" : "excluded",
     style: color ? { "--ct-iv": color } as CSSProperties : undefined };
 
-  if (!supportsAnchoredViDetail) return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}>
-    <span {...badge} title={`${symbol} · ${tradeStatus}${color ? "" : " · Fuera de la escala"}`}>{text}</span>
+  if (!viPopover) return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}>
+    <span {...badge}>{text}</span>
   </td>;
 
   return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`} style={{ "--ct-vi-anchor": anchor } as CSSProperties}>
     <button type="button" {...badge} popoverTarget={id}
-      aria-label={`${label} · ${symbol}`} aria-controls={id} aria-expanded={open} aria-describedby={id}
-    >
+      aria-label={`${label} · ${symbol}`} aria-controls={id} aria-expanded={open} aria-describedby={id}>
       {text}
     </button>
-    <div id={id} className="ct-opt-iv-detail" role="tooltip" popover="hint"
+    <div id={id} className="ct-opt-iv-detail" role="tooltip" popover={viPopover}
       onToggle={event => setOpen(event.newState === "open")}>
       {open ? <>
         <header><strong>{symbol}</strong><span>{label}</span></header>

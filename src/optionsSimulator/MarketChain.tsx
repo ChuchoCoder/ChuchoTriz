@@ -6,7 +6,7 @@ import { caucionReferenceLabel, type CaucionReference } from "./caucionRate";
 import { extraMetricLabels, OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
-import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, type standardDeviationLevels } from "./model";
+import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, validOptionTicketValues, type standardDeviationLevels } from "./model";
 import { importPosition, readPositionSnapshot, setPositionQuantity, startPositionDraft, type PositionSeries } from "./positions";
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import "./MarketChain.css";
@@ -598,8 +598,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
         <button type="button" className="ct-opt-load-ticket" aria-label={ticketLabel}
           title={ticketRestriction ?? (!price.ok ? price.reason : ticketLabel)}
-          disabled={!selectable || !price.ok || !!ticketRestriction ||
-            !Number.isSafeInteger(quantity) || quantity <= 0 || loadingTicket}
+          disabled={!selectable || !price.ok || !!ticketRestriction || !validOptionTicketValues(price.price, quantity) || loadingTicket}
           onClick={() => { if (contract && price.ok) onLoadTicket(contract, side, price.price, quantity); }}>
           <ToolbarIcon name="loadTicket" />
           <span>{loadTicketText}</span>
