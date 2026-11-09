@@ -47,6 +47,13 @@ pérdidas de cierres anteriores, ya netas de sus propios gastos.
 desde ahí forman **Ajustes simulados**. Cantidades,
 strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
 Las primas históricas, gastos y realizado permanecen en la posición original.
+Desde una cantidad vendida en **Posición actual**, **Rolar** compara otras bases
+del mismo tipo y vencimiento. Usa el ASK de la recompra, el BID de la nueva
+venta y los gastos ingresados para estimar el flujo y la cantidad mínima sin
+débito. El armado exige puntas compatibles con ambas cantidades. **Cargar en
+Cotizaciones** agrega las dos patas como ajustes y activa **Incluir posición
+actual en Análisis**. La prima histórica sigue siendo necesaria para calcular
+el resultado de la posición desde su costo.
 **Limpiar ajustes** vuelve a la posición sin esas operaciones hipotéticas.
 **Limpiar posición** vacía del borrador las patas, los gastos y el realizado de la
 posición. **Recargar tenencia** consulta nuevamente Matriz y recupera las primas

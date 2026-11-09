@@ -546,6 +546,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
     </div>
     <span role="status" className="ct-sim-sr">{status}</span>
     <div id={`${menusId}-build-panel`} role="tabpanel" aria-labelledby={`${menusId}-build-tab`} hidden={view !== "build"} className="ct-sim-market-layout"><MarketChain active={active && view === "build"} toolbar={marketToolbar} input={input} setInput={setInput} onStrikeMarket={setStrikeMarket} onNewStrategy={() => setChartZoom(undefined)}
+      onIncludePosition={() => setIncludePosition(true)}
       deviationReference={chainDeviations} positionMode={positionMode} setPositionMode={setPositionMode} positionAccounting={view === "build" ? historicalCosts : undefined}
       onPremiumChange={(id, value) => updateLeg(id, "premium", value)} onPremiumReview={reviewPremium} />
     <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-leg-toolbar"><h3>{input.position ? "Ajustes simulados" : "Patas"}</h3>

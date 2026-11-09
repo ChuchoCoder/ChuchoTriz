@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 export interface Contract {
   id: string; symbol: string; underlyingId: string; kind: "call" | "put"; strike: number;
-  expiration: string; currency: "ARS" | "USD"; strikeCurrency?: string; settlement: string; factor?: number;
+  expiration: string; currency: "ARS" | "USD"; strikeCurrency?: string; settlement: string; factor?: number; nominalsPerContract?: number;
 }
 export interface Catalog {
   contextRevision: number; catalogRevision: number; version: string; excluded: number;

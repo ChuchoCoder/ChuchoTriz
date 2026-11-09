@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { exampleLegs, initialSimulation, MAX_CONTRACTS } from "./model";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
+import { buildRoll, rollCandidates } from "./rollPosition";
 
 const input = () => ({ ...initialSimulation("2026-11-03"), underlying: "GGAL", legs: exampleLegs("butterfly").map(leg => ({
   ...leg, securityId: `call-${leg.strike}`, symbol: `CALL ${leg.strike}`,
@@ -12,6 +13,46 @@ const market = (): StrikeMarket => {
     bid: { price: contract.strike / 10, size: 100 }, ask: { price: contract.strike / 10 + 1, size: 100 }, impliedVolatility: contract.strike / 2,
   }])) };
 };
+
+describe("rolling a sold position", () => {
+  const sold = () => ({ ...input(), legs: [], position: { legs: [{ ...input().legs[1], contracts: "10", volatility: "40" }] } });
+  it("finds either direction and prices the minimum at ASK/BID plus costs", () => {
+    const draft = sold(), book = market();
+    book.quotes["call-110"].bid!.price = 8;
+    const candidates = rollCandidates(draft, "call-100", 100, book);
+    expect(candidates.ok && candidates.candidates.map(item => item.contract.strike)).toEqual([80, 90, 110, 120]);
+    expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(14);
+    expect(buildRoll(draft, "call-100", "call-110", 14, 100, book)).toMatchObject({
+      ok: true, net: 100, adjustmentCosts: "100", legs: [
+        { securityId: "call-100", side: "buy", contracts: "10", premium: "11", volatility: "40" },
+        { securityId: "call-110", side: "sell", contracts: "14", premium: "8" },
+      ],
+    });
+    expect(draft.position.legs[0].side).toBe("sell");
+    expect(draft.legs).toHaveLength(0);
+  });
+  it("rejects insufficient depth, ambiguous rows and adjustments on either leg", () => {
+    const draft = sold(), book = market();
+    book.quotes["call-110"].bid!.size = 4;
+    expect(buildRoll(draft, "call-100", "call-110", 10, 0, book).ok).toBe(false);
+    expect(buildRoll({ ...draft, legs: [{ ...draft.position.legs[0], side: "buy" }] }, "call-100", "call-90", 10, 0, book).ok).toBe(false);
+    book.contracts.push({ ...book.contracts.find(item => item.id === "call-90")!, id: "duplicate" });
+    expect(buildRoll(draft, "call-100", "call-90", 10, 0, book).ok).toBe(false);
+  });
+  it("requires a nonnegative raw flow and leaves out-of-range destination IV blank", () => {
+    const draft = sold(), book = market();
+    draft.position.legs[0].contracts = "1";
+    book.quotes["call-100"].bid = { price: .00008, size: 100 };
+    book.quotes["call-100"].ask!.price = .00009;
+    book.quotes["call-110"].bid!.price = .00001;
+    book.quotes["call-110"].impliedVolatility = 900;
+    const candidates = rollCandidates(draft, "call-100", 0, book);
+    expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(9);
+    expect(buildRoll(draft, "call-100", "call-110", 8, 0, book)).toMatchObject({ ok: true, net: -.001 });
+    expect(buildRoll(draft, "call-100", "call-110", 9, 0, book)).toMatchObject({ ok: true, net: 0,
+      legs: [{ volatility: "40" }, { volatility: "" }] });
+  });
+});
 
 describe("quantity adjustments", () => {
   it("steps the whole integer ratio up/down without changing premiums, IV or direction", () => {

@@ -105,6 +105,8 @@
   "src/optionsSimulator/OptionsSimulator.tsx",
   "src/optionsSimulator/strategyAdjustments.test.ts",
   "src/optionsSimulator/strategyAdjustments.ts",
+  "src/optionsSimulator/rollPosition.ts",
+  "src/optionsSimulator/RollPicker.tsx",
   "src/optionsSimulator/StrategyPicker.tsx",
   "src/optionsSimulator/strategyTemplates.test.ts",
   "src/optionsSimulator/strategyTemplates.ts",

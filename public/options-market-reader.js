@@ -43,7 +43,9 @@
       const strikeCurrency = typeof ref.strikeCurrency === "string" ? ref.strikeCurrency : ref.strikeCurrency == null && localEquity ? "ARS" : undefined;
       const factor = [ref.totalAmountFactor, ref.contractMultiplier, ref.roundLot].every(positive)
         ? ref.totalAmountFactor * ref.contractMultiplier * ref.roundLot : undefined;
-      contracts.push({ id, symbol, underlyingId, kind, strike: ref.strikePrice, expiration: ref.maturityDateStr, currency, strikeCurrency, settlement, factor });
+      const nominalsPerContract = localEquity && positive(ref.contractMultiplier) && positive(ref.roundLot)
+        ? ref.contractMultiplier * ref.roundLot : undefined;
+      contracts.push({ id, symbol, underlyingId, kind, strike: ref.strikePrice, expiration: ref.maturityDateStr, currency, strikeCurrency, settlement, factor, nominalsPerContract });
       seen.add(id);
     }
     const next = JSON.stringify([underlyings, contracts]);

@@ -171,3 +171,33 @@
 .ct-sim .ct-opt-quantity-total output { font-weight:700; }
 .ct-sim .ct-opt-chain-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; padding:6px 8px; font-size:10px; color:var(--ct-muted); gap:8px; }
 .ct-sim .ct-opt-chain-footer button { background:var(--ct-panel); color:var(--ct-text); padding:3px 7px; border:1px solid var(--ct-border); border-radius:2px; }
+.ct-sim .ct-opt-roll-origin { display:flex; align-items:center; gap:4px; }
+.ct-sim .ct-opt-roll-origin input { min-width:0; flex:1; }
+.ct-sim .ct-opt-position-chain .ct-opt-roll-trigger {
+  width:auto; min-height:22px; height:auto; padding:1px 4px; border-radius:4px; font-size:10px;
+}
+.ct-sim .ct-roll-picker {
+  box-sizing:border-box; width:min(640px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto;
+  padding:12px; border:1px solid var(--sim-border); border-radius:8px;
+  background:var(--sim-card); color:var(--sim-text); font-size:12px;
+}
+.ct-sim .ct-roll-picker::backdrop { background:#0007; }
+.ct-sim .ct-roll-picker header, .ct-sim .ct-roll-picker footer, .ct-sim .ct-roll-controls {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 10px;
+}
+.ct-sim .ct-roll-picker header h3, .ct-sim .ct-roll-picker p { margin:4px 0; }
+.ct-sim .ct-roll-picker header span, .ct-sim .ct-roll-table small { color:var(--sim-muted); }
+.ct-sim .ct-roll-field { display:flex; align-items:center; gap:6px; margin:6px 0; }
+.ct-sim .ct-roll-field input { width:105px; min-width:0; }
+.ct-sim .ct-roll-table { max-height:30dvh; overflow:auto; margin:7px 0; }
+.ct-sim .ct-roll-table table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+.ct-sim .ct-roll-table :is(th,td) { text-align:right; padding:4px; border-bottom:1px solid var(--sim-border); }
+.ct-sim .ct-roll-table th:first-child { text-align:left; }
+.ct-sim .ct-roll-table tbody th button { width:auto; min-height:22px; padding:2px 5px; font-size:11px; white-space:normal; }
+.ct-sim .ct-roll-table tr.selected { background:var(--sim-field); }
+.ct-sim .ct-roll-operations { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:8px; margin:8px 0; }
+.ct-sim .ct-roll-operations > div { border:1px solid var(--sim-border); border-radius:5px; padding:6px; }
+.ct-sim .ct-roll-chips { display:flex; flex-wrap:wrap; gap:3px; margin-top:3px; }
+.ct-sim .ct-roll-chips span { background:var(--sim-field); border-radius:4px; padding:2px 4px; font-weight:600; }
+.ct-sim .ct-roll-picker footer { margin-top:10px; }
+.ct-sim .ct-roll-picker .ct-roll-apply { background:var(--sim-accent); color:var(--sim-card); font-weight:700; }

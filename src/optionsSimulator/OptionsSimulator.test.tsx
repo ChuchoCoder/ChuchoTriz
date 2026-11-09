@@ -491,6 +491,30 @@ it("keeps the position tab visible while quotes load and imports with the select
   expect(byLabel("Editar VI pata 1").textContent).toBe("40,00");
 });
 
+it("rolls a sold call from Posición actual into both simulated quote cells and then Análisis", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: -2 }] });
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  await act(async () => button("Posición actual").click());
+  await fill("Prima histórica CALL 100", "7");
+  await act(async () => byLabel<HTMLButtonElement>("Rolar posición CALL 100").click());
+  await act(async () => byLabel<HTMLButtonElement>("Rolar a CALL 110").click());
+  await fill("Gastos del rolado", "100");
+  await act(async () => button("Usar mínimo sin débito").click());
+  expect(byLabel<HTMLInputElement>("Contratos a vender en rolado").value).toBe("3");
+  expect(byLabel("Operaciones del rolado").textContent).toContain("+2 contratos");
+  expect(byLabel("Operaciones del rolado").textContent).toContain("−3 contratos");
+  await act(async () => button("Cargar en Cotizaciones →").click());
+  expect(button("Cotizaciones").getAttribute("aria-pressed")).toBe("true");
+  expect(byLabel("Comprar CALL 100 en simulación").getAttribute("aria-pressed")).toBe("true");
+  expect(byLabel("Vender CALL 110 en simulación").getAttribute("aria-pressed")).toBe("true");
+  expect(positionCheckbox().checked).toBe(true);
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-chart")).not.toBeNull();
+  expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("100");
+});
+
 it("loads nominal holdings without open options and includes them only while the position is checked", async () => {
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
     reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
