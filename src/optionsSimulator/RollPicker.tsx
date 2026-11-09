@@ -25,15 +25,31 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
     onClose();
   }
   const kind = source.kind.toUpperCase();
+  const short = source.side === "sell";
+  const openVerb = short ? "Vender" : "Comprar";
+  const closeVerb = short ? "Recompra" : "Venta de cierre";
+  const openBook = short ? "BID" : "ASK";
   const roll = rollCandidates(input, source.securityId!, numeric(costs), market);
   const target = roll.ok ? roll.candidates.find(candidate => candidate.contract.id === targetId) : undefined;
   const qty = numeric(quantity);
   const draft = buildRoll(input, source.securityId!, targetId, qty, numeric(costs), market);
+  const noDebitQuantity = short
+    ? target?.minimum !== undefined && target.minimum <= (target.max ?? 0) ? target.minimum : undefined
+    : target?.maximum || undefined;
+  const noDebitLabel = short ? "mínimo" : "máximo";
   const nominalFactor = target?.contract.nominalsPerContract;
   const nominal = nominalFactor && Number.isSafeInteger(nominalFactor * qty) && Number.isSafeInteger(qty) && qty > 0 ? nominalFactor * qty : undefined;
   const holding = underlyingExposure(input.position);
-  const excess = nominal !== undefined && source.kind === "call" && !input.position?.underlyingUnavailable && holding
+  const excess = nominal !== undefined && short && source.kind === "call" && !input.position?.underlyingUnavailable && holding
     ? Math.max(0, nominal - Math.max(0, holding.quantity)) : undefined;
+  function operation(title: string, side: Leg["side"], contracts: number, strike: number, book: string, price: number) {
+    const buy = side === "buy", color = buy ? "ct-sim-buy" : "ct-sim-sell";
+    return <div><strong>{title}</strong><div className="ct-roll-chips">
+      <span className={color}>{buy ? "Compra" : "Venta"}</span>
+      <span className={color}>{buy ? "+" : "−"}{Number.isSafeInteger(contracts) && contracts > 0 ? fmt(contracts) : "—"} contratos</span>
+      <span>{kind} {fmt(strike)}</span><span>{book} {money(price)} / unidad</span>
+    </div></div>;
+  }
   return <dialog ref={dialog} className="ct-roll-picker" aria-labelledby={title} data-ct-inline-editor
     onCancel={event => { event.preventDefault(); close(); }}
     onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
@@ -43,41 +59,38 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
       <input aria-label="Gastos del rolado" type="number" min="0" step="any" value={costs} onChange={event => setCosts(event.target.value)} />
     </label>
     {roll.ok && <div className="ct-roll-table"><table aria-label="Bases de destino del rolado">
-      <thead><tr><th scope="col">Base</th><th scope="col">BID</th><th scope="col">Flujo 1 a 1</th><th scope="col">Mín. sin débito</th></tr></thead>
+      <thead><tr><th scope="col">Base</th><th scope="col">{openBook}</th><th scope="col">Flujo 1 a 1</th><th scope="col">{short ? "Mín." : "Máx."} sin débito</th></tr></thead>
       <tbody>{roll.candidates.map(candidate => {
-        const { contract, bid, max, minimum, oneForOne, reason } = candidate;
-        const validMinimum = minimum !== undefined && minimum <= (max ?? 0);
+        const { contract, price, max, minimum, maximum, oneForOne, reason } = candidate;
+        const limit = short ? minimum : maximum;
+        const limitLabel = limit && limit <= (max ?? 0) ? fmt(limit)
+          : short && minimum !== undefined ? "Sin profundidad" : !short && price !== undefined && max ? "Requiere débito" : "—";
         return <tr key={contract.id} className={contract.id === targetId ? "selected" : undefined}>
-          <th scope="row"><button type="button" disabled={bid === undefined || !max} aria-label={`Rolar a ${contract.symbol}`}
+          <th scope="row"><button type="button" disabled={price === undefined || !max} aria-label={`Rolar a ${contract.symbol}`}
             aria-pressed={contract.id === targetId} onClick={() => setTargetId(contract.id)}>{fmt(contract.strike)} <small>{contract.symbol}</small></button></th>
-          <td>{bid === undefined ? reason : fmt(bid)}</td>
+          <td>{price === undefined ? reason : fmt(price)}</td>
           <td>{oneForOne === undefined ? "—" : money(oneForOne)}</td>
-          <td>{validMinimum ? fmt(minimum) : minimum === undefined ? "—" : "Sin profundidad"}</td>
+          <td>{limitLabel}</td>
         </tr>;
       })}</tbody>
     </table>{!roll.candidates.length && <p>Sin otra base compatible en la cadena.</p>}</div>}
     <div className="ct-roll-controls">
-      <label className="ct-roll-field">Vender contratos
-        <input aria-label="Contratos a vender en rolado" type="number" min="1" max={target?.max} step="1" value={quantity} onChange={event => setQuantity(event.target.value)} />
+      <label className="ct-roll-field">{openVerb} contratos
+        <input aria-label={`Contratos a ${openVerb.toLowerCase()} en rolado`} type="number" min="1" max={target?.max} step="1" value={quantity} onChange={event => setQuantity(event.target.value)} />
       </label>
-      <button type="button" disabled={target?.minimum === undefined || target.minimum > (target.max ?? 0)}
-        onClick={() => setQuantity(String(target?.minimum))}>Usar mínimo sin débito</button>
+      <button type="button" disabled={noDebitQuantity === undefined}
+        onClick={() => setQuantity(String(noDebitQuantity))}>Usar {noDebitLabel} sin débito</button>
     </div>
     {roll.ok && <div className="ct-roll-operations" aria-label="Operaciones del rolado">
-      <div><strong>Recomprar para cerrar</strong><div className="ct-roll-chips">
-        <span className="ct-sim-buy">Compra</span><span className="ct-sim-buy">+{fmt(roll.quantity)} contratos</span>
-        <span>{kind} {fmt(roll.source.strike)}</span><span>ASK {money(roll.ask)} / unidad</span>
-      </div></div>
-      {target?.bid !== undefined && <div><strong>Vender para abrir</strong><div className="ct-roll-chips">
-        <span className="ct-sim-sell">Venta</span><span className="ct-sim-sell">−{Number.isSafeInteger(qty) && qty > 0 ? fmt(qty) : "—"} contratos</span>
-        <span>{kind} {fmt(target.contract.strike)}</span><span>BID {money(target.bid)} / unidad</span>
-      </div></div>}
+      {operation(short ? "Recomprar para cerrar" : "Vender para cerrar", roll.closeSide, roll.quantity, roll.source.strike,
+        roll.closeBook.toUpperCase(), roll.closePrice)}
+      {target?.price !== undefined && operation(`${openVerb} para abrir`, roll.openSide, qty, target.contract.strike, openBook, target.price)}
     </div>}
     <div aria-live="polite">
       {draft.ok ? <p><strong>{draft.net > 0 ? "Crédito" : draft.net < 0 ? "Débito" : "Flujo"} neto estimado · {money(Math.abs(draft.net))}</strong>
-        <br />Recompra {money(roll.ok ? roll.close : 0)} · Venta {money(draft.proceeds)} · Gastos {money(numeric(costs))}</p>
+        <br />{closeVerb} {money(roll.ok ? roll.close : 0)} · {short ? "Venta" : "Compra"} de apertura {money(draft.openingAmount)} · Gastos {money(numeric(costs))}</p>
         : <p>{!roll.ok ? roll.reason : targetId ? draft.reason : "Elegí una base de destino para ver el flujo del rolado."}</p>}
-      {nominal !== undefined && <p>{fmt(nominal)} nominales en la nueva venta{excess !== undefined && excess > 0
+      {nominal !== undefined && <p>{fmt(nominal)} nominales en la nueva {short ? "venta" : "compra"}{excess !== undefined && excess > 0
         ? ` · ${fmt(excess)} exceden la tenencia informada si solo se considera esta venta` : ""}</p>}
     </div>
     <footer><button type="button" onClick={close}>Cancelar</button>

@@ -163,8 +163,8 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     report(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`, tooManyHistoricalLegs ? "chain" : undefined);
   const closed = new Set<Leg>();
   for (const adjustment of input.legs) {
-    if (!adjustment.rollCloseOf || adjustment.securityId !== adjustment.rollCloseOf || adjustment.side !== "buy") continue;
-    const original = input.position?.legs.find(leg => leg.securityId === adjustment.rollCloseOf && leg.side === "sell" &&
+    if (!adjustment.rollCloseOf || adjustment.securityId !== adjustment.rollCloseOf) continue;
+    const original = input.position?.legs.find(leg => leg.securityId === adjustment.rollCloseOf && leg.side !== adjustment.side &&
       leg.kind === adjustment.kind && numeric(leg.strike) === numeric(adjustment.strike) && numeric(leg.contracts) === numeric(adjustment.contracts));
     if (original && !closed.has(original)) { closed.add(original); closed.add(adjustment); }
   }

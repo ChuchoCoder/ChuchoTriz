@@ -47,10 +47,13 @@ pérdidas de cierres anteriores, ya netas de sus propios gastos.
 desde ahí forman **Ajustes simulados**. Cantidades,
 strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
 Las primas históricas, gastos y realizado permanecen en la posición original.
-Desde una cantidad vendida en **Posición actual**, **Rolar** compara otras bases
-del mismo tipo y vencimiento. Usa el ASK de la recompra, el BID de la nueva
-venta y los gastos ingresados para estimar el flujo y la cantidad mínima sin
-débito. El armado exige puntas compatibles con ambas cantidades. **Cargar en
+En **Posición actual**, **Rolar** aparece en **Acciones**, a la izquierda para
+Calls y a la derecha para Puts. Compara bases del mismo tipo y vencimiento
+para cualquier posición comprada o vendida. Para una posición vendida usa el
+ASK de la recompra y el BID de la nueva venta, con un mínimo de contratos sin
+débito. Para una posición comprada usa el BID del cierre y el ASK de la nueva
+compra, con un máximo de contratos que alcanza a financiar el cierre.
+El cálculo incluye los gastos y el armado exige profundidad para ambas patas. **Cargar en
 Cotizaciones** agrega las dos patas como ajustes y activa **Incluir posición
 actual en Análisis**. La prima histórica sigue siendo necesaria para calcular
 el resultado de la posición desde su costo.

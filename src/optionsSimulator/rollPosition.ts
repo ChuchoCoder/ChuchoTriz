@@ -14,15 +14,18 @@ function decimal(value: number) {
   return { units: BigInt(integer + fraction), places: fraction.length - Number(exponent) };
 }
 
-function rollCash(closeQuantity: number, factor: number, ask: number, bid: number, costs: number) {
-  const lot = decimal(factor), close = decimal(ask), sale = decimal(bid), fee = decimal(costs);
-  const places = Math.max(lot.places + close.places, lot.places + sale.places, fee.places);
+function rollCash(closeQuantity: number, factor: number, closePrice: number, openPrice: number, costs: number, openingSide: Leg["side"]) {
+  const lot = decimal(factor), close = decimal(closePrice), open = decimal(openPrice), fee = decimal(costs);
+  const places = Math.max(lot.places + close.places, lot.places + open.places, fee.places);
   const scaled = (units: bigint, from: number) => units * 10n ** BigInt(places - from);
-  const debit = scaled(BigInt(closeQuantity) * lot.units * close.units, lot.places + close.places) + scaled(fee.units, fee.places);
-  const income = scaled(lot.units * sale.units, lot.places + sale.places);
+  const closeAmount = scaled(BigInt(closeQuantity) * lot.units * close.units, lot.places + close.places);
+  const openUnit = scaled(lot.units * open.units, lot.places + open.places);
+  const direction = openingSide === "sell" ? 1n : -1n;
+  const balance = -direction * closeAmount - scaled(fee.units, fee.places);
   return {
-    minimum: Number((debit + income - 1n) / income),
-    net: (quantity: number) => Number(`${BigInt(quantity) * income - debit}e${-places}`),
+    minimum: openingSide === "sell" ? Number((-balance + openUnit - 1n) / openUnit) : undefined,
+    maximum: openingSide === "buy" && balance >= openUnit ? Number(balance / openUnit) : undefined,
+    net: (quantity: number) => Number(`${balance + direction * BigInt(quantity) * openUnit}e${-places}`),
   };
 }
 
@@ -34,30 +37,38 @@ function rollContext(input: Simulation, sourceId: string, market?: StrikeMarket)
   const factor = numeric(input.multiplier);
   if (!market || !source || market.underlying !== input.underlying || market.expiry !== input.expiry || market.currency !== input.currency)
     return fail("Esperando cotizaciones de la misma posición y vencimiento.");
-  if (!position || position.side !== "sell" || position.kind !== source.kind || numeric(position.strike) !== source.strike ||
+  if (!position || position.kind !== source.kind || numeric(position.strike) !== source.strike ||
     !validStrike(source.strike) || !validQuantity(numeric(position.contracts)) || factor < .000001 || factor > 100000 || source.factor !== factor ||
     source.currency !== input.currency || source.strikeCurrency !== input.currency ||
     source.expiration.replaceAll("-", "") !== input.expiry.replaceAll("-", "") ||
     market.contracts.some(contract => contract.id !== sourceId && contract.kind === source.kind && contract.strike === source.strike))
-    return fail("La posición vendida debe corresponder a un contrato de la cadena y tener una cantidad válida.");
+    return fail("La posición debe corresponder a un contrato de la cadena y tener una cantidad válida.");
   if (input.legs.length > MAX_LEGS - 2 || input.legs.some(leg => leg.securityId === sourceId))
     return fail("Liberá espacio para las dos patas y quitá cualquier ajuste sobre la base actual.");
   const quote = market.quotes[sourceId];
-  const ask = quotePrice(quote, "buy");
-  if (!ask.ok || ask.price > 1e9) return fail("La base actual requiere un ASK válido para simular la recompra.");
+  const openSide = position.side;
+  const closeSide: Leg["side"] = openSide === "sell" ? "buy" : "sell";
+  const closeBook = closeSide === "buy" ? "ask" : "bid";
+  const closeLevel = quote?.[closeBook];
+  const closePrice = quotePrice(quote, closeSide);
+  const bookLabel = closeBook.toUpperCase();
+  if (!closePrice.ok || closePrice.price > 1e9 || !closeLevel)
+    return fail(`La base actual requiere un ${bookLabel} válido para simular el cierre.`);
   const quantity = numeric(position.contracts);
-  if (quote.ask?.depthUnverified) return fail("El libro no confirma la profundidad del ASK de recompra.");
-  if (quote.ask!.size < quantity) return fail("El ASK de la base actual no cubre toda la recompra.");
-  return { ok: true as const, market, source, position, quantity, factor, ask: ask.price };
+  if (closeLevel.depthUnverified) return fail(`El libro no confirma la profundidad del ${bookLabel} de cierre.`);
+  if (closeLevel.size < quantity) return fail(`El ${bookLabel} de la base actual no cubre todo el cierre.`);
+  return { ok: true as const, market, source, quantity, factor, closeSide, openSide, closeBook, closePrice: closePrice.price };
 }
 
 export function rollCandidates(input: Simulation, sourceId: string, costs: number, market?: StrikeMarket) {
   const context = rollContext(input, sourceId, market);
   if (!context.ok) return context;
-  const { source, quantity, factor, ask } = context;
-  const close = quantity * factor * ask;
+  const { source, quantity, factor, closePrice, openSide } = context;
+  const close = quantity * factor * closePrice;
+  const openBook = openSide === "sell" ? "bid" : "ask";
+  const bookLabel = openBook.toUpperCase();
   if (!Number.isFinite(costs) || costs < 0 || costs > 1e12 || (close + costs) * 100 > Number.MAX_SAFE_INTEGER)
-    return fail("Revisá los gastos y el importe de recompra.");
+    return fail("Revisá los gastos y el importe de cierre.");
   const seriesByStrike = new Map<number, number>();
   for (const contract of context.market.contracts) if (contract.kind === source.kind)
     seriesByStrike.set(contract.strike, (seriesByStrike.get(contract.strike) ?? 0) + 1);
@@ -68,28 +79,31 @@ export function rollCandidates(input: Simulation, sourceId: string, costs: numbe
     contract.expiration.replaceAll("-", "") === source.expiration.replaceAll("-", ""))
     .sort((a, b) => a.strike - b.strike).map(contract => {
       const quote = context.market.quotes[contract.id];
-      const bid = quotePrice(quote, "sell");
+      const level = quote?.[openBook];
+      const price = quotePrice(quote, openSide);
       if (input.legs.some(leg => leg.securityId === contract.id)) return { contract, reason: "Ya tiene un ajuste" };
-      if (!bid.ok || bid.price > 1e9) return { contract, reason: "Sin BID válido" };
-      if (quote.bid?.depthUnverified) return { contract, reason: "Profundidad BID sin verificar" };
-      const max = Math.min(MAX_CONTRACTS, Math.floor(quote.bid!.size));
-      const flow = rollCash(quantity, factor, ask, bid.price, costs);
-      return { contract, bid: bid.price, max, minimum: flow.minimum, oneForOne: quantity <= max ? flow.net(quantity) : undefined };
+      if (!price.ok || price.price > 1e9 || !level) return { contract, reason: `Sin ${bookLabel} válido` };
+      if (level.depthUnverified) return { contract, reason: `Profundidad ${bookLabel} sin verificar` };
+      const max = Math.min(MAX_CONTRACTS, Math.floor(level.size));
+      const flow = rollCash(quantity, factor, closePrice, price.price, costs, openSide);
+      return { contract, price: price.price, max, minimum: flow.minimum,
+        maximum: flow.maximum === undefined ? undefined : Math.min(max, flow.maximum),
+        oneForOne: quantity <= max ? flow.net(quantity) : undefined };
     });
-  return { ...context, candidates, close, costs };
+  return { ...context, candidates, close, openBook };
 }
 
 export function buildRoll(input: Simulation, sourceId: string, targetId: string, quantity: number, costs: number, market?: StrikeMarket) {
   const roll = rollCandidates(input, sourceId, costs, market);
   if (!roll.ok) return roll;
   const target = roll.candidates.find(candidate => candidate.contract.id === targetId);
-  if (!target || target.bid === undefined) return fail("Elegí una base de destino con BID disponible.");
-  if (!validQuantity(quantity) || quantity > target.max) return fail("Ingresá una cantidad entera que entre en el BID disponible.");
+  if (!target || target.price === undefined) return fail(`Elegí una base de destino con ${roll.openBook.toUpperCase()} disponible.`);
+  if (!validQuantity(quantity) || quantity > target.max) return fail(`Ingresá una cantidad entera que entre en el ${roll.openBook.toUpperCase()} disponible.`);
   const previousCosts = input.legs.length ? numeric(input.adjustmentCosts ?? "0") : 0;
   const adjustmentCosts = previousCosts + costs;
-  const proceeds = quantity * roll.factor * target.bid;
+  const openingAmount = quantity * roll.factor * target.price;
   if (!Number.isFinite(previousCosts) || previousCosts < 0 || adjustmentCosts > 1e12 ||
-    (proceeds + roll.close + adjustmentCosts) * 100 > Number.MAX_SAFE_INTEGER)
+    (openingAmount + roll.close + adjustmentCosts) * 100 > Number.MAX_SAFE_INTEGER)
     return fail("Revisá los gastos y la precisión de los importes del ajuste.");
   const id = Math.max(0, ...input.legs.map(leg => leg.id), ...input.position!.legs.map(leg => leg.id)) + 1;
   const leg = (contract: Contract, quote: Quote | undefined, id: number, side: Leg["side"], amount: number, premium: number): Leg => ({
@@ -98,9 +112,9 @@ export function buildRoll(input: Simulation, sourceId: string, targetId: string,
     volatility: quote?.impliedVolatility !== undefined && Number.isFinite(quote.impliedVolatility) &&
       quote.impliedVolatility >= 0 && quote.impliedVolatility <= 500 ? formatOptionInput(quote.impliedVolatility) : "",
   });
-  const close = { ...leg(roll.source, roll.market.quotes[sourceId], id, "buy", roll.quantity, roll.ask), rollCloseOf: sourceId };
+  const close = { ...leg(roll.source, roll.market.quotes[sourceId], id, roll.closeSide, roll.quantity, roll.closePrice), rollCloseOf: sourceId };
   const legs = [close,
-    leg(target.contract, roll.market.quotes[targetId], id + 1, "sell", quantity, target.bid)];
-  return { ok: true as const, legs, adjustmentCosts: rollDecimal(adjustmentCosts), proceeds,
-    net: rollCash(roll.quantity, roll.factor, roll.ask, target.bid, costs).net(quantity) };
+    leg(target.contract, roll.market.quotes[targetId], id + 1, roll.openSide, quantity, target.price)];
+  return { ok: true as const, legs, adjustmentCosts: rollDecimal(adjustmentCosts), openingAmount,
+    net: rollCash(roll.quantity, roll.factor, roll.closePrice, target.price, costs, roll.openSide).net(quantity) };
 }

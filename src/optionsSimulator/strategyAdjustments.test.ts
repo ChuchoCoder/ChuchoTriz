@@ -58,6 +58,34 @@ describe("rolling a sold position", () => {
       ok: true, net: -.04, legs: [{ premium: "10.00000000000001" }, { premium: "10" }],
     });
   });
+  it("closes a bought put at BID and caps the debit-free ASK purchase by depth and cash", () => {
+    const draft = sold(), book = market();
+    draft.position.legs[0] = { ...draft.position.legs[0], securityId: "put-100", kind: "put", side: "buy" };
+    book.quotes["put-100"].bid = { price: 10, size: 10 };
+    book.quotes["put-90"].ask = { price: 4, size: 30 };
+    book.quotes["put-90"].bid = { price: 3, size: 30 };
+    const maximum = (costs: number) => {
+      const roll = rollCandidates(draft, "put-100", costs, book);
+      return roll.ok && roll.candidates.find(candidate => candidate.contract.id === "put-90")?.maximum;
+    };
+    expect(maximum(200)).toBe(24);
+    expect(maximum(400)).toBe(24);
+    expect(maximum(400.001)).toBe(23);
+    expect(maximum(9600)).toBe(1);
+    expect(maximum(9600.001)).toBeUndefined();
+    expect(buildRoll(draft, "put-100", "put-90", 24, 400, book)).toMatchObject({
+      ok: true, net: 0, legs: [
+        { securityId: "put-100", side: "sell", contracts: "10", premium: "10", rollCloseOf: "put-100" },
+        { securityId: "put-90", side: "buy", contracts: "24", premium: "4" },
+      ],
+    });
+    expect(buildRoll(draft, "put-100", "put-90", 25, 200, book)).toMatchObject({ ok: true, net: -200 });
+    book.quotes["put-90"].ask.size = 20;
+    expect(maximum(200)).toBe(20);
+    expect(buildRoll(draft, "put-100", "put-90", 21, 0, book).ok).toBe(false);
+    book.quotes["put-100"].bid.size = 9;
+    expect(rollCandidates(draft, "put-100", 0, book).ok).toBe(false);
+  });
   it("requires a nonnegative raw flow and leaves out-of-range destination IV blank", () => {
     const draft = sold(), book = market();
     draft.position.legs[0].contracts = "1";

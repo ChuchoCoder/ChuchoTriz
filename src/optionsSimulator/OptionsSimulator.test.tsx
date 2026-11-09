@@ -517,6 +517,37 @@ it("rolls a sold call from Posición actual into both simulated quote cells and 
   expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("100");
 });
 
+it("shows Calls and Puts actions on opposite edges and rolls a bought put into Análisis", async () => {
+  readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
+    reportedAt: Date.now(), positions: [{ securityId: "call-90", quantity: -1 }, { securityId: "put-100", quantity: 2 }] });
+  marketState.current.data!.instruments["put-100"].impliedVolatility = undefined;
+  marketState.current.data!.instruments["put-110"].ask = { price: 3, size: 20 };
+  marketState.current.data!.instruments["put-110"].bid = { price: 2, size: 20 };
+  marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
+  await mount();
+  await act(async () => button("Posición actual").click());
+  const headings = container.querySelector(".ct-opt-position-chain thead tr")!.children;
+  expect([headings[0].textContent, headings[6].textContent]).toEqual(["Acciones", "Acciones"]);
+  const call = byLabel<HTMLButtonElement>("Rolar posición CALL 90");
+  const put = byLabel<HTMLButtonElement>("Rolar posición PUT 100");
+  expect(call.closest("td")?.cellIndex).toBe(0);
+  expect(put.closest("td")?.cellIndex).toBe(6);
+  expect(container.querySelector('[aria-label="Rolar posición PUT 110"]')).toBeNull();
+  await fill("Prima histórica CALL 90", "3");
+  await fill("Prima histórica PUT 100", "7");
+  await act(async () => put.click());
+  await act(async () => byLabel<HTMLButtonElement>("Rolar a PUT 110").click());
+  await act(async () => button("Usar máximo sin débito").click());
+  expect(byLabel<HTMLInputElement>("Contratos a comprar en rolado").value).toBe("2");
+  expect(byLabel("Operaciones del rolado").textContent).toContain("Vender para cerrarVenta−2 contratos");
+  expect(byLabel("Operaciones del rolado").textContent).toContain("Comprar para abrirCompra+2 contratos");
+  await act(async () => button("Cargar en Cotizaciones →").click());
+  expect(byLabel("Vender PUT 100 en simulación").getAttribute("aria-pressed")).toBe("true");
+  expect(byLabel("Comprar PUT 110 en simulación").getAttribute("aria-pressed")).toBe("true");
+  await showAnalysis();
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).not.toBeNull();
+});
+
 it("loads nominal holdings without open options and includes them only while the position is checked", async () => {
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
     reportedAt: Date.now(), positions: [], underlyingQuantity: 100 });
@@ -603,18 +634,18 @@ it("loads holdings and shows the local read time if Matriz reports a future date
 it("keeps position accounting above the single-row header and shows deviations while premiums are incomplete", async () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
     const strike = this.dataset.optionStrike;
-    return strike === undefined ? new DOMRect(0, 0, 496, 186) : new DOMRect(0, 26 + (Number(strike) - 80) / 10 * 32, 496, 32);
+    return strike === undefined ? new DOMRect(0, 0, 640, 186) : new DOMRect(0, 26 + (Number(strike) - 80) / 10 * 32, 640, 32);
   });
   await mount();
   await act(async () => button("Posición actual").click());
   const chain = container.querySelector<HTMLTableElement>(".ct-opt-position-chain")!;
   expect(chain.tHead?.rows).toHaveLength(1);
   expect(Array.from(chain.tHead!.rows[0].cells, cell => cell.textContent)).toEqual([
-    "CALLS · Cant.", "Prima histórica", "Strike", "PUTS · Cant.", "Prima histórica",
+    "Acciones", "CALLS · Cant.", "Prima histórica", "Strike", "PUTS · Cant.", "Prima histórica", "Acciones",
   ]);
   const strikeRow = chain.querySelector<HTMLTableRowElement>('tr[data-option-strike="100"]')!;
-  expect(strikeRow.cells[3].contains(byLabel("Cantidad posición PUT 100"))).toBe(true);
-  expect(strikeRow.cells[4].contains(byLabel("Prima histórica PUT 100"))).toBe(true);
+  expect(strikeRow.cells[4].contains(byLabel("Cantidad posición PUT 100"))).toBe(true);
+  expect(strikeRow.cells[5].contains(byLabel("Prima histórica PUT 100"))).toBe(true);
   const controls = byLabel("Controles de posición");
   for (const label of ["Gastos de la posición", "Resultado realizado neto"]) {
     const field = byLabel(label);
