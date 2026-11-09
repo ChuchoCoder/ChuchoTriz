@@ -194,7 +194,8 @@
 }
 .ct-sim .ct-roll-destinations, .ct-sim .ct-roll-details { display:grid; min-width:0; gap:5px; }
 .ct-sim .ct-roll-details { border-inline-start:1px solid var(--sim-border); padding-inline-start:12px; }
-.ct-sim .ct-roll-field { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+.ct-sim .ct-roll-field { display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px 6px; }
+.ct-sim .ct-roll-controls { align-items:flex-end; }
 .ct-sim .ct-roll-field input { width:76px; min-width:0; max-width:100%; }
 .ct-sim .ct-roll-table {
   min-width:0; max-height:min(48dvh, 26rem); overflow-y:auto; scrollbar-gutter:stable;
