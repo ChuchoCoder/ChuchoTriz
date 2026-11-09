@@ -1,6 +1,6 @@
 import type { Contract, Quote } from "./market";
 import { formatOptionInput } from "./format";
-import { MAX_CONTRACTS, numeric, type Leg, type Simulation } from "./model";
+import { MAX_CONTRACTS, numeric, rollFees, type Leg, type Simulation } from "./model";
 import { recipePrices } from "./strategyTemplates";
 
 export type Adjustment = { ok: true; legs: Leg[] } | { ok: false; reason: string };
@@ -91,14 +91,25 @@ export function strategyPriceReferences(input: Simulation, market?: StrikeMarket
   const currentValid = current.every(value => Number.isFinite(value) && value >= 0 && value <= 1e9);
   // Check gross exposure before signed summation: cancellation can hide lost precision.
   if ([natural.premiums, opposite.premiums, ...(currentValid ? [current] : [])].some(premiums => {
-    let gross = costs;
+    let gross = costs + rollFees(input.legs, factor, premiums);
     for (let index = 0; index < premiums.length; index++) {
       gross += quantities[index] * factor * premiums[index];
       if (!Number.isFinite(gross) || gross > Number.MAX_SAFE_INTEGER) return true;
     }
     return false;
   })) return fail("Reducí precios o cantidades: la exposición bruta supera la precisión admitida.");
-  const total = (premiums: number[]) => premiums.reduce((sum, premium, index) => sum + (input.legs[index].side === "buy" ? 1 : -1) * quantities[index] * factor * premium, costs);
+  const hasRollFees = input.legs.some(leg => leg.rollFeePercent);
+  const total = (premiums: number[]) => {
+    let net = costs + rollFees(input.legs, factor, premiums);
+    let gross = net;
+    for (let index = 0; index < premiums.length; index++) {
+      const amount = quantities[index] * factor * premiums[index];
+      gross += amount;
+      net += input.legs[index].side === "buy" ? amount : -amount;
+    }
+    // A decimal-neutral roll can leave float noise after opposing premiums and fees cancel.
+    return hasRollFees && Math.abs(net) <= gross * Number.EPSILON ? 0 : net;
+  };
   const mid = natural.premiums.map((premium, index) => (premium + opposite.premiums[index]) / 2);
   const references = { natural: { premiums: natural.premiums, total: total(natural.premiums) }, mid: { premiums: mid, total: total(mid) },
     opposite: { premiums: opposite.premiums, total: total(opposite.premiums) } };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { exampleLegs, initialSimulation, MAX_CONTRACTS } from "./model";
 import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
+import { buildRoll, rollCandidates } from "./rollPosition";
 
 const input = () => ({ ...initialSimulation("2026-11-03"), underlying: "GGAL", legs: exampleLegs("butterfly").map(leg => ({
   ...leg, securityId: `call-${leg.strike}`, symbol: `CALL ${leg.strike}`,
@@ -12,6 +13,124 @@ const market = (): StrikeMarket => {
     bid: { price: contract.strike / 10, size: 100 }, ask: { price: contract.strike / 10 + 1, size: 100 }, impliedVolatility: contract.strike / 2,
   }])) };
 };
+
+describe("rolling an option position", () => {
+  const sold = () => ({ ...input(), legs: [], position: { legs: [{ ...input().legs[1], contracts: "10", volatility: "40" }] } });
+  it("finds either direction and prices the minimum at ASK/BID with fees on both legs", () => {
+    const draft = sold(), book = market();
+    book.quotes["call-110"].bid!.price = 8;
+    const candidates = rollCandidates(draft, "call-100", .2, book);
+    expect(candidates.ok && candidates.candidates.map(item => item.contract.strike)).toEqual([80, 90, 110, 120]);
+    expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(14);
+    expect(buildRoll(draft, "call-100", "call-110", 14, .2, book)).toMatchObject({
+      ok: true, net: 155.6, costs: 44.4, legs: [
+        { securityId: "call-100", side: "buy", contracts: "10", premium: "11", volatility: "50", rollSeriesId: "call-100" },
+        { securityId: "call-110", side: "sell", contracts: "14", premium: "8" },
+      ],
+    });
+    expect(draft.position.legs[0].side).toBe("sell");
+    expect(draft.legs).toHaveLength(0);
+  });
+  it("rejects insufficient depth, ambiguous rows and adjustments on either leg", () => {
+    const draft = sold(), book = market();
+    book.quotes["call-110"].bid!.size = 4;
+    expect(buildRoll(draft, "call-100", "call-110", 10, 0, book).ok).toBe(false);
+    expect(buildRoll({ ...draft, legs: [{ ...draft.position.legs[0], side: "buy" }] }, "call-100", "call-90", 10, 0, book).ok).toBe(false);
+    book.contracts.push({ ...book.contracts.find(item => item.id === "call-90")!, id: "duplicate" });
+    expect(buildRoll(draft, "call-100", "call-90", 10, 0, book).ok).toBe(false);
+  });
+  it("rejects unverified book depth on either side even when the displayed size is sufficient", () => {
+    const book = market();
+    book.quotes["call-110"].bid!.depthUnverified = true;
+    expect(buildRoll(sold(), "call-100", "call-110", 10, 0, book).ok).toBe(false);
+    expect(buildRoll(sold(), "call-100", "call-90", 10, 0, book).ok).toBe(true);
+    book.quotes["call-100"].ask!.depthUnverified = true;
+    expect(rollCandidates(sold(), "call-100", 0, book).ok).toBe(false);
+  });
+  it("stores the premium precision used in the preview", () => {
+    const draft = sold(), book = market();
+    draft.multiplier = "100000";
+    draft.position.legs[0].contracts = "40000000";
+    for (const contract of book.contracts) contract.factor = 100000;
+    book.quotes["call-100"].ask = { price: 10.00000000000001, size: 40000000 };
+    book.quotes["call-110"].bid = { price: 10, size: 40000000 };
+    expect(buildRoll(draft, "call-100", "call-110", 40000000, 0, book)).toMatchObject({
+      ok: true, net: -.04, legs: [{ premium: "10.00000000000001" }, { premium: "10" }],
+    });
+  });
+  it("closes a bought put at BID and caps the debit-free ASK purchase by depth and cash", () => {
+    const draft = sold(), book = market();
+    draft.position.legs[0] = { ...draft.position.legs[0], securityId: "put-100", kind: "put", side: "buy" };
+    book.quotes["put-100"].bid = { price: 10, size: 10 };
+    book.quotes["put-90"].ask = { price: 4, size: 30 };
+    book.quotes["put-90"].bid = { price: 3, size: 30 };
+    const maximum = (feePercent: number) => {
+      const roll = rollCandidates(draft, "put-100", feePercent, book);
+      return roll.ok && roll.candidates.find(candidate => candidate.contract.id === "put-90")?.maximum;
+    };
+    expect(maximum(2)).toBe(24);
+    expect(maximum(2.05)).toBe(23);
+    expect(maximum(92.3)).toBe(1);
+    expect(maximum(92.31)).toBeUndefined();
+    expect(buildRoll(draft, "put-100", "put-90", 24, 2, book)).toMatchObject({
+      ok: true, net: 8, costs: 392, legs: [
+        { securityId: "put-100", side: "sell", contracts: "10", premium: "10", rollSeriesId: "put-100" },
+        { securityId: "put-90", side: "buy", contracts: "24", premium: "4" },
+      ],
+    });
+    expect(buildRoll(draft, "put-100", "put-90", 25, .2, book)).toMatchObject({ ok: true, net: -40 });
+    book.quotes["put-90"].ask.size = 20;
+    expect(maximum(2)).toBe(20);
+    expect(buildRoll(draft, "put-100", "put-90", 21, 0, book).ok).toBe(false);
+    book.quotes["put-100"].bid.size = 9;
+    expect(rollCandidates(draft, "put-100", 0, book).ok).toBe(false);
+  });
+  it("keeps the exact neutral roll neutral in the pricing control", () => {
+    const draft = sold(), book = market();
+    draft.position.legs[0].contracts = "5";
+    book.quotes["call-100"].ask!.price = 64.87;
+    book.quotes["call-110"].ask!.price = 66;
+    book.quotes["call-110"].bid!.price = 65.13;
+    const roll = buildRoll(draft, "call-100", "call-110", 5, .2, book);
+    expect(roll.ok && roll.net).toBe(0);
+    if (!roll.ok) throw Error(roll.reason);
+    const references = strategyPriceReferences({ ...draft, legs: roll.legs }, book);
+    expect(references.ok && references.currentTotal).toBe(0);
+  });
+  it("caps the suggested purchase at a quantity that passes monetary validation", () => {
+    const draft = sold(), book = market();
+    draft.multiplier = "100000";
+    draft.position.legs[0].contracts = "60000000";
+    draft.position.legs[0].side = "buy";
+    for (const contract of book.contracts) contract.factor = 100000;
+    book.quotes["call-100"].bid = { price: 10, size: 1e9 };
+    book.quotes["call-90"].bid = { price: 4, size: 1e9 };
+    book.quotes["call-90"].ask = { price: 5, size: 1e9 };
+    const candidates = rollCandidates(draft, "call-100", 0, book);
+    if (!candidates.ok) throw Error(candidates.reason);
+    const target = candidates.candidates.find(candidate => candidate.contract.id === "call-90")!;
+    expect(target.maximum).toBe(60143985);
+    expect(buildRoll(draft, "call-100", "call-90", target.maximum!, 0, book).ok).toBe(true);
+    expect(buildRoll(draft, "call-100", "call-90", target.maximum! + 1, 0, book).ok).toBe(false);
+  });
+  it("requires a nonnegative raw flow and leaves out-of-range destination IV blank", () => {
+    const draft = sold(), book = market();
+    draft.position.legs[0].contracts = "1";
+    book.quotes["call-100"].bid = { price: .00008, size: 100 };
+    book.quotes["call-100"].ask!.price = .00009;
+    book.quotes["call-110"].bid!.price = .00001;
+    book.quotes["call-110"].impliedVolatility = 900;
+    const candidates = rollCandidates(draft, "call-100", 0, book);
+    expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(9);
+    const withFees = rollCandidates(draft, "call-100", .2, book);
+    expect(withFees.ok && withFees.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(10);
+    expect(buildRoll(draft, "call-100", "call-110", 9, .2, book)).toMatchObject({ ok: true, net: -.000036 });
+    expect(buildRoll(draft, "call-100", "call-110", 10, 100, book).ok).toBe(false);
+    expect(buildRoll(draft, "call-100", "call-110", 8, 0, book)).toMatchObject({ ok: true, net: -.001 });
+    expect(buildRoll(draft, "call-100", "call-110", 9, 0, book)).toMatchObject({ ok: true, net: 0,
+      legs: [{ volatility: "50" }, { volatility: "" }] });
+  });
+});
 
 describe("quantity adjustments", () => {
   it("steps the whole integer ratio up/down without changing premiums, IV or direction", () => {

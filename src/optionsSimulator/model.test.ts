@@ -83,6 +83,25 @@ it("keeps the default chart near the strikes when nominal holdings add a distant
   expect(initial.rangeMax).toBe(125);
   expect(chartPriceRange(value, equilibria, 2).rangeMax).toBeGreaterThan(187.5);
 });
+it("values only the contracts left open after a roll, while retaining all premiums and recalculating its fees", () => {
+  const [source, destination] = exampleLegs("bull-call");
+  const position = { legs: [
+    { ...source, id: -1, securityId: "call-100", side: "sell" as const, contracts: "2", volatility: "" },
+    { ...destination, id: -2, securityId: "call-110", side: "buy" as const, contracts: "3", volatility: "30" },
+  ] };
+  const legs = [
+    { ...source, securityId: "call-100", rollSeriesId: "call-100", contracts: "2", premium: "5", rollFeePercent: 1.5 },
+    { ...destination, securityId: "call-110", rollSeriesId: "call-110", contracts: "2", premium: "4", rollFeePercent: 1.5, volatility: "" },
+  ];
+  const partial = strategy({ position, legs, adjustmentCosts: "7" });
+  expect(partial.costs).toBe(34);
+  expect(resultAt(partial, 120, "expiry")).toBe(1266);
+  expect(resultAt(partial, 120, "theoretical")).toBeCloseTo(266 + 100 * theoreticalPrice("call", 120, 110, partial.years, .30, 0, 0));
+  const fullyClosed = strategy({ position, legs: [legs[0], { ...legs[1], contracts: "3" }] });
+  expect(fullyClosed.costs).toBe(33);
+  expect(resultAt(fullyClosed, 80, "theoretical")).toBe(667);
+  expect(resultAt(fullyClosed, 150, "theoretical")).toBe(667);
+});
 describe("European theoretical prices", () => {
   it("keeps exactly hedged decimal-factor call tails bounded in either direction", () => {
     for (const reverse of [false, true]) {
