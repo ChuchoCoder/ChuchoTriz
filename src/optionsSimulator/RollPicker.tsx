@@ -9,6 +9,9 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
   onApply(result: Extract<ReturnType<typeof buildRoll>, { ok: true }>): void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const destinationsHeading = useRef<HTMLHeadingElement>(null);
+  const tableScroll = useRef<HTMLDivElement>(null);
+  const originRow = useRef<HTMLTableRowElement>(null);
   const title = useId();
   const [targetId, setTargetId] = useState("");
   const [quantity, setQuantity] = useState(source.contracts);
@@ -17,6 +20,7 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
     const panel = dialog.current;
     if (panel?.showModal) panel.showModal();
     else panel?.setAttribute("open", "");
+    destinationsHeading.current?.focus({ preventScroll: true });
   }, []);
   const currency = input.currency;
   const money = (amount: number) => `${fmt(amount, amount !== 0 && Math.abs(amount) < .01 ? 12 : 2)} ${currency}`;
@@ -30,7 +34,18 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
   const closeVerb = short ? "Recompra" : "Venta de cierre";
   const openBook = short ? "BID" : "ASK";
   const roll = rollCandidates(input, source.securityId!, numeric(feePercent), market);
-  const target = roll.ok ? roll.candidates.find(candidate => candidate.contract.id === targetId) : undefined;
+  const candidates = roll.ok ? roll.candidates : [];
+  const sourceStrike = numeric(source.strike);
+  const firstHigher = candidates.findIndex(candidate => candidate.contract.strike > sourceStrike);
+  const originIndex = firstHigher < 0 ? candidates.length : firstHigher;
+  const rows = [...candidates.slice(0, originIndex), null, ...candidates.slice(originIndex)];
+  const target = candidates.find(candidate => candidate.contract.id === targetId);
+  useLayoutEffect(() => {
+    const table = tableScroll.current, row = originRow.current;
+    if (!table || !row) return;
+    const bounds = row.getBoundingClientRect();
+    table.scrollTop += bounds.top - table.getBoundingClientRect().top - (table.clientHeight - bounds.height) / 2;
+  }, [roll.ok, originIndex, candidates.length]);
   const qty = numeric(quantity);
   const draft = buildRoll(input, source.securityId!, targetId, qty, numeric(feePercent), market);
   const noDebitQuantity = short
@@ -56,12 +71,15 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
     <header><h3 id={title}>Rolar {kind} {source.strike}</h3><span>{input.underlying} · {input.expiry}</span></header>
     <div className="ct-roll-layout">
       <section className="ct-roll-destinations" aria-labelledby={`${title}-destinations`}>
-        <h4 id={`${title}-destinations`}>Strike de destino</h4>
+        <h4 ref={destinationsHeading} tabIndex={-1} id={`${title}-destinations`}>Strike de destino</h4>
         <p className="ct-roll-hint">Mismo vencimiento · Importes en {currency}</p>
-        {roll.ok && <div className="ct-roll-table"><table aria-label="Bases de destino del rolado">
+        <div ref={tableScroll} className="ct-roll-table"><table aria-label="Bases de destino del rolado">
           <colgroup><col className="ct-roll-strike-col" /><col className="ct-roll-price-col" /><col className="ct-roll-flow-col" /><col /></colgroup>
           <thead><tr><th scope="col">Strike</th><th scope="col">{openBook}</th><th scope="col">Flujo 1 a 1</th><th scope="col" aria-label={`${short ? "Mínimo" : "Máximo"} sin débito`} title={`${short ? "Mínimo" : "Máximo"} sin débito`}>{short ? "Mín." : "Máx."} s/déb.</th></tr></thead>
-          <tbody>{roll.candidates.map(candidate => {
+          <tbody>{rows.map(candidate => {
+            if (!candidate) return <tr key={source.securityId} ref={originRow} className="ct-roll-origin">
+              <th scope="row">{fmt(sourceStrike)}</th><td colSpan={3}>Posición actual</td>
+            </tr>;
             const { contract, price, max, minimum, maximum, oneForOne, reason } = candidate;
             const limit = short ? minimum : maximum;
             const limitLabel = limit && limit <= (max ?? 0) ? fmt(limit)
@@ -78,7 +96,8 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
               <td title={limitLabel}>{limitLabel}</td>
             </tr>;
           })}</tbody>
-        </table>{!roll.candidates.length && <p>Sin otra base compatible en la cadena.</p>}</div>}
+        </table></div>
+        {roll.ok && !candidates.length && <p>Sin otra base compatible en la cadena.</p>}
       </section>
       <section className="ct-roll-details" aria-labelledby={`${title}-operations`}>
         <h4 id={`${title}-operations`}>Operaciones</h4>
