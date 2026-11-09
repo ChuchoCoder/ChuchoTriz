@@ -83,7 +83,7 @@ export default function RollPicker({ input, source, market, onClose, onApply }: 
             const { contract, price, max, minimum, maximum, oneForOne, reason } = candidate;
             const limit = short ? minimum : maximum;
             const limitLabel = limit && limit <= (max ?? 0) ? fmt(limit)
-              : short && minimum !== undefined ? "Sin profundidad" : !short && price !== undefined && max ? "Requiere débito" : "—";
+              : short && minimum !== undefined ? "No disponible" : !short && price !== undefined && max ? "Requiere débito" : "—";
             const strike = fmt(contract.strike);
             const flowClass = oneForOne === undefined || oneForOne === 0 ? undefined : oneForOne > 0 ? "ct-sim-profit" : "ct-sim-loss";
             const flow = oneForOne === undefined ? "—" : `${oneForOne > 0 ? "+" : ""}${fmt(oneForOne, Math.abs(oneForOne) < .01 ? 12 : 2)}`;

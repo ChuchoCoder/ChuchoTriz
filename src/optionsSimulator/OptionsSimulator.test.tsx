@@ -567,12 +567,14 @@ it("keeps the position tab visible while quotes load and imports with the select
 
 it("rolls a sold call from Posición actual into both simulated quote cells and then Análisis", async () => {
   readPosition.mockResolvedValue({ contextId: "demo-context", storageScope: "a".repeat(64), capturedAt: Date.now(),
-    reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: -2 }] });
-  marketState.current.data!.instruments["call-100"].impliedVolatility = undefined;
+    reportedAt: Date.now(), positions: [{ securityId: "call-100", quantity: -2 }, { securityId: "call-110", quantity: 3 }] });
+  marketState.current.data!.instruments["call-100"].impliedVolatility = 0;
+  marketState.current.data!.instruments["call-110"].impliedVolatility = undefined;
   marketState.current.selectionKey = JSON.stringify(Object.keys(marketState.current.data!.instruments).sort());
   await mount();
   await act(async () => button("Posición actual").click());
   await fill("Prima histórica CALL 100", "7");
+  await fill("Prima histórica CALL 110", "3");
   await act(async () => byLabel<HTMLButtonElement>("Rolar posición CALL 100").click());
   const destinationRows = byLabel<HTMLTableElement>("Bases de destino del rolado").tBodies[0].rows;
   expect(Array.from(destinationRows, row => row.cells[0].textContent)).toEqual(["80", "90", "100", "110", "120"]);
@@ -594,7 +596,17 @@ it("rolls a sold call from Posición actual into both simulated quote cells and 
   expect(positionCheckbox().checked).toBe(true);
   await showAnalysis();
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).not.toBeNull();
-  expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("33");
+  expect(button("−5 pp").disabled).toBe(false);
+  expect(byLabel("Gastos estimados de rolado").textContent).toContain("33 ARS");
+  expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("0");
+  await fill("Gastos de entrada de los ajustes", "7");
+  await showBuild();
+  await act(async () => byLabel<HTMLButtonElement>("Comprar PUT 90 en simulación").click());
+  await act(async () => byLabel<HTMLButtonElement>("Quitar pata 1").click());
+  await act(async () => byLabel<HTMLButtonElement>("Quitar pata 1").click());
+  await showAnalysis();
+  expect(container.querySelector('[aria-label="Gastos estimados de rolado"]')).toBeNull();
+  expect(byLabel<HTMLInputElement>("Gastos de entrada de los ajustes").value).toBe("7");
 });
 
 it("shows Calls and Puts actions on opposite edges and rolls a bought put into Análisis", async () => {

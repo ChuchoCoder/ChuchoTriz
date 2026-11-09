@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_LEGS,
-  newLeg, numeric, parseSignedQuantity, parseSimulation, resultAt, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure } from "./model";
+  newLeg, numeric, openRollContracts, parseSignedQuantity, parseSimulation, resultAt, rollFees, simulationLegs, Simulation, standardDeviationLevels, Strategy, underlyingExposure } from "./model";
 import "./OptionsSimulator.css";
 import MarketChain, { SignedQuantityInput } from "./MarketChain";
 import ToolbarIcon from "../ToolbarIcon";
@@ -85,8 +85,11 @@ function StrategyPriceControl({ input, market, entry, maxProfit, maxLoss, onChan
   const marker = Math.max(0, Math.min(100, position * 100));
   const tone = total === undefined || total === 0 ? "var(--sim-muted)" : total < 0 ? "var(--sim-profit)" : "var(--sim-loss)";
   const costs = numeric(pricingInput.costs);
-  const credit = references.ok && references.natural.total - costs < 0 && references.opposite.total - costs < 0;
-  const debit = references.ok && references.natural.total - costs > 0 && references.opposite.total - costs > 0;
+  const factor = numeric(input.multiplier);
+  const naturalGross = references.ok ? references.natural.total - costs - rollFees(input.legs, factor, references.natural.premiums) : 0;
+  const oppositeGross = references.ok ? references.opposite.total - costs - rollFees(input.legs, factor, references.opposite.premiums) : 0;
+  const credit = naturalGross < 0 && oppositeGross < 0;
+  const debit = naturalGross > 0 && oppositeGross > 0;
   return <section className="ct-sim-strategy-price" aria-label="Precio total de entrada de la estrategia">
     <header><strong aria-label={input.position ? "Crédito o débito de los ajustes" : "Crédito o débito de la estrategia"} title="Precio total de entrada">{text(total)}</strong>
       {!input.position && ([ ["profit", "Ganancia", maxProfit], ["loss", "Pérdida", maxLoss] ] as const).map(([kind, label, amount]) =>
@@ -180,7 +183,7 @@ function scenarioPriceAt(spot: number, factor: number) {
 }
 
 function hasTheoreticalResult(strategy: Strategy) {
-  return strategy.years === 0 || strategy.legs.every(leg => leg.closed ||
+  return strategy.years === 0 || strategy.legs.every(leg => leg.openContracts === 0 ||
     (Number.isFinite(strategy.rate) && Number.isFinite(leg.volatility)));
 }
 
@@ -441,7 +444,9 @@ export default function OptionsSimulator({ active = true, marketReference = fals
   const priceSpan = chartView ? chartView.strategy.rangeMax - priceMin : 0;
   const priceSliderSteps = priceSpan > 0 ? PRICE_SLIDER_STEPS : 0;
   const sliderPrice = (position: number) => priceMin + priceSpan * position / PRICE_SLIDER_STEPS;
-  const legVolatilities = allLegs.map(leg => numeric(leg.volatility)).filter(Number.isFinite);
+  const remaining = useMemo(() => openRollContracts(valuationInput), [valuationInput]);
+  const legVolatilities = allLegs.filter(leg => remaining.get(leg) !== 0)
+    .map(leg => numeric(leg.volatility)).filter(Number.isFinite);
   const minVolatilityShift = Math.ceil(Math.max(-50, ...legVolatilities.map(volatility => -volatility)));
   const maxVolatilityShift = Math.floor(Math.min(50, ...legVolatilities.map(volatility => 500 - volatility)));
   const viableVolatilityRange = minVolatilityShift <= maxVolatilityShift;
@@ -508,6 +513,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
   }
   const fmt = (amount: number) => formatOptionAmount(amount, input.currency);
   const money = (value: number) => `${fmt(value)} ${input.currency}`;
+  const rollCost = rollFees(input.legs, numeric(input.multiplier));
   const reviewPremium = (id: number) => setInput(current => current.position ? { ...current, position: { ...current.position,
     legs: current.position.legs.map(leg => leg.id === id && validHistoricalPremium(leg.premium)
       ? { ...leg, premiumQuantity: signedPositionQuantity(leg), premiumReviewPending: false } : leg) } } : current);
@@ -580,7 +586,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
               : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↓" : "↑"}</button>;
         })}</div></div>)}</div>
       <button type="button" className="ct-sim-clear-legs ct-tool-icon-button" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"}
-        onClick={() => { setInput(current => ({ ...current, legs: [], adjustmentCosts: undefined })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
+        onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
         <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-price" /><col className="ct-sim-leg-remove" /></colgroup>
         <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th title="Prima de entrada por unidad">Precio</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
@@ -610,10 +616,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
               : <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />}
           </th>
           <td><EditableLegValue label={`Precio pata ${index + 1}`} value={leg.premium} onChange={value => updateLeg(leg.id, "premium", value)} /></td>
-          <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => {
-            const legs = current.legs.filter(item => item.id !== leg.id);
-            return { ...current, legs, adjustmentCosts: legs.length ? current.adjustmentCosts : undefined };
-          }); setStatus(""); }}>×</button></td>
+          <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {
@@ -654,7 +657,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
       {input.marketSpotMissing && <Field label="Precio de referencia" value={input.spot} onChange={value => update("spot", value)} />}</div>
       {!!allLegs.length && <div className="ct-sim-scenario-group"><ScenarioButtons label="VI" value={input.volatilityShift} numericValues options={[
         { label: "−5 pp", value: "-5" }, { label: "0 pp", value: "0" }, { label: "+5 pp", value: "5" },
-      ].map(option => ({ ...option, disabled: allLegs.some(leg => Number.isFinite(numeric(leg.volatility)) && (numeric(leg.volatility) + Number(option.value) < 0 || numeric(leg.volatility) + Number(option.value) > 500)) }))}
+      ].map(option => ({ ...option, disabled: legVolatilities.some(iv => iv + Number(option.value) < 0 || iv + Number(option.value) > 500) }))}
         onChange={value => update("volatilityShift", value)} />
       <Field label="Cambio de VI (pp)" value={input.volatilityShift} onChange={value => update("volatilityShift", value)}
         slider={<ScenarioSlider label="Deslizar cambio de VI" min={viableVolatilityRange ? minVolatilityShift : 0}
@@ -698,6 +701,9 @@ export default function OptionsSimulator({ active = true, marketReference = fals
       </>}
       {input.position ? <Field label="Gastos de entrada de los ajustes" value={input.adjustmentCosts ?? "0"} onChange={value => update("adjustmentCosts", value)} />
         : <Field label="Gastos de entrada totales" value={input.costs} onChange={value => update("costs", value)} />}
+      {input.legs.some(leg => leg.rollFeePercent) && <p className="ct-sim-hint" aria-label="Gastos estimados de rolado">
+        Gastos estimados de rolado · {Number.isFinite(rollCost) ? money(rollCost) : "—"}
+      </p>}
       <details key={`${view}-${active}`} className="ct-sim-leg-prices"><summary>Precios de entrada por pata</summary>{input.legs.map((leg, index) => <div key={leg.id}>
         <span>{leg.side === "buy" ? "+" : "−"} {leg.kind === "call" ? "C" : "P"} {formatOptionNumber(numeric(leg.strike))}</span>
         <EditableLegValue label={`Prima pata ${index + 1}`} value={leg.premium} onChange={value => updateLeg(leg.id, "premium", value)} />

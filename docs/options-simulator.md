@@ -54,7 +54,11 @@ ASK de la recompra y el BID de la nueva venta, con un mínimo de contratos sin
 débito. Para una posición comprada usa el BID del cierre y el ASK de la nueva
 compra, con un máximo de contratos que alcanza a financiar el cierre.
 El cálculo aplica el porcentaje de gastos a los importes brutos de ambas patas
-(0,2 % por defecto) y el armado exige profundidad para ambas. **Cargar en
+(0,2 % por defecto). El armado exige tamaño para ambas puntas. Si el libro
+no informa esa punta, se admite el precio y tamaño de market data cuando
+están completos. Una punta incompleta o vacía del libro invalida ese respaldo.
+Al editar o quitar una pata se recalculan sus gastos estimados. Los gastos
+manuales se editan por separado en Análisis. **Cargar en
 Cotizaciones** agrega las dos patas como ajustes y activa **Incluir posición
 actual en Análisis**. La prima histórica sigue siendo necesaria para calcular
 el resultado de la posición desde su costo.

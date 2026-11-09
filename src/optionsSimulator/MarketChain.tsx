@@ -485,10 +485,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote, premium: number | undefined) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
     if (existing?.side === side) {
-      setInput(current => {
-        const legs = current.legs.filter(leg => leg.securityId !== contract.id);
-        return { ...current, legs, adjustmentCosts: legs.length ? current.adjustmentCosts : undefined };
-      });
+      setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) }));
       setOpenQuote(undefined);
       return;
     }
@@ -698,7 +695,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   return <section className="ct-sim-card ct-options ct-sim-market">
     {rolling && <RollPicker key={rolling.id} input={input} source={rolling} market={rollMarket} onClose={() => setRollSource(undefined)}
       onApply={draft => {
-        setInput(current => ({ ...current, legs: [...current.legs, ...draft.legs], adjustmentCosts: draft.adjustmentCosts }));
+        setInput(current => ({ ...current, legs: [...current.legs, ...draft.legs] }));
         onIncludePosition();
         onNewStrategy();
         setOpenQuote(undefined);
