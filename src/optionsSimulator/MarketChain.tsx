@@ -195,6 +195,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   onIncludePosition(): void;
 }) {
   const [rollSource, setRollSource] = useState<Leg>();
+  const quotesTrigger = useRef<HTMLButtonElement>(null);
+  const focusQuotes = useRef(false);
   const grid = useRef<HTMLDivElement>(null);
   const chainScroll = useRef<HTMLDivElement>(null);
   const [availableChainWidth, setAvailableChainWidth] = useState(0);
@@ -293,6 +295,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [selectionReady, expiration, market, expirations.join(), catalog, underlyingId, !!input.position]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
   const editingPosition = positionMode && !!input.position;
+  useLayoutEffect(() => {
+    if (!active || editingPosition || !focusQuotes.current) return;
+    focusQuotes.current = false;
+    quotesTrigger.current?.focus();
+  }, [active, editingPosition]);
   const openLeg = active && input.legs.find(leg => legKey(leg) === openQuote && selected.some(contract => contract.id === leg.securityId));
   const shownQuote = openLeg ? openQuote : undefined;
   useEffect(() => {
@@ -465,7 +472,10 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote, premium: number | undefined) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
     if (existing?.side === side) {
-      setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) }));
+      setInput(current => {
+        const legs = current.legs.filter(leg => leg.securityId !== contract.id);
+        return { ...current, legs, adjustmentCosts: legs.length ? current.adjustmentCosts : undefined };
+      });
       setOpenQuote(undefined);
       return;
     }
@@ -680,6 +690,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         onNewStrategy();
         setOpenQuote(undefined);
         setRollSource(undefined);
+        focusQuotes.current = true;
         setPositionMode(false);
         setNotice({ announcement: "Rolado cargado en Cotizaciones. Abrí Análisis para simular la posición con los ajustes." });
       }} />}
@@ -693,7 +704,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />
     </div>
     <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">
-      <button type="button" className="ct-tool-icon-button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>
+      <button ref={quotesTrigger} type="button" className="ct-tool-icon-button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>
         <ToolbarIcon name="quotes" />Cotizaciones
       </button>
       <button type="button" className="ct-tool-icon-button" aria-pressed={editingPosition}

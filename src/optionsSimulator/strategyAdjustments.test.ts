@@ -24,7 +24,7 @@ describe("rolling a sold position", () => {
     expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(14);
     expect(buildRoll(draft, "call-100", "call-110", 14, 100, book)).toMatchObject({
       ok: true, net: 100, adjustmentCosts: "100", legs: [
-        { securityId: "call-100", side: "buy", contracts: "10", premium: "11", volatility: "40" },
+        { securityId: "call-100", side: "buy", contracts: "10", premium: "11", volatility: "50", rollCloseOf: "call-100" },
         { securityId: "call-110", side: "sell", contracts: "14", premium: "8" },
       ],
     });
@@ -39,6 +39,25 @@ describe("rolling a sold position", () => {
     book.contracts.push({ ...book.contracts.find(item => item.id === "call-90")!, id: "duplicate" });
     expect(buildRoll(draft, "call-100", "call-90", 10, 0, book).ok).toBe(false);
   });
+  it("rejects unverified book depth on either side even when the displayed size is sufficient", () => {
+    const book = market();
+    book.quotes["call-110"].bid!.depthUnverified = true;
+    expect(buildRoll(sold(), "call-100", "call-110", 10, 0, book).ok).toBe(false);
+    expect(buildRoll(sold(), "call-100", "call-90", 10, 0, book).ok).toBe(true);
+    book.quotes["call-100"].ask!.depthUnverified = true;
+    expect(rollCandidates(sold(), "call-100", 0, book).ok).toBe(false);
+  });
+  it("stores the premium precision used in the preview", () => {
+    const draft = sold(), book = market();
+    draft.multiplier = "100000";
+    draft.position.legs[0].contracts = "40000000";
+    for (const contract of book.contracts) contract.factor = 100000;
+    book.quotes["call-100"].ask = { price: 10.00000000000001, size: 40000000 };
+    book.quotes["call-110"].bid = { price: 10, size: 40000000 };
+    expect(buildRoll(draft, "call-100", "call-110", 40000000, 0, book)).toMatchObject({
+      ok: true, net: -.04, legs: [{ premium: "10.00000000000001" }, { premium: "10" }],
+    });
+  });
   it("requires a nonnegative raw flow and leaves out-of-range destination IV blank", () => {
     const draft = sold(), book = market();
     draft.position.legs[0].contracts = "1";
@@ -50,7 +69,7 @@ describe("rolling a sold position", () => {
     expect(candidates.ok && candidates.candidates.find(item => item.contract.id === "call-110")?.minimum).toBe(9);
     expect(buildRoll(draft, "call-100", "call-110", 8, 0, book)).toMatchObject({ ok: true, net: -.001 });
     expect(buildRoll(draft, "call-100", "call-110", 9, 0, book)).toMatchObject({ ok: true, net: 0,
-      legs: [{ volatility: "40" }, { volatility: "" }] });
+      legs: [{ volatility: "50" }, { volatility: "" }] });
   });
 });
 

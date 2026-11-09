@@ -6,6 +6,7 @@ import { quotePrice } from "./strategyTemplates";
 
 const fail = (reason: string) => ({ ok: false as const, reason });
 const validQuantity = (quantity: number) => Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= MAX_CONTRACTS;
+const rollDecimal = (value: number) => value.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 17 });
 const validStrike = (strike: number) => Number.isFinite(strike) && strike >= .000001 && strike <= 1e9;
 function decimal(value: number) {
   const [mantissa, exponent = "0"] = String(value).split("e");
@@ -45,6 +46,7 @@ function rollContext(input: Simulation, sourceId: string, market?: StrikeMarket)
   const ask = quotePrice(quote, "buy");
   if (!ask.ok || ask.price > 1e9) return fail("La base actual requiere un ASK válido para simular la recompra.");
   const quantity = numeric(position.contracts);
+  if (quote.ask?.depthUnverified) return fail("El libro no confirma la profundidad del ASK de recompra.");
   if (quote.ask!.size < quantity) return fail("El ASK de la base actual no cubre toda la recompra.");
   return { ok: true as const, market, source, position, quantity, factor, ask: ask.price };
 }
@@ -69,6 +71,7 @@ export function rollCandidates(input: Simulation, sourceId: string, costs: numbe
       const bid = quotePrice(quote, "sell");
       if (input.legs.some(leg => leg.securityId === contract.id)) return { contract, reason: "Ya tiene un ajuste" };
       if (!bid.ok || bid.price > 1e9) return { contract, reason: "Sin BID válido" };
+      if (quote.bid?.depthUnverified) return { contract, reason: "Profundidad BID sin verificar" };
       const max = Math.min(MAX_CONTRACTS, Math.floor(quote.bid!.size));
       const flow = rollCash(quantity, factor, ask, bid.price, costs);
       return { contract, bid: bid.price, max, minimum: flow.minimum, oneForOne: quantity <= max ? flow.net(quantity) : undefined };
@@ -90,15 +93,14 @@ export function buildRoll(input: Simulation, sourceId: string, targetId: string,
     return fail("Revisá los gastos y la precisión de los importes del ajuste.");
   const id = Math.max(0, ...input.legs.map(leg => leg.id), ...input.position!.legs.map(leg => leg.id)) + 1;
   const leg = (contract: Contract, quote: Quote | undefined, id: number, side: Leg["side"], amount: number, premium: number): Leg => ({
-    id, securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side, strike: formatOptionInput(contract.strike),
-    contracts: String(amount), premium: formatOptionInput(premium),
+    id, securityId: contract.id, symbol: contract.symbol, kind: contract.kind, side, strike: rollDecimal(contract.strike),
+    contracts: String(amount), premium: rollDecimal(premium),
     volatility: quote?.impliedVolatility !== undefined && Number.isFinite(quote.impliedVolatility) &&
       quote.impliedVolatility >= 0 && quote.impliedVolatility <= 500 ? formatOptionInput(quote.impliedVolatility) : "",
   });
-  // Both sides of the closed series must use the same IV so their theoretical values cancel.
-  const close = { ...leg(roll.source, roll.market.quotes[sourceId], id, "buy", roll.quantity, roll.ask), volatility: roll.position.volatility };
+  const close = { ...leg(roll.source, roll.market.quotes[sourceId], id, "buy", roll.quantity, roll.ask), rollCloseOf: sourceId };
   const legs = [close,
     leg(target.contract, roll.market.quotes[targetId], id + 1, "sell", quantity, target.bid)];
-  return { ok: true as const, legs, adjustmentCosts: formatOptionInput(adjustmentCosts), proceeds,
+  return { ok: true as const, legs, adjustmentCosts: rollDecimal(adjustmentCosts), proceeds,
     net: rollCash(roll.quantity, roll.factor, roll.ask, target.bid, costs).net(quantity) };
 }

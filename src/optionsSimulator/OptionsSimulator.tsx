@@ -178,7 +178,7 @@ function scenarioPriceAt(spot: number, factor: number) {
 }
 
 function hasTheoreticalResult(strategy: Strategy) {
-  return strategy.years === 0 || strategy.legs.every(leg => Number.isFinite(leg.volatility));
+  return strategy.years === 0 || strategy.legs.every(leg => leg.closed || Number.isFinite(leg.volatility));
 }
 
 type DeviationReference = ReturnType<typeof standardDeviationLevels>;
@@ -559,7 +559,7 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
               : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↓" : "↑"}</button>;
         })}</div></div>)}</div>
       <button type="button" className="ct-sim-clear-legs ct-tool-icon-button" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"}
-        onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
+        onClick={() => { setInput(current => ({ ...current, legs: [], adjustmentCosts: undefined })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">
         <colgroup><col className="ct-sim-leg-kind" /><col className="ct-sim-leg-quantity" /><col className="ct-sim-leg-date" /><col className="ct-sim-leg-days" /><col /><col className="ct-sim-leg-price" /><col className="ct-sim-leg-remove" /></colgroup>
         <thead><tr><th>Tipo</th><th title="Cantidad positiva: compra. Cantidad negativa: venta.">Cant.</th><th>Venc.</th><th>Días</th><th>Strike</th><th title="Prima de entrada por unidad">Precio</th><th><span className="ct-sim-sr">Acciones</span></th></tr></thead>
@@ -589,7 +589,10 @@ export default function OptionsSimulator({ active = true }: { active?: boolean }
               : <EditableLegValue label={`Strike pata ${index + 1}`} value={leg.strike} onChange={value => updateLeg(leg.id, "strike", value)} />}
           </th>
           <td><EditableLegValue label={`Precio pata ${index + 1}`} value={leg.premium} onChange={value => updateLeg(leg.id, "premium", value)} /></td>
-          <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => ({ ...current, legs: current.legs.filter(item => item.id !== leg.id) })); setStatus(""); }}>×</button></td>
+          <td><button type="button" className="ct-sim-remove-leg" aria-label={`Quitar pata ${index + 1}`} onClick={() => { setInput(current => {
+            const legs = current.legs.filter(item => item.id !== leg.id);
+            return { ...current, legs, adjustmentCosts: legs.length ? current.adjustmentCosts : undefined };
+          }); setStatus(""); }}>×</button></td>
         </tr>)}</tbody></table></div>
       {!input.legs.length && <p>Seleccioná precios de la cadena. BID simula venta; ASK simula compra.</p>}
       <div className="ct-sim-legs-footer"><button type="button" disabled={input.legs.length >= MAX_LEGS} onClick={() => {

@@ -7,8 +7,9 @@ export interface Catalog {
   contextRevision: number; catalogRevision: number; version: string; excluded: number;
   underlyings: { id: string; symbol: string; currency: string }[]; contracts: Contract[];
 }
+type QuoteLevel = { price: number; size: number; depthUnverified?: true };
 export interface Quote {
-  bid?: { price: number; size: number }; ask?: { price: number; size: number };
+  bid?: QuoteLevel; ask?: QuoteLevel;
   last?: number; referencePrice?: number; seq?: number; impliedVolatility?: number; delta?: number;
   nominalVolume?: number; changePercent?: number; lastTradeAt?: number;
 }

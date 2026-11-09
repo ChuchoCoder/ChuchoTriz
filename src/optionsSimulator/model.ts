@@ -13,6 +13,7 @@ export interface Leg {
   /** Signed native quantity when the user last reviewed the historical premium. */
   premiumQuantity?: string;
   premiumReviewPending?: boolean;
+  rollCloseOf?: string;
 }
 export interface PositionStorageSession { key: string; revision?: string }
 export interface UnderlyingHolding {
@@ -45,6 +46,7 @@ export interface Simulation {
 }
 export interface ParsedLeg {
   kind: OptionKind; side: Side; strike: number; premium: number; contracts: number; volatility: number;
+  closed?: true;
 }
 export interface Strategy {
   legs: ParsedLeg[];
@@ -159,6 +161,13 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
   const tooManyHistoricalLegs = historicalCount > MAX_LEGS;
   if ((!allLegs.length && !underlying && !input.position?.underlyingUnavailable) || input.legs.length > MAX_LEGS || tooManyHistoricalLegs)
     report(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`, tooManyHistoricalLegs ? "chain" : undefined);
+  const closed = new Set<Leg>();
+  for (const adjustment of input.legs) {
+    if (!adjustment.rollCloseOf || adjustment.securityId !== adjustment.rollCloseOf || adjustment.side !== "buy") continue;
+    const original = input.position?.legs.find(leg => leg.securityId === adjustment.rollCloseOf && leg.side === "sell" &&
+      leg.kind === adjustment.kind && numeric(leg.strike) === numeric(adjustment.strike) && numeric(leg.contracts) === numeric(adjustment.contracts));
+    if (original && !closed.has(original)) { closed.add(original); closed.add(adjustment); }
+  }
   const legs = allLegs.map((leg, index): ParsedLeg => {
     const historical = index < historicalCount;
     const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - historicalCount}`;
@@ -166,12 +175,12 @@ export function parseSimulation(input: Simulation): { ok: true; strategy: Strate
     const volatilityCorrection = historical ? "volatility" : undefined;
     if (!["call", "put"].includes(leg.kind) || !["buy", "sell"].includes(leg.side)) report(`${prefix}: elegí tipo y sentido válidos.`, correction);
     // Missing native VI blocks the theoretical curve, but expiry needs no volatility.
-    const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500, { correction: volatilityCorrection }) + shift;
+    const volatility = closed.has(leg) || leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500, { correction: volatilityCorrection }) + shift;
     if (volatility < 0 || volatility > 500) report(`${prefix}: la VI más el cambio debe estar entre 0% y 500%.`, volatilityCorrection);
     return { kind: leg.kind, side: leg.side, strike: read(leg.strike, `${prefix}, strike`, .000001, 1e9, { correction }),
       premium: read(leg.premium, `${prefix}, prima`, 0, 1e9, { correction }),
       contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, { integer: true, correction }),
-      volatility: volatility / 100 };
+      volatility: volatility / 100, ...(closed.has(leg) ? { closed: true } : {}) };
   });
   const nominalExposure = underlying ? Math.abs(underlying.quantity) * Math.max(spot, explicitMax ?? 0, underlying.averageCost) : 0;
   const addExposure = (sum: number, leg: ParsedLeg) =>
@@ -193,8 +202,9 @@ export function intrinsic(kind: OptionKind, spot: number, strike: number): numbe
 
 /** Linear expected-move approximation, using the nearest selected strikes and ACT/365. */
 export function standardDeviationLevels(strategy: Strategy) {
-  const distance = Math.min(...strategy.legs.map(leg => Math.abs(leg.strike - strategy.spot)));
-  const nearest = strategy.legs.filter(leg => Math.abs(Math.abs(leg.strike - strategy.spot) - distance) <= Math.max(1, strategy.spot) * Number.EPSILON * 8);
+  const open = strategy.legs.filter(leg => !leg.closed);
+  const distance = Math.min(...open.map(leg => Math.abs(leg.strike - strategy.spot)));
+  const nearest = open.filter(leg => Math.abs(Math.abs(leg.strike - strategy.spot) - distance) <= Math.max(1, strategy.spot) * Number.EPSILON * 8);
   if (!nearest.length || nearest.some(leg => !Number.isFinite(leg.volatility))) return undefined;
   // Equal weight per contract identity (kind + strike), independent of side/quantity.
   const groups = new Map<string, number[]>();
@@ -255,7 +265,7 @@ export function entryCost(strategy: Strategy): number {
 }
 export function resultAt(strategy: Strategy, spot: number, mode: "expiry" | "theoretical"): number {
   const stockValue = (strategy.underlying?.quantity ?? 0) * spot;
-  return strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier *
+  return strategy.legs.reduce((sum, leg) => leg.closed ? sum : sum + direction(leg) * leg.contracts * strategy.multiplier *
     (mode === "expiry" ? intrinsic(leg.kind, spot, leg.strike) : theoreticalPrice(leg.kind, spot, leg.strike, strategy.years, leg.volatility, strategy.rate, strategy.dividendYield)), (strategy.realized ?? 0) - entryCost(strategy) + stockValue);
 }
 export interface Equilibrium { from: number; to: number }
