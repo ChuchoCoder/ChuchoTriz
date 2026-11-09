@@ -72,8 +72,13 @@ function installMarketFixture(regression) {
     { ...execution, id: 3, side: '2', lastQty: 3, lastPx: 12 * executionPriceScale },
     { ...execution, id: 4, securityId: `put-${spot}`, side: '2', lastQty: 1, lastPx: 9 * executionPriceScale },
   ];
+  const cauciones = [7, 6, 5, 4, 3].map(days => ({
+    id: `bm_MERV_PESOS_${days}D`, marketId: 'bm', cfiCode: 'RPXXXX', currency: 'ARS', symbolStr: `PESOS - ${days}D`,
+    md: { lst: regression ? 1e-10 : 30 - (7 - days) / 2, lstdStr: new Date(Date.now() - 2 * 60000).toISOString() },
+  }));
+  const securities = new Map([underlying, ...options, ...cauciones].map(s => [s.id, s]));
   window.mainStore = { orderEventStore: { getOrderEventsForAccountReport: async () => executions },
-    securityStore: { options, underlyingsForMatrix: [underlying], getSecurity: async id => [underlying, ...options].find(s => s.id === id) },
+    securityStore: { options, underlyingsForMatrix: [underlying], findSecurityFromId: id => securities.get(id), getSecurity: async id => securities.get(id) },
     portfolioStore: { detailedPositionReport: positionReport, getDetailedPositionReport: async () => { positionReport.lastCalculation = new Date(); return positionReport; } },
     dmaWebSocket: { addSubscription() {} }, profileStore: { activeAccount: 'DEMO-NO-BROKER' }, webSocketConnectionStatus: true };
 }

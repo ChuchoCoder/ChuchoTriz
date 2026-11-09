@@ -2,6 +2,7 @@ import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, 
 import { createPortal } from "react-dom";
 import { Catalog, Contract, lastTradedPremium, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
+import { caucionReferenceLabel, type CaucionReference } from "./caucionRate";
 import { extraMetricLabels, OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber as fmt, formatOptionVolatility } from "./format";
@@ -185,7 +186,8 @@ function PositionPremium({ label, leg, disabled, onChange, onReview }: {
 }
 
 export default function MarketChain({ active, toolbar, input, setInput, onStrikeMarket, onNewStrategy, deviationReference,
-  positionMode, setPositionMode, positionAccounting, onPremiumChange, onPremiumReview, onIncludePosition }: {
+  positionMode, setPositionMode, positionAccounting, onPremiumChange, onPremiumReview, onIncludePosition,
+  automaticCaucion, caucion, usdRate, onMarketContext }: {
   active: boolean; toolbar: HTMLDivElement | null; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
   onStrikeMarket(market: StrikeMarket | undefined): void;
   onNewStrategy(): void;
@@ -193,6 +195,8 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   positionMode: boolean; setPositionMode(value: boolean): void; positionAccounting?: ReactNode;
   onPremiumChange(id: number, value: string): void; onPremiumReview(id: number): void;
   onIncludePosition(): void;
+  automaticCaucion: boolean; caucion?: CaucionReference; usdRate: string;
+  onMarketContext(context: { currency?: Simulation["currency"]; version: string }): void;
 }) {
   const [rollSource, setRollSource] = useState<Leg>();
   const quotesTrigger = useRef<HTMLButtonElement>(null);
@@ -329,6 +333,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const data = reading.data?.underlyingId === underlyingId && reading.data.catalogRevision === catalog?.catalogRevision && ids.every(id => reading.data?.instruments[id]) ? reading.data : undefined;
   const strategyQuotes = reading.issue ? undefined : data?.instruments;
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
+  const underlyingCurrency = underlying?.currency;
+  const marketVersion = catalog?.version;
+  useEffect(() => {
+    if (active && marketVersion) onMarketContext({ version: marketVersion,
+      currency: underlyingCurrency === "ARS" || underlyingCurrency === "USD" ? underlyingCurrency : undefined });
+  }, [active, underlyingCurrency, marketVersion, onMarketContext]);
   const spot = positive(spotQuote?.last) ? spotQuote.last : undefined;
   const changePercent = spotQuote?.changePercent;
   const spotChange = changePercent !== undefined && Number.isFinite(changePercent)
@@ -387,8 +397,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     observer.observe(container);
     return () => observer.disconnect();
   }, [active, editingPosition, visibleColumns, strikes.join("|")]);
+  const automaticRate = automaticCaucion && underlying?.currency === "ARS";
+  const rateSource = automaticRate ? caucion ? caucionReferenceLabel(caucion) : "Caución sin dato reciente" : "Tasa manual de Análisis";
   const metrics = deriveOptionMetrics(selected, data?.instruments, { now: Date.now(), minutes: viMinutes, enabled: viEnabled, available: !!data && !reading.issue,
-    spot, currency: underlying?.currency, rate: numeric(input.rate) / 100, dividendYield: numeric(input.dividendYield) / 100 });
+    spot, currency: underlyingCurrency, rate: automaticRate ? caucion?.annualRate : numeric(underlyingCurrency === "USD" ? usdRate : input.rate) / 100, rateSource,
+    dividendYield: numeric(input.dividendYield) / 100 });
   function change(field: "underlying" | "expiration", value: string) {
     const nextUnderlying = field === "underlying" ? value : underlyingId;
     const nextExpiration = field === "expiration" ? value : defaultExpiration((catalog?.contracts ?? [])

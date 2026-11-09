@@ -220,14 +220,17 @@ pestaña y conserva su borrador al alternar con el simulador.
 
 ## Datos nativos y aislamiento
 
-`public/options-market-reader.js` expone únicamente `catalog` y `snapshot` mediante
+`public/options-market-reader.js` expone únicamente `catalog`, `snapshot` y `caucion` mediante
 un canal de mensajes. No importa los puentes, coordinadores ni motores de Premium.
-Solo consulta `securityStore.options`, `underlyingsForMatrix`, `getSecurity` y
-suscripciones `md`/`book`. La cuenta activa participa únicamente en la detección
+La cadena consulta `securityStore.options`, `underlyingsForMatrix`, `getSecurity` y
+suscripciones `md`/`book`. El método de caución usa el catálogo local por ID y
+hasta cinco suscripciones `md` adicionales de caución BYMA en ARS. Informa si la
+versión admite caución y devuelve moneda, plazo, última TNA operada y hora de
+cada operación. La cuenta activa participa únicamente en la detección
 interna de cambios de contexto y nunca se devuelve. No lee credenciales.
 
-Versiones admitidas: Matriz 4.24.1 y 4.24.4, como el lector de referencia. Máximo de
-160 instrumentos por lectura y 256 suscripciones acumuladas por contexto. No se
+Versiones admitidas: Matriz 4.24.1 y 4.24.4, como el lector de referencia. La cadena
+admite hasta 160 instrumentos por lectura y 256 instrumentos suscritos por contexto. No se
 publica una cadena incompleta: el cliente divide la selección en grupos
 secuenciales de 23 opciones más el subyacente. No se
 desuscribe, porque Matriz comparte suscripciones con otras vistas. Las llamadas
@@ -244,6 +247,16 @@ Con el filtro activo, el detalle de VI muestra las probabilidades teóricas de
 Black–Scholes–Merton y las griegas solo para operaciones dentro de esa ventana.
 Con el filtro desactivado, indica la fecha o antigüedad de la última operación y
 requiere un timestamp verificable para mostrar los cálculos.
+
+En Matriz 4.24.4, la valuación en ARS propone una caución BYMA a 7 días como
+referencia de corto plazo. Si falta un dato reciente, prueba 6, 5, 4 y 3 días.
+Exige última operación del mismo día de Buenos Aires y con hasta 60 minutos de
+antigüedad. El modelo convierte la TNA simple a una tasa anual continua con
+`log1p(TNA / 100 × días / 365) × 365 / días`. El tooltip informa la fuente y la
+hora de operación. En **Análisis → Supuestos de valuación** se puede alternar con
+una tasa manual. Cuando falta caución, el simulador sigue calculando el resultado
+al vencimiento y deja en suspenso la valuación teórica. La página independiente
+y la valuación en USD usan entrada manual.
 
 Los factores monetarios se toman de los metadatos nativos:
 `totalAmountFactor × contractMultiplier × roundLot`. Se exige factor positivo,

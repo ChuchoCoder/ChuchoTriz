@@ -1,22 +1,23 @@
-// Dedicated market-data reader. Only catalog and option snapshots are exposed.
+// Dedicated market-data reader. Only the option chain and ARS repo references are exposed.
 // It has no account, balance, position, order or execution API.
 (() => {
   const channel = document.currentScript?.dataset.channel;
   if (!channel) return;
   if (window.__chuchotrizOptionsMarketReader) { window.__chuchotrizOptionsMarketReader.attach(channel); return; }
-  const channels = new Set([channel]), subscribed = new Set();
+  const channels = new Set([channel]), subscribed = new Set(), caucionSubscribed = new Set();
+  const latestCaucionTrade = new Map();
   let previousContext, revision = 0, signature, catalogRevision = 0, active;
   const finite = value => typeof value === "number" && Number.isFinite(value) ? value : undefined;
   const positive = value => finite(value) !== undefined && value > 0;
-  function context() {
+  const marketVersion = () => document.body.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1];
+  function context(version = marketVersion()) {
     const ms = window.mainStore;
-    const version = document.body.innerText.match(/Versi[oó]n:\s*([\d.]+)/)?.[1];
     if (!["4.24.1", "4.24.4"].includes(version)) throw Error("Versión de Matriz no verificada para lectura de opciones.");
     if (!ms?.securityStore || typeof ms.securityStore.getSecurity !== "function" || !ms.dmaWebSocket || typeof ms.dmaWebSocket.addSubscription !== "function")
       throw Error("El catálogo de Matriz todavía no está disponible.");
     const next = [ms, ms.securityStore, ms.dmaWebSocket, ms.profileStore?.activeAccount, ms.webSocketConnectionStatus, version];
     if (!previousContext || next.some((value, i) => value !== previousContext[i])) {
-      previousContext = next; revision++; subscribed.clear();
+      previousContext = next; revision++; subscribed.clear(); caucionSubscribed.clear(); latestCaucionTrade.clear();
     }
     if (!ms.webSocketConnectionStatus) throw Error("Market data desconectado. Esperando reconexión de Matriz.");
     return { ms, revision, version };
@@ -65,12 +66,35 @@
     let impliedVolatility, delta;
     try { impliedVolatility = finite(sec.impliedVolatility); } catch { /* Native computed value unavailable. */ }
     try { delta = finite(sec.greeks?.ggd); } catch { /* Native computed value unavailable. */ }
-    const raw = md.lstdStr;
+    return { bid: level("bid", "bsz"), ask: level("ask", "asz"), last: finite(md.lst), referencePrice: finite(md.refp),
+      seq: finite(md.seq), impliedVolatility, delta, nominalVolume: finite(md.von), changePercent: finite(sec.change), lastTradeAt: tradeTimestamp(md.lstdStr) };
+  }
+  function tradeTimestamp(raw) {
     const timestamp = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(raw) ? Date.parse(raw) : NaN;
     const canonical = typeof raw === "string" ? raw.replace(/(?:\.(\d{1,3}))?Z$/, (_, ms) => "." + (ms || "").padEnd(3, "0") + "Z") : "";
-    const lastTradeAt = Number.isFinite(timestamp) && new Date(timestamp).toISOString() === canonical ? timestamp : undefined;
-    return { bid: level("bid", "bsz"), ask: level("ask", "asz"), last: finite(md.lst), referencePrice: finite(md.refp),
-      seq: finite(md.seq), impliedVolatility, delta, nominalVolume: finite(md.von), changePercent: finite(sec.change), lastTradeAt };
+    return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === canonical ? timestamp : undefined;
+  }
+  function caucionTrades(ms) {
+    const store = ms.securityStore;
+    if (typeof store.findSecurityFromId !== "function") return [];
+    const topics = [], trades = [];
+    for (const days of [7, 6, 5, 4, 3]) {
+      const id = `bm_MERV_PESOS_${days}D`;
+      const sec = store.findSecurityFromId(id);
+      if (sec?.id !== id || sec.marketId !== "bm" || sec.cfiCode !== "RPXXXX" || sec.currency !== "ARS" ||
+        sec.symbolStr !== `PESOS - ${days}D`) continue;
+      if (!caucionSubscribed.has(id)) topics.push(id);
+      const tna = sec.md?.lst, tradedAt = tradeTimestamp(sec.md?.lstdStr);
+      if (positive(tna) && tradedAt !== undefined && tradedAt <= Date.now() && tradedAt >= (latestCaucionTrade.get(id) ?? 0)) {
+        latestCaucionTrade.set(id, tradedAt);
+        trades.push({ currency: "ARS", days, tna, tradedAt });
+      }
+    }
+    if (topics.length) {
+      ms.dmaWebSocket.addSubscription("md", topics.map(id => "md." + id));
+      topics.forEach(id => caucionSubscribed.add(id));
+    }
+    return trades;
   }
   function assertCurrent(operation) {
     if (!channels.has(operation.channel) || operation.retired || Date.now() > operation.deadline) throw Error("Lectura retirada o fuera de tiempo.");
@@ -129,6 +153,14 @@
       if (msg.method === "catalog") {
         const current = context();
         reply({ result: { ...catalogOf(sources(current.ms)), contextRevision: current.revision, version: current.version } });
+      } else if (msg.method === "caucion") {
+        const version = marketVersion();
+        const supported = version === "4.24.4";
+        let trades = [];
+        try {
+          if (supported) trades = caucionTrades(context(version).ms);
+        } catch { /* The version is known even when market data is unavailable. */ }
+        reply({ result: { supported, trades } });
       } else if (msg.method === "snapshot") {
         if (active) throw Error("Hay una lectura de mercado pendiente. Esperando a que termine.");
         const current = context();
@@ -137,7 +169,10 @@
         const result = await snapshot(msg.params || {}, operation, current.ms);
         assertCurrent(operation); reply({ result });
       } else throw Error("Método no permitido por el lector de mercado.");
-    } catch (error) { reply({ error: error instanceof Error ? error.message : "Lectura no disponible." }); }
+    } catch (error) {
+      reply({ error: msg.method === "caucion" ? "Referencia de caución no disponible."
+        : error instanceof Error ? error.message : "Lectura no disponible." });
+    }
     finally { if (operation && active === operation) active = undefined; }
   });
   window.__chuchotrizOptionsMarketReader = { attach(value) { if (typeof value === "string" && channels.size < 8) channels.add(value); } };

@@ -85,6 +85,8 @@
   "src/optionExecutions.ts",
   "src/optionExecutions.test.ts",
   "src/optionsSimulator/format.ts",
+  "src/optionsSimulator/caucionRate.ts",
+  "src/optionsSimulator/caucionRate.test.ts",
   "src/optionsSimulator/market.test.ts",
   "src/optionsSimulator/market.ts",
   "src/optionsSimulator/positions.ts",
