@@ -35,12 +35,114 @@ export function observeMiniOrderForm(update: (form: HTMLElement | null, buttons:
     reconcile();
 }
 
-function setInputValue(input: HTMLInputElement, value: string) {
+function setInputValue(input: HTMLInputElement, value: string, eventType = "change") {
     Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype,
         "value"
     )!.set!.call(input, value);
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event(eventType, { bubbles: true }));
+}
+
+export async function preloadOptionTicket(symbol: string, price: number, quantity: number, signal: AbortSignal) {
+    const form = currentMiniOrderForm();
+    const instrument = form?.querySelector<HTMLInputElement>(instrumentoSelector);
+    if (!form || !instrument || instrument.disabled || !form.getClientRects().length) {
+        throw Error("El Mini Order Form no está disponible.");
+    }
+    const request = new AbortController();
+    const cancel = () => request.abort();
+    const interrupted = "Se interrumpió la carga en el Mini Order Form.";
+    const current = () => !signal.aborted && !request.signal.aborted && currentMiniOrderForm() === form &&
+        form.querySelector(instrumentoSelector) === instrument;
+    const matchesSearch = () => current() && instrument.value === symbol;
+    const userInteracted = (event: Event) => { if (event.isTrusted) cancel(); };
+    const requireCurrent = () => {
+        if (!matchesSearch()) throw Error(interrupted);
+    };
+    const selected = () => instrument.getAttribute("aria-expanded") === "false";
+    const findInput = (selector: string) => form.querySelector<HTMLInputElement>(selector);
+    const accepts = (input: HTMLInputElement, selector: string, value: number) =>
+        findInput(selector) === input && !input.disabled && Number(input.getAttribute("aria-valuenow")) === value;
+
+    // Native React controls can commit selection and numeric edits after dispatch returns.
+    function waitFor<T>(read: () => T | undefined, reason: string, timeoutMs = 1000) {
+        return new Promise<T>((resolve, reject) => {
+            const stop = () => {
+                observer.disconnect();
+                clearTimeout(timeout);
+                request.signal.removeEventListener("abort", abort);
+            };
+            const fail = (message: string) => { stop(); reject(Error(message)); };
+            const abort = () => fail(interrupted);
+            const check = () => {
+                if (!matchesSearch()) { abort(); return; }
+                const result = read();
+                if (result !== undefined) { stop(); resolve(result); }
+            };
+            const observer = new MutationObserver(check);
+            const timeout = setTimeout(() => fail(reason), timeoutMs);
+            request.signal.addEventListener("abort", abort);
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true,
+                attributeFilter: ["aria-expanded", "aria-valuenow", "class", "title", "disabled", "value"] });
+            check();
+        });
+    }
+
+    if (!current()) throw Error(interrupted);
+    signal.addEventListener("abort", cancel);
+    document.addEventListener("pointerdown", userInteracted, true);
+    document.addEventListener("keydown", userInteracted, true);
+    try {
+        instrument.focus();
+        // Trigger a fresh search even when the same contract is already in the form.
+        if (instrument.value === symbol) setInputValue(instrument, "", "input");
+        setInputValue(instrument, symbol, "input");
+        const option = await waitFor(() => {
+            if (instrument.getAttribute("aria-expanded") !== "true") return;
+            const list = document.getElementById(instrument.getAttribute("aria-controls") ?? "");
+            const dropdown = list?.closest(".ant-select-dropdown:not(.ant-select-dropdown-hidden)");
+            const matches = Array.from(dropdown?.querySelectorAll<HTMLElement>(
+                ".ant-select-item-option:not(.ant-select-item-option-disabled)"
+            ) ?? []).filter(item => item.title === symbol);
+            if (matches.length === 1) return matches[0];
+        }, `Matriz no encontró una coincidencia exacta para ${symbol}.`, 2500);
+        requireCurrent();
+        if (!option.isConnected) throw Error(interrupted);
+        option.click();
+
+        const fields = await waitFor(() => {
+            const priceInput = findInput(precioSelector), quantityInput = findInput(cantidadSelector);
+            if (selected() && priceInput && !priceInput.disabled && quantityInput && !quantityInput.disabled) {
+                return { priceInput, quantityInput };
+            }
+        }, `Matriz no pudo seleccionar ${symbol} para cargar la orden.`);
+        const { priceInput, quantityInput } = fields;
+        requireCurrent();
+        if (!selected() || findInput(precioSelector) !== priceInput) throw Error(interrupted);
+        setInputValue(priceInput, String(price).replace(".", ","), "input");
+        await waitFor(() => selected() && accepts(priceInput, precioSelector, price) ? true : undefined,
+            "Matriz no aceptó el precio indicado.");
+
+        requireCurrent();
+        if (!selected() || !accepts(priceInput, precioSelector, price) ||
+            findInput(cantidadSelector) !== quantityInput || quantityInput.disabled) throw Error(interrupted);
+        setInputValue(quantityInput, String(quantity), "input");
+        await waitFor(() => selected() && accepts(quantityInput, cantidadSelector, quantity) ? true : undefined,
+            "Matriz no aceptó la cantidad indicada.");
+
+        requireCurrent();
+        if (findInput(cantidadSelector) !== quantityInput) throw Error(interrupted);
+        selectCantidad(quantityInput);
+        await Promise.resolve();
+        requireCurrent();
+        if (!selected() || !accepts(priceInput, precioSelector, price) || !accepts(quantityInput, cantidadSelector, quantity)) {
+            throw Error("Matriz cambió los datos del ticket durante la carga.");
+        }
+    } finally {
+        signal.removeEventListener("abort", cancel);
+        document.removeEventListener("pointerdown", userInteracted, true);
+        document.removeEventListener("keydown", userInteracted, true);
+    }
 }
 
 function toTicker(instrumento: string): string {

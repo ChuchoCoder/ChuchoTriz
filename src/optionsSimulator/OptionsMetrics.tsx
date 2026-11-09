@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { formatOptionAmount, formatOptionNumber, formatOptionVolatility } from "./format";
 import type { MetricCell, MetricScale } from "./marketMetrics";
 import { viGradeColor } from "./marketMetrics";
@@ -21,10 +21,6 @@ const supportsAnchoredViDetail = (() => {
 function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; cell?: MetricCell; scale: MetricScale }) {
   const id = useId();
   const anchor = `--ct-vi-${id.replace(/[^\w-]/g, "")}`;
-  const panel = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pinned = useRef(false);
   const [open, setOpen] = useState(false);
   const { symbol, kind, strike, strikeCurrency } = contract;
   const color = viGradeColor(cell, scale), value = cell?.impliedVolatility;
@@ -37,41 +33,18 @@ function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; c
   const badge = { className: `ct-opt-iv-value${color ? "" : " excluded"}`, "data-grading": color ? "included" : "excluded",
     style: color ? { "--ct-iv": color } as CSSProperties : undefined };
 
-  function show() {
-    clearTimeout(leaveTimer.current);
-    if (panel.current?.showPopover && !panel.current.matches(":popover-open")) panel.current.showPopover();
-  }
-
-  function scheduleClose() {
-    clearTimeout(leaveTimer.current);
-    leaveTimer.current = setTimeout(() => {
-      if (!pinned.current && !trigger.current?.matches(":focus-visible") && panel.current?.matches(":popover-open:not(:focus-within)")) panel.current.hidePopover();
-    }, 120);
-  }
-
   if (!supportsAnchoredViDetail) return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`}>
     <span {...badge} title={`${symbol} · ${tradeStatus}${color ? "" : " · Fuera de la escala"}`}>{text}</span>
   </td>;
 
   return <td className="ct-opt-metric ct-opt-iv" aria-label={`VI ${symbol}`} style={{ "--ct-vi-anchor": anchor } as CSSProperties}>
-    <button ref={trigger} type="button" {...badge}
+    <button type="button" {...badge} popoverTarget={id}
       aria-label={`${label} · ${symbol}`} aria-controls={id} aria-expanded={open} aria-describedby={id}
-      onPointerEnter={event => { if (event.pointerType === "mouse") show(); }} onPointerLeave={scheduleClose}
-      onFocus={event => { if (!panel.current?.contains(event.relatedTarget)) show(); }} onBlur={scheduleClose} onClick={() => {
-        if (pinned.current) { panel.current?.hidePopover?.(); return; }
-        pinned.current = true;
-        show();
-      }}>
+    >
       {text}
     </button>
-    <div ref={panel} id={id} className="ct-opt-iv-detail" role="tooltip" popover="hint"
-      onPointerEnter={() => clearTimeout(leaveTimer.current)} onPointerLeave={scheduleClose}
-      onBlur={scheduleClose}
-      onToggle={event => {
-        const visible = event.newState === "open";
-        if (!visible) pinned.current = false;
-        setOpen(visible);
-      }}>
+    <div id={id} className="ct-opt-iv-detail" role="tooltip" popover="hint"
+      onToggle={event => setOpen(event.newState === "open")}>
       {open ? <>
         <header><strong>{symbol}</strong><span>{label}</span></header>
         {details ? <>

@@ -1,6 +1,7 @@
 const paths = {
   simulator: "M3 1.5h10v13H3zM5.5 4h5M5.5 7h.5m4 0h.5m-5 3h.5m4 0h.5m-5 2h.5m4 0h.5",
   operations: "M3 2h10v12H3zM5.5 5h5m-5 3h5m-5 3h3",
+  loadTicket: "M7 5V2.5h7v11H7V11m2-5.5h3m-3 5h3M2 8h9m-2-2 2 2-2 2",
   presets: "M9 1.5 3 9h4l-1 5.5L13 7H9z",
   strategy: "M8 2 2 5l6 3 6-3-6-3ZM2 8l6 3 6-3M2 11l6 3 6-3",
   quotes: "M4 2v3m0 5v4m8-12v5m0 5v2M2 5h4v5H2zM10 7h4v5h-4z",

@@ -1,5 +1,6 @@
 import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { preloadOptionTicket } from "../Matriz";
 import { Catalog, Contract, lastTradedPremium, Quote, useOptionMarket } from "./market";
 import { deriveOptionMetrics } from "./marketMetrics";
 import { caucionReferenceLabel, type CaucionReference } from "./caucionRate";
@@ -244,6 +245,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState<string | { announcement: string }>("");
+  const [loadingTicket, setLoadingTicket] = useState(false);
+  const ticketRequest = useRef<AbortController>(undefined);
+  useEffect(() => () => ticketRequest.current?.abort(), [active]);
   const [openQuote, setOpenQuote] = useState<string>();
   const pendingQuantity = useRef<{ leg: Leg; next: Leg }>(undefined);
   const quantityBar = useRef<HTMLDivElement>(null);
@@ -503,6 +507,26 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       ? { ...current, legs: current.legs.map(item => item === before ? next : item) }
       : current);
   }
+  async function loadTicket(contract: Contract, side: "buy" | "sell", price: number, quantity: number) {
+    if (ticketRequest.current) return;
+    const request = new AbortController();
+    ticketRequest.current = request;
+    setLoadingTicket(true);
+    setNotice("");
+    try {
+      await preloadOptionTicket(contract.symbol, price, quantity, request.signal);
+      const action = side === "buy" ? "Comprar" : "Vender";
+      setNotice(`${contract.symbol} · ${fmt(quantity)} a ${fmt(price)}. Revisá el Mini Order Form y elegí ${action}.`);
+    } catch (error) {
+      if (!request.signal.aborted) {
+        const reason = error instanceof Error ? error.message : "La carga quedó incompleta.";
+        setNotice(`${reason} Revisá los datos del Mini Order Form.`);
+      }
+    } finally {
+      ticketRequest.current = undefined;
+      setLoadingTicket(false);
+    }
+  }
   function chooseStrategy(choice: StrategyChoice): boolean {
     const recipe = strategyRecipe(choice, selected, spot), prices = recipeDraftPrices(recipe, strategyQuotes, underlying?.currency);
     if (!recipe.ok || !prices.ok || !strategyQuotes || !underlying || !positive(spot)) {
@@ -559,6 +583,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const key = marked && legKey(marked);
     const visible = key !== undefined && key === shownQuote;
     const quantity = marked ? numeric(marked.contracts) : NaN;
+    // Matriz lists these option symbols without a settlement suffix.
+    const supportedTicket = contract?.currency === "ARS" && contract.settlement === "2";
+    const ambiguousTicket = contract && catalog?.contracts.some(item =>
+      item.symbol === contract.symbol && item.id !== contract.id);
+    const ticketLabel = `Cargar ${side === "buy" ? "compra" : "venta"} de ${contract?.symbol} en el Mini Order Form`;
     return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}
       onMouseEnter={() => { if (key) setOpenQuote(key); }}
       onMouseLeave={() => {
@@ -589,6 +618,15 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
             changeQuoteQuantity(marked, preset);
           }}>{preset}</button>)}
         <span className="ct-opt-quantity-total">Total <output aria-label="Cantidad total">{fmt(quantity)}</output></span>
+        <button type="button" className="ct-opt-load-ticket" aria-label={ticketLabel}
+          title={!supportedTicket ? "Carga disponible para opciones en pesos a 24 h"
+            : ambiguousTicket ? "Más de un contrato comparte este símbolo"
+            : !price.ok ? price.reason : ticketLabel}
+          disabled={!selectable || !price.ok || !supportedTicket || ambiguousTicket ||
+            !Number.isSafeInteger(quantity) || quantity <= 0 || loadingTicket}
+          onClick={() => { if (contract && price.ok) void loadTicket(contract, side, price.price, quantity); }}>
+          <ToolbarIcon name="loadTicket" />
+        </button>
       </div>}
     </td>;
   };

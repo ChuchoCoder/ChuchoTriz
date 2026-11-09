@@ -177,6 +177,7 @@ it("uses the last trade when ASK is missing and lets Armado edit the premium", a
   await act(async () => buy.click());
   expect(buy.getAttribute("aria-pressed")).toBe("true");
   expect(byLabel("Editar Precio pata 1").textContent).toBe("3,75");
+  expect(byLabel<HTMLButtonElement>("Cargar compra de CALL 100 en el Mini Order Form").disabled).toBe(true);
   await fill("Precio pata 1", "4,25");
   await act(async () => byLabel("Precio pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   quotes["call-100"].ask = { price: 5, size: 200 };
@@ -431,7 +432,8 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
   await act(async () => buy.click());
   expect(bar()?.parentElement).toBe(buy.parentElement);
   expect(bar()?.firstElementChild?.textContent).toBe("Cant.");
-  expect([...bar()!.querySelectorAll("button")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100"]);
+  expect([...bar()!.querySelectorAll("button:not(.ct-opt-load-ticket)")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100"]);
+  expect(bar()?.lastElementChild).toBe(byLabel("Cargar compra de CALL 100 en el Mini Order Form"));
   expect(byLabel("Cantidad total").textContent).toBe("1");
   await act(async () => {
     byLabel<HTMLButtonElement>("Fijar 50 contratos").click();
@@ -455,6 +457,62 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
   expect(bar()).toBeNull();
   expect(buy.getAttribute("aria-pressed")).toBe("false");
   expect(byLabel("Editar Contratos pata 1").textContent).toBe("−100");
+});
+
+it.each([
+  { side: "compra", action: "Comprar", symbol: "CALL 100", id: "call-100", bookSide: "ask", price: 47.2 },
+  { side: "venta", action: "Vender", symbol: "PUT 90", id: "put-90", bookSide: "bid", price: 4.6 },
+] as const)("preloads the selected $side with the visible price and never activates a native order action", async ({
+  side, action, symbol, id, bookSide, price,
+}) => {
+  const ticket = document.createElement("div");
+  ticket.id = "MiniOrderForm";
+  ticket.innerHTML = `
+    <input id="rc_select_2" aria-controls="native-list" aria-expanded="false">
+    <div class="ant-form-item MiniOrderFormQuantity-price-input"><div class="ant-input-number-input-wrap"><input></div></div>
+    <div class="ant-form-item MiniOrderFormQuantity-amount-input"><div class="ant-input-number-input-wrap"><input></div></div>
+    <button class="ButtonComprar">COMPRAR</button><button class="ButtonVender">VENDER</button>
+    <div class="ant-select-dropdown"><div id="native-list"></div>
+      <div class="ant-select-item-option" title="${symbol} CI"></div>
+      <div class="ant-select-item-option" title="${symbol}"></div>
+    </div>`;
+  document.body.append(ticket);
+  try {
+    vi.spyOn(ticket, "getClientRects").mockReturnValue([new DOMRect()] as unknown as DOMRectList);
+    const instrument = ticket.querySelector<HTMLInputElement>("#rc_select_2")!;
+    const [priceInput, quantityInput] = ticket.querySelectorAll<HTMLInputElement>(".ant-input-number-input-wrap input");
+    instrument.addEventListener("input", () => instrument.setAttribute("aria-expanded", "true"));
+    const wrong = vi.fn(), select = vi.fn(), submit = vi.fn();
+    ticket.querySelector("[title$=' CI']")!.addEventListener("click", wrong);
+    ticket.querySelector(`[title="${symbol}"]`)!.addEventListener("click", () => queueMicrotask(() => {
+      select();
+      instrument.setAttribute("aria-expanded", "false");
+    }));
+    ticket.querySelectorAll("button").forEach(button => button.addEventListener("click", submit));
+    for (const input of [priceInput, quantityInput]) {
+      input.addEventListener("input", () => queueMicrotask(() => {
+        input.setAttribute("aria-valuenow", input.value.replace(",", "."));
+      }));
+    }
+
+    await mount();
+    await act(async () => byLabel<HTMLButtonElement>(`${action} ${symbol} en simulación`).click());
+    await act(async () => byLabel<HTMLButtonElement>("Fijar 25 contratos").click());
+    // The book can move after creating the simulated leg.
+    marketState.current.data!.instruments[id][bookSide]!.price = price;
+    await mount();
+    await act(async () => byLabel<HTMLButtonElement>(`Cargar ${side} de ${symbol} en el Mini Order Form`).click());
+    expect(instrument.value).toBe(symbol);
+    expect(priceInput.value).toBe(String(price).replace(".", ","));
+    expect(quantityInput.value).toBe("25");
+    expect(document.activeElement).toBe(quantityInput);
+    expect(container.textContent).toContain(`Revisá el Mini Order Form y elegí ${action}.`);
+    expect(wrong).not.toHaveBeenCalled();
+    expect(select).toHaveBeenCalledOnce();
+    expect(submit).not.toHaveBeenCalled();
+  } finally {
+    ticket.remove();
+  }
 });
 
 it("closes the active Armado editor and replaces its quantity from the grid", async () => {
