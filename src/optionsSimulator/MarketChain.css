@@ -218,6 +218,10 @@
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .ct-sim .ct-roll-table tr.selected { background:var(--sim-field); }
+.ct-sim .ct-roll-table tbody th button[aria-pressed="true"] {
+  background:color-mix(in srgb, var(--sim-accent) 30%, var(--sim-field));
+  border-color:var(--sim-accent); color:var(--sim-text); font-weight:700;
+}
 .ct-sim .ct-roll-table .ct-roll-origin { background:color-mix(in srgb, var(--sim-accent) 18%, var(--sim-card)); }
 .ct-sim .ct-roll-table .ct-roll-origin th { box-shadow:inset 3px 0 var(--sim-accent); padding-inline-start:8px; }
 .ct-sim .ct-roll-table .ct-roll-origin td { text-align:left; font-weight:700; }
