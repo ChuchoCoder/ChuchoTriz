@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { isRecentCaucionTrade, selectCaucionReference, type CaucionReference, type CaucionTrade } from "./caucionRate";
+import { caucionTradeExpiresAt, isRecentCaucionTrade, selectCaucionReference, type CaucionReference, type CaucionTrade } from "./caucionRate";
 
 const supportedMarketHost = /^(?:.+\.)?xoms\.com\.ar$|^remarkets\.matriz\.com\.ar$|^127\.0\.0\.1$/;
 export interface Contract {
@@ -73,29 +73,44 @@ export class MarketReader {
 
 export function useCaucionMarket(active: boolean) {
   const [reference, setReference] = useState<CaucionReference>();
+  const [supported, setSupported] = useState<boolean>();
   useEffect(() => {
     setReference(undefined);
     if (!active || !supportedMarketHost.test(location.hostname)) return;
     const reader = new MarketReader();
-    let closed = false, timer: ReturnType<typeof setTimeout>;
-    const clearExpired = () => setReference(current => current && isRecentCaucionTrade(current.tradedAt, Date.now()) ? current : undefined);
+    let closed = false, timer: ReturnType<typeof setTimeout>, expiryTimer: ReturnType<typeof setTimeout>;
+    let trades: CaucionTrade[] = [];
+    const refreshReference = () => {
+      clearTimeout(expiryTimer);
+      const now = Date.now();
+      const next = selectCaucionReference(trades, now);
+      setReference(previous => previous?.days === next?.days && previous?.tradedAt === next?.tradedAt && previous?.tna === next?.tna ? previous : next);
+      if (next) expiryTimer = setTimeout(refreshReference, caucionTradeExpiresAt(next.tradedAt) - now);
+    };
     const tick = async () => {
       try {
-        const trades = await reader.call<CaucionTrade[]>("caucion");
+        const response = await reader.call<{ supported: boolean; trades: CaucionTrade[] }>("caucion");
         if (closed) return;
-        const next = selectCaucionReference(Array.isArray(trades) && trades.length <= 5 ? trades : [], Date.now());
-        setReference(previous => previous?.days === next?.days && previous?.tradedAt === next?.tradedAt && previous?.tna === next?.tna ? previous : next);
+        const eligibleVersion = response?.supported === true;
+        setSupported(eligibleVersion);
+        trades = eligibleVersion && Array.isArray(response.trades) && response.trades.length <= 5 ? response.trades : [];
       } catch {
-        if (!closed) setReference(undefined);
+        trades = [];
       } finally {
-        if (!closed) timer = setTimeout(() => void tick(), 5000);
+        if (!closed) {
+          refreshReference();
+          timer = setTimeout(() => void tick(), 5000);
+        }
       }
     };
-    document.addEventListener("visibilitychange", clearExpired);
+    document.addEventListener("visibilitychange", refreshReference);
     void tick();
-    return () => { closed = true; clearTimeout(timer); document.removeEventListener("visibilitychange", clearExpired); reader.dispose(); };
+    return () => {
+      closed = true; clearTimeout(timer); clearTimeout(expiryTimer);
+      document.removeEventListener("visibilitychange", refreshReference); reader.dispose();
+    };
   }, [active]);
-  return active && reference && isRecentCaucionTrade(reference.tradedAt, Date.now()) ? reference : undefined;
+  return { supported, reference: active && reference && isRecentCaucionTrade(reference.tradedAt, Date.now()) ? reference : undefined };
 }
 
 export function useOptionMarket(active: boolean, underlyingId: string, ids: string[]) {

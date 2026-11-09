@@ -9,9 +9,9 @@
   let previousContext, revision = 0, signature, catalogRevision = 0, active;
   const finite = value => typeof value === "number" && Number.isFinite(value) ? value : undefined;
   const positive = value => finite(value) !== undefined && value > 0;
-  function context() {
+  const marketVersion = () => document.body.innerText.match(/Versi[oó]n:\s*([\d.]+)/)?.[1];
+  function context(version = marketVersion()) {
     const ms = window.mainStore;
-    const version = document.body.innerText.match(/Versi[oó]n:\s*([\d.]+)/)?.[1];
     if (!["4.24.1", "4.24.4"].includes(version)) throw Error("Versión de Matriz no verificada para lectura de opciones.");
     if (!ms?.securityStore || typeof ms.securityStore.getSecurity !== "function" || !ms.dmaWebSocket || typeof ms.dmaWebSocket.addSubscription !== "function")
       throw Error("El catálogo de Matriz todavía no está disponible.");
@@ -149,8 +149,13 @@
         const current = context();
         reply({ result: { ...catalogOf(sources(current.ms)), contextRevision: current.revision, version: current.version } });
       } else if (msg.method === "caucion") {
-        const current = context();
-        reply({ result: current.version === "4.24.4" ? caucionTrades(current.ms) : [] });
+        const version = marketVersion();
+        const supported = version === "4.24.4";
+        let trades = [];
+        try {
+          if (supported) trades = caucionTrades(context(version).ms);
+        } catch { /* The version is known even when market data is unavailable. */ }
+        reply({ result: { supported, trades } });
       } else if (msg.method === "snapshot") {
         if (active) throw Error("Hay una lectura de mercado pendiente. Esperando a que termine.");
         const current = context();

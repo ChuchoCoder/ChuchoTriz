@@ -46,7 +46,7 @@ test('never exposes execution or arbitrary store methods', async () => {
   assert.equal(f.calls.length, 0); assert.equal(f.subscriptions.length, 0);
 });
 test('reads only catalog-verified ARS cauciones, using last traded TNA and timestamp', async () => {
-  const f = fixture(), stamp = '2026-11-03T17:00:00Z';
+  const f = fixture(), now = Date.now(), stamp = new Date(now - 60_000).toISOString();
   function caucion(days, patch = {}) {
     const id = `bm_MERV_PESOS_${days}D`;
     f.securities.set(id, { id, marketId: 'bm', cfiCode: 'RPXXXX', currency: 'ARS', symbolStr: `PESOS - ${days}D`,
@@ -55,20 +55,27 @@ test('reads only catalog-verified ARS cauciones, using last traded TNA and times
   caucion(7); caucion(6, { currency: 'USD' }); caucion(5, { md: { bid: 30, lstdStr: stamp } });
   caucion(4, { md: { lst: 30, lstdStr: '2026-02-30T17:00:00Z' } }); caucion(2);
   const first = (await f.call('caucion', { ids: ['GGAL', 'option-0'] })).result;
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), [{ currency: 'ARS', days: 7, tna: 30, tradedAt: Date.parse(stamp) }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { supported: true, trades: [{ currency: 'ARS', days: 7, tna: 30, tradedAt: Date.parse(stamp) }] });
   assert.deepEqual(JSON.parse(JSON.stringify(f.subscriptions)), [{ topic: 'md', ids: ['md.bm_MERV_PESOS_7D', 'md.bm_MERV_PESOS_5D', 'md.bm_MERV_PESOS_4D'] }]);
-  assert.equal((await f.call('caucion')).result.length, 1);
+  assert.equal((await f.call('caucion')).result.trades.length, 1);
   assert.equal(f.subscriptions.length, 1);
   assert.equal(f.calls.length, 0);
-  caucion(7, { md: { lst: 30, lstdStr: '2026-11-03T16:00:00Z' } });
-  assert.equal((await f.call('caucion')).result.length, 0);
-  f.document.body.innerText = 'Versión: 4.24.1';
-  assert.equal((await f.call('caucion')).result.length, 0);
-  f.document.body.innerText = 'Versión: 4.24.4';
+  caucion(7, { md: { lst: 30, lstdStr: new Date(now - 120_000).toISOString() } });
+  assert.equal((await f.call('caucion')).result.trades.length, 0);
+});
+test('reports caución support independently of catalogue and connection availability', async () => {
+  const f = fixture();
   f.store.securityStore.findSecurityFromId = () => { throw Error('PRIVATE_NATIVE_MESSAGE'); };
-  assert.equal((await f.call('caucion')).error, 'Referencia de caución no disponible.');
+  async function expectSupport(supported) {
+    const reply = await f.call('caucion');
+    assert.deepEqual(JSON.parse(JSON.stringify(reply.result)), { supported, trades: [] });
+    assert.doesNotMatch(JSON.stringify(reply), /PRIVATE_NATIVE_MESSAGE/);
+  }
+  await expectSupport(true);
   f.store.webSocketConnectionStatus = false;
-  assert.equal((await f.call('caucion')).error, 'Referencia de caución no disponible.');
+  await expectSupport(true);
+  f.document.body.innerText = 'Versión: 4.24.1';
+  await expectSupport(false);
 });
 test('rejects unknown instruments and does not infer a missing factor or foreign strike currency', async () => {
   const f = fixture(); f.contracts[0].refData.roundLot = undefined; f.contracts[1].refData.strikeCurrency = 'USD';

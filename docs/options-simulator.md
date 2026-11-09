@@ -214,12 +214,13 @@ pestaña y conserva su borrador al alternar con el simulador.
 un canal de mensajes. No importa los puentes, coordinadores ni motores de Premium.
 La cadena consulta `securityStore.options`, `underlyingsForMatrix`, `getSecurity` y
 suscripciones `md`/`book`. El método de caución usa el catálogo local por ID y
-hasta cinco suscripciones `md` adicionales de caución BYMA en ARS. Devuelve solo
-moneda, plazo, última TNA operada y hora de la operación. La cuenta activa participa únicamente en la detección
+hasta cinco suscripciones `md` adicionales de caución BYMA en ARS. Informa si la
+versión admite caución y devuelve moneda, plazo, última TNA operada y hora de
+cada operación. La cuenta activa participa únicamente en la detección
 interna de cambios de contexto y nunca se devuelve. No lee credenciales.
 
-Versiones admitidas: Matriz 4.24.1 y 4.24.4, como el lector de referencia. Máximo de
-160 instrumentos por lectura y 256 suscripciones acumuladas por contexto. No se
+Versiones admitidas: Matriz 4.24.1 y 4.24.4, como el lector de referencia. La cadena
+admite hasta 160 instrumentos por lectura y 256 instrumentos suscritos por contexto. No se
 publica una cadena incompleta: el cliente divide la selección en grupos
 secuenciales de 23 opciones más el subyacente. No se
 desuscribe, porque Matriz comparte suscripciones con otras vistas. Las llamadas

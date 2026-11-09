@@ -361,10 +361,6 @@ export default function OptionsSimulator({ active = true, marketReference = fals
   const [automaticCaucion, setAutomaticCaucion] = useState(true);
   const [chainContext, setChainContext] = useState<{ currency?: Simulation["currency"]; version: string }>();
   const [usdRate, setUsdRate] = useState("0");
-  const supportsCaucion = marketReference && (!chainContext || chainContext.version === "4.24.4");
-  const useAutomaticCaucion = supportsCaucion && automaticCaucion;
-  const caucion = useCaucionMarket(active && useAutomaticCaucion);
-  const rateOverride = useAutomaticCaucion && input.currency === "ARS" ? caucion?.annualRate ?? NaN : undefined;
   const [positionMode, setPositionMode] = useState(false);
   const [includePosition, setIncludePosition] = useState(false);
   const valuationInput = useMemo(() => {
@@ -376,6 +372,11 @@ export default function OptionsSimulator({ active = true, marketReference = fals
   const holding = underlyingExposure(valuationInput.position);
   const hasExposure = !!(allLegs.length || holding?.quantity || valuationInput.position?.underlyingUnavailable);
   const rateCurrency = hasExposure ? input.currency : chainContext?.currency ?? input.currency;
+  const { supported: caucionSupported, reference: caucion } = useCaucionMarket(active && marketReference && automaticCaucion &&
+    chainContext?.version !== "4.24.1" && (rateCurrency === "ARS" || chainContext?.currency === "ARS"));
+  const supportsCaucion = marketReference && (chainContext ? chainContext.version === "4.24.4" : caucionSupported === true);
+  const useAutomaticCaucion = supportsCaucion && automaticCaucion;
+  const rateOverride = useAutomaticCaucion && input.currency === "ARS" ? caucion?.annualRate ?? NaN : undefined;
   const automaticRate = useAutomaticCaucion && rateCurrency === "ARS";
   const [chartZoom, setChartZoom] = useState<{ context: string; level: number }>();
   const [status, setStatus] = useState("");
@@ -729,7 +730,7 @@ export default function OptionsSimulator({ active = true, marketReference = fals
       <p>Máximos y equilibrios calculados para todo precio del subyacente desde 0 hasta ∞, independientemente del rango visible.</p>
       <p>Resultado total = suma de (valor de cada opción − prima de entrada) × contratos × unidades por contrato, más (precio del escenario − costo promedio) × nominales del subyacente. Las cantidades llevan signo, se restan los gastos de entrada y se suma el resultado realizado neto informado.</p>
       <p>Al vencimiento se usa valor intrínseco. El teórico usa Black–Scholes–Merton europeo, días calendario / 365, tasa y dividendos continuos, y VI constante por pata más el cambio de escenario. Es una estimación: no modela ejercicio anticipado, dividendos en efectivo, garantías, financiación de primas ni gastos de salida o ejercicio.</p>
-      <p>La cadena muestra cotizaciones y métricas nativas de Matriz; la hora de lectura local no certifica frescura bursátil. Theta es una estimación BSM por unidad y día calendario; Extrínseco es Mid menos intrínseco. Tasa y dividendos empiezan en 0%, sin representar condiciones actuales. No se infiere VI a partir de primas: si falta, se muestra solo el resultado al vencimiento hasta ingresarla. Cambiar la VI no cambia las primas de entrada.</p>
+      <p>La cadena muestra cotizaciones y métricas nativas de Matriz; la hora de lectura local no certifica frescura bursátil. Theta es una estimación BSM por unidad y día calendario; Extrínseco es Mid menos intrínseco. Las tasas manuales y los dividendos empiezan en 0%. En Matriz 4.24.4 la tasa automática en ARS usa caución reciente. Si falta esa referencia o la VI, el resultado al vencimiento sigue disponible. Cambiar la VI no cambia las primas de entrada.</p>
     </details></div>
   </div>;
 }

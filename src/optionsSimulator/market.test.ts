@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { Catalog, MarketReader, Snapshot, useOptionMarket } from "./market";
+import { Catalog, MarketReader, Snapshot, useCaucionMarket, useOptionMarket } from "./market";
 
 let root: Root, container: HTMLDivElement, state: ReturnType<typeof useOptionMarket>;
 let sequence: number, context: number, catalogRevision: number;
@@ -59,4 +59,25 @@ it("discards an incomplete batch and never publishes a partially read chain", as
   });
   await render(true, ["GGAL", ...Array.from({ length: 30 }, (_, index) => `option-${index}`)]);
   expect(state.data).toBeUndefined(); expect(state.issue).toContain("Batch unavailable");
+});
+
+it.each([
+  ["the age limit", "2026-11-09T15:00:00Z", "2026-11-09T14:00:00.001Z", "2026-11-09T14:59:00Z", 2, 6],
+  ["Buenos Aires midnight", "2026-11-10T02:59:59.999Z", "2026-11-10T02:59:00Z", "2026-11-10T02:58:00Z", 1, undefined],
+] as const)("refreshes the rate at %s without waiting for another market read", async (_limit, clock, preferred, fallback, elapsed, expectedDays) => {
+  vi.setSystemTime(new Date(clock));
+  read.mockResolvedValue({ supported: true, trades: [
+    { currency: "ARS", days: 7, tna: 30, tradedAt: Date.parse(preferred) },
+    { currency: "ARS", days: 6, tna: 32, tradedAt: Date.parse(fallback) },
+  ] });
+  let rate: ReturnType<typeof useCaucionMarket>;
+  function CaucionProbe() {
+    rate = useCaucionMarket(true);
+    return null;
+  }
+  await act(async () => root.render(createElement(CaucionProbe)));
+  expect(rate!.reference?.days).toBe(7);
+  await act(async () => { await vi.advanceTimersByTimeAsync(elapsed); });
+  expect(rate!.reference?.days).toBe(expectedDays);
+  expect(read).toHaveBeenCalledTimes(1);
 });

@@ -20,6 +20,20 @@ export function isRecentCaucionTrade(tradedAt: number, now: number): boolean {
     sessionDay.format(tradedAt) === sessionDay.format(now);
 }
 
+export function caucionTradeExpiresAt(tradedAt: number): number {
+  let end = tradedAt + maxAge + 1;
+  const day = sessionDay.format(tradedAt);
+  if (sessionDay.format(end) === day) return end;
+  // The freshness window crosses local midnight. Find the first millisecond of the new day.
+  let start = tradedAt;
+  while (end - start > 1) {
+    const middle = Math.floor((start + end) / 2);
+    if (sessionDay.format(middle) === day) start = middle;
+    else end = middle;
+  }
+  return end;
+}
+
 /** Uses the closest eligible term to seven days and the newest print within that term. */
 export function selectCaucionReference(trades: readonly CaucionTrade[], now: number): CaucionReference | undefined {
   let best: CaucionReference | undefined;

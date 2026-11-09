@@ -10,9 +10,9 @@ import { formatOptionExpiry } from "./format";
 import type { CaucionReference } from "./caucionRate";
 
 const marketState = vi.hoisted(() => ({ current: {} as { catalog?: Catalog; data?: Snapshot; issue?: string; selectionKey?: string } }));
-const caucionState = vi.hoisted(() => ({ current: undefined as CaucionReference | undefined }));
+const caucionState = vi.hoisted(() => ({ current: undefined as CaucionReference | undefined, supported: undefined as boolean | undefined }));
 vi.mock("./market", async original => ({ ...await original<typeof import("./market")>(), useOptionMarket: () => marketState.current,
-  useCaucionMarket: (active: boolean) => active ? caucionState.current : undefined }));
+  useCaucionMarket: (active: boolean) => ({ supported: caucionState.supported, reference: active ? caucionState.current : undefined }) }));
 const readPosition = vi.hoisted(() => vi.fn());
 vi.mock("./positions", async original => ({ ...await original<typeof import("./positions")>(),
   readPositionSnapshot: async (contracts: Contract[], signal: AbortSignal) => {
@@ -30,6 +30,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   stored = {};
   caucionState.current = undefined;
+  caucionState.supported = undefined;
   storageListeners = new Set();
   write = vi.fn(async value => { Object.assign(stored, value); });
   readPosition.mockReset();
@@ -73,6 +74,21 @@ async function fill(label: string, value: string) {
 async function mount(marketReference = false) { await act(async () => root.render(<OptionsSimulator marketReference={marketReference} />)); }
 async function showAnalysis() { await act(async () => button("Análisis").click()); }
 async function showBuild() { await act(async () => button("Armado").click()); }
+
+it("keeps manual valuation before caución support is confirmed and enables it without the options catalogue", async () => {
+  marketState.current = {};
+  caucionState.supported = false;
+  await mount(true);
+  await act(async () => button("+ Pata manual").click());
+  await showAnalysis();
+  expect(container.querySelector('[aria-label="Origen de la tasa"]')).toBeNull();
+  expect(byLabel("Tasa anual continua %").title).toBe("Tasa manual en ARS");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).not.toBeNull();
+  caucionState.supported = true;
+  await mount(true);
+  expect(byLabel<HTMLSelectElement>("Origen de la tasa").value).toBe("automatic");
+  expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).toBeNull();
+});
 
 it("uses an automatic ARS reference, keeps expiry results if it disappears, and restores the manual override", async () => {
   caucionState.current = { currency: "ARS", days: 6, tna: 30, tradedAt: Date.now(), annualRate: .299 };
