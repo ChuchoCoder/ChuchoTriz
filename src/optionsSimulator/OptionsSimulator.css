@@ -93,7 +93,9 @@
 .ct-sim-leg-date { width: 48px; }
 .ct-sim-leg-days { width: 36px; }
 .ct-sim-leg-price { width: 64px; }
-.ct-sim-leg-remove { width: 22px; }
+.ct-sim-leg-actions-col { width: 48px; }
+.ct-sim-leg-actions { display: flex; align-items: center; gap: 2px; }
+.ct-sim-legs-card .ct-sim-load-leg { display: grid; place-items: center; width: 22px; min-height: 24px; padding: 0; }
 .ct-sim-kind-chip { display: block; width: 24px; text-align: center; border: 1px solid currentColor; border-radius: 4px; font-size: 10px; line-height: 20px; }
 .ct-sim-kind-call { color: var(--sim-profit); }
 .ct-sim-kind-put { color: var(--sim-theory); }

@@ -464,7 +464,7 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
 it.each([
   { side: "compra", action: "Comprar", symbol: "CALL 100", id: "call-100", bookSide: "ask", price: 47.2 },
   { side: "venta", action: "Vender", symbol: "PUT 90", id: "put-90", bookSide: "bid", price: 4.6 },
-] as const)("preloads the selected $side with the visible price and never activates a native order action", async ({
+] as const)("preloads the selected $side from the grid or the edited leg without activating a native order action", async ({
   side, action, symbol, id, bookSide, price,
 }) => {
   const ticket = document.createElement("div");
@@ -511,10 +511,35 @@ it.each([
     expect(container.textContent).toContain(`Revisá el Mini Order Form y elegí ${action}.`);
     expect(wrong).not.toHaveBeenCalled();
     expect(select).toHaveBeenCalledOnce();
+
+    const legButton = () => byLabel<HTMLButtonElement>(`Cargar ${side} de la pata 1 en el Mini Order Form`);
+    expect(legButton().textContent).toBe("");
+    expect(legButton().querySelector("svg")).not.toBeNull();
+    await fill("Precio pata 1", "0");
+    expect(legButton().disabled).toBe(true);
+    await fill("Precio pata 1", "6,75");
+    await fill("Contratos pata 1", "++17");
+    expect(legButton().disabled).toBe(true);
+    expect(container.textContent).not.toContain("Revisá el Mini Order Form y elegí");
+    await fill("Contratos pata 1", side === "venta" ? "-17" : "17,0");
+    await act(async () => byLabel("Contratos pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(legButton().disabled).toBe(false);
+    await act(async () => legButton().click());
+    expect(instrument.value).toBe(symbol);
+    expect(priceInput.value).toBe("6,75");
+    expect(quantityInput.value).toBe("17");
+    expect(container.textContent).toContain(`Revisá el Mini Order Form y elegí ${action}.`);
+    expect(select).toHaveBeenCalledTimes(2);
     expect(submit).not.toHaveBeenCalled();
   } finally {
     ticket.remove();
   }
+});
+
+it("keeps the leg ticket action disabled for a manually entered instrument", async () => {
+  await mount();
+  await act(async () => button("+ Pata manual").click());
+  expect(byLabel<HTMLButtonElement>("Cargar compra de la pata 1 en el Mini Order Form").disabled).toBe(true);
 });
 
 it("closes the active Armado editor and replaces its quantity from the grid", async () => {
