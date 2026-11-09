@@ -177,7 +177,7 @@ it("uses the last trade when ASK is missing and lets Armado edit the premium", a
   await act(async () => buy.click());
   expect(buy.getAttribute("aria-pressed")).toBe("true");
   expect(byLabel("Editar Precio pata 1").textContent).toBe("3,75");
-  expect(byLabel<HTMLButtonElement>("Cargar compra de CALL 100 en el Mini Order Form").disabled).toBe(true);
+  expect(byLabel<HTMLButtonElement>("Cargar Op. · compra de CALL 100 en el Mini Order Form").disabled).toBe(true);
   await fill("Precio pata 1", "4,25");
   await act(async () => byLabel("Precio pata 1").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   quotes["call-100"].ask = { price: 5, size: 200 };
@@ -433,7 +433,9 @@ it("sets only the clicked quote's contracts using the compact quantity bar", asy
   expect(bar()?.parentElement).toBe(buy.parentElement);
   expect(bar()?.firstElementChild?.textContent).toBe("Cant.");
   expect([...bar()!.querySelectorAll("button:not(.ct-opt-load-ticket)")].map(node => node.textContent)).toEqual(["1", "10", "25", "50", "100"]);
-  expect(bar()?.lastElementChild).toBe(byLabel("Cargar compra de CALL 100 en el Mini Order Form"));
+  const loadTicket = byLabel("Cargar Op. · compra de CALL 100 en el Mini Order Form");
+  expect(bar()?.lastElementChild).toBe(loadTicket);
+  expect(loadTicket.textContent).toBe("Cargar Op.");
   expect(byLabel("Cantidad total").textContent).toBe("1");
   await act(async () => {
     byLabel<HTMLButtonElement>("Fijar 50 contratos").click();
@@ -501,7 +503,7 @@ it.each([
     // The book can move after creating the simulated leg.
     marketState.current.data!.instruments[id][bookSide]!.price = price;
     await mount();
-    await act(async () => byLabel<HTMLButtonElement>(`Cargar ${side} de ${symbol} en el Mini Order Form`).click());
+    await act(async () => byLabel<HTMLButtonElement>(`Cargar Op. · ${side} de ${symbol} en el Mini Order Form`).click());
     expect(instrument.value).toBe(symbol);
     expect(priceInput.value).toBe(String(price).replace(".", ","));
     expect(quantityInput.value).toBe("25");

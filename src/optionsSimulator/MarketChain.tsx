@@ -20,6 +20,7 @@ const positive = (value: unknown): value is number => typeof value === "number" 
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
 const quantityPresets = [1, 10, 25, 50, 100];
+const loadTicketText = "Cargar Op.";
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
 type ChainColumn = OptionMetricField | "bid" | "ask";
 type OptionalColumn = Exclude<OptionMetricField, "iv">;
@@ -587,7 +588,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const supportedTicket = contract?.currency === "ARS" && contract.settlement === "2";
     const ambiguousTicket = contract && catalog?.contracts.some(item =>
       item.symbol === contract.symbol && item.id !== contract.id);
-    const ticketLabel = `Cargar ${side === "buy" ? "compra" : "venta"} de ${contract?.symbol} en el Mini Order Form`;
+    const ticketLabel = `${loadTicketText} · ${side === "buy" ? "compra" : "venta"} de ${contract?.symbol} en el Mini Order Form`;
     return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}
       onMouseEnter={() => { if (key) setOpenQuote(key); }}
       onMouseLeave={() => {
@@ -626,6 +627,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
             !Number.isSafeInteger(quantity) || quantity <= 0 || loadingTicket}
           onClick={() => { if (contract && price.ok) void loadTicket(contract, side, price.price, quantity); }}>
           <ToolbarIcon name="loadTicket" />
+          <span>{loadTicketText}</span>
         </button>
       </div>}
     </td>;
