@@ -156,13 +156,13 @@ async (page) => {
     assert(await label('Referencias de desvío estándar').count() === 1, 'Full sigma explanation remains in Analysis');
     assert(await page.locator('label').filter({ hasText: 'Moneda común' }).count() === 0, 'No currency selector');
     equal(await page.locator('.ct-sim-inspect input[type="range"]').count(), 0, 'No price slider below chart');
-    await click(button('VI Sube (+5 pp)'));
+    await click(button('VI +5 pp'));
     assert((await outputs())[1] !== beforeAnalysis[1], 'IV scenario changes theoretical P&L');
-    const expiryButton = page.getByRole('button', { name: /^Fecha Vencimiento/ });
+    const expiryButton = button('Fecha Vencimiento');
     await click(expiryButton);
     const atExpiry = await outputs();
     equal(atExpiry[0], atExpiry[1], 'Theoretical equals intrinsic at expiry');
-    await click(button('Precio Mantiene (0 %)'));
+    await click(button('Precio 0%'));
     equal(money(await label('Precio fijado').innerText()), 100, 'Price scenario toggle');
     await click(page.getByRole('tab', { name: 'Armado', exact: true }));
     checks.push('analysis:shared state, scenarios, pinned price, no price slider');
@@ -203,7 +203,7 @@ async (page) => {
       const contract = window.mainStore.securityStore.options.find(item => item.id === 'call-100');
       contract.impliedVolatility = undefined; contract.md.seq++;
     });
-    await page.waitForFunction(() => document.querySelector('[aria-label="VI DEMO CALL 100"]')?.textContent === '—', null, { polling: 100, timeout: 12000 });
+    await page.getByRole('button', { name: 'VI sin dato · DEMO CALL 100', exact: true }).waitFor({ timeout: 12000 });
     await apply('option', 'Long', 'Call');
     equal(await page.locator('.ct-sim-theory-line').count(), 0, 'Missing IV disables theoretical curve');
     equal(await page.locator('.ct-sim-expiry-line').count(), 1, 'Missing IV preserves expiry curve');

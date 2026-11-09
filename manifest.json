@@ -2,7 +2,7 @@
   "name": "ChuchoTriz",
   "short_name": "ChuchoTriz",
   "description": "Presets de cantidad y simulador de estrategias de opciones con cadena de Matriz y gráficos de resultados.",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "author": "Chucho Trader",
   "homepage_url": "https://x.com/chuchotrader",
   "manifest_version": 3,

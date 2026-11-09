@@ -234,3 +234,8 @@ de Matriz.
 - [Privacidad](PRIVACY.md).
 - [Mantenimiento y distribución](docs/distribution.md).
 - [Reportar problemas o proponer mejoras](https://github.com/ChuchoCoder/ChuchoTriz/issues).
+
+## Validación antes de un PR
+
+Usá la [guía de smoke y regresión manual](docs/manual-regression.md) y guardá
+el resultado con la [plantilla de ejecución](docs/qa/run-template.md).
