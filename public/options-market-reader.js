@@ -44,7 +44,9 @@
       const strikeCurrency = typeof ref.strikeCurrency === "string" ? ref.strikeCurrency : ref.strikeCurrency == null && localEquity ? "ARS" : undefined;
       const factor = [ref.totalAmountFactor, ref.contractMultiplier, ref.roundLot].every(positive)
         ? ref.totalAmountFactor * ref.contractMultiplier * ref.roundLot : undefined;
-      contracts.push({ id, symbol, underlyingId, kind, strike: ref.strikePrice, expiration: ref.maturityDateStr, currency, strikeCurrency, settlement, factor });
+      const nominalsPerContract = localEquity && positive(ref.contractMultiplier) && positive(ref.roundLot)
+        ? ref.contractMultiplier * ref.roundLot : undefined;
+      contracts.push({ id, symbol, underlyingId, kind, strike: ref.strikePrice, expiration: ref.maturityDateStr, currency, strikeCurrency, settlement, factor, nominalsPerContract });
       seen.add(id);
     }
     const next = JSON.stringify([underlyings, contracts]);
@@ -56,7 +58,10 @@
     const level = (side, size) => {
       const price = finite(book[side + "Book1"]), quantity = finite(book[size + "Book1"]);
       if (positive(price) && positive(quantity)) return { price, size: quantity };
-      return positive(md[side]) && positive(md[size]) ? { price: md[side], size: md[size] } : undefined;
+      if (!positive(md[side]) || !positive(md[size])) return undefined;
+      // Keep the quote visible, but an incomplete book cannot confirm executable size.
+      return { price: md[side], size: md[size],
+        ...(price !== undefined || quantity !== undefined ? { depthUnverified: true } : {}) };
     };
     let impliedVolatility, delta;
     try { impliedVolatility = finite(sec.impliedVolatility); } catch { /* Native computed value unavailable. */ }

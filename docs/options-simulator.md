@@ -47,6 +47,21 @@ pérdidas de cierres anteriores, ya netas de sus propios gastos.
 desde ahí forman **Ajustes simulados**. Cantidades,
 strikes, plantillas y Natural/Mid/Opuesto modifican esas patas adicionales.
 Las primas históricas, gastos y realizado permanecen en la posición original.
+En **Posición actual**, **Rolar** aparece en **Acciones**, a la izquierda para
+Calls y a la derecha para Puts. Compara bases del mismo tipo y vencimiento
+para cualquier posición comprada o vendida. Para una posición vendida usa el
+ASK de la recompra y el BID de la nueva venta, con un mínimo de contratos sin
+débito. Para una posición comprada usa el BID del cierre y el ASK de la nueva
+compra, con un máximo de contratos que alcanza a financiar el cierre.
+El cálculo aplica el porcentaje de gastos a los importes brutos de ambas patas
+(0,2 % por defecto). El armado exige tamaño para ambas puntas. Si el libro
+no informa esa punta, se admite el precio y tamaño de market data cuando
+están completos. Una punta incompleta o vacía del libro invalida ese respaldo.
+Al editar o quitar una pata se recalculan sus gastos estimados. Los gastos
+manuales se editan por separado en Análisis. **Cargar en
+Cotizaciones** agrega las dos patas como ajustes y activa **Incluir posición
+actual en Análisis**. La prima histórica sigue siendo necesaria para calcular
+el resultado de la posición desde su costo.
 **Limpiar ajustes** vuelve a la posición sin esas operaciones hipotéticas.
 **Limpiar posición** vacía del borrador las patas, los gastos y el realizado de la
 posición. **Recargar tenencia** consulta nuevamente Matriz y recupera las primas

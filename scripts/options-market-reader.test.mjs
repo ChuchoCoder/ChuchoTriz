@@ -39,6 +39,15 @@ test('projects catalog, native metrics, monetary factor and mirrored book with n
   assert.equal(JSON.stringify({ catalog, snapshot }).includes('PRIVATE_ACCOUNT'), false);
   assert.deepEqual(f.subscriptions.map(s => s.topic), ['md', 'book']);
 });
+test('preserves displayed fallback quotes without confirming depth from an incomplete book', async () => {
+  const f = fixture();
+  f.contracts[0].book.aszBook1 = 0;
+  Object.assign(f.contracts[0].md, { ask: 6, asz: 20 });
+  const snapshot = (await f.call('snapshot', { underlyingId: 'GGAL', ids: ['option-0'] })).result;
+  assert.equal(snapshot.instruments['option-0'].ask.size, 20);
+  assert.equal(snapshot.instruments['option-0'].ask.depthUnverified, true);
+  assert.equal(snapshot.instruments['option-0'].bid.depthUnverified, undefined);
+});
 test('never exposes execution or arbitrary store methods', async () => {
   const f = fixture();
   for (const method of ['orders', 'sendOrder', 'cancelOrder', 'replaceOrder', 'hello', 'constructor', '__proto__', 'getSecurity'])

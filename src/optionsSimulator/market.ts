@@ -4,14 +4,15 @@ import { caucionTradeExpiresAt, isRecentCaucionTrade, selectCaucionReference, ty
 const supportedMarketHost = /^(?:.+\.)?xoms\.com\.ar$|^remarkets\.matriz\.com\.ar$|^127\.0\.0\.1$/;
 export interface Contract {
   id: string; symbol: string; underlyingId: string; kind: "call" | "put"; strike: number;
-  expiration: string; currency: "ARS" | "USD"; strikeCurrency?: string; settlement: string; factor?: number;
+  expiration: string; currency: "ARS" | "USD"; strikeCurrency?: string; settlement: string; factor?: number; nominalsPerContract?: number;
 }
 export interface Catalog {
   contextRevision: number; catalogRevision: number; version: string; excluded: number;
   underlyings: { id: string; symbol: string; currency: string }[]; contracts: Contract[];
 }
+type QuoteLevel = { price: number; size: number; depthUnverified?: true };
 export interface Quote {
-  bid?: { price: number; size: number }; ask?: { price: number; size: number };
+  bid?: QuoteLevel; ask?: QuoteLevel;
   last?: number; referencePrice?: number; seq?: number; impliedVolatility?: number; delta?: number;
   nominalVolume?: number; changePercent?: number; lastTradeAt?: number;
 }

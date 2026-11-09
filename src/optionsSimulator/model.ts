@@ -13,6 +13,9 @@ export interface Leg {
   /** Signed native quantity when the user last reviewed the historical premium. */
   premiumQuantity?: string;
   premiumReviewPending?: boolean;
+  /** Original series of a roll leg, used to offset matching holdings in analysis. */
+  rollSeriesId?: string;
+  rollFeePercent?: number;
 }
 export interface PositionStorageSession { key: string; revision?: string }
 export interface UnderlyingHolding {
@@ -45,6 +48,7 @@ export interface Simulation {
 }
 export interface ParsedLeg {
   kind: OptionKind; side: Side; strike: number; premium: number; contracts: number; volatility: number;
+  openContracts?: number;
 }
 export interface Strategy {
   legs: ParsedLeg[];
@@ -57,6 +61,23 @@ export interface Strategy {
 export function simulationLegs(input: Simulation): Leg[] {
   return [...(input.position?.legs ?? []), ...input.legs];
 }
+/** Maps each offset roll or historical leg to its remaining exposure, without changing entry cash. */
+export function openRollContracts(input: Simulation) {
+  const remaining = new Map<Leg, number>();
+  const openContracts = (leg: Leg) => remaining.get(leg) ?? numeric(leg.contracts);
+  for (const adjustment of input.legs) {
+    if (!adjustment.rollSeriesId || adjustment.securityId !== adjustment.rollSeriesId) continue;
+    const original = input.position?.legs.find(leg => leg.securityId === adjustment.rollSeriesId && leg.side !== adjustment.side &&
+      leg.kind === adjustment.kind && numeric(leg.strike) === numeric(adjustment.strike));
+    if (!original) continue;
+    const offset = Math.min(openContracts(original), openContracts(adjustment));
+    if (offset > 0) {
+      remaining.set(original, openContracts(original) - offset);
+      remaining.set(adjustment, openContracts(adjustment) - offset);
+    }
+  }
+  return remaining;
+}
 export function underlyingExposure(position: Simulation["position"]) {
   return position?.nominalOverride ?? position?.underlying;
 }
@@ -67,6 +88,11 @@ const dayMs = 86_400_000;
 // Decimal comma and decimal point are accepted; grouping separators are deliberately rejected.
 export function numeric(value: string): number {
   return /^-?\d+(?:[.,]\d+)?$/.test(value.trim()) ? Number(value.trim().replace(",", ".")) : NaN;
+}
+/** Prospective roll fees follow the current premium and quantity of each remaining adjustment. */
+export function rollFees(legs: readonly Leg[], multiplier: number, premiums?: readonly number[]) {
+  return legs.reduce((sum, leg, index) => leg.rollFeePercent ? sum + numeric(leg.contracts) * multiplier *
+    (premiums?.[index] ?? numeric(leg.premium)) * (leg.rollFeePercent / 100) : sum, 0);
 }
 export function parseSignedQuantity(value: string): number | undefined {
   const raw = value.trim().replace(/^−/, "-");
@@ -136,7 +162,9 @@ export function parseSimulation(input: Simulation, automaticRate?: number): { ok
   const entryCosts = read(input.costs, input.position ? "Gastos de la posición" : "Gastos de entrada", 0, 1e12, { correction: accounting });
   const adjustmentCosts = input.position && input.legs.length && input.adjustmentCosts !== undefined
     ? read(input.adjustmentCosts, "Gastos de los ajustes", 0, 1e12) : 0;
-  const costs = entryCosts + adjustmentCosts;
+  const automaticCosts = rollFees(input.legs, multiplier);
+  if (adjustmentCosts + automaticCosts > 1e12) report("Los gastos de los ajustes superan el máximo admitido.");
+  const costs = entryCosts + adjustmentCosts + automaticCosts;
   const realized = !input.realized?.trim() ? 0 : read(input.realized, "Resultado realizado neto", -1e12, 1e12, { correction: accounting });
   const rate = automaticRate ?? read(input.rate, "Tasa anual", -100, 1000) / 100;
   const dividendYield = read(input.dividendYield, "Dividendos anuales", 0, 100) / 100;
@@ -159,6 +187,7 @@ export function parseSimulation(input: Simulation, automaticRate?: number): { ok
   const tooManyHistoricalLegs = historicalCount > MAX_LEGS;
   if ((!allLegs.length && !underlying && !input.position?.underlyingUnavailable) || input.legs.length > MAX_LEGS || tooManyHistoricalLegs)
     report(`Usá hasta ${MAX_LEGS} patas de posición y ${MAX_LEGS} ajustes.`, tooManyHistoricalLegs ? "chain" : undefined);
+  const remaining = openRollContracts(input);
   const legs = allLegs.map((leg, index): ParsedLeg => {
     const historical = index < historicalCount;
     const prefix = historical ? `Posición, pata ${index + 1}` : `Pata ${index + 1 - historicalCount}`;
@@ -166,19 +195,19 @@ export function parseSimulation(input: Simulation, automaticRate?: number): { ok
     const volatilityCorrection = historical ? "volatility" : undefined;
     if (!["call", "put"].includes(leg.kind) || !["buy", "sell"].includes(leg.side)) report(`${prefix}: elegí tipo y sentido válidos.`, correction);
     // Missing native VI blocks the theoretical curve, but expiry needs no volatility.
-    const volatility = leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500, { correction: volatilityCorrection }) + shift;
+    const volatility = remaining.get(leg) === 0 || leg.volatility.trim() === "" ? NaN : read(leg.volatility, `${prefix}, VI`, 0, 500, { correction: volatilityCorrection }) + shift;
     if (volatility < 0 || volatility > 500) report(`${prefix}: la VI más el cambio debe estar entre 0% y 500%.`, volatilityCorrection);
     return { kind: leg.kind, side: leg.side, strike: read(leg.strike, `${prefix}, strike`, .000001, 1e9, { correction }),
       premium: read(leg.premium, `${prefix}, prima`, 0, 1e9, { correction }),
       contracts: read(leg.contracts, `${prefix}, contratos`, 1, MAX_CONTRACTS, { integer: true, correction }),
-      volatility: volatility / 100 };
+      volatility: volatility / 100, openContracts: remaining.get(leg) };
   });
   const nominalExposure = underlying ? Math.abs(underlying.quantity) * Math.max(spot, explicitMax ?? 0, underlying.averageCost) : 0;
   const addExposure = (sum: number, leg: ParsedLeg) =>
     sum + leg.contracts * multiplier * Math.max(spot, explicitMax ?? 0, leg.strike, leg.premium);
   const exposure = legs.reduce(addExposure, costs + Math.abs(realized) + nominalExposure);
   if (exposure > Number.MAX_SAFE_INTEGER) {
-    const positionCausedOverflow = input.position && legs.slice(historicalCount).reduce(addExposure, adjustmentCosts) <= Number.MAX_SAFE_INTEGER;
+    const positionCausedOverflow = input.position && legs.slice(historicalCount).reduce(addExposure, adjustmentCosts + automaticCosts) <= Number.MAX_SAFE_INTEGER;
     report("Reducí precios o cantidades: el importe total supera la precisión admitida.", positionCausedOverflow ? "chain" : undefined);
   }
   const rangeMax = explicitMax ?? Math.min(maximumChartPrice(legs, multiplier, costs, realized, underlying?.quantity), spot * 1.25);
@@ -193,8 +222,9 @@ export function intrinsic(kind: OptionKind, spot: number, strike: number): numbe
 
 /** Linear expected-move approximation, using the nearest selected strikes and ACT/365. */
 export function standardDeviationLevels(strategy: Strategy) {
-  const distance = Math.min(...strategy.legs.map(leg => Math.abs(leg.strike - strategy.spot)));
-  const nearest = strategy.legs.filter(leg => Math.abs(Math.abs(leg.strike - strategy.spot) - distance) <= Math.max(1, strategy.spot) * Number.EPSILON * 8);
+  const open = strategy.legs.filter(leg => leg.openContracts !== 0);
+  const distance = Math.min(...open.map(leg => Math.abs(leg.strike - strategy.spot)));
+  const nearest = open.filter(leg => Math.abs(Math.abs(leg.strike - strategy.spot) - distance) <= Math.max(1, strategy.spot) * Number.EPSILON * 8);
   if (!nearest.length || nearest.some(leg => !Number.isFinite(leg.volatility))) return undefined;
   // Equal weight per contract identity (kind + strike), independent of side/quantity.
   const groups = new Map<string, number[]>();
@@ -255,7 +285,7 @@ export function entryCost(strategy: Strategy): number {
 }
 export function resultAt(strategy: Strategy, spot: number, mode: "expiry" | "theoretical"): number {
   const stockValue = (strategy.underlying?.quantity ?? 0) * spot;
-  return strategy.legs.reduce((sum, leg) => sum + direction(leg) * leg.contracts * strategy.multiplier *
+  return strategy.legs.reduce((sum, leg) => leg.openContracts === 0 ? sum : sum + direction(leg) * (leg.openContracts ?? leg.contracts) * strategy.multiplier *
     (mode === "expiry" ? intrinsic(leg.kind, spot, leg.strike) : theoreticalPrice(leg.kind, spot, leg.strike, strategy.years, leg.volatility, strategy.rate, strategy.dividendYield)), (strategy.realized ?? 0) - entryCost(strategy) + stockValue);
 }
 export interface Equilibrium { from: number; to: number }

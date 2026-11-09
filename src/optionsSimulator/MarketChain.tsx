@@ -14,6 +14,7 @@ import StrategyPicker from "./StrategyPicker";
 import ToolbarIcon from "../ToolbarIcon";
 import { preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
 import type { StrikeMarket } from "./strategyAdjustments";
+import RollPicker from "./RollPicker";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
@@ -185,16 +186,21 @@ function PositionPremium({ label, leg, disabled, onChange, onReview }: {
 }
 
 export default function MarketChain({ active, toolbar, input, setInput, onStrikeMarket, onNewStrategy, deviationReference,
-  positionMode, setPositionMode, positionAccounting, onPremiumChange, onPremiumReview, automaticCaucion, caucion, usdRate, onMarketContext }: {
+  positionMode, setPositionMode, positionAccounting, onPremiumChange, onPremiumReview, onIncludePosition,
+  automaticCaucion, caucion, usdRate, onMarketContext }: {
   active: boolean; toolbar: HTMLDivElement | null; input: Simulation; setInput: Dispatch<SetStateAction<Simulation>>;
   onStrikeMarket(market: StrikeMarket | undefined): void;
   onNewStrategy(): void;
   deviationReference: ReturnType<typeof standardDeviationLevels>;
   positionMode: boolean; setPositionMode(value: boolean): void; positionAccounting?: ReactNode;
   onPremiumChange(id: number, value: string): void; onPremiumReview(id: number): void;
+  onIncludePosition(): void;
   automaticCaucion: boolean; caucion?: CaucionReference; usdRate: string;
   onMarketContext(context: { currency?: Simulation["currency"]; version: string }): void;
 }) {
+  const [rollSource, setRollSource] = useState<Leg>();
+  const quotesTrigger = useRef<HTMLButtonElement>(null);
+  const focusQuotes = useRef(false);
   const grid = useRef<HTMLDivElement>(null);
   const chainScroll = useRef<HTMLDivElement>(null);
   const [availableChainWidth, setAvailableChainWidth] = useState(0);
@@ -293,6 +299,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [selectionReady, expiration, market, expirations.join(), catalog, underlyingId, !!input.position]);
   const selected = contracts.filter(contract => contract.expiration === expiration && marketKey(contract) === market);
   const editingPosition = positionMode && !!input.position;
+  useLayoutEffect(() => {
+    if (!active || editingPosition || !focusQuotes.current) return;
+    focusQuotes.current = false;
+    quotesTrigger.current?.focus();
+  }, [active, editingPosition]);
   const openLeg = active && input.legs.find(leg => legKey(leg) === openQuote && selected.some(contract => contract.id === leg.securityId));
   const shownQuote = openLeg ? openQuote : undefined;
   useEffect(() => {
@@ -353,6 +364,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [active, catalog, data, underlyingId, expiration, market, reading.issue, onStrikeMarket]);
   const itmSpot = comparable ? spot : undefined;
   const sameContext = comparable && input.underlying === underlying?.symbol && input.expiry === expiryDate(expiration) && input.currency === underlying?.currency;
+  const rollMarket = sameContext && underlying && strategyQuotes ? {
+    underlying: underlying.symbol, expiry: expiryDate(expiration), currency: underlying.currency, contracts: selected, quotes: strategyQuotes,
+  } : undefined;
+  const rolling = active && editingPosition && !loadingPosition && rollSource && positionLegs.includes(rollSource) ? rollSource : undefined;
+  useEffect(() => { if (!rolling) setRollSource(undefined); }, [rolling]);
   const deviations = sameContext ? deviationReference : undefined;
   const gridLevels = deviations && deviations.move > 0 && strikes.length > 1 && strikeRows.length === strikes.length && strikeRows.every((row, index) => row.strike === strikes[index])
     ? deviations.levels.flatMap(level => {
@@ -527,7 +543,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     setNotice("");
     return true;
   }
-  const positionCell = (kind: "call" | "put", strike: number, field: "quantity" | "premium") => {
+  const positionCell = (kind: "call" | "put", strike: number, field: "quantity" | "premium" | "action") => {
     const entries = positionSeries.filter(series => series.kind === kind && series.strike === strike);
     const held = entries.some(series => positionLegs.some(leg => leg.securityId === series.id));
     const otm = itmSpot !== undefined && (kind === "call" ? strike > itmSpot : strike < itmSpot);
@@ -537,13 +553,15 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         const label = entries.length > 1 ? series.symbol : `${kind.toUpperCase()} ${fmt(strike)}`;
         return <div key={series.id} className="ct-opt-position-field">
           {entries.length > 1 && <small>{series.symbol}</small>}
-          <div>{field === "quantity" ? <SignedQuantityInput label={`Cantidad posición ${label}`} disabled={loadingPosition}
-            value={leg ? (leg.side === "sell" ? "−" : "+") + leg.contracts : ""} className={leg && (leg.side === "sell" ? "ct-sim-sell" : "ct-sim-buy")}
-            onCommit={value => commitPositionQuantity(series, value)} />
-            : <PositionPremium label={label} leg={leg} disabled={loadingPosition}
-              onChange={onPremiumChange} onReview={onPremiumReview} />}</div>
+          <div>{field === "action" ? leg?.securityId && <button type="button" disabled={loadingPosition} className="ct-opt-roll-trigger"
+            aria-label={`Rolar posición ${label}`} aria-haspopup="dialog" onClick={() => setRollSource(leg)}>Rolar ↗</button>
+            : field === "quantity" ? <SignedQuantityInput label={`Cantidad posición ${label}`} disabled={loadingPosition}
+              value={leg ? (leg.side === "sell" ? "−" : "+") + leg.contracts : ""} className={leg && (leg.side === "sell" ? "ct-sim-sell" : "ct-sim-buy")}
+              onCommit={value => commitPositionQuantity(series, value)} />
+              : <PositionPremium label={label} leg={leg} disabled={loadingPosition}
+                onChange={onPremiumChange} onReview={onPremiumReview} />}</div>
         </div>;
-      }) : "—"}
+      }) : field === "action" ? null : "—"}
     </td>;
   };
   const quoteCell = (contract: Contract | undefined, side: "buy" | "sell") => {
@@ -674,7 +692,19 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       ? <div {...configAttributes} popover="auto" role="group">{chainConfigContents}</div>
       : <dialog {...configAttributes} ref={configDialog}>{chainConfigContents}</dialog>}
   </>;
-  return <section className="ct-sim-card ct-options ct-sim-market">{toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
+  return <section className="ct-sim-card ct-options ct-sim-market">
+    {rolling && <RollPicker key={rolling.id} input={input} source={rolling} market={rollMarket} onClose={() => setRollSource(undefined)}
+      onApply={draft => {
+        setInput(current => ({ ...current, legs: [...current.legs, ...draft.legs] }));
+        onIncludePosition();
+        onNewStrategy();
+        setOpenQuote(undefined);
+        setRollSource(undefined);
+        focusQuotes.current = true;
+        setPositionMode(false);
+        setNotice({ announcement: "Rolado cargado en Cotizaciones. Abrí Análisis para simular la posición con los ajustes." });
+      }} />}
+    {toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
       <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
@@ -684,7 +714,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         context={`${underlying?.symbol ?? "Sin selección"} · ${formatOptionExpiry(expiryDate(expiration), "short")}${input.position ? " · Ajustes" : ""}`} onApply={chooseStrategy} />
     </div>
     <div className="ct-sim-position-tabs" role="group" aria-label="Modo de la cadena">
-      <button type="button" className="ct-tool-icon-button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>
+      <button ref={quotesTrigger} type="button" className="ct-tool-icon-button" aria-pressed={!editingPosition} disabled={loadingPosition} onClick={() => { setPositionMode(false); setNotice(""); }}>
         <ToolbarIcon name="quotes" />Cotizaciones
       </button>
       <button type="button" className="ct-tool-icon-button" aria-pressed={editingPosition}
@@ -715,9 +745,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       <div ref={grid} className={`ct-opt-chain-grid${editingPosition ? " ct-opt-position-grid" : ""}`}><table
         className={editingPosition ? "ct-opt-chain ct-opt-position-chain" : `ct-opt-chain ct-opt-metrics-chain${compactChain ? " ct-opt-compact-chain" : ""}`}
         style={editingPosition ? undefined : marketTableStyle}>
-        {editingPosition ? <><colgroup><col /><col /><col className="strike" /><col /><col /></colgroup>
-          <thead><tr><th scope="col" title="Cantidad de Calls · + compra, − venta">CALLS · Cant.</th><th scope="col" title="Prima histórica por unidad de Calls">Prima histórica</th>
-            <th className="ct-opt-strike" scope="col">Strike</th><th scope="col" title="Cantidad de Puts · + compra, − venta">PUTS · Cant.</th><th scope="col" title="Prima histórica por unidad de Puts">Prima histórica</th></tr></thead>
+        {editingPosition ? <><colgroup><col className="actions" /><col /><col /><col className="strike" /><col /><col /><col className="actions" /></colgroup>
+          <thead><tr><th scope="col" title="Acciones de Calls">Acciones</th><th scope="col" title="Cantidad de Calls · + compra, − venta">CALLS · Cant.</th><th scope="col" title="Prima histórica por unidad de Calls">Prima histórica</th>
+            <th className="ct-opt-strike" scope="col">Strike</th><th scope="col" title="Cantidad de Puts · + compra, − venta">PUTS · Cant.</th><th scope="col" title="Prima histórica por unidad de Puts">Prima histórica</th><th scope="col" title="Acciones de Puts">Acciones</th></tr></thead>
         </> : <>
         <colgroup>{columnWidths(callColumns)}<col className="strike" />{columnWidths(putColumns)}</colgroup>
         <thead><tr className="ct-sim-chain-legend" aria-label="Resumen de mercado y escala de VI">
@@ -730,12 +760,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         <tbody>{strikes.map(strike => {
           const call = editingPosition ? undefined : unique("call", strike), put = editingPosition ? undefined : unique("put", strike);
           return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}>
-            {editingPosition ? <>{positionCell("call", strike, "quantity")}{positionCell("call", strike, "premium")}</>
+            {editingPosition ? <>{positionCell("call", strike, "action")}{positionCell("call", strike, "quantity")}{positionCell("call", strike, "premium")}</>
               : chainCells(callColumns, call, "call")}
             <th scope="row" className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
-            {editingPosition ? <>{positionCell("put", strike, "quantity")}{positionCell("put", strike, "premium")}</>
+            {editingPosition ? <>{positionCell("put", strike, "quantity")}{positionCell("put", strike, "premium")}{positionCell("put", strike, "action")}</>
               : chainCells(putColumns, put, "put")}
-          </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 5 : 2 * callColumns.length + 1}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
+          </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 7 : 2 * callColumns.length + 1}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}
