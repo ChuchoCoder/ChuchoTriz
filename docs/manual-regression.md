@@ -1,4 +1,106 @@
-# Pruebas manuales de ChuchoTriz Free
+# Smoke y regresión de ChuchoTriz Free
+
+## Ejecutar antes de un PR
+
+Desde el checkout del cambio, con dependencias instaladas (`npm ci --ignore-scripts --no-audit`):
+
+```powershell
+npm run test:pr
+```
+
+Ejecuta seguridad, todos los tests de Node/Vitest, empaquetado, auditoría y la
+regresión de navegador. Un fallo devuelve código de salida distinto de cero.
+No necesita sesión de broker ni mercado abierto. Para ejecutar solo la interfaz:
+
+```powershell
+npm run test:smoke
+npm run test:regression
+```
+
+Ambos compilan primero el paquete de producción. Smoke ejecuta los recorridos
+básicos; regression agrega las 34 comprobaciones anteriores de estrategias y
+los casos ampliados de contabilidad, cuentas/vencimientos, rolado y límites.
+Los tests usan el bundle recién generado y los lectores reales sobre APIs externas
+ficticias. **No prueban por sí solos que Chrome haya instalado ese bundle ni que
+la versión actual de Matriz mantenga el contrato simulado.**
+
+Requisitos de navegador: Windows, PowerShell 7 (`pwsh` en PATH), Node compatible
+con `package.json` y el perfil compartido ChuchoTriz abierto. El ejecutor usa el
+servidor MCP del launcher `Start-Browser.ps1 -Mcp`; verifica el perfil mediante
+ese launcher, sin crear otro navegador. Si está cerrado o no se puede conectar,
+falla y registra el motivo. Abrilo explícitamente con el launcher compartido.
+La ubicación habitual es `%LOCALAPPDATA%/AgentBrowsers/ChuchoTriz/Start-Browser.ps1`;
+se puede indicar otra con `CHUCHOTRIZ_BROWSER_LAUNCHER`.
+
+El recorrido abre únicamente una pestaña nueva en un puerto loopback asignado
+por el sistema, bloquea solicitudes externas desde esa pestaña, y conserva las
+pestañas y preferencias de Matriz. Usa almacenamiento del origen local y una
+captura temporal del portapapeles ficticio; no reemplaza el portapapeles del
+sistema. Al terminar cierra su pestaña y servidor local, no el navegador compartido.
+No interactuar con la pestaña de prueba mientras corre. Un lock impide dos
+ejecuciones CLI simultáneas. Si se interrumpe abruptamente y queda un lock,
+comprobar que el PID del archivo temporal `chuchotriz-free-qa.lock` ya no existe
+antes de eliminarlo; no cerrar ni terminar procesos del navegador para limpiarlo.
+
+Cada ejecución guarda `report.json` y `report.md` en una carpeta nueva bajo
+`test-results/qa-<fecha-UTC>/`, con commit, indicador de cambios locales, versión,
+SHA-256 del ZIP, suites esperadas/completadas y resultados. Ante un fallo del
+recorrido intenta guardar además una captura de **su fixture**, nunca de Matriz.
+Los artefactos se ignoran en Git. Adjuntar al PR el resumen revisado o copiarlo a
+`docs/qa/` siguiendo la allowlist. No marcar aprobado un reporte parcial.
+
+Para depurar un grupo sin repetir todo:
+
+```powershell
+npm run test:regression -- --group=scope
+```
+
+Ese reporte se marca **PARTIAL**, aun si el grupo aprueba. Los grupos disponibles
+son los de la tabla siguiente. CI ejecuta automáticamente los tests unitarios,
+de lectores y del transporte/parseo MCP mediante `npm test`; la suite de navegador
+se ejecuta localmente porque requiere el perfil compartido. No se lanza un
+navegador aislado en CI.
+
+## Cobertura automática y comprobaciones humanas
+
+| Casos de la guía | Grupo de navegador | Cobertura reproducible |
+| --- | --- | --- |
+| SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
+| SM-02, SM-03, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, cambio de instrumento, último preset, Limpiar, reemplazo de formulario y foco tras cotización. |
+| SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
+| SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. |
+| SM-06 | `tooltip` | VI y griegas, ausencia de VI, Escape y clic exterior. |
+| SM-07, RG-08 | `analysis` | Vistas compartidas, 25 escenarios, vencimiento, zoom/Ajustar y cambio entre tasa automática/manual. Los tests de caución también cubren vencimiento y ausencia de referencia. |
+| SM-08 | `position` | Importación, primas desconocidas y conservación de ajustes al alternar vistas. |
+| SM-09 | `operations` | Lectura y copia de ejecuciones ficticias con cantidades firmadas, vencimientos, bases y primas. |
+| SM-10 | `preload` | Precarga ASK/BID con cantidad elegida y precio editado por pata; ticket ficticio limpiado. |
+| RG-02, RG-03, RG-09 | `baseline` | 24 variantes y 10 comprobaciones de cantidades, strikes, precios, gráficos, VI y desconexión/libro cruzado. |
+| RG-02 | `limits` | Coincidencia de patas entre previsualización/armado y límites de cantidad/strikes. |
+| RG-03 | `editing` | VI por pata modifica el teórico y conserva prima, cantidad y resultado al vencimiento; quitar pata. |
+| RG-04 | `oracle` | Resultados independientes de call manual comprada/vendida a precios 90/100/110. |
+| RG-05 | `accounting` | Primas, gastos, realizado, nominales/costo, recarga y persistencia; totales y exclusión/inclusión de posición. |
+| RG-06 | `scope` | Cambios de cantidad/sentido, separación entre cuentas y entre vencimientos. |
+| RG-07 | `roll` | Rolado comprado/vendido, contratos financiables, gastos y falta de liquidez. |
+| SM-08, SM-09 | `reader-errors` | Reportes vacíos/fallidos, errores sin datos privados, cambio de cuenta y recuperación. |
+| RG-10 | `layout` | Geometría a 1024/1920, scroll, controles, teclado y devolución de foco. |
+
+Quedan como comprobaciones humanas de integración, no como pasos repetidos sobre
+la fixture:
+
+1. **Instalación y Matriz real:** verificar la versión/ID cargados y recorrer
+   apertura, un preset, foco de cotización y una precarga sin confirmar. Esto
+   detecta cambios en el DOM de Matriz que la fixture no puede anticipar.
+2. **Datos reales:** con sesión/2FA cuando corresponda y durante rueda, contrastar
+   instrumento, plazo, puntas/VI/tasa, tenencia y ejecuciones contra Matriz. No
+   editar primas personales para fabricar pruebas ni confirmar órdenes.
+3. **Inspección visual:** legibilidad, recortes, tooltips y gráficos con el tema,
+   zoom de Windows y densidad de datos reales utilizados. La geometría automática
+   no reemplaza ese juicio visual ni una revisión con lector de pantalla.
+
+Repetir la integración cuando el PR afecte los adaptadores, la instalación o esos
+flujos. Para cambios internos cubiertos, adjuntar el reporte automático y explicar
+si no corresponde repetir integración. Los casos detallados debajo siguen siendo
+el procedimiento de referencia y permiten contrastar manualmente un fallo.
 
 Ejecutar el smoke antes de cada PR que cambie comportamiento y la regresión
 completa antes de publicar una versión. Repetir los casos afectados sobre el
@@ -54,7 +156,7 @@ con datos reales disponibles, sin publicar detalles de la cuenta.
 
 | ID | Pasos | Resultado esperado |
 | --- | --- | --- |
-| RG-01 | Configurar presets y Cantidad a mostrar; probar guardado, editor RAW válido/inválido y recarga. Restaurar configuración original. | Valores válidos persisten; JSON inválido no destruye la configuración; cantidad visible respeta las reglas del formulario. |
+| RG-01 | Configurar presets y Cantidad a mostrar; probar guardado, editor RAW válido/inválido y recarga. Restaurar configuración original. | Valores válidos persisten; texto RAW inválido no destruye la configuración; cantidad visible respeta las reglas del formulario. |
 | RG-02 | Recorrer las ocho familias y sus variantes en Estrategia; Armar, subir/bajar cantidades y strikes, clic simple/doble y límites. | Previsualización y armado coinciden; proporciones y sentido se conservan; dobles clics suman diez unidades; límites no invierten posición. |
 | RG-03 | Comparar Natural/Mid/Opuesto; editar cantidad/precio/VI; quitar patas y limpiar ajustes. | Primas y crédito/débito coherentes con puntas y gastos; no se pisa una prima editada con un refresco. |
 | RG-04 | Ingresar manualmente una call: spot/strike 100, prima 8, cantidad +1, factor 100, gastos 0. Evaluar al vencimiento a 90/100/110; invertir a −1. | Compra: −800/−800/+200; venta: +800/+800/−200. Ganancia/pérdida ilimitada identificada según lado. |

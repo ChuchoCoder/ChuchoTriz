@@ -237,5 +237,11 @@ de Matriz.
 
 ## Validación antes de un PR
 
-Usá la [guía de smoke y regresión manual](docs/manual-regression.md) y guardá
-el resultado con la [plantilla de ejecución](docs/qa/run-template.md).
+Ejecutá `npm run test:pr` desde el checkout del cambio, con el perfil compartido
+ChuchoTriz abierto. Incluye seguridad, tests, paquete, auditoría y regresión de
+navegador sobre datos ficticios. Para una pasada corta: `npm run test:smoke`.
+Los reportes JSON/Markdown quedan en `test-results/qa-*/`; un fallo devuelve error.
+
+La [guía de smoke y regresión](docs/manual-regression.md) explica requisitos,
+cobertura automática y las comprobaciones que requieren Matriz real o inspección
+humana. Para estas últimas usá la [plantilla de ejecución](docs/qa/run-template.md).
