@@ -1570,7 +1570,12 @@ it("adjusts all quantities proportionally and shifts the whole strategy to nativ
   const upQuantity = () => byLabel<HTMLButtonElement>("Subir cantidades de toda la estrategia");
   const downQuantity = () => byLabel<HTMLButtonElement>("Bajar cantidades de toda la estrategia");
   const upStrike = () => byLabel<HTMLButtonElement>("Subir strikes de toda la estrategia");
+  const wider = () => byLabel<HTMLButtonElement>("Aumentar el ancho de la estrategia");
+  const narrower = () => byLabel<HTMLButtonElement>("Reducir el ancho de la estrategia");
   expect(upQuantity().disabled).toBe(true); expect(upStrike().disabled).toBe(true);
+  expect(upStrike().textContent).toBe("↓");
+  expect(byLabel("Bajar strikes de toda la estrategia").textContent).toBe("↑");
+  expect(wider().disabled).toBe(true);
   await act(async () => byLabel<HTMLButtonElement>("Elegir estrategia").click());
   await act(async () => byLabel<HTMLButtonElement>("Armar Butterfly · Long Call").click());
   expect(downQuantity().disabled).toBe(true);
@@ -1578,6 +1583,11 @@ it("adjusts all quantities proportionally and shifts the whole strategy to nativ
   expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+3", "−6", "+3"]);
   await act(async () => downQuantity().click());
   expect([1, 2, 3].map(index => byLabel(`Editar Contratos pata ${index}`).textContent)).toEqual(["+2", "−4", "+2"]);
+  expect(narrower().disabled).toBe(true);
+  await act(async () => wider().click());
+  expect([1, 2, 3].map(index => byLabel(`Strike pata ${index}`).textContent)).toEqual(["80", "100", "120"]);
+  await act(async () => narrower().click());
+  expect([1, 2, 3].map(index => byLabel(`Strike pata ${index}`).textContent)).toEqual(["90", "100", "110"]);
   await act(async () => upStrike().click());
   expect([...container.querySelectorAll('.ct-sim-leg-strike')].map(node => node.textContent)).toEqual(["100", "110", "120"]);
   expect([1, 2, 3].map(index => byLabel(`Editar Prima pata ${index}`).textContent)).toEqual(["5", "8", "2"]);

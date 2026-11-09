@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exampleLegs, initialSimulation, MAX_CONTRACTS } from "./model";
-import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
+import { adjustStrategyQuantity, adjustStrategyWidth, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { buildRoll, rollCandidates } from "./rollPosition";
 
 const input = () => ({ ...initialSimulation("2026-11-03"), underlying: "GGAL", legs: exampleLegs("butterfly").map(leg => ({
@@ -13,6 +13,32 @@ const market = (): StrikeMarket => {
     bid: { price: contract.strike / 10, size: 100 }, ask: { price: contract.strike / 10 + 1, size: 100 }, impliedVolatility: contract.strike / 2,
   }])) };
 };
+
+describe("adjusting strategy width", () => {
+  it("reprices only moved wings, keeping the middle leg and its edited inputs", () => {
+    const draft = input(), book = market();
+    draft.legs[1].premium = "7.25";
+    delete book.quotes["call-100"];
+    book.quotes["call-120"] = { bid: { price: 1e-7, size: 100 }, ask: { price: 1.2e-7, size: 100 }, impliedVolatility: 1e-7 };
+    const wider = adjustStrategyWidth(draft, 1, book);
+    expect(wider).toMatchObject({ ok: true, legs: [
+      { securityId: "call-80", strike: "80", premium: "9" },
+      { securityId: "call-100", strike: "100", premium: "7.25" },
+      { securityId: "call-120", strike: "120", premium: "0.00000012", volatility: "0.0000001" },
+    ] });
+    expect(wider.ok && wider.legs[1]).toBe(draft.legs[1]);
+    delete book.quotes["call-120"];
+    expect(adjustStrategyWidth(draft, 1, book).ok).toBe(false);
+    expect(draft.legs.map(leg => leg.strike)).toEqual(["90", "100", "110"]);
+  });
+
+  it("narrows manual spreads by one point per extreme and stops before they meet", () => {
+    const draft = { ...input(), legs: exampleLegs("butterfly").map((leg, index) => ({ ...leg, strike: String(98 + 2 * index) })) };
+    const narrower = adjustStrategyWidth(draft, -1);
+    expect(narrower.ok && narrower.legs.map(leg => leg.strike)).toEqual(["99", "100", "101"]);
+    expect(narrower.ok && adjustStrategyWidth({ ...draft, legs: narrower.legs }, -1).ok).toBe(false);
+  });
+});
 
 describe("rolling an option position", () => {
   const sold = () => ({ ...input(), legs: [], position: { legs: [{ ...input().legs[1], contracts: "10", volatility: "40" }] } });

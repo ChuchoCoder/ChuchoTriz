@@ -71,9 +71,9 @@
 .ct-sim-quick-results .ct-sim-inspect span { font-size: 10px; }
 .ct-sim-quick-results .ct-sim-inspect output, .ct-sim-quick-results .ct-sim-inspect strong { margin-top: 2px; font-size: 12px; overflow-wrap: anywhere; }
 .ct-sim-legs-card { padding: 10px; }
-.ct-sim-leg-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ct-sim-leg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
 .ct-sim-leg-toolbar h3 { margin: 0; font-size: 12px; }
-.ct-sim-quick-adjustments { display: flex; gap: 8px; margin-left: auto; }
+.ct-sim-quick-adjustments { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .ct-sim-adjustment-group { display: flex; align-items: center; gap: 4px; }
 .ct-sim-adjustment-group > span { font-size: 10px; color: var(--sim-muted); }
 .ct-sim-adjustment-group > div { display: flex; }

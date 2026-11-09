@@ -7,7 +7,7 @@ import MarketChain, { SignedQuantityInput } from "./MarketChain";
 import ToolbarIcon from "../ToolbarIcon";
 import { preloadOptionTicket } from "../Matriz";
 import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionInput, formatOptionNumber, formatOptionVolatility } from "./format";
-import { adjustStrategyQuantity, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
+import { adjustStrategyQuantity, adjustStrategyWidth, setStrategyPrice, shiftStrategyStrikes, strategyPriceReferences, type StrikeMarket } from "./strategyAdjustments";
 import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import { optionTicketRestriction, useCaucionMarket, type Contract } from "./market";
 import { caucionReferenceLabel } from "./caucionRate";
@@ -502,12 +502,18 @@ export default function OptionsSimulator({ active = true, marketReference = fals
       return result.ok ? result.legs[0] : leg;
     }) }));
   }
-  function adjust(kind: "strike" | "quantity", direction: -1 | 1, steps = 1) {
+  function strategyAdjustment(draft: Simulation, kind: "strike" | "quantity" | "width", direction: -1 | 1, steps = 1) {
+    if (kind === "strike") return shiftStrategyStrikes(draft, direction, strikeMarket);
+    if (kind === "width") return adjustStrategyWidth(draft, direction, strikeMarket);
+    return adjustStrategyQuantity(draft.legs, direction, steps);
+  }
+  function adjust(kind: "strike" | "quantity" | "width", direction: -1 | 1, steps = 1) {
     setInput(current => {
-      const result = kind === "strike" ? shiftStrategyStrikes(current, direction, strikeMarket) : adjustStrategyQuantity(current.legs, direction, steps);
+      const result = strategyAdjustment(current, kind, direction, steps);
       return result.ok ? { ...current, legs: result.legs } : current;
     });
-    setStatus(kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
+    setStatus(kind === "width" ? "Ancho de la estrategia ajustado."
+      : kind === "quantity" ? "Cantidades ajustadas conservando las proporciones de todas las patas."
       : input.legs.some(leg => leg.securityId) ? "Strikes desplazados a bases contiguas. Primas y VI copiadas de esta lectura."
       : "Strikes manuales desplazados un punto; primas y VI conservadas.");
   }
@@ -624,12 +630,21 @@ export default function OptionsSimulator({ active = true, marketReference = fals
     <div className="ct-sim-build-summary"><section key={view} className="ct-sim-card ct-sim-legs-card"><div className="ct-sim-leg-toolbar"><h3>{input.position ? "Ajustes simulados" : "Patas"}</h3>
       <div className="ct-sim-quick-adjustments" aria-label="Ajustar toda la estrategia">{([ ["strike", "Strike"], ["quantity", "Cantidad"] ] as const).map(([kind, label]) =>
         <div key={kind} className="ct-sim-adjustment-group" role="group" aria-label={label}><span>{kind === "quantity" ? "Cant." : label}</span><div>{([-1, 1] as const).map(direction => {
-          const result = kind === "strike" ? shiftStrategyStrikes(input, direction, strikeMarket) : adjustStrategyQuantity(input.legs, direction);
+          const result = strategyAdjustment(input, kind, direction);
           const action = `${direction < 0 ? "Bajar" : "Subir"} ${kind === "strike" ? "strikes" : "cantidades"} de toda la estrategia`;
           return <button key={direction} type="button" aria-label={action} disabled={!result.ok} onClick={event => adjust(kind, direction, kind === "quantity" ? quantityClickSteps(event.detail) : 1)}
             title={result.ok ? kind === "strike" ? input.legs.some(leg => leg.securityId) ? "Base contigua por pata; copia prima y VI del destino" : "Paso manual de un punto; conserva prima y VI"
-              : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↓" : "↑"}</button>;
-        })}</div></div>)}</div>
+              : "Clic: 1 unidad de proporción · Doble clic: 10 · Conserva las relaciones entre patas" : result.reason}>{kind === "quantity" ? direction < 0 ? "−" : "+" : direction < 0 ? "↑" : "↓"}</button>;
+        })}</div></div>)}
+        <div className="ct-sim-adjustment-group" role="group" aria-label="Ancho"><span>Ancho</span><div>{([-1, 1] as const).map(direction => {
+          const result = strategyAdjustment(input, "width", direction);
+          const label = direction < 0 ? "Reducir el ancho de la estrategia" : "Aumentar el ancho de la estrategia";
+          return <button key={direction} type="button" className="ct-tool-icon-button" aria-label={label}
+            disabled={!result.ok} title={result.ok ? label : result.reason} onClick={() => adjust("width", direction)}>
+            <ToolbarIcon name={direction < 0 ? "narrowWidth" : "widenWidth"} />
+          </button>;
+        })}</div></div>
+      </div>
       <button type="button" className="ct-sim-clear-legs ct-tool-icon-button" aria-label={input.position ? "Limpiar ajustes" : "Limpiar patas"}
         onClick={() => { setInput(current => ({ ...current, legs: [] })); setStatus(""); }}><ToolbarIcon name="clear" />Limpiar</button></div>
       <div className="ct-sim-table-scroll"><table aria-label="Patas simuladas con strike, cantidad y prima por unidad">

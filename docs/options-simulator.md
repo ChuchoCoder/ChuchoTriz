@@ -188,12 +188,15 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    anterior. Las patas manuales permiten editar también tipo y strike.
    La VI de cada pata se conserva y se edita desde **Análisis → VI por pata**,
    con dos decimales al mostrarla y precisión original al editarla.
-   Los botones **Strike ↓/↑** desplazan todas las patas a la base contigua del
+   Los botones **Strike ↑/↓** desplazan todas las patas a la base contigua del
    mismo tipo y vencimiento, copiando BID para ventas, ASK para compras y VI del
    destino. El ajuste es completo o no se aplica: no salta bases con contratos
    ambiguos, factores incompatibles o sin la punta requerida. En estrategias
    totalmente manuales el paso de strike es un punto, conservando prima y VI;
    no se mezcla este ajuste con patas de la cadena.
+   **Ancho** acerca o separa los dos strikes extremos un paso por lado. Conserva
+   las patas intermedias y requiere que los strikes se mantengan separados y en
+   el mismo orden. Las patas movidas toman la prima y VI de su nueva base.
    **Cantidad −/+** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
    3:6:3; bajar vuelve una unidad de esa proporción. Doble clic ajusta diez
    unidades de proporción en total (1:2:1 → 11:22:11). No baja cantidades a cero.
