@@ -38,6 +38,16 @@ describe("adjusting strategy width", () => {
     expect(narrower.ok && narrower.legs.map(leg => leg.strike)).toEqual(["99", "100", "101"]);
     expect(narrower.ok && adjustStrategyWidth({ ...draft, legs: narrower.legs }, -1).ok).toBe(false);
   });
+
+  it("rejects out-of-range destination prices and strikes and treats invalid IV as unavailable", () => {
+    const draft = input(), book = market();
+    book.quotes["call-120"].impliedVolatility = 501;
+    expect(adjustStrategyWidth(draft, 1, book)).toMatchObject({ ok: true, legs: [expect.anything(), expect.anything(), { volatility: "" }] });
+    book.quotes["call-120"].ask!.price = 1e9 + 1;
+    expect(adjustStrategyWidth(draft, 1, book)).toMatchObject({ ok: false, reason: expect.stringContaining("prima de destino") });
+    book.contracts.find(contract => contract.id === "call-120")!.strike = 1e9 + 1;
+    expect(adjustStrategyWidth(draft, 1, book)).toMatchObject({ ok: false, reason: expect.stringContaining("strike de destino") });
+  });
 });
 
 describe("rolling an option position", () => {

@@ -196,7 +196,8 @@ se quitaron BID/ASK duplicados, hora local de lectura y escalas de volumen repet
    no se mezcla este ajuste con patas de la cadena.
    **Ancho** acerca o separa los dos strikes extremos un paso por lado. Conserva
    las patas intermedias y requiere que los strikes se mantengan separados y en
-   el mismo orden. Las patas movidas toman la prima y VI de su nueva base.
+   el mismo orden. Las patas de la cadena toman la prima y VI de su nueva base.
+   Las patas manuales conservan su prima y VI.
    **Cantidad −/+** conserva la proporción entera: 1:2:1 pasa a 2:4:2, luego a
    3:6:3; bajar vuelve una unidad de esa proporción. Doble clic ajusta diez
    unidades de proporción en total (1:2:1 → 11:22:11). No baja cantidades a cero.
