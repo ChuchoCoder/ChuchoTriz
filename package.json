@@ -8,14 +8,17 @@
     "build": "npm run check:free && tsc && vite build && node scripts/check-free.mjs --dist",
     "preview": "vite preview",
     "watch": "tsc && vite build --watch",
-    "test": "vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs",
+    "test": "vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs && node --test tools/qa/*.test.mjs",
     "check:free": "node scripts/check-free.mjs",
     "package:free": "npm run build && node scripts/package-free.mjs",
     "security:lint": "eslint \"src/**/*.{ts,tsx,js,jsx,mjs,cjs}\" \"public/**/*.{ts,tsx,js,jsx,mjs,cjs}\" --no-error-on-unmatched-pattern --max-warnings=0",
     "security:policy": "node scripts/security/check-policy.mjs",
     "security:test": "node --test scripts/security/*.test.mjs",
     "security:tools": "node scripts/security/run-tools.mjs",
-    "security:check": "npm run security:test && npm run security:policy && npm run security:lint"
+    "security:check": "npm run security:test && npm run security:policy && npm run security:lint",
+    "test:smoke": "npm run package:free && node tools/qa/run.mjs --smoke",
+    "test:regression": "npm run package:free && node tools/qa/run.mjs",
+    "test:pr": "npm run security:check && npm test && npm run package:free && npm audit --audit-level=moderate && node tools/qa/run.mjs"
   },
   "dependencies": {
     "react": "19.3.1",

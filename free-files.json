@@ -129,5 +129,10 @@
   ".github/pull_request_template.md",
   "docs/manual-regression.md",
   "docs/qa/0.0.21-2026-11-08.md",
-  "docs/qa/run-template.md"
+  "docs/qa/run-template.md",
+  "tools/qa/mcp-stdio.mjs",
+  "tools/qa/mcp-stdio.test.mjs",
+  "tools/qa/run.mjs",
+  "tools/qa/browser-cases.js",
+  "docs/qa/automation-2026-11-09.md"
 ]
