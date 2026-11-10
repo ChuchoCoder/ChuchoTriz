@@ -13,7 +13,7 @@ import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import ToolbarIcon from "../ToolbarIcon";
 import { preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";
-import type { StrikeMarket } from "./strategyAdjustments";
+import { moveQuoteLeg, type StrikeMarket } from "./strategyAdjustments";
 import RollPicker from "./RollPicker";
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -22,6 +22,10 @@ const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "
 const quantityPresets = [1, 10, 25, 50, 100];
 const loadTicketText = "Cargar Op.";
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
+function acceptsStrikeDrop(target: EventTarget, leg: Leg) {
+  const zone = target instanceof Element ? target.closest("td, th")?.getAttribute("data-strike-drop") : undefined;
+  return zone === "strike" || zone === `${leg.kind}:${leg.side}`;
+}
 type ChainColumn = OptionMetricField | "bid" | "ask";
 type OptionalColumn = Exclude<OptionMetricField, "iv">;
 const chainColumns: Record<ChainColumn, { heading: string; compactHeading?: string; label?: string; title?: string; className?: string; width?: number }> = {
@@ -254,6 +258,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const [viEnabled, setViEnabled] = useState(true), [viMinutes, setViMinutes] = useState("30");
   const [notice, setNotice] = useState<string | { announcement: string }>("");
   const [openQuote, setOpenQuote] = useState<string>();
+  const [strikeDrag, setStrikeDrag] = useState<{ leg: Leg; target?: number }>();
   const pendingQuantity = useRef<{ leg: Leg; next: Leg }>(undefined);
   const quantityBar = useRef<HTMLDivElement>(null);
   const [loadingPosition, setLoadingPosition] = useState(false);
@@ -308,7 +313,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     quotesTrigger.current?.focus();
   }, [active, editingPosition]);
   const openLeg = active && input.legs.find(leg => legKey(leg) === openQuote && selected.some(contract => contract.id === leg.securityId));
-  const shownQuote = openLeg ? openQuote : undefined;
+  const shownQuote = openLeg && !strikeDrag ? openQuote : undefined;
   useEffect(() => {
     if (!shownQuote) setOpenQuote(undefined);
   }, [shownQuote]);
@@ -368,9 +373,14 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [active, catalog, data, underlyingId, expiration, market, reading.issue, onStrikeMarket]);
   const itmSpot = comparable ? spot : undefined;
   const sameContext = comparable && input.underlying === underlying?.symbol && input.expiry === expiryDate(expiration) && input.currency === underlying?.currency;
-  const rollMarket = sameContext && underlying && strategyQuotes ? {
+  const draftMarket = sameContext && underlying && strategyQuotes ? {
     underlying: underlying.symbol, expiry: expiryDate(expiration), currency: underlying.currency, contracts: selected, quotes: strategyQuotes,
   } : undefined;
+  const draggedLeg = active && !editingPosition && !loadingPosition && draftMarket && strikeDrag && input.legs.includes(strikeDrag.leg)
+    ? strikeDrag.leg : undefined;
+  useEffect(() => {
+    if (strikeDrag && !draggedLeg) setStrikeDrag(undefined);
+  }, [strikeDrag, draggedLeg]);
   const rolling = active && editingPosition && !loadingPosition && rollSource && positionLegs.includes(rollSource) ? rollSource : undefined;
   useEffect(() => { if (!rolling) setRollSource(undefined); }, [rolling]);
   const deviations = sameContext ? deviationReference : undefined;
@@ -486,13 +496,14 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       return legs === current.position.legs ? current : { ...current, position: { ...current.position, legs } };
     });
   }
-  function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote, premium: number | undefined) {
+  function selectQuote(contract: Contract, side: "buy" | "sell", quote: Quote | undefined, premium: number | undefined) {
     const existing = input.legs.find(leg => leg.securityId === contract.id);
     if (existing?.side === side) {
       setInput(current => ({ ...current, legs: current.legs.filter(leg => leg.securityId !== contract.id) }));
       setOpenQuote(undefined);
       return;
     }
+    if (!quote) return;
     if (!existing && input.legs.length >= MAX_LEGS) { setNotice(`Máximo ${MAX_LEGS} patas.`); return; }
     if (!underlying || !comparable || contract.currency !== underlying.currency || !positive(contract.factor)) {
       setNotice("No se puede simular este contrato: faltan factores o hay monedas de prima, ejercicio y subyacente diferentes."); return;
@@ -568,7 +579,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       }) : field === "action" ? null : "—"}
     </td>;
   };
-  const quoteCell = (contract: Contract | undefined, side: "buy" | "sell") => {
+  const quoteCell = (contract: Contract | undefined, side: "buy" | "sell", highlighted: boolean) => {
     const quote = contract && data?.instruments[contract.id], level = quote?.[side === "buy" ? "ask" : "bid"];
     const price = quotePrice(quote, side);
     const marked = contract && input.legs.find(leg => leg.securityId === contract.id && leg.side === side);
@@ -579,24 +590,36 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     const title = price.ok ? contract?.symbol : `${contract?.symbol ?? "Contrato"}: ${price.reason}${selectable ? ` ${fallback}` : ""}`;
     const moneyness = contract && itmSpot !== undefined && contract.strike !== itmSpot ? (contract.kind === "call" ? contract.strike < itmSpot : contract.strike > itmSpot) ? "itm" : "otm" : undefined;
     const key = marked && legKey(marked);
+    const draggable = active && !loadingPosition && !!draftMarket && !!marked && !marked.rollSeriesId && marked.rollFeePercent === undefined;
     const visible = key !== undefined && key === shownQuote;
     const quantity = marked ? numeric(marked.contracts) : NaN;
     const ticketRestriction = visible && contract && catalog ? optionTicketRestriction(contract, catalog.contracts) : undefined;
     const ticketLabel = `${loadTicketText} · ${side === "buy" ? "compra" : "venta"} de ${contract?.symbol} en el Mini Order Form`;
-    return <td className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}`}
-      onMouseEnter={() => { if (key) setOpenQuote(key); }}
+    const dropTarget = highlighted && draggedLeg?.kind === contract?.kind && draggedLeg?.side === side;
+    return <td data-strike-drop={contract && `${contract.kind}:${side}`}
+      className={`ct-opt-price ${side} ${side === "sell" ? "ct-opt-bid" : "ct-opt-ask"}${marked ? " selected" : ""}${moneyness ? ` ct-opt-${moneyness}` : ""}${dropTarget ? " ct-opt-strike-target" : ""}`}
+      onMouseEnter={() => { if (key && !strikeDrag) setOpenQuote(key); }}
       onMouseLeave={() => {
         if (!quantityBar.current?.contains(document.activeElement)) setOpenQuote(current => current === key ? undefined : current);
       }}
-      onFocus={() => { if (key) setOpenQuote(key); }}
+      onFocus={() => { if (key && !strikeDrag) setOpenQuote(key); }}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(":hover")) {
           setOpenQuote(current => current === key ? undefined : current);
         }
       }}>
-      <button type="button" disabled={!selectable} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
-        aria-pressed={!!marked} title={title} onClick={() => {
-          if (selectable && contract && quote) selectQuote(contract, side, quote, price.ok ? price.price : last);
+      <button type="button" disabled={!selectable && !marked} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
+        aria-pressed={!!marked} draggable={draggable} title={draggable ? `${title} · Arrastrá a otra fila para cambiar el strike` : title}
+        onDragStart={event => {
+          if (!draggable || !marked) return;
+          event.dataTransfer.setData("application/x-chuchotriz-strike", "move");
+          event.dataTransfer.effectAllowed = "move";
+          setOpenQuote(undefined);
+          setStrikeDrag({ leg: marked });
+        }}
+        onDragEnd={() => setStrikeDrag(undefined)}
+        onClick={() => {
+          if (contract && (marked || selectable)) selectQuote(contract, side, quote, price.ok ? price.price : last);
         }}>
         <span className="ct-opt-marker">{marked ? `${side === "buy" ? "Compra" : "Venta"} · ${marked.contracts}` : held ? `Pos. ${held.side === "buy" ? "+" : "−"}${held.contracts}` : ""}</span>
         <Fragment key={contract?.id}>
@@ -623,9 +646,9 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       </div>}
     </td>;
   };
-  const chainCells = (columns: ChainColumn[], contract: Contract | undefined, kind: "call" | "put") =>
+  const chainCells = (columns: ChainColumn[], contract: Contract | undefined, kind: "call" | "put", highlighted: boolean) =>
     columns.map(column => column === "bid" || column === "ask"
-      ? <Fragment key={column}>{quoteCell(contract, column === "bid" ? "sell" : "buy")}</Fragment>
+      ? <Fragment key={column}>{quoteCell(contract, column === "bid" ? "sell" : "buy", highlighted)}</Fragment>
       : <OptionMetricCell key={column} contract={contract} field={column} cell={contract ? metrics.byId[contract.id] : undefined} scale={metrics.scales[kind]} />);
   const columnWidths = (columns: ChainColumn[]) => columns.map(column => <col key={column} style={{ width: columnWidth(column, compactChain) }} />);
   const columnHeadings = (columns: ChainColumn[], side: "Calls" | "Puts") => columns.map((column, index) => {
@@ -706,7 +729,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       : <dialog {...configAttributes} ref={configDialog}>{chainConfigContents}</dialog>}
   </>;
   return <section className="ct-sim-card ct-options ct-sim-market">
-    {rolling && <RollPicker key={rolling.id} input={input} source={rolling} market={rollMarket} onClose={() => setRollSource(undefined)}
+    {rolling && <RollPicker key={rolling.id} input={input} source={rolling} market={draftMarket} onClose={() => setRollSource(undefined)}
       onApply={draft => {
         setInput(current => ({ ...current, legs: [...current.legs, ...draft.legs] }));
         onIncludePosition();
@@ -772,12 +795,39 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         </tr><tr>{columnHeadings(callColumns, "Calls")}<th scope="col" className="ct-opt-strike">Strike</th>{columnHeadings(putColumns, "Puts")}</tr></thead></>}
         <tbody>{strikes.map(strike => {
           const call = editingPosition ? undefined : unique("call", strike), put = editingPosition ? undefined : unique("put", strike);
-          return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}>
+          const target = draggedLeg?.kind === "call" ? call : put;
+          const highlighted = !!draggedLeg && strikeDrag?.target === strike && !!moveQuoteLeg(input, draggedLeg, target, draftMarket);
+          return <Fragment key={strike}><tr data-option-strike={strike} className={itmSpot === strike ? "ct-opt-atm" : ""}
+            onDragOver={event => {
+              if (!draggedLeg) return;
+              if (!acceptsStrikeDrop(event.target, draggedLeg) || (!highlighted && !moveQuoteLeg(input, draggedLeg, target, draftMarket))) {
+                if (strikeDrag?.target !== undefined) setStrikeDrag({ leg: draggedLeg });
+                return;
+              }
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              if (!highlighted) setStrikeDrag({ leg: draggedLeg, target: strike });
+            }}
+            onDragLeave={event => {
+              if (highlighted && draggedLeg && !(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)))
+                setStrikeDrag({ leg: draggedLeg });
+            }}
+            onDrop={event => {
+              if (!draggedLeg) return;
+              const moved = acceptsStrikeDrop(event.target, draggedLeg) ? moveQuoteLeg(input, draggedLeg, target, draftMarket) : undefined;
+              setStrikeDrag(undefined);
+              if (!moved) return;
+              event.preventDefault();
+              setInput(current => current.legs.includes(draggedLeg) && !current.legs.some(leg => leg.securityId === moved.securityId)
+                ? { ...current, legs: current.legs.map(leg => leg === draggedLeg ? moved : leg) }
+                : current);
+              setNotice({ announcement: `Pata movida a ${moved.symbol}. Prima copiada del destino.` });
+            }}>
             {editingPosition ? <>{positionCell("call", strike, "action")}{positionCell("call", strike, "quantity")}{positionCell("call", strike, "premium")}</>
-              : chainCells(callColumns, call, "call")}
-            <th scope="row" className="ct-opt-strike">{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
+              : chainCells(callColumns, call, "call", highlighted)}
+            <th scope="row" data-strike-drop="strike" className={`ct-opt-strike${highlighted ? " ct-opt-strike-target" : ""}`}>{fmt(strike)}{itmSpot === strike && <span className="ct-opt-atm-label">ATM {spotChange}</span>}</th>
             {editingPosition ? <>{positionCell("put", strike, "quantity")}{positionCell("put", strike, "premium")}{positionCell("put", strike, "action")}</>
-              : chainCells(putColumns, put, "put")}
+              : chainCells(putColumns, put, "put", highlighted)}
           </tr>{itmSpot !== undefined && strike === spotBoundary && <tr className="ct-opt-itm-boundary"><td colSpan={editingPosition ? 7 : 2 * callColumns.length + 1}><div className="ct-opt-itm-line" aria-label={`Límite ITM, subyacente ${fmt(itmSpot)}`}><span className="ct-opt-itm-call">↑ ITM</span>{!spotSharesSigma && <span className="ct-opt-itm-spot">$ {fmt(itmSpot)} {spotChange}</span>}<span className="ct-opt-itm-put">↓ ITM</span></div></td></tr>}</Fragment>;
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>

@@ -10,6 +10,23 @@ export interface StrikeMarket {
 const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
 const validStrike = (strike: number) => Number.isFinite(strike) && strike >= .000001 && strike <= 1e9;
 
+function legAtStrike(leg: Leg, contract: Contract, premium: number, quote?: Quote): Leg {
+  const iv = quote?.impliedVolatility;
+  return { ...leg, securityId: contract.id, symbol: contract.symbol, strike: formatOptionInput(contract.strike, 21),
+    premium: formatOptionInput(premium, 21),
+    volatility: iv !== undefined && Number.isFinite(iv) && iv >= 0 && iv <= 500 ? formatOptionInput(iv, 21) : "" };
+}
+
+export function moveQuoteLeg(input: Simulation, leg: Leg, target: Contract | undefined, market?: StrikeMarket): Leg | undefined {
+  if (!target || !market || !input.legs.includes(leg) || leg.rollSeriesId || leg.rollFeePercent !== undefined ||
+    target.kind !== leg.kind || !validStrike(target.strike) || target.factor !== numeric(input.multiplier) ||
+    input.legs.some(item => item.securityId === target.id)) return;
+  const context = nativeContext({ ...input, legs: [leg] }, market);
+  if (!context.ok || !market.contracts.includes(target) || context.contracts[0].strike === target.strike) return;
+  const prices = recipePrices({ ok: true, legs: [{ contract: target, side: leg.side, ratio: 1 }] }, market.quotes, input.currency);
+  if (prices.ok && prices.premiums[0] <= 1e9) return legAtStrike(leg, target, prices.premiums[0], market.quotes[target.id]);
+}
+
 function nativeContext(input: Simulation, market?: StrikeMarket): { ok: true; market: StrikeMarket; contracts: Contract[] } | { ok: false; reason: string } {
   if (!market || input.underlying !== market.underlying || input.expiry !== market.expiry || input.currency !== market.currency)
     return fail("Esperando la cadena del mismo subyacente, vencimiento y moneda.");
@@ -75,10 +92,7 @@ function moveStrategyStrikes(input: Simulation, directions: readonly (-1 | 0 | 1
   if (prices.premiums.some(premium => premium > 1e9)) return fail("La prima de destino supera el máximo admitido.");
   const legs = [...input.legs];
   targets.forEach(({ contract, index }, targetIndex) => {
-    const iv = source.quotes[contract.id].impliedVolatility;
-    legs[index] = { ...legs[index], securityId: contract.id, symbol: contract.symbol, strike: formatOptionInput(contract.strike, 21),
-      premium: formatOptionInput(prices.premiums[targetIndex], 21),
-      volatility: iv !== undefined && Number.isFinite(iv) && iv >= 0 && iv <= 500 ? formatOptionInput(iv, 21) : "" };
+    legs[index] = legAtStrike(legs[index], contract, prices.premiums[targetIndex], source.quotes[contract.id]);
   });
   return { ok: true, legs };
 }

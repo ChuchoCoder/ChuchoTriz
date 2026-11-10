@@ -96,9 +96,59 @@ async (page, group) => {
     await selectCall(); equal(await b('Editar Precio pata 1').innerText(), '—', 'Missing ask and last require manual premium');
     const load = b('Cargar Op. · compra de DEMO CALL 100 en el Mini Order Form');
     assert(await load.isDisabled(), 'Cannot preload absent quote');
+    await b('Fijar 10 contratos').click();
     await b('Vender DEMO PUT 100 en simulación').click();
-    equal(await page.locator('.ct-sim-quantity-stepper .ct-sim-cell-value').allTextContents(), ['+1', '−1'], 'Call buy and put sell sides');
+    equal(await page.locator('.ct-sim-quantity-stepper .ct-sim-cell-value').allTextContents(), ['+10', '−1'], 'Call buy and put sell sides');
     pass('SM-04', 'Call/put selection, deselection, last-trade fallback, missing premium and blocked preload');
+    const strike = value => page.locator(`tr[data-option-strike="${value}"] th[scope="row"]`);
+    const dragQuote = async (source, target, { highlight, cancel = false } = {}) => {
+      await source.scrollIntoViewIfNeeded();
+      await target.scrollIntoViewIfNeeded();
+      const from = await source.boundingBox(), to = await target.boundingBox();
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await page.mouse.down();
+      try {
+        await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+        if (highlight) await page.locator(`tr[data-option-strike="${highlight}"] th.ct-opt-strike-target`).waitFor();
+        if (cancel) await page.keyboard.press('Escape');
+      } finally {
+        await page.mouse.up();
+      }
+    };
+    const ask100 = b('Comprar DEMO CALL 100 en simulación'), ask120 = b('Comprar DEMO CALL 120 en simulación');
+    const bid100 = b('Vender DEMO PUT 100 en simulación'), bid90 = b('Vender DEMO PUT 90 en simulación');
+    equal(await ask120.getAttribute('draggable'), 'false', 'Unselected quote cannot start a drag');
+    await dragQuote(ask100, strike(120), { highlight: 120, cancel: true });
+    equal(await ask100.getAttribute('aria-pressed'), 'true', 'Escape leaves the source selected');
+    equal(await ask120.getAttribute('aria-pressed'), 'false', 'Escape cancels the move');
+    equal(await page.locator('.ct-opt-strike-target').count(), 0, 'Escape clears the highlight');
+    await dragQuote(ask100, b('Vender DEMO PUT 120 en simulación'));
+    equal(await ask100.getAttribute('aria-pressed'), 'true', 'Other type and side cannot receive the drag');
+    await dragQuote(ask100, ask120, { highlight: 120 });
+    equal(await ask120.getAttribute('aria-pressed'), 'true', 'ASK moves to higher strike');
+    equal(await ask100.getAttribute('aria-pressed'), 'false', 'Original quote is deselected');
+    equal(await b('Editar Contratos pata 1').innerText(), '+10', 'Move retains selected quantity');
+    equal(await b('Editar Precio pata 1').innerText(), '4,1', 'Move uses destination ASK');
+    await dragQuote(ask120, strike(100));
+    equal(await ask120.getAttribute('aria-pressed'), 'true', 'Drop rejected when the destination has no ASK');
+    await page.evaluate(() => {
+      const put = window.mainStore.securityStore.options.find(option => option.id === 'put-100');
+      put.md.bid = put.md.ask;
+      put.md.seq++;
+    });
+    await page.waitForFunction(() => document.querySelector('[aria-label="Vender DEMO PUT 100 en simulación"]').title.includes('cerrado o cruzado'));
+    assert(await b('Comprar DEMO PUT 100 en simulación').isDisabled(), 'Cannot select the other side of a crossed book');
+    await dragQuote(bid100, strike(90), { highlight: 90 });
+    equal(await bid90.getAttribute('aria-pressed'), 'true', 'BID moves to lower strike');
+    equal(await b('Editar Precio pata 2').innerText(), '5,9', 'Move uses destination BID');
+    await b('Vender DEMO CALL 110 en simulación').click();
+    await dragQuote(ask120, strike(110));
+    equal(await ask120.getAttribute('aria-pressed'), 'true', 'Drop rejected when the contract already has a leg');
+    equal(await b('Vender DEMO CALL 110 en simulación').getAttribute('aria-pressed'), 'true', 'Existing leg is preserved');
+    await page.getByRole('tab', { name: 'Análisis', exact: true }).click();
+    await page.getByText('VI por pata', { exact: true }).click();
+    equal(await b('Editar VI pata 1').innerText(), '45,00', 'Move uses destination IV');
+    pass('SM-04-drag', 'Native BID/ASK drag reprices the leg, handles crossed source and Escape, and rejects mismatched, missing or occupied targets');
   } else if (group === 'columns') {
     await open(); await b('Configurar cadena de opciones').click();
     await page.getByRole('checkbox', { name: 'Volumen nominal', exact: true }).uncheck();
@@ -270,6 +320,8 @@ async (page, group) => {
     await field('Gastos del rolado (%)', '1'); assert((await dialog.innerText()).includes('156,1 ARS'), 'Short roll net 156.10 with 1% fees');
     await b('Cargar en Cotizaciones →').click();
     equal(await page.locator('.ct-sim-quantity-stepper .ct-sim-cell-value').allTextContents(), ['+1', '−2'], 'Short roll closing and opening quantities');
+    for (const name of ['Comprar DEMO CALL 110 en simulación', 'Vender DEMO CALL 120 en simulación'])
+      equal(await b(name).getAttribute('draggable'), 'false', 'Roll legs are not draggable');
     assert(await label('Incluir posición actual en Análisis').isChecked(), 'Roll includes current position');
     await b('Limpiar ajustes').click(); await b('Posición actual').click();
     await b('Rolar posición CALL 100').click(); await b('Rolar a 110').click(); await b('Usar máximo sin débito').click();

@@ -68,6 +68,7 @@ navegador aislado en CI.
 | SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
 | SM-02, SM-03, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, cambio de instrumento, último preset, Limpiar, reemplazo de formulario y foco tras cotización. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
+| SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
 | SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. |
 | SM-06 | `tooltip` | VI y griegas, ausencia de VI, Escape y clic exterior. |
 | SM-07, RG-08 | `analysis` | Vistas compartidas, 25 escenarios, vencimiento, zoom/Ajustar y cambio entre tasa automática/manual. Los tests de caución también cubren vencimiento y ausencia de referencia. |
@@ -141,6 +142,7 @@ con broker. Un caso sin posiciones o cotizaciones no cuenta como aprobado.
 | SM-02 | En Cantidades rápidas revisar un preset existente. Volver a Matriz, seleccionar ese instrumento/plazo y pulsar un preset; cambiar instrumento y volver. Pulsar Limpiar. | Cantidad correcta para el instrumento; no mezcla presets; Limpiar no reaplica la selección anterior. No se envían órdenes. |
 | SM-03 | Hacer clic en una cotización nativa y comprobar foco en Cantidad. Abrir/cerrar el panel lateral o navegar y volver al ticket. | Presets y foco funcionan sobre el formulario vigente, sin duplicados ni escritura sobre el formulario anterior. |
 | SM-04 | Abrir simulador; elegir subyacente/vencimiento. Seleccionar ASK de call y BID de put; volver a pulsar una punta. Probar una punta sin precio. | Compra/venta y cantidades firmadas correctas; segundo clic quita la pata. Sin punta usa último o exige prima manual; nunca inventa cero. |
+| SM-04-drag | Seleccionar un ASK o BID y arrastrarlo al strike central o a la misma punta de otra fila. Repetir en el otro sentido y cancelar un intento con Escape. | El destino válido se resalta. La pata conserva tipo, lado y cantidad y usa la prima y VI disponibles del destino. Al cancelar se conserva la pata de origen. |
 | SM-05 | Config. de cadena: ocultar una columna, reordenarla y cambiar otra desde el encabezado. Cerrar y reabrir; restaurar preferencias. | Calls/puts reflejan el cambio, BID/ASK/VI/Strike siguen fijos y la selección persiste. |
 | SM-06 | Abrir VI por clic; cerrar por Escape y por clic exterior. Probar una serie con y otra sin VI. | Tooltip identifica serie y datos disponibles; ausencia de VI no produce métricas ficticias ni impide cerrar. |
 | SM-07 | Con una pata válida alternar Armado/Análisis. Cambiar precio, VI y fecha; usar zoom y Ajustar. | Patas conservadas, resultados finitos cuando corresponde, máximo ilimitado explícito y gráficos consistentes. Sin datos, aviso claro. |
