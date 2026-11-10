@@ -608,7 +608,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           setOpenQuote(current => current === key ? undefined : current);
         }
       }}>
-      <button type="button" disabled={!selectable && !marked} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
+      <button type="button" disabled={!selectable && !(marked && draftMarket)} aria-label={`${side === "buy" ? "Comprar" : "Vender"} ${contract?.symbol ?? "contrato no disponible"} en simulación`}
         aria-pressed={!!marked} draggable={draggable} title={draggable ? `${title} · Arrastrá a otra fila para cambiar el strike` : title}
         onDragStart={event => {
           if (!draggable || !marked) return;

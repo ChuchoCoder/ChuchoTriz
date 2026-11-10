@@ -138,6 +138,8 @@ async (page, group) => {
     });
     await page.waitForFunction(() => document.querySelector('[aria-label="Vender DEMO PUT 100 en simulación"]').title.includes('cerrado o cruzado'));
     assert(await b('Comprar DEMO PUT 100 en simulación').isDisabled(), 'Cannot select the other side of a crossed book');
+    await bid100.hover();
+    assert(await b('Cargar Op. · venta de DEMO PUT 100 en el Mini Order Form').isDisabled(), 'Cannot preload a crossed quote');
     await dragQuote(bid100, strike(90), { highlight: 90 });
     equal(await bid90.getAttribute('aria-pressed'), 'true', 'BID moves to lower strike');
     equal(await b('Editar Precio pata 2').innerText(), '5,9', 'Move uses destination BID');
