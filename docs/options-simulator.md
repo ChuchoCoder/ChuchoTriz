@@ -14,6 +14,12 @@ la tenencia de la cuenta activa para el subyacente y vencimiento seleccionados.
 Si el reporte está vacío o falla la consulta, podés completar la posición a mano.
 Al alternar entre los modos, el borrador conserva los cambios que ingresaste.
 
+Para cambiar el strike de una pata simulada, arrastrá su BID o ASK
+seleccionado al strike central o a la misma punta de otra fila. La grilla
+resalta los destinos con una punta válida del mismo tipo y lado y sin otra
+pata simulada en ese contrato. La pata conserva su cantidad y toma la prima
+y, si está disponible, la VI del destino.
+
 **⚙ Config.** reúne el filtro de VI y las casillas para mostrar, ocultar y
 ordenar las columnas laterales. El orden se guarda por sitio y se refleja en
 calls y puts. También podés cambiar una métrica desde su encabezado. BID, ASK,

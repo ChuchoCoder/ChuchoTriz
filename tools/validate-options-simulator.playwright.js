@@ -188,16 +188,17 @@ async (page) => {
     });
     await page.waitForFunction(() => {
       const el = document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]');
-      return el?.disabled && el.title.includes('cerrado o cruzado');
+      return el?.getAttribute('aria-pressed') === 'true' && !el.disabled && el.title.includes('cerrado o cruzado');
     }, null, { polling: 100, timeout: 12000 });
-    assert(await button('Vender DEMO CALL 100 en simulación').isDisabled(), 'Both crossed sides blocked');
+    assert(await button('Vender DEMO CALL 100 en simulación').isDisabled(), 'Crossed quote cannot add a leg');
+    equal(await label('Crédito o débito de la estrategia').innerText(), 'Débito 810 ARS', 'Crossed quote preserves the draft premium');
     await page.evaluate(() => {
       const contract = window.mainStore.securityStore.options.find(item => item.id === 'call-100');
       contract.md.bid = 7.9; contract.md.ask = 8.1; contract.md.seq++;
     });
     await page.waitForFunction(() => {
       const el = document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]');
-      return el && !el.disabled;
+      return el?.querySelector('.ct-opt-quote-value')?.textContent === '$ 8,1';
     }, null, { polling: 100, timeout: 12000 });
     await page.evaluate(() => {
       const contract = window.mainStore.securityStore.options.find(item => item.id === 'call-100');

@@ -44,6 +44,8 @@
 .ct-sim .ct-opt-chain td.ct-opt-price { padding:0; position:relative; }
 .ct-sim .ct-opt-price > button { box-sizing:border-box; width:100%; height:32px; padding:3px 10px; border:2px solid transparent; border-radius:0; background:none; color:var(--ct-text); text-align:right; font-variant-numeric:tabular-nums; }
 .ct-sim .ct-opt-price > button:focus-visible { outline-offset:-4px; }
+.ct-sim .ct-opt-price > button[draggable="true"] { cursor:grab; }
+.ct-sim .ct-opt-chain .ct-opt-strike-target { box-shadow:inset 0 0 0 2px var(--ct-accent); }
 .ct-sim .ct-opt-price > button { display:grid; grid-template-columns:minmax(42px,1fr) minmax(30px,.6fr) minmax(55px,1fr); gap:5px; align-items:center; white-space:nowrap; }
 .ct-sim .ct-opt-price .ct-opt-marker { grid-column:1; grid-row:1; justify-self:start; font-size:9px; border-radius:2px; }
 .ct-sim .ct-opt-price.selected .ct-opt-marker { padding:1px 3px; border:1px solid currentColor; }
