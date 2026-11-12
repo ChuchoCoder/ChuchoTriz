@@ -81,7 +81,7 @@ beforeEach(() => {
           { cantidad: 300, mostrar: 30 },
         ],
         GD30: [{ cantidad: 400, mostrar: 0 }],
-      } }),
+      }, Autocomplete: true }),
       set: vi.fn().mockResolvedValue(undefined),
     },
     onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
@@ -170,6 +170,133 @@ async function boot() {
   await act(async () => { await import("./main"); });
   stopQuoteFocus = startQuoteFocus.mock.results[0]?.value;
 }
+
+function autocompleteStorage(initial: Record<string, unknown> = {}) {
+  const saved: Record<string, unknown> = { ...initial };
+  const emit = (values: Record<string, unknown>) => {
+    Object.assign(saved, values);
+    const changes = Object.fromEntries(Object.entries(values).map(([key, newValue]) => [key, { newValue }]));
+    for (const [listener] of vi.mocked(chrome.storage.onChanged.addListener).mock.calls) listener(changes, "local");
+  };
+  vi.mocked(chrome.storage.local.get).mockImplementation(async () => ({ ...saved }));
+  vi.mocked(chrome.storage.local.set).mockImplementation(async values => { emit(values); });
+  return { saved, emit };
+}
+
+const autocompleteCheckbox = (form: HTMLElement, ticker: string) => {
+  const input = form.querySelector<HTMLInputElement>(`[aria-label="Autocompletar para ${ticker}"]`);
+  expect(input).not.toBeNull();
+  return input!;
+};
+
+async function changeInstrument(form: HTMLElement, value: string) {
+  await act(async () => {
+    const input = form.querySelector<HTMLInputElement>("#rc_select_2")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+it("starts with autocomplete off and still allows manual preset buttons", async () => {
+  autocompleteStorage();
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(false);
+  await act(async () => { current.price.focus(); });
+  expect(current.amount.value).toBe("");
+  await act(async () => { presetButton(current.form, "200k").click(); });
+  expect(current.amount.value).toBe("200000");
+});
+
+it("saves the checkbox per ticker, applies on future focus and keeps the choice across remounts", async () => {
+  const storage = autocompleteStorage({ InstrumentPresets: {
+    AL30: [{ cantidad: 100, mostrar: 0 }], GD30: [{ cantidad: 400, mostrar: 0 }],
+  } });
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  await act(async () => { current.price.focus(); });
+  expect(current.amount.value).toBe("");
+  await act(async () => { autocompleteCheckbox(current.form, "AL30").focus(); autocompleteCheckbox(current.form, "AL30").click(); });
+  expect(storage.saved["AutocompleteInstrument:AL30"]).toBe(true);
+  expect(current.amount.value, "Toggling must not fill the current ticket").toBe("");
+  await act(async () => { current.price.focus(); });
+  expect(current.amount.value).toBe("100");
+  await changeInstrument(current.form, "GD30 (CI)");
+  expect(autocompleteCheckbox(current.form, "GD30").checked).toBe(false);
+  await act(async () => { current.amount.value = ""; current.price.blur(); current.price.focus(); });
+  expect(current.amount.value).toBe("");
+  await act(async () => { presetButton(current.form, "400").click(); });
+  expect(current.amount.value).toBe("400");
+  const replacement = createForm();
+  await act(async () => { current.form.replaceWith(replacement.form); });
+  expect(autocompleteCheckbox(replacement.form, "AL30").checked).toBe(true);
+  expect(replacement.amount.value).toBe("");
+  await act(async () => { replacement.price.focus(); });
+  expect(replacement.amount.value).toBe("100");
+  await act(async () => { autocompleteCheckbox(replacement.form, "AL30").click(); });
+  expect(replacement.amount.value, "Disabling must preserve the current quantity").toBe("100");
+  await act(async () => { replacement.buttons.querySelector<HTMLButtonElement>(".ButtonLimpiar")!.click();
+    replacement.amount.value = ""; replacement.price.focus(); });
+  expect(replacement.amount.value).toBe("");
+  expect(storage.saved["AutocompleteInstrument:AL30"]).toBe(false);
+});
+
+it("updates from global and external ticker choices, including instruments without a price or presets", async () => {
+  const storage = autocompleteStorage();
+  const current = createForm();
+  current.price.value = "";
+  document.body.append(current.form);
+  await boot();
+  expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(false);
+  await act(async () => { storage.emit({ Autocomplete: true, "AutocompleteInstrument:AL30": false }); });
+  expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(false);
+  await changeInstrument(current.form, "NEW (CI)");
+  expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(true);
+  await act(async () => { storage.emit({ "AutocompleteInstrument:NEW": false }); });
+  expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(false);
+  await act(async () => { storage.emit({ "AutocompleteInstrument:NEW": undefined }); });
+  expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(true);
+  await changeInstrument(current.form, "");
+  expect(current.form.querySelector('input[type="checkbox"]')).toBeNull();
+});
+
+it("reports a failed checkbox save and can retry without changing the ticket", async () => {
+  autocompleteStorage();
+  const current = createForm("1234");
+  document.body.append(current.form);
+  await boot();
+  vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(new Error("storage unavailable"));
+  await act(async () => { autocompleteCheckbox(current.form, "AL30").click(); });
+  expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(false);
+  expect(current.form.querySelector('[role="alert"]')?.textContent).toContain("No se pudo guardar");
+  expect(current.amount.value).toBe("1234");
+  await act(async () => { autocompleteCheckbox(current.form, "AL30").click(); });
+  expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(true);
+  expect(current.form.querySelector('[role="alert"]')).toBeNull();
+  expect(current.amount.value).toBe("1234");
+});
+
+it("keeps a newer external preference when an earlier save resolves late", async () => {
+  const storage = autocompleteStorage();
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  let finishSave!: () => void;
+  vi.mocked(chrome.storage.local.set).mockImplementationOnce(async values => {
+    storage.emit(values);
+    await new Promise<void>(resolve => { finishSave = resolve; });
+  });
+  await act(async () => { autocompleteCheckbox(current.form, "AL30").click(); });
+  expect(autocompleteCheckbox(current.form, "AL30").disabled).toBe(true);
+  await act(async () => { storage.emit({ "AutocompleteInstrument:AL30": false }); });
+  await act(async () => { finishSave(); });
+  expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(false);
+  expect(autocompleteCheckbox(current.form, "AL30").disabled).toBe(false);
+  await act(async () => { current.price.focus(); });
+  expect(current.amount.value).toBe("");
+});
 
 it("mounts Configuración in the left menu even before the order form exists", async () => {
   document.body.innerHTML = `

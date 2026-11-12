@@ -3,15 +3,17 @@ import { MiniOrderForm, Ticket } from "./MiniOrderForm";
 
 export interface PresetSettings {
   presetsFor(ticker: string): Promise<IInstrumentPreset[]>;
-  autocompletar(): Promise<boolean>;
+  autocompletar(ticker: string): Promise<boolean>;
 }
 
 export interface PresetSession {
   // Presets visibles; devuelve la misma referencia mientras no cambien
   presets(): IInstrumentPreset[];
+  ticker(): string;
   subscribe(listener: () => void): () => void;
   // Carga los botones al montar sin consumir el próximo foco del ticket.
   refresh(): Promise<void>;
+  invalidateAutocomplete(): void;
   choose(preset: IInstrumentPreset): void;
   dispose(): void;
 }
@@ -28,6 +30,7 @@ export function createPresetSession(
   lastUsedPresets = new Map<string, IInstrumentPreset>(),
 ): PresetSession {
   let visiblePresets = NoPresets;
+  let currentTicker = "";
   let lastInstrumento = "";
   let lastTicketKey = "";
   let pendingLookup: { identity: string } | undefined;
@@ -47,6 +50,10 @@ export function createPresetSession(
     let request: typeof pendingLookup;
     try {
       const ticket = form.read();
+      if (!disposed && currentTicker !== ticket.ticker) {
+        currentTicker = ticket.ticker;
+        listeners.forEach(listener => listener());
+      }
       const ticketKey = keyOf(ticket);
       const identity = identityOf(ticket);
       const instrument = instrumentOf(ticket);
@@ -72,7 +79,7 @@ export function createPresetSession(
       if (!current()) return;
 
       // Every await can outlive an instrument change, Limpiar, or manual typing.
-      const enabled = fromFocus && !form.read().cantidad && await settings.autocompletar();
+      const enabled = fromFocus && !form.read().cantidad && await settings.autocompletar(ticket.ticker);
       if (!current()) return;
       if (!form.read().cantidad && enabled) {
         const lastUsed = lastUsedPresets.get(ticket.instrumento);
@@ -109,11 +116,16 @@ export function createPresetSession(
 
   return {
     presets: () => visiblePresets,
+    ticker: () => currentTicker,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     refresh: () => update(false),
+    invalidateAutocomplete: () => {
+      pendingLookup = undefined;
+      lastTicketKey = "";
+    },
     choose: (preset) => {
       const ticket = form.read();
       // Presets belong to the instrument; editing Precio must not invalidate their buttons.

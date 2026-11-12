@@ -1,11 +1,11 @@
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
 import "./main.css";
-import App from "./App";
+import App, { InstrumentAutocompleteSettings } from "./App";
 import { IInstrumentPreset } from "./InstrumentPresets";
 import { bindMiniOrderForm, focusCantidadAfterQuoteClick, observeMiniOrderForm } from "./Matriz";
 import { createPresetSession } from "./PresetSession";
-import instrumentPresetsRepository from "./InstrumentPresetsRepository";
+import instrumentPresetsRepository, { autocompleteFor, StoredSettings } from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
 import { SettingsMenu } from "./SettingsMenu";
 
@@ -19,13 +19,32 @@ createRoot(settingsContainer).render(<React.StrictMode><SettingsMenu /></React.S
 
 // Read once; subsequent settings changes arrive through Chrome Storage.
 let storedSettings = instrumentPresetsRepository.readSettings();
-instrumentPresetsRepository.watch((change) => {
-  storedSettings = storedSettings.then((current) => ({ ...current, ...change }));
-});
+let snapshot: StoredSettings | undefined;
+const settingsListeners = new Set<() => void>();
+const publishSettings = (settings: StoredSettings) => {
+  const ticker = active?.session.ticker();
+  if (snapshot && ticker && autocompleteFor(snapshot, ticker) !== autocompleteFor(settings, ticker)) {
+    active?.session.invalidateAutocomplete();
+  }
+  snapshot = settings;
+  settingsListeners.forEach(listener => listener());
+};
+const updateSettings = (change: Partial<StoredSettings>) => {
+  storedSettings = storedSettings.then(current => ({ ...current, ...change,
+    autocompleteByInstrument: { ...current.autocompleteByInstrument, ...change.autocompleteByInstrument } }));
+  void storedSettings.then(publishSettings).catch(console.error);
+};
+void storedSettings.then(publishSettings).catch(console.error);
+instrumentPresetsRepository.watch(updateSettings);
+const autocomplete: InstrumentAutocompleteSettings = {
+  enabled: ticker => snapshot ? autocompleteFor(snapshot, ticker) : undefined,
+  subscribe: listener => { settingsListeners.add(listener); return () => { settingsListeners.delete(listener); }; },
+  save: instrumentPresetsRepository.saveInstrumentAutocomplete,
+};
 
 const presetSettings = {
   presetsFor: async (ticker: string) => presetsFor((await storedSettings).book, ticker),
-  autocompletar: async () => (await storedSettings).autocompletar,
+  autocompletar: async (ticker: string) => autocompleteFor(await storedSettings, ticker),
 };
 const lastUsedPresets = new Map<string, IInstrumentPreset>();
 let active: {
@@ -54,8 +73,8 @@ observeMiniOrderForm((form, buttons) => {
     const session = createPresetSession(adapter, presetSettings, lastUsedPresets);
     active = { form, adapter, session };
   }
-  if (!buttons || panel) return;
   void active.session.refresh();
+  if (!buttons || panel) return;
 
   const container = document.createElement("div");
   container.id = "root-chuchotriz";
@@ -65,6 +84,6 @@ observeMiniOrderForm((form, buttons) => {
   const root = createRoot(container);
   panel = { buttons, container, root };
   root.render(
-    <React.StrictMode><App session={active.session} /></React.StrictMode>
+    <React.StrictMode><App session={active.session} autocomplete={autocomplete} /></React.StrictMode>
   );
 });
