@@ -32,6 +32,9 @@ export function observeMiniOrderForm(update: (form: HTMLElement | null, buttons:
     body.addEventListener("click", ({ target }) => {
         if (target instanceof Element && target.closest(limpiarButtonSelector)) reconcile();
     }, true);
+    body.addEventListener("input", ({ target }) => {
+        if (target instanceof Element && target.matches(instrumentoSelector) && target.closest("#MiniOrderForm")) reconcile();
+    }, true);
     reconcile();
 }
 

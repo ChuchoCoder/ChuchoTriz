@@ -39,6 +39,8 @@ async (page, group) => {
     }
     pass('SM-01', 'Open/close/reopen, one panel, tools coexist');
   } else if (group === 'presets') {
+    // This suite explicitly exercises opt-in autocomplete; new installations default to off.
+    await page.evaluate(() => chrome.storage.local.set({ Autocomplete: true }));
     await open(); await b('Cantidades rápidas').click(); await b('RAW').click();
     const raw = 'AL30 100 200/20 300/R10\nGD30 400';
     await label('Presets RAW').fill(raw); await b('Guardar cambios').click();

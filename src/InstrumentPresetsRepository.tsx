@@ -2,14 +2,23 @@ import { defaultBook, PresetBook } from "./PresetBook";
 
 const Key = "InstrumentPresets";
 const AutocompleteKey = "Autocomplete";
+const InstrumentAutocompletePrefix = "AutocompleteInstrument:";
 
-const DefaultAutocomplete = true;
+const DefaultAutocomplete = false;
 
 // Lo que Opciones guarda: el Preset book y si Autocompletar está activado
 export interface StoredSettings {
   book: PresetBook;
   autocompletar: boolean;
+  autocompleteByInstrument: Record<string, boolean | undefined>;
 }
+
+export const autocompleteFor = (settings: StoredSettings, ticker: string): boolean =>
+  settings.autocompleteByInstrument[ticker] ?? settings.autocompletar;
+
+const saveInstrumentAutocomplete = async (ticker: string, enabled: boolean): Promise<void> => {
+  await chrome.storage.local.set({ [InstrumentAutocompletePrefix + ticker]: enabled });
+};
 
 const bookFrom = (value: unknown): PresetBook => {
   return value ? value as PresetBook : defaultBook;
@@ -47,10 +56,13 @@ const saveAutocomplete = async (autocomplete: boolean): Promise<void> => {
 };
 
 const readSettings = async (): Promise<StoredSettings> => {
-  var storageValue = await chrome.storage.local.get([Key, AutocompleteKey]);
+  var storageValue = await chrome.storage.local.get(null);
   return {
     book: bookFrom(storageValue?.[Key]),
     autocompletar: autocompleteFrom(storageValue?.[AutocompleteKey]),
+    autocompleteByInstrument: Object.fromEntries(Object.entries(storageValue).flatMap(([key, value]) =>
+      key.startsWith(InstrumentAutocompletePrefix) && typeof value === "boolean"
+        ? [[key.slice(InstrumentAutocompletePrefix.length), value]] : [])),
   };
 };
 
@@ -66,6 +78,13 @@ const watch = (listener: (change: Partial<StoredSettings>) => void): (() => void
     }
     if (AutocompleteKey in changes) {
       change.autocompletar = autocompleteFrom(changes[AutocompleteKey].newValue);
+    }
+    for (const [key, value] of Object.entries(changes)) {
+      if (key.startsWith(InstrumentAutocompletePrefix)) {
+        change.autocompleteByInstrument ??= {};
+        change.autocompleteByInstrument[key.slice(InstrumentAutocompletePrefix.length)] =
+          typeof value.newValue === "boolean" ? value.newValue : undefined;
+      }
     }
     if (Object.keys(change).length > 0) {
       listener(change);
@@ -84,6 +103,7 @@ export default {
   save,
   readAutocomplete,
   saveAutocomplete,
+  saveInstrumentAutocomplete,
   saveSettings,
   readSettings,
   watch,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import instrumentPresetsRepository from "./InstrumentPresetsRepository";
+import instrumentPresetsRepository, { autocompleteFor } from "./InstrumentPresetsRepository";
 import { defaultBook } from "./PresetBook";
 
 type OnChanged = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => void;
@@ -43,7 +43,7 @@ describe("InstrumentPresetsRepository.watch", () => {
 
     emit({ InstrumentPresets: { oldValue: {} }, Autocomplete: { oldValue: false } });
 
-    expect(listener).toHaveBeenCalledWith({ book: defaultBook, autocompletar: true });
+    expect(listener).toHaveBeenCalledWith({ book: defaultBook, autocompletar: false });
   });
 
   it("ignores other keys and other storage areas", () => {
@@ -64,5 +64,35 @@ describe("InstrumentPresetsRepository.watch", () => {
     emit({ Autocomplete: { newValue: false } });
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("defaults to off, preserves an explicit global choice and reads independent ticker choices", async () => {
+    const get = vi.fn().mockResolvedValue({});
+    vi.stubGlobal("chrome", { storage: { local: { get } } });
+    expect(await instrumentPresetsRepository.readAutocomplete()).toBe(false);
+    expect(await instrumentPresetsRepository.readSettings()).toEqual({
+      book: defaultBook, autocompletar: false, autocompleteByInstrument: {},
+    });
+    get.mockResolvedValue({ Autocomplete: true, "AutocompleteInstrument:AL30": false,
+      "AutocompleteInstrument:GD30": true, "AutocompleteInstrument:GGAL": "invalid" });
+    const settings = await instrumentPresetsRepository.readSettings();
+    expect(autocompleteFor(settings, "AL30")).toBe(false);
+    expect(autocompleteFor(settings, "GD30")).toBe(true);
+    expect(autocompleteFor(settings, "GGAL")).toBe(true);
+    expect(autocompleteFor(settings, "AL30D")).toBe(true);
+    expect(settings.autocompleteByInstrument).toEqual({ AL30: false, GD30: true });
+  });
+
+  it("writes only the selected ticker, and reports external changes and removals", async () => {
+    const set = vi.fn().mockResolvedValue(undefined);
+    Object.assign(chrome.storage, { local: { set } });
+    const listener = vi.fn();
+    instrumentPresetsRepository.watch(listener);
+    await instrumentPresetsRepository.saveInstrumentAutocomplete("AL30", true);
+    expect(set).toHaveBeenCalledWith({ "AutocompleteInstrument:AL30": true });
+    emit({ "AutocompleteInstrument:AL30": { newValue: false }, "AutocompleteInstrument:GD30": { newValue: true } });
+    expect(listener).toHaveBeenLastCalledWith({ autocompleteByInstrument: { AL30: false, GD30: true } });
+    emit({ "AutocompleteInstrument:AL30": { oldValue: false } });
+    expect(listener).toHaveBeenLastCalledWith({ autocompleteByInstrument: { AL30: undefined } });
   });
 });
