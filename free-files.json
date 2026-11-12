@@ -81,6 +81,7 @@
   "src/Options.tsx",
   "src/OptionsPage.css",
   "src/OptionsOperations.css",
+  "src/OptionsOperations.test.tsx",
   "src/OptionsOperations.tsx",
   "src/optionExecutions.ts",
   "src/optionExecutions.test.ts",

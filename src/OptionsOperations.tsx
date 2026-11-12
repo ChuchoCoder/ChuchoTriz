@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarketReader } from "./optionsSimulator/market";
 import { executionClipboard, executionFormatters, groupExecutions, normalizeExecutionLocale, type ExecutionGroup, type ExecutionLocale, type OptionExecution, type OptionKind } from "./optionExecutions";
 import "./OptionsOperations.css";
@@ -88,11 +88,12 @@ function OperationsSide({ label, rows, averaged, format, disabled, notice, onCop
 
 export default function OptionsOperations({ embedded }: { embedded: boolean }) {
   const reader = useRef<MarketReader | null>(null);
+  const readRevision = useRef(0);
   const [report, setReport] = useState<ExecutionReport>();
   const [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState("");
   const [copyNotice, setCopyNotice] = useState<CopyNotice>();
-  const [averaged, setAveraged] = useState(false);
+  const [averaged, setAveraged] = useState(true);
   const [locale, setLocale] = useState<ExecutionLocale>("auto");
   const [localePending, setLocalePending] = useState(true);
   const [localeIssue, setLocaleIssue] = useState("");
@@ -138,11 +139,6 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
     } finally { setLocalePending(false); }
   }
 
-  useEffect(() => () => {
-    reader.current?.dispose();
-    reader.current = null;
-  }, []);
-
   const groups = useMemo(() => groupExecutions(report?.rows ?? [], averaged), [report, averaged]);
 
   useEffect(() => {
@@ -165,7 +161,8 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [report]);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
+    const revision = ++readRevision.current;
     setBusy(true);
     setReport(undefined);
     setIssue("");
@@ -174,16 +171,28 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
     try {
       current = reader.current ??= new MarketReader("options-executions-reader.js");
       const next = await current.call<ExecutionReport>("executions");
+      if (revision !== readRevision.current) return;
       if (!next || typeof next.contextId !== "string" || !Array.isArray(next.rows)) throw Error("Reporte de operaciones inválido.");
       if (reader.current === current) setReport(next);
     } catch (error) {
+      if (revision !== readRevision.current) return;
       setIssue(error instanceof Error ? error.message : "No se pudieron cargar las operaciones.");
       if (current && reader.current === current) {
         current.dispose();
         reader.current = null;
       }
-    } finally { setBusy(false); }
-  }
+    } finally { if (revision === readRevision.current) setBusy(false); }
+  }, []);
+
+  useEffect(() => {
+    if (!embedded) return;
+    void refresh();
+    return () => {
+      readRevision.current++;
+      reader.current?.dispose();
+      reader.current = null;
+    };
+  }, [embedded, refresh]);
 
   async function copy(group: ExecutionGroup, scope: CopyScope) {
     const current = reader.current;
