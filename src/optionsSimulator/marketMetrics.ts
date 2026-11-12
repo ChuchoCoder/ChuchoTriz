@@ -23,7 +23,7 @@ function quotedIntrinsic(kind: OptionContract["kind"], spot: number, strike: num
 }
 
 export interface MetricCell extends OptionMarketMetrics {
-  eligible: boolean; reason: string; theta?: number; extrinsic?: number; mid?: number; spreadPercent?: number;
+  eligible: boolean; reason: string; theta?: number; extrinsic?: number; extrinsicBid?: number; extrinsicAsk?: number; mid?: number; spreadPercent?: number;
   intrinsic?: number; gamma?: number; vega?: number; viTradeStatus?: string; rateSource?: string;
   viDetails?: NonNullable<ReturnType<typeof theoreticalGreeks>> & { spot: number; days: number; rate: number; dividendYield: number };
 }
@@ -60,6 +60,8 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
     }
     const intrinsicValue = comparable ? quotedIntrinsic(contract.kind, settings.spot!, contract.strike) : undefined;
     const extrinsic = intrinsicValue !== undefined && mid !== undefined ? mid - intrinsicValue : undefined;
+    const extrinsicBid = intrinsicValue !== undefined && bid && positive(bid.price) && positive(bid.size) ? bid.price - intrinsicValue : undefined;
+    const extrinsicAsk = intrinsicValue !== undefined && ask && positive(ask.price) && positive(ask.size) ? ask.price - intrinsicValue : undefined;
     const tradeIssue = stamp === undefined ? "Sin fecha verificable de última operación"
       : stamp > settings.now ? "Fecha de operación posterior al reloj actual"
       : nowValid && day(stamp) !== today ? "Última operación de otra fecha" : undefined;
@@ -85,7 +87,7 @@ export function deriveOptionMetrics(contracts: OptionContract[], instruments: Op
       viDetails: eligible && stamp !== undefined && stamp <= settings.now && greeks && Number.isFinite(greeks.probabilityItm) ? {
         ...greeks, spot: settings.spot!, days, rate: settings.rate!, dividendYield: settings.dividendYield!,
       } : undefined,
-      intrinsic: intrinsicValue, extrinsic, eligible, reason };
+      intrinsic: intrinsicValue, extrinsic, extrinsicBid, extrinsicAsk, eligible, reason };
     byId[contract.id] = cell;
     const scale = scales[contract.kind]; scale.total++;
     if (volume !== undefined && settings.available) scale.volumeMax = Math.max(scale.volumeMax, volume);

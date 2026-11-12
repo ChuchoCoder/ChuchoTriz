@@ -74,7 +74,7 @@ function VolatilityCell({ contract, cell, scale }: { contract: OptionContract; c
 }
 
 export type OptionMetricField = "volume" | "change" | "delta" | "iv" | "theta" | "extrinsic" | "last" | "mid" | "spreadPercent" | "lastTradeAt"
-  | "referencePrice" | "intrinsic" | "gamma" | "vega";
+  | "referencePrice" | "intrinsic" | "gamma" | "vega" | "extrinsicBid" | "extrinsicAsk";
 
 export const extraMetricLabels = {
   referencePrice: "Precio de referencia", intrinsic: "Valor intrínseco", gamma: "Gamma teórica", vega: "Vega teórica",
@@ -106,10 +106,12 @@ export function OptionMetricCell({ contract, field, cell, scale }: {
       {value === undefined ? "—" : field === "mid" ? fmt(Number(value.toPrecision(15))) : `${fmt(value, 2)} %`}
     </td>;
   }
-  if (field === "theta" || field === "extrinsic") {
-    const value = cell?.[field], label = field === "theta" ? "Theta teórico" : "Extrínseco";
+  if (field === "theta" || field === "extrinsic" || field === "extrinsicBid" || field === "extrinsicAsk") {
+    const value = cell?.[field], label = field === "theta" ? "Theta teórico" : field === "extrinsicBid" ? "Extrínseco Bid"
+      : field === "extrinsicAsk" ? "Extrínseco Ask" : "Extrínseco";
+    const price = field === "extrinsicBid" ? "Bid" : field === "extrinsicAsk" ? "Ask" : "Mid (BID/ASK)";
     const explanation = field === "theta" ? "Theta BSM europeo por unidad de prima y día calendario. Usa VI nativa, fecha de hoy y tasa/dividendos de Análisis. La antigüedad de la VI se consulta en su columna."
-      : "Precio Mid (BID/ASK) menos valor intrínseco, por unidad de prima. Los valores negativos no se recortan.";
+      : `Precio ${price} menos valor intrínseco, por unidad de prima. Los valores negativos no se recortan.`;
     return <td className="ct-opt-metric" aria-label={`${label} ${symbol}`} title={`${explanation}${value === undefined ? " Sin datos compatibles suficientes." : ""}`}>
       {value === undefined ? "—" : formatOptionAmount(value)}
     </td>;

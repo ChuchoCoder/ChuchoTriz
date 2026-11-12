@@ -302,6 +302,14 @@ libro sin cruce; no reemplaza información faltante con cero ni recorta valores
 negativos. La descomposición prima/intrínseco/valor temporal se explica en
 [Options Pricing de OIC](https://prd-web.optionseducation.org/optionsoverview/options-pricing).
 
+**Extrínseco Bid** y **Extrínseco Ask** se agregan desde **Config. → Columnas de
+cotizaciones** o desde el selector de un encabezado. Restan el mismo intrínseco
+al precio Bid o Ask, respectivamente, por unidad de prima. Cada columna exige
+precio y tamaño positivos en su propia punta y spot/monedas compatibles; puede
+mostrar un valor aunque falte la punta opuesta. Conservan ceros y negativos y
+muestran `—` cuando faltan datos. Su visibilidad y orden se guardan por sitio,
+con el mismo orden reflejado en calls y puts.
+
 Las plantillas usan strikes únicos del mismo vencimiento. Butterfly exige alas
 simétricas 1:2:1. Ratio Spread Long es un backspread: vende una opción cercana y
 compra dos más alejadas; Short invierte esos lados
