@@ -69,7 +69,7 @@ navegador aislado en CI.
 | SM-02, SM-03, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, cambio de instrumento, último preset, Limpiar, reemplazo de formulario y foco tras cotización. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
 | SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
-| SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. |
+| SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. Extrínseco Bid/Ask: selección e intercambio, calls/puts ATM/ITM/OTM, puntas independientes, ceros/negativos, VI ausente, precio/tamaño inválidos y desconexión/recuperación. |
 | SM-06 | `tooltip` | VI y griegas, ausencia de VI, Escape y clic exterior. |
 | SM-07, RG-08 | `analysis` | Vistas compartidas, 25 escenarios, vencimiento, zoom/Ajustar y cambio entre tasa automática/manual. Los tests de caución también cubren vencimiento y ausencia de referencia. |
 | SM-08 | `position` | Importación, primas desconocidas y conservación de ajustes al alternar vistas. |

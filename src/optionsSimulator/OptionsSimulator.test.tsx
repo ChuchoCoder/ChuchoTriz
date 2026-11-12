@@ -293,6 +293,42 @@ it("reorders and replaces mirrored chain columns while keeping the book, IV and 
   expect(byLabel("Configurar cadena de opciones")).toBeTruthy();
 });
 
+it("selects, mirrors and persists Bid and Ask extrinsic with independent quote availability", async () => {
+  const key = `OptionsSimulatorChainColumnsV2:${location.origin}`;
+  const quotes = marketState.current.data!.instruments;
+  quotes.GGAL.last = 105;
+  quotes["call-100"].ask = undefined;
+  quotes["put-110"].bid = undefined;
+  quotes["call-90"].bid = { price: 15, size: 100 };
+  await mount();
+  const checkbox = (label: string) => [...byLabel("Columnas de cotizaciones").querySelectorAll("label")]
+    .find(node => node.textContent?.trim() === label)!.querySelector<HTMLInputElement>("input")!;
+  expect(checkbox("Extrínseco Bid").checked).toBe(false);
+  await act(async () => checkbox("Extrínseco Bid").click());
+  await act(async () => {
+    const select = byLabel<HTMLSelectElement>("Cambiar columna Extrínseco al Mid de Puts");
+    select.value = "extrinsicAsk";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(byLabel("Extrínseco Bid CALL 100").textContent).toBe("-1");
+  expect(byLabel("Extrínseco Ask CALL 100").textContent).toBe("—");
+  expect(byLabel("Extrínseco Bid PUT 110").textContent).toBe("—");
+  expect(byLabel("Extrínseco Ask PUT 110").textContent).toBe("0");
+  expect(byLabel("Extrínseco Bid CALL 90").textContent).toBe("0");
+  expect(byLabel("Extrínseco Ask CALL 100").title).toContain("Precio Ask menos valor intrínseco");
+  const expected = ["volume", "change", "delta", "theta", "extrinsicAsk", "last", "extrinsicBid"];
+  expect(stored[key]).toEqual(expected);
+  await act(async () => root.render(null));
+  await mount();
+  expect(checkbox("Extrínseco Bid").checked).toBe(true);
+  expect(checkbox("Extrínseco Ask").checked).toBe(true);
+  const selected = [...container.querySelectorAll<HTMLSelectElement>(".ct-opt-chain thead tr:last-child select")].map(select => select.value);
+  expect(selected).toEqual([...expected, ...expected.toReversed()]);
+  quotes["call-100"].bid = { price: 6, size: 100 };
+  await mount();
+  expect(byLabel("Extrínseco Bid CALL 100").textContent).toBe("1");
+});
+
 it("restores a prior visibility preference while retaining the now fixed IV columns", async () => {
   stored[`OptionsSimulatorChainColumnsV1:${location.origin}`] = ["last", "delta"];
   await mount();

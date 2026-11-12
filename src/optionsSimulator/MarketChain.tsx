@@ -35,6 +35,8 @@ const chainColumns: Record<ChainColumn, { heading: string; compactHeading?: stri
   delta: { heading: "Delta", width: 58 },
   theta: { heading: "Θ/d teór.", compactHeading: "Θ/d", label: "Theta teórico por día", title: "Theta teórico BSM por día calendario y unidad de prima", width: 62 },
   extrinsic: { heading: "Extr. Mid", compactHeading: "Extr.", label: "Extrínseco al Mid", title: "Precio Mid menos intrínseco, por unidad de prima", width: 72 },
+  extrinsicBid: { heading: "Extr. Bid", label: "Extrínseco Bid", title: "Precio Bid menos intrínseco, por unidad de prima", width: 72 },
+  extrinsicAsk: { heading: "Extr. Ask", label: "Extrínseco Ask", title: "Precio Ask menos intrínseco, por unidad de prima", width: 72 },
   spreadPercent: { heading: "Spread %", title: "(ASK − BID) ÷ Mid × 100, con ambas puntas válidas", width: 76 },
   mid: { heading: "Mid", title: "Promedio de BID y ASK con ambas puntas válidas", width: 72 },
   last: { heading: "Últ.", label: "Último precio operado", title: "Último precio operado informado por Matriz", width: 76 },
@@ -46,7 +48,7 @@ const chainColumns: Record<ChainColumn, { heading: string; compactHeading?: stri
   ask: { heading: "ASK · Comprar", className: "ct-opt-ask" },
   iv: { heading: "VI", label: "Volatilidad implícita", className: "ct-opt-vi-heading", width: 62 },
 };
-const optionalColumns: OptionalColumn[] = ["volume", "change", "lastTradeAt", "delta", "theta", "extrinsic", "spreadPercent", "mid", "last",
+const optionalColumns: OptionalColumn[] = ["volume", "change", "lastTradeAt", "delta", "theta", "extrinsic", "extrinsicBid", "extrinsicAsk", "spreadPercent", "mid", "last",
   "referencePrice", "intrinsic", "gamma", "vega"];
 const defaultColumns: OptionalColumn[] = ["volume", "change", "delta", "theta", "extrinsic", "last"];
 const columnLabel = (column: OptionalColumn) => chainColumns[column].label ?? chainColumns[column].heading;
