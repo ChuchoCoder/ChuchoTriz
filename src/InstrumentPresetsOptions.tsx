@@ -44,7 +44,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   const [selected, setSelected] = useState("");
   const [editing, setEditing] = useState<EditingPreset | null>(null);
   const editFocus = useRef<{ index: number; field: "cantidad" | "mostrar" | "action" } | null>(null);
-  const [autocomplete, setAutocomplete] = useState(true);
+  const [autocomplete, setAutocomplete] = useState(repository.DefaultAutocomplete);
   const [newTicker, setNewTicker] = useState("");
   const [tickerQuery, setTickerQuery] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
@@ -56,7 +56,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [conflict, setConflict] = useState(false);
-  const saved = useRef<EditorSettings>({ presets: {}, autocomplete: true });
+  const saved = useRef<EditorSettings>({ presets: {}, autocomplete: repository.DefaultAutocomplete });
   const dirty = useRef(false);
   const conflicted = useRef(false);
   const pendingSave = useRef<EditorSettings | null>(null);
@@ -454,7 +454,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
             </section>
           </div>}
           <label className="autocomplete-setting">
-            <span><strong>Autocompletar al seleccionar</strong><span>Usar el último preset elegido o, si no hay uno, el primero configurado.</span></span>
+            <span><strong>Autocompletar al seleccionar</strong><span>Valor por defecto para instrumentos sin una elección propia. Podés cambiarlo por instrumento desde el mini panel. Usa el último preset elegido o el primero configurado.</span></span>
             <span className="setting-switch"><input name="autocompleteWithFirstPreset" type="checkbox" checked={autocomplete}
               onChange={event => { setAutocomplete(event.target.checked); markChanged(); }} /><span aria-hidden="true" /></span>
           </label>

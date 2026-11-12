@@ -199,6 +199,23 @@ describe("Preset session", () => {
     session.dispose();
   });
 
+  it("invalidates an in-flight autocomplete and rechecks the same empty ticket on its next focus", async () => {
+    const page = fakeMiniOrderForm(al30);
+    const pending = deferred<boolean>();
+    const autocompletar = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(true);
+    const session = createPresetSession(page.form, { presetsFor: async () => [big], autocompletar });
+    await page.focus();
+    session.invalidateAutocomplete();
+    pending.resolve(true);
+    await new Promise(resolve => setTimeout(resolve));
+    expect(page.state.ticket.cantidad).toBe("");
+    page.blur();
+    await page.focus();
+    expect(page.state.ticket.cantidad).toBe("200000");
+    expect(autocompletar).toHaveBeenLastCalledWith("AL30");
+    session.dispose();
+  });
+
   it.each(["limpiar", "dispose"] as const)("invalidates pending work on %s", async action => {
     const page = fakeMiniOrderForm(al30);
     const pending = deferred<IInstrumentPreset[]>();
@@ -422,7 +439,7 @@ describe("Preset session", () => {
     expect(page.state.ticket.cantidad).toBe("200000");
   });
 
-  it("notifies subscribers when the visible Presets change", async () => {
+  it("notifies subscribers when the ticker and visible Presets change", async () => {
     const page = fakeMiniOrderForm({ ...al30, cantidad: "1" });
     const session = createPresetSession(page.form, fakeSettings({ AL30: [big] }).settings);
     let notifications = 0;
@@ -430,7 +447,8 @@ describe("Preset session", () => {
 
     await page.focus();
 
-    expect(notifications).toBe(1);
+    expect(notifications).toBe(2);
+    expect(session.ticker()).toBe("AL30");
     expect(session.presets()).toBe(session.presets());
   });
 

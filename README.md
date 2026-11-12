@@ -120,6 +120,16 @@ de Chrome.
 
 ### Editor visual
 
+**Autocompletar al seleccionar** viene desactivado por defecto. El checkbox
+**Autocompletar** del mini panel guarda una elección para el ticker seleccionado,
+compartida entre sus plazos y conservada al recargar Matriz. Cada ticker tiene su
+propia elección, aunque comparta presets por prefijo con otro instrumento.
+La opción de Configuración se usa para tickers sin una elección propia; las
+preferencias generales guardadas anteriormente se conservan.
+Cambiar el checkbox no modifica el ticket cargado: se aplica en las próximas
+selecciones con Cantidad vacía. Los botones de presets siguen disponibles cuando
+el autocompletado está desactivado.
+
 Buscá o agregá un instrumento en la lista alfabética de la izquierda. Cada fila
 de la derecha representa un preset; la vista previa muestra cómo quedarán sus
 botones en Matriz.

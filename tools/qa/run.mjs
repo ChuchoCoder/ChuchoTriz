@@ -16,7 +16,7 @@ const report = { mode, startedAt: new Date().toISOString(), commit: execFileSync
   version: JSON.parse(readFileSync(join(root, 'manifest.json'))).version, cases: [], manual: 'See docs/manual-regression.md: installed Matriz, live freshness and human visual review.' };
 const lock = join(tmpdir(), 'chuchotriz-free-qa.lock');
 let lockFd, client, server, fixture;
-const groups = ['opening', 'presets', 'quotes', 'columns', 'tooltip', 'preload', 'position', 'operations', 'analysis'];
+const groups = ['opening', 'presets', 'autocomplete', 'quotes', 'columns', 'tooltip', 'preload', 'position', 'operations', 'analysis'];
 if (mode === 'regression') groups.push('oracle', 'editing', 'accounting', 'scope', 'roll', 'limits', 'reader-errors', 'layout');
 const call = async code => toolJSON(await client.request('tools/call', { name: 'browser_run_code_unsafe', arguments: { code } }, 180000));
 function save() {

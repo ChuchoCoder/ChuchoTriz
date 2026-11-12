@@ -36,6 +36,29 @@
   margin: 0 0 0 0;
 }
 
+#root-chuchotriz .preset-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#root-chuchotriz .instrument-autocomplete {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+#root-chuchotriz .instrument-autocomplete label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+#root-chuchotriz .instrument-autocomplete input {
+  margin: 0;
+  accent-color: #3fb1e5;
+}
+
 #root-chuchotriz .DefaultSizeShowButtons {
   margin: 0 0 0 8px;
   position: inherit;
