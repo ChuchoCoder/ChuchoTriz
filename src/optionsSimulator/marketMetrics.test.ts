@@ -79,6 +79,50 @@ it("shows the VI model details only with compatible inputs and an eligible trade
   expect(deriveOptionMetrics(pool, data, { ...context, currency: "USD" }).byId["put-100"].viDetails).toBeUndefined();
 });
 
+it("derives Bid and Ask extrinsic for calls and puts without requiring Mid or VI", () => {
+  const pool = contracts.map(contract => ({ ...contract, strikeCurrency: "ARS" }));
+  const data = sample();
+  for (const quote of Object.values(data)) {
+    quote.bid = { price: 10, size: 10 }; quote.ask = { price: 11, size: 10 };
+    quote.impliedVolatility = undefined;
+  }
+  const context = { ...settings, spot: 100, currency: "ARS" };
+  const result = deriveOptionMetrics(pool, data, context).byId;
+  for (const id of ["call-90", "put-110"]) expect(result[id]).toMatchObject({ extrinsicBid: 0, extrinsicAsk: 1 });
+  for (const id of ["call-100", "put-100", "call-110", "put-90"]) {
+    expect(result[id]).toMatchObject({ extrinsicBid: 10, extrinsicAsk: 11 });
+  }
+  data["call-90"].bid!.price = 8; data["call-90"].ask = undefined;
+  data["put-110"].bid = undefined; data["put-110"].ask!.price = 9;
+  const oneSided = deriveOptionMetrics(pool, data, context).byId;
+  expect(oneSided["call-90"].extrinsicBid).toBe(-2);
+  expect(oneSided["call-90"].extrinsicAsk).toBeUndefined();
+  expect(oneSided["put-110"].extrinsicBid).toBeUndefined();
+  expect(oneSided["put-110"].extrinsicAsk).toBe(-1);
+  expect(oneSided["call-90"].extrinsic).toBeUndefined();
+  expect(oneSided["put-110"].extrinsic).toBeUndefined();
+});
+
+it.each(["bid", "ask"] as const)("rejects invalid %s inputs independently and requires a compatible spot", side => {
+  const pool = contracts.map(contract => ({ ...contract, strikeCurrency: "ARS" }));
+  const data = sample(), context = { ...settings, spot: 100, currency: "ARS" };
+  const field = side === "bid" ? "extrinsicBid" : "extrinsicAsk";
+  const otherField = side === "bid" ? "extrinsicAsk" : "extrinsicBid";
+  for (const invalid of [0, -1, NaN, Infinity]) {
+    for (const property of ["price", "size"] as const) {
+      data["call-100"] = { bid: { price: 10, size: 1 }, ask: { price: 11, size: 1 } };
+      data["call-100"][side]![property] = invalid;
+      const cell = deriveOptionMetrics(pool, data, context).byId["call-100"];
+      expect(cell[field]).toBeUndefined(); expect(cell[otherField]).toBeDefined();
+    }
+  }
+  data["call-100"] = { bid: { price: 10, size: 1 }, ask: { price: 11, size: 1 } };
+  for (const overrides of [{ available: false }, { spot: undefined }, { spot: 0 }, { spot: NaN }, { currency: "USD" }]) {
+    expect(deriveOptionMetrics(pool, data, { ...context, ...overrides }).byId["call-100"][field]).toBeUndefined();
+  }
+  expect(deriveOptionMetrics(contracts, data, context).byId["call-100"][field]).toBeUndefined();
+});
+
 it.each([
   [10000.01, 10000, .01],
   [1000, 1000.001, .001],

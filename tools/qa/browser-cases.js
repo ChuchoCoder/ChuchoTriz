@@ -165,6 +165,66 @@ async (page, group) => {
     equal(await label('Cambiar columna Volumen nominal de Puts').inputValue(), 'volume', 'Header change mirrored');
     for (const fixed of ['BID · Vender', 'ASK · Comprar', 'VI', 'Strike']) assert(await page.getByRole('columnheader', { name: fixed, exact: true }).count() > 0, `Fixed ${fixed}`);
     pass('SM-05', 'Hide/show/reorder, reload persistence, mirrored header replacement and fixed columns');
+    await b('Configurar cadena de opciones').click();
+    for (const name of ['Extrínseco Bid', 'Extrínseco Ask']) await page.getByRole('checkbox', { name, exact: true }).check();
+    const beforeMove = await columns();
+    const movedCalls = beforeMove.slice(0, beforeMove.length / 2);
+    const bidIndex = movedCalls.indexOf('extrinsicBid');
+    assert(bidIndex > 0, 'Bid can move toward the edge');
+    [movedCalls[bidIndex - 1], movedCalls[bidIndex]] = [movedCalls[bidIndex], movedCalls[bidIndex - 1]];
+    await b('Mover Extrínseco Bid hacia el borde').click(); await b('Listo').click();
+    const extrinsicColumns = await columns();
+    equal(extrinsicColumns, [...movedCalls, ...movedCalls.toReversed()], 'Bid actually moves and both sides mirror the new order');
+    await page.reload(); await open();
+    equal(await columns(), extrinsicColumns, 'Extrinsic visibility and order persist');
+    await label('Cambiar columna Extrínseco Bid de Calls').selectOption('extrinsicAsk');
+    const swapped = await columns();
+    const swappedCalls = movedCalls.map(column => column === 'extrinsicBid' ? 'extrinsicAsk' : column === 'extrinsicAsk' ? 'extrinsicBid' : column);
+    equal(swapped, [...swappedCalls, ...swappedCalls.toReversed()], 'Bid/Ask actually swap positions and both sides mirror the new order');
+    const metric = async (name, expected) => {
+      await page.waitForFunction(({ name, expected }) => document.querySelector(`[aria-label="${name}"]`)?.textContent === expected, { name, expected });
+    };
+    for (const kind of ['CALL', 'PUT']) {
+      await metric(`Extrínseco Bid DEMO ${kind} 100`, '7,9');
+      await metric(`Extrínseco Ask DEMO ${kind} 100`, '8,1');
+    }
+    pass('SM-05-extrinsic-columns', 'Bid/Ask columns selectable, reorderable, persisted, mirrored and swappable from headers');
+    await page.evaluate(() => {
+      const options = window.mainStore.securityStore.options;
+      const call = options.find(c => c.id === 'call-90');
+      Object.assign(call.md, { bid: 8, bsz: 100, ask: undefined, asz: undefined }); call.md.seq++;
+      const put = options.find(c => c.id === 'put-110');
+      Object.assign(put.md, { bid: undefined, bsz: undefined, ask: 10, asz: 100 }); put.md.seq++;
+      for (const id of ['call-110', 'put-90']) {
+        const c = options.find(c => c.id === id);
+        Object.assign(c.md, { bid: 1.25, bsz: 100, ask: 1.75, asz: 100 }); c.impliedVolatility = undefined; c.md.seq++;
+      }
+    });
+    await metric('Extrínseco Bid DEMO CALL 90', '-2'); await metric('Extrínseco Ask DEMO CALL 90', '—');
+    await metric('Extrínseco Bid DEMO PUT 110', '—'); await metric('Extrínseco Ask DEMO PUT 110', '0');
+    for (const symbol of ['CALL 110', 'PUT 90']) {
+      await metric(`Extrínseco Bid DEMO ${symbol}`, '1,25'); await metric(`Extrínseco Ask DEMO ${symbol}`, '1,75');
+    }
+    pass('SM-05-extrinsic-values', 'ATM/ITM/OTM calls and puts, one-sided books, zero/negative extrinsic and missing VI');
+    await page.evaluate(() => {
+      const options = window.mainStore.securityStore.options;
+      const call = options.find(c => c.id === 'call-100'); call.md.bsz = 0; call.md.seq++;
+      const put = options.find(c => c.id === 'put-100'); put.md.ask = 0; put.md.seq++;
+    });
+    await metric('Extrínseco Bid DEMO CALL 100', '—'); await metric('Extrínseco Ask DEMO CALL 100', '8,1');
+    await metric('Extrínseco Bid DEMO PUT 100', '7,9'); await metric('Extrínseco Ask DEMO PUT 100', '—');
+    await page.evaluate(() => { window.mainStore.webSocketConnectionStatus = false; });
+    for (const kind of ['CALL', 'PUT']) {
+      await metric(`Extrínseco Bid DEMO ${kind} 100`, '—'); await metric(`Extrínseco Ask DEMO ${kind} 100`, '—');
+    }
+    await page.evaluate(() => {
+      window.mainStore.webSocketConnectionStatus = true;
+      const options = window.mainStore.securityStore.options;
+      const call = options.find(c => c.id === 'call-100'); call.md.bsz = 100; call.md.seq++;
+      const put = options.find(c => c.id === 'put-100'); put.md.ask = 8.1; put.md.seq++;
+    });
+    await metric('Extrínseco Bid DEMO CALL 100', '7,9'); await metric('Extrínseco Ask DEMO PUT 100', '8,1');
+    pass('SM-05-extrinsic-freshness', 'Invalid own price/size hides only that side; disconnect clears metrics and reconnect restores them');
   } else if (group === 'tooltip') {
     await open(); const trigger = b('VI 35,00 % · DEMO CALL 100');
     await trigger.click();
