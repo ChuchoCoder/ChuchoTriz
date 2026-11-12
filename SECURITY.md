@@ -40,7 +40,8 @@ issues públicos. Usar el canal privado habitual con el propietario.
   verifican cancelación, cambios de cuenta,
   serialización, datos incompletos y ausencia de cuerpos o errores privados.
   `options-executions-reader.js` consulta las ejecuciones de la cuenta activa
-  al pulsar **Actualizar desde Matriz**. Solo devuelve los campos necesarios
+  automáticamente al entrar en **Operaciones de opciones** y al pulsar
+  **Actualizar desde Matriz**. Solo devuelve los campos necesarios
   para la vista y el token opaco de contexto. Si se cierra la pestaña, expira
   la lectura o cambia la cuenta, el lector descarta el resultado y deja
   de iniciar búsquedas de instrumentos.

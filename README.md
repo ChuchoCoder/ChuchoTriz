@@ -40,10 +40,12 @@ Seleccioná BID/ASK para incorporar patas simuladas, ajustá cantidades con sign
 explorá el gráfico con distintos precios, fechas y VI. No envía órdenes al mercado.
 Ver [uso, fuentes y supuestos del simulador](docs/options-simulator.md).
 
-En **Configuración → Operaciones de opciones**, pulsá **Actualizar desde Matriz**
-para consultar las ejecuciones disponibles en el reporte de la cuenta activa.
+En **Configuración → Operaciones de opciones**, las ejecuciones disponibles en el
+reporte de la cuenta activa se cargan automáticamente cada vez que entrás a la
+pestaña. También podés recargarlas con **Actualizar desde Matriz**.
 Las operaciones se muestran por subyacente y vencimiento, con Calls a la
-izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** calcula
+izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** está
+activado por defecto y calcula
 el precio promedio ponderado por serie y mantiene compras y ventas separadas.
 Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
 Vencimiento, Cantidad, Base y Prima para pegar en una planilla.

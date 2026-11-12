@@ -410,8 +410,34 @@ async (page, group) => {
     equal(await b('Editar Contratos pata 1').innerText(), '+1', 'Adjustment kept across modes');
     pass('SM-08', 'Imported +2/-1 position, unknown premiums blank, adjustments survive mode switches');
   } else if (group === 'operations') {
-    await open(); await b('Operaciones de opciones').click(); await b('Actualizar desde Matriz').click();
+    await open(); await b('Operaciones de opciones').click();
     await b('Copiar Calls y Puts').waitFor();
+    const grouping = page.getByRole('checkbox', { name: 'Agrupar por strike', exact: true });
+    assert(await grouping.isChecked(), 'Executions grouped by default');
+    equal(await page.getByRole('table', { name: 'Calls', exact: true }).locator('tbody tr').count(), 2, 'Grouped call rows');
+    await grouping.uncheck();
+    await b('Cantidades rápidas').click();
+    await page.evaluate(async () => {
+      const store = window.mainStore.orderEventStore;
+      const rows = await store.getOrderEventsForAccountReport('DEMO-NO-BROKER');
+      store.getOrderEventsForAccountReport = async () => rows.filter(row => row.id !== 2);
+    });
+    await b('Operaciones de opciones').click();
+    await b('Copiar Calls y Puts').waitFor();
+    assert(await grouping.isChecked(), 'Grouping defaults on re-entry');
+    const callQuantities = await page.getByRole('table', { name: 'Calls', exact: true }).locator('tbody tr td:nth-child(2)').allTextContents();
+    assert(callQuantities.includes('2') && !callQuantities.includes('8'), 'Re-entry reads the updated report automatically');
+    await page.evaluate(() => {
+      const store = window.mainStore.orderEventStore;
+      const read = store.getOrderEventsForAccountReport;
+      store.getOrderEventsForAccountReport = async account => {
+        const rows = await read(account);
+        return [...rows, { ...rows.find(row => row.id === 1), id: 2, lastQty: 6, lastPx: 16 }];
+      };
+    });
+    await b('Actualizar desde Matriz').click();
+    await b('Copiar Calls y Puts').waitFor();
+    await grouping.uncheck();
     await page.getByRole('combobox', { name: /Formato regional/ }).selectOption('es-AR');
     const expiration = await page.evaluate(() => {
       const date = window.mainStore.securityStore.options[0].refData.maturityDateStr;
@@ -425,7 +451,7 @@ async (page, group) => {
       equal(data, [[expiration, '6', '100', '16'], [expiration, '-3', '100', '12'], [expiration, '2', '100', '10'], [expiration, '-1', '100', '9']], 'Copied expirations, signed quantities, strikes, premiums');
       assert(copy.includes('OPERACIONES CALLS') && copy.includes('OPERACIONES PUTS'), 'Both sections');
     } finally { await page.evaluate(() => { navigator.clipboard.writeText = window.ctCopyOriginal; delete window.ctCopyOriginal; delete window.ctCopy; }); }
-    pass('SM-09', 'Real reader + UI over synthetic executions; clipboard verified without changing system clipboard');
+    pass('SM-09', 'Automatic load/re-entry refresh, grouping by default, manual refresh and clipboard over synthetic executions');
   } else if (group === 'analysis') {
     await open(); await selectCall();
     const outputs = () => page.locator('.ct-sim-inspect output').allTextContents();
@@ -564,7 +590,7 @@ async (page, group) => {
     assert(await b('Bajar strikes de toda la estrategia').isDisabled(), 'Outer lower strike boundary');
     pass('RG-02-limits', 'Preview/build correspondence, quantity floor/ceiling, upper/lower chain boundaries');
   } else if (group === 'reader-errors') {
-    await open(); await b('Operaciones de opciones').click(); await b('Actualizar desde Matriz').click(); await b('Copiar Calls y Puts').waitFor();
+    await open(); await b('Operaciones de opciones').click(); await b('Copiar Calls y Puts').waitFor();
     await page.evaluate(() => { window.mainStore.profileStore.activeAccount = 'DEMO-SECOND'; });
     await page.getByRole('alert').filter({ hasText: 'Cambió la cuenta' }).waitFor();
     equal(await b('Copiar Calls y Puts').count(), 0, 'Stale account executions removed');
