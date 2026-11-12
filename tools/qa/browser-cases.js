@@ -85,6 +85,151 @@ async (page, group) => {
     await label('Precio').click();
     equal(await page.evaluate(() => document.activeElement.id), 'precio', 'Direct price click keeps focus');
     pass('SM-03', 'Form remount keeps preset, Clear forgets it, quote redirects focus and direct click does not');
+  } else if (group === 'autocomplete') {
+    const ticket = page.locator('#MiniOrderForm');
+    const box = ticker => ticket.getByRole('checkbox', { name: `Autocompletar para ${ticker}`, exact: true });
+    const ready = async ticker => {
+      await box(ticker).waitFor();
+      await page.waitForFunction(ticker => {
+        const input = document.querySelector(`[aria-label="Autocompletar para ${ticker}"]`);
+        return input && !input.disabled;
+      }, ticker);
+    };
+    const checked = async (ticker, expected) => {
+      await ready(ticker);
+      equal(await box(ticker).isChecked(), expected, `${ticker} autocomplete state`);
+    };
+    const change = async ticker => {
+      await label('Instrumento').fill(ticker);
+      await label('Cantidad').fill('');
+      await label('Precio').focus();
+    };
+    const quantity = async expected => {
+      try { await page.waitForFunction(expected => document.querySelector('#cantidad').value === expected, expected); }
+      catch { throw Error(`Autocomplete quantity: expected ${expected}, got ${await label('Cantidad').inputValue()}`); }
+    };
+    await checked('AL30', false);
+    await label('Precio').focus();
+    equal(await label('Cantidad').inputValue(), '', 'Default off leaves empty ticket');
+    await ticket.getByRole('button', { name: '100k', exact: true }).click();
+    equal(await label('Cantidad').inputValue(), '100000', 'Manual preset works with autocomplete off');
+    await b('Limpiar').click();
+    await label('Precio').focus();
+    await box('AL30').check();
+    await checked('AL30', true);
+    equal(await label('Cantidad').inputValue(), '', 'Enabling does not write the current ticket');
+    await label('Precio').focus();
+    await quantity('500000');
+    pass('AC-01', 'Off by default, manual presets work, opt-in after prior focus applies on next focus only');
+
+    await ticket.getByRole('button', { name: '100k', exact: true }).click();
+    await change('GD30 (CI)'); await checked('GD30', false);
+    equal(await label('Cantidad').inputValue(), '', 'Other ticker stays empty');
+    await change('AL30D (CI)'); await checked('AL30D', false);
+    equal(await label('Cantidad').inputValue(), '', 'Shared preset prefix does not share preference');
+    await change('AL30 (CI)'); await checked('AL30', true); await quantity('100000');
+    await change('AL30 (24hs)'); await checked('AL30', true); await quantity('500000');
+    pass('AC-02', 'Exact ticker overrides, independent prefix matches, last-used preset and shared settlement preference');
+
+    await page.reload(); await checked('AL30', true);
+    equal(await label('Cantidad').inputValue(), '', 'Reload does not write ticket before focus');
+    await label('Cantidad').fill('1234'); await label('Cantidad a mostrar').fill('123');
+    await box('AL30').uncheck(); await checked('AL30', false);
+    equal(await label('Cantidad').inputValue(), '1234', 'Disabling preserves total');
+    equal(await label('Cantidad a mostrar').inputValue(), '123', 'Disabling preserves displayed quantity');
+    await page.reload(); await checked('AL30', false);
+    await label('Precio').focus();
+    equal(await label('Cantidad').inputValue(), '', 'Persisted false overrides default');
+    pass('AC-03', 'Reload persists true and false, toggles preserve both ticket quantities');
+
+    await open(); await b('Cantidades rápidas').click();
+    const global = page.locator('[name="autocompleteWithFirstPreset"]');
+    equal(await global.isChecked(), false, 'Configuration default off');
+    await global.check(); await b('Guardar cambios').click();
+    await page.getByText('Cambios guardados', { exact: false }).waitFor();
+    await b('Volver a Matriz').click();
+    await checked('AL30', false);
+    await change('GD30 (CI)'); await checked('GD30', true); await quantity('300000');
+    await box('GD30').uncheck(); await checked('GD30', false);
+    await label('Precio').fill(''); await change('NUEVO (CI)'); await checked('NUEVO', true);
+    equal(await ticket.locator('.ButtonPreset').count(), 0, 'No preset buttons for unknown ticker without price');
+    await page.evaluate(() => chrome.storage.local.set({ Autocomplete: false }));
+    await checked('NUEVO', false);
+    await page.evaluate(() => chrome.storage.local.set({ 'AutocompleteInstrument:NUEVO': true }));
+    await checked('NUEVO', true);
+    await change('GD30 (CI)'); await checked('GD30', false);
+    await label('Instrumento').fill('');
+    await ticket.locator('.instrument-autocomplete').waitFor({ state: 'hidden' });
+    pass('AC-04', 'Global configuration fallback, explicit false override, external events, no-price/no-presets and empty instrument');
+
+    await change('AL30 (CI)'); await label('Precio').fill('70000');
+    await checked('AL30', false);
+    await page.evaluate(() => {
+      const set = chrome.storage.local.set;
+      let fail = true;
+      chrome.storage.local.set = async values => {
+        if (fail) { fail = false; throw Error('Simulated storage failure'); }
+        return set(values);
+      };
+    });
+    await box('AL30').click();
+    await ticket.getByRole('alert').waitFor(); await checked('AL30', false);
+    await box('AL30').focus(); await page.keyboard.press('Space'); await checked('AL30', true);
+    equal(await ticket.getByRole('alert').count(), 0, 'Retry clears save error');
+    equal(await label('Cantidad').inputValue(), '', 'Keyboard toggle preserves ticket');
+    pass('AC-05', 'Failed persistence is visible, retry works with keyboard without writing quantity');
+
+    await page.evaluate(() => {
+      const set = chrome.storage.local.set;
+      window.ctSaveImmediately = set;
+      chrome.storage.local.set = async values => {
+        await set(values);
+        await new Promise(resolve => { window.ctFinishSave = resolve; });
+      };
+    });
+    await box('AL30').uncheck();
+    await page.waitForFunction(() => typeof window.ctFinishSave === 'function');
+    assert(await box('AL30').isDisabled(), 'Pending save disables checkbox');
+    await change('GD30 (CI)'); await checked('GD30', false);
+    await page.evaluate(async () => {
+      await window.ctSaveImmediately({ 'AutocompleteInstrument:AL30': true });
+      window.ctFinishSave();
+      chrome.storage.local.set = window.ctSaveImmediately;
+    });
+    await checked('GD30', false);
+    await change('AL30 (CI)'); await checked('AL30', true); await quantity('500000');
+    pass('AC-06', 'Delayed save remains scoped to original ticker and cannot overwrite a newer preference event');
+
+    await page.evaluate(() => {
+      const buttons = document.querySelector('#MiniOrderForm > .MiniOrderForm_buttonsBlock');
+      buttons.replaceWith(buttons.cloneNode(true));
+    });
+    await checked('AL30', true);
+    equal(await ticket.locator('#root-chuchotriz').count(), 1, 'One panel after button replacement');
+    await box('AL30').uncheck(); await checked('AL30', false);
+    await page.evaluate(() => {
+      const form = document.getElementById('MiniOrderForm');
+      const replacement = form.cloneNode(true);
+      replacement.querySelector('#cantidad').value = '';
+      form.replaceWith(replacement);
+    });
+    await checked('AL30', false);
+    equal(await ticket.locator('#root-chuchotriz').count(), 1, 'One panel after form replacement');
+    await box('AL30').check(); await checked('AL30', true);
+    equal(await label('Cantidad').inputValue(), '', 'Replacement toggle does not fill');
+    await label('Precio').focus(); await quantity('500000');
+    pass('AC-07', 'Cloned button block and complete form remount preserve preference and restore working listeners');
+
+    for (const width of [1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const bounds = await box('AL30').boundingBox();
+      assert(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= 1000,
+        `Checkbox within viewport at ${width}`);
+      await box('AL30').focus(); await page.keyboard.press('Space'); await checked('AL30', false);
+      await box('AL30').focus();
+      await page.keyboard.press('Space'); await checked('AL30', true);
+    }
+    pass('AC-08', 'Checkbox remains visible and keyboard-operable at 1024/1440/1920');
   } else if (group === 'quotes') {
     await open();
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.ask = undefined; c.md.asz = undefined; c.md.lst = 9; c.md.seq++; });

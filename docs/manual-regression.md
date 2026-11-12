@@ -67,6 +67,7 @@ navegador aislado en CI.
 | --- | --- | --- |
 | SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
 | SM-02, SM-03, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, cambio de instrumento, último preset, Limpiar, reemplazo de formulario y foco tras cotización. |
+| AC-01–AC-08 | `autocomplete` | Default apagado, presets manuales, elección exacta por ticker/plazos, persistencia, fallback general, eventos externos, errores/reintentos, guardados demorados, remount, teclado y geometría a 1024/1440/1920. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
 | SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
 | SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. |
