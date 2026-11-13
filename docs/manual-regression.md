@@ -68,7 +68,7 @@ navegador aislado en CI.
 | SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
 | SM-02, SM-03, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, cambio de instrumento, último preset, Limpiar, reemplazo de formulario y foco tras cotización. |
 | AC-01–AC-08 | `autocomplete` | Default apagado, presets manuales, elección exacta por ticker/plazos, persistencia, fallback general, eventos externos, errores/reintentos, guardados demorados, remount, teclado y geometría a 1024/1440/1920. |
-| SM-11 | `mini-layout` | Botones nativos y presets alineados, Autocompletar debajo de Comprar/Vender/Limpiar, salto a dos filas y márgenes uniformes, sin recortes a 1024/1280/1440/1920 en modo expandido y compacto. |
+| SM-11, SM-11-labels, SM-11-column | `mini-layout` | Botones nativos y presets alineados, Autocompletar debajo de Comprar/Vender/Limpiar, salto a dos filas y márgenes uniformes, sin recortes a 1024/1280/1440/1920 en modo expandido y compacto. Incluye los diez presets predeterminados de AO2 con cantidad/mostrar y contenedores en columna Notebook/Tablet. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
 | SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
 | SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. Extrínseco Bid/Ask: selección e intercambio, calls/puts ATM/ITM/OTM, puntas independientes, ceros/negativos, VI ausente, precio/tamaño inválidos y desconexión/recuperación. |

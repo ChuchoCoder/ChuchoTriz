@@ -246,7 +246,7 @@ async (page, group) => {
       :where(#MiniOrderForm.ct-qa-mini-layout .OrderButton) {
         width:var(--mini-form-button-width); height:var(--mini-form-button-height);
         flex-shrink:0; display:flex; align-items:center; justify-content:center;
-        padding:0 7px; border:1px solid; box-sizing:border-box;
+        padding:0 7px; border:1px solid; box-sizing:border-box; white-space:nowrap;
       }
     ` });
     await page.evaluate(async () => {
@@ -269,6 +269,25 @@ async (page, group) => {
     equal(await ticket.locator('.ButtonPreset').count(), 8, 'Eight layout presets loaded');
     const ticketValues = () => page.locator('#MiniOrderForm input:not([type="checkbox"])').evaluateAll(es => es.map(e => e.value));
     const initialValues = await ticketValues();
+    const readLayout = () => ticket.evaluate(form => {
+      const rect = e => { const r = e.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height, right:r.right, bottom:r.bottom }; };
+      const native = [...form.querySelectorAll('.MiniOrderForm_buttonsBlock > button')].map(rect);
+      const buttons = [...form.querySelectorAll('.ButtonPreset')];
+      const presets = buttons.map(rect);
+      return { form:rect(form), native, presets, checkbox:rect(form.querySelector('.instrument-autocomplete')),
+        rows:new Set(presets.map(r => Math.round(r.y))).size,
+        labelsFit:buttons.every(e => e.scrollWidth <= e.clientWidth + 1 && e.scrollHeight <= e.clientHeight + 1) };
+    });
+    const assertControlsFit = (layout, context) => {
+      assert(layout.native.every(r => Math.abs(r.y - layout.presets[0].y) < 1), `Native/preset row alignment ${context}`);
+      assert(layout.checkbox.y >= layout.native[0].bottom + 3, `Autocomplete below native buttons ${context}`);
+      assert(Math.abs(layout.checkbox.x - layout.native[0].x) < 1 && layout.checkbox.right <= layout.native[2].right + 1,
+        `Autocomplete aligned within the action group ${context}`);
+      assert([...layout.native, ...layout.presets, layout.checkbox].every(r =>
+        r.x >= layout.form.x && r.right <= layout.form.right + 1 && r.y >= layout.form.y && r.bottom <= layout.form.bottom + 1),
+        `Controls fit without clipping ${context}`);
+      assert(layout.labelsFit, `Preset labels fit without truncation ${context}`);
+    };
     for (const expanded of [true, false]) {
       for (const width of [1920, 1440, 1280, 1024]) {
         await page.setViewportSize({ width, height:1000 });
@@ -276,21 +295,9 @@ async (page, group) => {
           form.classList.toggle('ExpandedForm', expanded);
           form.classList.toggle('IsNotExpandedForm', !expanded);
         }, expanded);
-        const layout = await ticket.evaluate(form => {
-          const rect = e => { const r = e.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height, right:r.right, bottom:r.bottom }; };
-          const native = [...form.querySelectorAll('.MiniOrderForm_buttonsBlock > button')].map(rect);
-          const presets = [...form.querySelectorAll('.ButtonPreset')].map(rect);
-          return { form:rect(form), native, presets, checkbox:rect(form.querySelector('.instrument-autocomplete')),
-            rows:new Set(presets.map(r => Math.round(r.y))).size };
-        });
+        const layout = await readLayout();
         const context = `${expanded ? 'expanded' : 'collapsed'} at ${width}`;
-        assert(layout.native.every(r => Math.abs(r.y - layout.presets[0].y) < 1), `Native/preset row alignment ${context}`);
-        assert(layout.checkbox.y >= layout.native[0].bottom + 3, `Autocomplete below native buttons ${context}`);
-        assert(Math.abs(layout.checkbox.x - layout.native[0].x) < 1 && layout.checkbox.right <= layout.native[2].right + 1,
-          `Autocomplete aligned within the action group ${context}`);
-        assert([...layout.native, ...layout.presets, layout.checkbox].every(r =>
-          r.x >= layout.form.x && r.right <= layout.form.right + 1 && r.y >= layout.form.y && r.bottom <= layout.form.bottom + 1),
-          `Controls fit without clipping ${context}`);
+        assertControlsFit(layout, context);
         if (width === 1920) equal(layout.rows, 1, `Presets use one row ${context}`);
         if (width <= 1440) equal(layout.rows, 2, `Presets wrap into two rows ${context}`);
         for (let i = 1; i < layout.presets.length; i++) {
@@ -301,6 +308,30 @@ async (page, group) => {
       }
     }
     pass('SM-11', 'Native/preset alignment, autocomplete below actions, one/two preset rows, spacing and no clipping at 1024/1280/1440/1920 expanded/collapsed');
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: undefined }));
+    await label('Instrumento').fill('AO20 (CI)'); await label('Precio').focus();
+    await ticket.getByRole('button', { name:'300k/100k', exact:true }).waitFor();
+    equal(await ticket.locator('.ButtonPreset').count(), 10, 'Ten default AO2 presets loaded');
+    for (const expanded of [true, false]) {
+      for (const width of [1920, 1440, 1280, 1024]) {
+        await page.setViewportSize({ width, height:1000 });
+        await ticket.evaluate((form, expanded) => {
+          form.classList.toggle('ExpandedForm', expanded); form.classList.toggle('IsNotExpandedForm', !expanded);
+        }, expanded);
+        assertControlsFit(await readLayout(), `AO2 ${expanded ? 'expanded' : 'collapsed'} at ${width}`);
+      }
+    }
+    pass('SM-11-labels', 'Ten default AO2 presets including quantity/display labels remain legible and inside the form');
+    for (const [mode, width, height] of [['NotebookExpanded', 1024, 140], ['TabletExpanded', 768, 160]]) {
+      await page.setViewportSize({ width, height:1000 });
+      await ticket.evaluate((form, {mode, height}) => {
+        form.classList.remove('IsNotExpandedForm', 'NotebookExpanded', 'TabletExpanded');
+        form.classList.add('ExpandedForm', mode);
+        form.style.flexDirection = 'column'; form.style.minHeight = `${height}px`; form.style.maxHeight = `${height}px`;
+      }, {mode, height});
+      assertControlsFit(await readLayout(), mode);
+    }
+    pass('SM-11-column', 'Notebook/tablet column containers preserve native/preset alignment, checkbox placement and long labels');
   } else if (group === 'quotes') {
     await open();
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.ask = undefined; c.md.asz = undefined; c.md.lst = 9; c.md.seq++; });
