@@ -27,23 +27,41 @@
     #MiniOrderForm > div.MiniOrderForm_buttonsBlock
     {
         width: auto;
-        top: 40px;
-        left: 1150px;
     }
 }
 
-#root-chuchotriz {
-  margin: 0 0 0 0;
+#MiniOrderForm > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) {
+  display: grid;
+  grid-template-columns: repeat(3, max-content) minmax(0, 1fr);
+  grid-template-rows: var(--mini-form-button-height, 28px) auto;
+  align-items: start;
+  align-content: center;
+  justify-content: start;
+  gap: 4px 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: min-content;
+  width: auto;
+  position: static;
 }
 
+#MiniOrderForm > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) > button {
+  grid-row: 1;
+}
+
+#MiniOrderForm.IsNotExpandedForm:has(#root-chuchotriz) {
+  max-height: none;
+}
+
+#root-chuchotriz,
 #root-chuchotriz .preset-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: contents;
 }
 
 #root-chuchotriz .instrument-autocomplete {
-  margin-left: 8px;
+  grid-column: 1 / 4;
+  grid-row: 2;
+  margin: 0;
   font-size: 12px;
 }
 
@@ -60,8 +78,18 @@
 }
 
 #root-chuchotriz .DefaultSizeShowButtons {
-  margin: 0 0 0 8px;
-  position: inherit;
+  grid-column: 4;
+  grid-row: 1 / 3;
+  min-width: 0;
+  margin: 0;
+  position: static;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  align-content: start;
+  gap: 4px 8px;
+}
+
+#root-chuchotriz .ButtonPreset {
+  min-width: min-content;
+  max-width: calc((100% - 24px) / 4);
 }
