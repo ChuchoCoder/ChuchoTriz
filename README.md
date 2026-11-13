@@ -124,8 +124,10 @@ de Chrome.
 **Autocompletar** del mini panel guarda una elección para el ticker seleccionado,
 compartida entre sus plazos y conservada al recargar Matriz. Cada ticker tiene su
 propia elección, aunque comparta presets por prefijo con otro instrumento.
-La opción de Configuración se usa para tickers sin una elección propia; las
-preferencias generales guardadas anteriormente se conservan.
+El checkbox del Mini Order Form es el único control de autocompletado. Cada
+instrumento comienza apagado hasta que lo habilites; las preferencias por
+instrumento guardadas anteriormente se conservan. El ajuste global de versiones
+anteriores deja de aplicarse.
 Cambiar el checkbox no modifica el ticket cargado: se aplica en las próximas
 selecciones con Cantidad vacía. Los botones de presets siguen disponibles cuando
 el autocompletado está desactivado.
@@ -235,9 +237,9 @@ incorporación en `free-files.json`.
 ## Datos y distribución
 
 Las preferencias se almacenan localmente en `chrome.storage.local`, dentro del
-perfil de Chrome. Se conservan las claves `InstrumentPresets` y `Autocomplete`
-de versiones anteriores; el último preset elegido se mantiene en memoria
-durante la sesión.
+perfil de Chrome. Se conservan `InstrumentPresets` y las preferencias
+`AutocompleteInstrument:<ticker>`. La antigua clave global `Autocomplete` se
+ignora; el último preset elegido se mantiene en memoria durante la sesión.
 
 La extensión usa Manifest V3, pide solamente el permiso `storage` y no incorpora
 servidores propios, analítica ni pagos. No bloquea las solicitudes de telemetría

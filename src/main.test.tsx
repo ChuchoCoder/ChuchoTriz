@@ -81,7 +81,7 @@ beforeEach(() => {
           { cantidad: 300, mostrar: 30 },
         ],
         GD30: [{ cantidad: 400, mostrar: 0 }],
-      }, Autocomplete: true }),
+      }, "AutocompleteInstrument:AL30": true, "AutocompleteInstrument:GD30": true }),
       set: vi.fn().mockResolvedValue(undefined),
     },
     onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
@@ -243,7 +243,7 @@ it("saves the checkbox per ticker, applies on future focus and keeps the choice 
   expect(storage.saved["AutocompleteInstrument:AL30"]).toBe(false);
 });
 
-it("updates from global and external ticker choices, including instruments without a price or presets", async () => {
+it("ignores legacy global changes and updates exact ticker choices, including instruments without a price or presets", async () => {
   const storage = autocompleteStorage();
   const current = createForm();
   current.price.value = "";
@@ -253,11 +253,13 @@ it("updates from global and external ticker choices, including instruments witho
   await act(async () => { storage.emit({ Autocomplete: true, "AutocompleteInstrument:AL30": false }); });
   expect(autocompleteCheckbox(current.form, "AL30").checked).toBe(false);
   await changeInstrument(current.form, "NEW (CI)");
+  expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(false);
+  await act(async () => { storage.emit({ "AutocompleteInstrument:NEW": true }); });
   expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(true);
   await act(async () => { storage.emit({ "AutocompleteInstrument:NEW": false }); });
   expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(false);
   await act(async () => { storage.emit({ "AutocompleteInstrument:NEW": undefined }); });
-  expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(true);
+  expect(autocompleteCheckbox(current.form, "NEW").checked).toBe(false);
   await changeInstrument(current.form, "");
   expect(current.form.querySelector('input[type="checkbox"]')).toBeNull();
 });

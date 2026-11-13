@@ -34,7 +34,7 @@ describe("InstrumentPresetsRepository.watch", () => {
     emit({ Autocomplete: { oldValue: true, newValue: false } });
 
     expect(listener).toHaveBeenNthCalledWith(1, { book });
-    expect(listener).toHaveBeenNthCalledWith(2, { autocompletar: false });
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to the defaults when a setting is removed", () => {
@@ -43,7 +43,7 @@ describe("InstrumentPresetsRepository.watch", () => {
 
     emit({ InstrumentPresets: { oldValue: {} }, Autocomplete: { oldValue: false } });
 
-    expect(listener).toHaveBeenCalledWith({ book: defaultBook, autocompletar: false });
+    expect(listener).toHaveBeenCalledWith({ book: defaultBook });
   });
 
   it("ignores other keys and other storage areas", () => {
@@ -51,7 +51,8 @@ describe("InstrumentPresetsRepository.watch", () => {
     instrumentPresetsRepository.watch(listener);
 
     emit({ Other: { newValue: 1 } });
-    emit({ Autocomplete: { newValue: false } }, "sync");
+    emit({ Autocomplete: { newValue: true } });
+    emit({ "AutocompleteInstrument:AL30": { newValue: true } }, "sync");
 
     expect(listener).not.toHaveBeenCalled();
   });
@@ -61,26 +62,26 @@ describe("InstrumentPresetsRepository.watch", () => {
     const unsubscribe = instrumentPresetsRepository.watch(listener);
 
     unsubscribe();
-    emit({ Autocomplete: { newValue: false } });
+    emit({ "AutocompleteInstrument:AL30": { newValue: false } });
 
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it("defaults to off, preserves an explicit global choice and reads independent ticker choices", async () => {
+  it("ignores the legacy global flag, defaults to off and preserves independent ticker choices", async () => {
     const get = vi.fn().mockResolvedValue({});
     vi.stubGlobal("chrome", { storage: { local: { get } } });
-    expect(await instrumentPresetsRepository.readAutocomplete()).toBe(false);
     expect(await instrumentPresetsRepository.readSettings()).toEqual({
-      book: defaultBook, autocompletar: false, autocompleteByInstrument: {},
+      book: defaultBook, autocompleteByInstrument: {},
     });
     get.mockResolvedValue({ Autocomplete: true, "AutocompleteInstrument:AL30": false,
       "AutocompleteInstrument:GD30": true, "AutocompleteInstrument:GGAL": "invalid" });
     const settings = await instrumentPresetsRepository.readSettings();
     expect(autocompleteFor(settings, "AL30")).toBe(false);
     expect(autocompleteFor(settings, "GD30")).toBe(true);
-    expect(autocompleteFor(settings, "GGAL")).toBe(true);
-    expect(autocompleteFor(settings, "AL30D")).toBe(true);
+    expect(autocompleteFor(settings, "GGAL")).toBe(false);
+    expect(autocompleteFor(settings, "AL30D")).toBe(false);
     expect(settings.autocompleteByInstrument).toEqual({ AL30: false, GD30: true });
+    expect(settings).not.toHaveProperty("autocompletar");
   });
 
   it("writes only the selected ticker, and reports external changes and removals", async () => {

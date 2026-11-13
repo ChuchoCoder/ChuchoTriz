@@ -13,7 +13,7 @@ describe("instrument settings drafts", () => {
       AL30: [{ cantidad: 100000, mostrar: "R5" }],
     });
   });
-  it("preserves prefix precedence and saves both settings in one write", async () => {
+  it("preserves prefix precedence and saves only the preset book", async () => {
     const book = { GGALD: [{ cantidad: 100, mostrar: 10 }], GGALC: [{ cantidad: 500, mostrar: 50 }] };
     const draft = toDraft(book);
     expect(Object.keys(draft).sort((a, b) => a.localeCompare(b, "es"))).toEqual(["GGALC", "GGALD"]);
@@ -22,9 +22,9 @@ describe("instrument settings drafts", () => {
     expect(Object.keys(serialized)).toEqual(["GGALD", "GGALC"]);
     const set = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("chrome", { storage: { local: { set } } });
-    await repository.saveSettings(serialized, false);
+    await repository.save(serialized);
     expect(set).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith({ InstrumentPresets: book, Autocomplete: false });
+    expect(set).toHaveBeenCalledWith({ InstrumentPresets: book });
   });
 
   it("round trips preset order, zero display quantity and large peso values", () => {

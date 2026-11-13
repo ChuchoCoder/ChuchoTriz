@@ -40,7 +40,7 @@ async (page, group) => {
     pass('SM-01', 'Open/close/reopen, one panel, tools coexist');
   } else if (group === 'presets') {
     // This suite explicitly exercises opt-in autocomplete; new installations default to off.
-    await page.evaluate(() => chrome.storage.local.set({ Autocomplete: true }));
+    await page.evaluate(() => chrome.storage.local.set({ 'AutocompleteInstrument:AL30': true, 'AutocompleteInstrument:GD30': true }));
     await open(); await b('Cantidades rápidas').click(); await b('RAW').click();
     const raw = 'AL30 100 200/20 300/R10\nGD30 400';
     await label('Presets RAW').fill(raw); await b('Guardar cambios').click();
@@ -86,6 +86,8 @@ async (page, group) => {
     equal(await page.evaluate(() => document.activeElement.id), 'precio', 'Direct price click keeps focus');
     pass('SM-03', 'Form remount keeps preset, Clear forgets it, quote redirects focus and direct click does not');
   } else if (group === 'autocomplete') {
+    await page.evaluate(() => chrome.storage.local.set({ Autocomplete: true,
+      'AutocompleteInstrument:KEEP': true, 'AutocompleteInstrument:OFF': false }));
     const ticket = page.locator('#MiniOrderForm');
     const box = ticker => ticket.getByRole('checkbox', { name: `Autocompletar para ${ticker}`, exact: true });
     const ready = async ticker => {
@@ -110,7 +112,7 @@ async (page, group) => {
     };
     await checked('AL30', false);
     await label('Precio').focus();
-    equal(await label('Cantidad').inputValue(), '', 'Default off leaves empty ticket');
+    equal(await label('Cantidad').inputValue(), '', 'Legacy global true is ignored; default off leaves empty ticket');
     await ticket.getByRole('button', { name: '100k', exact: true }).click();
     equal(await label('Cantidad').inputValue(), '100000', 'Manual preset works with autocomplete off');
     await b('Limpiar').click();
@@ -143,15 +145,19 @@ async (page, group) => {
     pass('AC-03', 'Reload persists true and false, toggles preserve both ticket quantities');
 
     await open(); await b('Cantidades rápidas').click();
-    const global = page.locator('[name="autocompleteWithFirstPreset"]');
-    equal(await global.isChecked(), false, 'Configuration default off');
-    await global.check(); await b('Guardar cambios').click();
+    equal(await page.locator('[name="autocompleteWithFirstPreset"]').count(), 0, 'Configuration has no global autocomplete control');
+    await b('Guardar cambios').click();
     await page.getByText('Cambios guardados', { exact: false }).waitFor();
     await b('Volver a Matriz').click();
+    const preserved = await page.evaluate(() => chrome.storage.local.get(null));
+    equal(preserved['AutocompleteInstrument:KEEP'], true, 'Preset save preserves enabled ticker');
+    equal(preserved['AutocompleteInstrument:OFF'], false, 'Preset save preserves disabled ticker');
     await checked('AL30', false);
-    await change('GD30 (CI)'); await checked('GD30', true); await quantity('300000');
+    await change('GD30 (CI)'); await checked('GD30', false);
+    equal(await label('Cantidad').inputValue(), '', 'Unconfigured ticker stays empty despite legacy global true');
+    await box('GD30').check(); await checked('GD30', true); await label('Precio').focus(); await quantity('300000');
     await box('GD30').uncheck(); await checked('GD30', false);
-    await label('Precio').fill(''); await change('NUEVO (CI)'); await checked('NUEVO', true);
+    await label('Precio').fill(''); await change('NUEVO (CI)'); await checked('NUEVO', false);
     equal(await ticket.locator('.ButtonPreset').count(), 0, 'No preset buttons for unknown ticker without price');
     await page.evaluate(() => chrome.storage.local.set({ Autocomplete: false }));
     await checked('NUEVO', false);
@@ -160,7 +166,7 @@ async (page, group) => {
     await change('GD30 (CI)'); await checked('GD30', false);
     await label('Instrumento').fill('');
     await ticket.locator('.instrument-autocomplete').waitFor({ state: 'hidden' });
-    pass('AC-04', 'Global configuration fallback, explicit false override, external events, no-price/no-presets and empty instrument');
+    pass('AC-04', 'Global control removed and legacy flag ignored; ticker preferences preserved on preset save; default off, external events and empty instrument');
 
     await change('AL30 (CI)'); await label('Precio').fill('70000');
     await checked('AL30', false);
