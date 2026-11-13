@@ -135,5 +135,6 @@
   "tools/qa/mcp-stdio.test.mjs",
   "tools/qa/run.mjs",
   "tools/qa/browser-cases.js",
-  "docs/qa/automation-2026-11-09.md"
+  "docs/qa/automation-2026-11-09.md",
+  "docs/qa/0.0.24-2026-11-13.md"
 ]
