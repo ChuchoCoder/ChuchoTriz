@@ -25,13 +25,14 @@ const savedBook: typeof defaultBook = {
 let root: Root;
 let container: HTMLDivElement;
 let set: ReturnType<typeof vi.fn>;
-let stored: { InstrumentPresets: typeof defaultBook; Autocomplete: boolean };
+let stored: { InstrumentPresets: typeof defaultBook; Autocomplete: boolean;
+  "AutocompleteInstrument:AL30"?: boolean; "AutocompleteInstrument:GD30"?: boolean };
 let storageListeners: Set<(changes: Record<string, chrome.storage.StorageChange>, area: string) => void>;
 
 async function externalSave(quantity: number) {
   await act(async () => {
     const previous = stored;
-    stored = { InstrumentPresets: { ...stored.InstrumentPresets,
+    stored = { ...stored, InstrumentPresets: { ...stored.InstrumentPresets,
       AL30: [{ ...stored.InstrumentPresets.AL30[0], cantidad: quantity }, ...stored.InstrumentPresets.AL30.slice(1)],
     }, Autocomplete: false };
     storageListeners.forEach(listener => listener({
@@ -79,7 +80,8 @@ async function chooseMode(mode: string, index = 1) {
 }
 
 beforeEach(async () => {
-  stored = { InstrumentPresets: structuredClone(savedBook), Autocomplete: true };
+  stored = { InstrumentPresets: structuredClone(savedBook), Autocomplete: true,
+    "AutocompleteInstrument:AL30": true, "AutocompleteInstrument:GD30": false };
   storageListeners = new Set();
   set = vi.fn().mockImplementation(async values => {
     const previous = stored;
@@ -109,6 +111,32 @@ afterEach(async () => {
 });
 
 describe("Opciones por instrumento", () => {
+  it("has no global autocomplete control and preserves ticker choices when saving and restoring presets", async () => {
+    expect(container.querySelector('[name="autocompleteWithFirstPreset"]')).toBeNull();
+    expect(container.textContent).not.toContain("Autocompletar al seleccionar");
+    await edit(quantity("Cantidad del preset 1 de AL30"), "123456");
+    await act(async () => button("Guardar cambios").click());
+    await act(async () => button("Restablecer valores").click());
+    await act(async () => button("Guardar cambios").click());
+    expect(stored["AutocompleteInstrument:AL30"]).toBe(true);
+    expect(stored["AutocompleteInstrument:GD30"]).toBe(false);
+    expect(stored.Autocomplete).toBe(true);
+    for (const [values] of set.mock.calls) expect(Object.keys(values)).toEqual(["InstrumentPresets"]);
+  });
+
+  it("does not conflict with or overwrite a ticker preference changed while presets are being edited", async () => {
+    await act(async () => root.render(<InstrumentPresetsOptions embedded />));
+    await edit(quantity("Cantidad del preset 1 de AL30"), "123456");
+    await act(async () => {
+      stored["AutocompleteInstrument:AL30"] = false;
+      storageListeners.forEach(listener => listener({ "AutocompleteInstrument:AL30": { newValue:false } }, "local"));
+    });
+    await act(async () => button("Guardar cambios").click());
+    expect(stored.InstrumentPresets.AL30[0].cantidad).toBe(123456);
+    expect(stored["AutocompleteInstrument:AL30"]).toBe(false);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("shares unsaved presets between visual and RAW, preserves order and saves either mode", async () => {
     const random = vi.spyOn(Math, 'random');
     await edit(quantity('Cantidad del preset 1 de AL30'), '234567');
@@ -308,7 +336,7 @@ describe("Opciones por instrumento", () => {
     await act(async () => root.render(<InstrumentPresetsOptions embedded />));
     await externalSave(333333);
     expect(quantity("Cantidad del preset 1 de AL30").value).toBe("333333");
-    expect(container.querySelector<HTMLInputElement>('[name="autocompleteWithFirstPreset"]')!.checked).toBe(false);
+    expect(container.querySelector('[name="autocompleteWithFirstPreset"]')).toBeNull();
     await act(async () => button("Guardar cambios").click());
     expect(stored.InstrumentPresets.AL30[0].cantidad).toBe(333333);
     expect(container.textContent).toContain("Cambios guardados");
@@ -327,14 +355,14 @@ describe("Opciones por instrumento", () => {
     expect(stored.InstrumentPresets.AL30[0].cantidad).toBe(333333);
     await act(async () => button("Descartar cambios").click());
     expect(quantity("Cantidad del preset 1 de AL30").value).toBe("333333");
-    expect(container.querySelector<HTMLInputElement>('[name="autocompleteWithFirstPreset"]')!.checked).toBe(false);
+    expect(container.querySelector('[name="autocompleteWithFirstPreset"]')).toBeNull();
     expect(button("Guardar cambios").disabled).toBe(false);
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("checks storage again before saving when an external change notification has not arrived", async () => {
     await edit(quantity("Cantidad del preset 1 de AL30"), "234567");
-    stored = { ...stored, Autocomplete: false };
+    stored = { ...stored, InstrumentPresets: { ...stored.InstrumentPresets, NEW: [{ cantidad:100, mostrar:0 }] } };
     await act(async () => button("Guardar cambios").click());
     expect(set).not.toHaveBeenCalled();
     expect(quantity("Cantidad del preset 1 de AL30").value).toBe("234567");

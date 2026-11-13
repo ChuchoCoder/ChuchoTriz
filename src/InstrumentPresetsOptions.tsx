@@ -31,8 +31,8 @@ function displaySummary(preset: DraftPreset): { title: string; detail: string } 
     return { title: `Aleatoria ÷${divisor}`, detail: `${quantityLabel(String(minimum))}–${quantityLabel(String(maximum))}` };
   } catch { return { title: "Revisar valores", detail: "" }; }
 }
-type EditorSettings = { presets: DraftPresets; autocomplete: boolean };
-const toEditorSettings = (settings: StoredSettings): EditorSettings => ({ presets: toDraft(settings.book), autocomplete: settings.autocompletar });
+type EditorSettings = { presets: DraftPresets };
+const toEditorSettings = (settings: StoredSettings): EditorSettings => ({ presets: toDraft(settings.book) });
 const sameSettings = (a: EditorSettings, b: EditorSettings) => JSON.stringify(a) === JSON.stringify(b);
 const conflictMessage = "Las preferencias cambiaron en otra vista. Tu borrador se conserva. Descartá los cambios para cargar lo guardado antes de volver a guardar.";
 
@@ -44,7 +44,6 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   const [selected, setSelected] = useState("");
   const [editing, setEditing] = useState<EditingPreset | null>(null);
   const editFocus = useRef<{ index: number; field: "cantidad" | "mostrar" | "action" } | null>(null);
-  const [autocomplete, setAutocomplete] = useState(repository.DefaultAutocomplete);
   const [newTicker, setNewTicker] = useState("");
   const [tickerQuery, setTickerQuery] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
@@ -56,7 +55,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [conflict, setConflict] = useState(false);
-  const saved = useRef<EditorSettings>({ presets: {}, autocomplete: repository.DefaultAutocomplete });
+  const saved = useRef<EditorSettings>({ presets: {} });
   const dirty = useRef(false);
   const conflicted = useRef(false);
   const pendingSave = useRef<EditorSettings | null>(null);
@@ -77,7 +76,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
       conflicted.current = true; setConflict(true); setError(conflictMessage); setStatus("");
       return;
     }
-    setPresets(next.presets); setAutocomplete(next.autocomplete); setEditing(null);
+    setPresets(next.presets); setEditing(null);
     setRawText(rawTextFor(next.presets));
     setSelected(current => Object.hasOwn(next.presets, current) ? current : sortTickers(next.presets)[0] ?? "");
     setStatus("Preferencias actualizadas");
@@ -92,12 +91,10 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
     try {
       const settings = { ...await repository.readSettings(), ...loadingChanges.current };
       const draft = toDraft(settings.book);
-      const enabled = settings.autocompletar;
-      saved.current = { presets: draft, autocomplete: enabled };
+      saved.current = { presets: draft };
       dirty.current = false; conflicted.current = false; setConflict(false);
       setPresets(draft);
       setRawText(rawTextFor(draft));
-      setAutocomplete(enabled);
       setSelected(sortTickers(draft)[0] ?? "");
     } catch {
       setLoadFailed(true);
@@ -107,8 +104,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   useEffect(() => {
     const stop = repository.watch(change => {
       if (loadingSettings.current) { loadingChanges.current = { ...loadingChanges.current, ...change }; return; }
-      receiveSettings({ presets: change.book ? toDraft(change.book) : saved.current.presets,
-        autocomplete: change.autocompletar ?? saved.current.autocomplete });
+      receiveSettings({ presets: change.book ? toDraft(change.book) : saved.current.presets });
     });
     void load();
     return stop;
@@ -238,7 +234,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
     const defaults = toDraft(defaultBook);
     setRawText(rawTextFor(defaults));
     setPresets(defaults); setSelected(sortTickers(defaults)[0] ?? "");
-    setAutocomplete(repository.DefaultAutocomplete); setNewTicker(""); setTickerQuery(""); markChanged();
+    setNewTicker(""); setTickerQuery(""); markChanged();
     setStatus("Valores por defecto cargados. Guardá para aplicarlos.");
   }
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -269,7 +265,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
       return;
     }
     setSaving(true); setStatus("Guardando…");
-    const candidate = { presets: toDraft(parsed), autocomplete };
+    const candidate = { presets: toDraft(parsed) };
     pendingSave.current = candidate;
     try {
       // Re-read as well: a storage notification may still be queued.
@@ -279,7 +275,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
         return;
       }
       if (conflicted.current) return;
-      await repository.saveSettings(parsed, autocomplete);
+      await repository.save(parsed);
       if (!conflicted.current) {
         saved.current = candidate; setPresets(candidate.presets); setRawText(format(parsed));
         dirty.current = false; setEditing(null); setStatus("Cambios guardados");
@@ -291,7 +287,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   function cancel() {
     setEditing(null);
     dirty.current = false; conflicted.current = false; setConflict(false);
-    setPresets(saved.current.presets); setAutocomplete(saved.current.autocomplete);
+    setPresets(saved.current.presets);
     setRawText(rawTextFor(saved.current.presets));
     setSelected(sortTickers(saved.current.presets)[0] ?? ""); setNewTicker(""); setTickerQuery(""); setError("");
     setStatus("Cambios descartados");
@@ -453,11 +449,6 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
                 <p>Ingresá su símbolo y configurá las cantidades rápidas.</p></div>}
             </section>
           </div>}
-          <label className="autocomplete-setting">
-            <span><strong>Autocompletar al seleccionar</strong><span>Valor por defecto para instrumentos sin una elección propia. Podés cambiarlo por instrumento desde el mini panel. Usa el último preset elegido o el primero configurado.</span></span>
-            <span className="setting-switch"><input name="autocompleteWithFirstPreset" type="checkbox" checked={autocomplete}
-              onChange={event => { setAutocomplete(event.target.checked); markChanged(); }} /><span aria-hidden="true" /></span>
-          </label>
         </fieldset>
       </div>
       <footer className="options-footer">

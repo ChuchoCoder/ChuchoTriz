@@ -8,7 +8,7 @@ Al pulsar la acción de carga del simulador, copia el instrumento, la cantidad y
 el precio de la operación elegida al Mini Order Form.
 Completar el formulario no envía una orden: la confirmación corresponde a Matriz.
 
-Los presets por instrumento y la preferencia de autocompletar se guardan en
+Los presets y la preferencia de autocompletar de cada instrumento se guardan en
 `chrome.storage.local`, dentro del perfil de Chrome. El último preset elegido
 por instrumento se mantiene en memoria durante la sesión del formulario.
 
