@@ -33,6 +33,11 @@ simulados y sin conexión a un broker. La apariencia de Matriz puede variar.*
 | **Modo RAW** | Editar todos los instrumentos como texto, con una línea por ticker. |
 | **Preferencias locales** | Guardar la configuración en el perfil de Chrome y actualizarla entre vistas. |
 | **Simulador de opciones** | Armar patas desde una cadena con calls/puts, VI, Theta teórico y Extrínseco; simular resultados y consultar la pérdida máxima al vencimiento. |
+| **Widget de ratios** | Comparar últimos precios de dos instrumentos, con varios pares, variación diaria y guardado en el dashboard de Matriz. |
+
+En **Nuevo widget → RATIOS · CHUCHOTRIZ**, elegí numerador y denominador con
+su moneda y plazo. Podés agregar, editar, invertir y quitar pares, mover el panel
+y cambiar su tamaño. Ver [uso y cálculo de ratios](docs/ratios.md).
 
 El **Simulador de opciones** está disponible en una pestaña dentro de Configuración.
 Conserva la cadena de Premium, con calls a la izquierda y puts a la derecha.

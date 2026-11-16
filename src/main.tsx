@@ -8,6 +8,7 @@ import { createPresetSession } from "./PresetSession";
 import instrumentPresetsRepository, { autocompleteFor, StoredSettings } from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
 import { SettingsMenu } from "./SettingsMenu";
+import RatiosDashboard from "./ratios/RatiosDashboard";
 
 focusCantidadAfterQuoteClick();
 
@@ -15,7 +16,7 @@ focusCantidadAfterQuoteClick();
 const settingsContainer = document.createElement("div");
 settingsContainer.id = "root-chuchotriz-settings";
 document.body.append(settingsContainer);
-createRoot(settingsContainer).render(<React.StrictMode><SettingsMenu /></React.StrictMode>);
+createRoot(settingsContainer).render(<React.StrictMode><SettingsMenu /><RatiosDashboard /></React.StrictMode>);
 
 // Read once; subsequent settings changes arrive through Chrome Storage.
 let storedSettings = instrumentPresetsRepository.readSettings();
