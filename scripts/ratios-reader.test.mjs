@@ -40,6 +40,34 @@ function fixture() {
   const add = async () => request('ratiosAdd', await args());
   return { ms, ds, d, controls, originalUpdate, securities, document, window, request, state, args, add, calls, failSave: () => { failSave = true; } };
 }
+test('multiple full panels and replaced pairs do not exhaust a cumulative subscription budget', async () => {
+  const f = fixture();
+  for (let i = 0; i < 400; i++) f.securities.push({ ...f.securities[0], id: 'bulk-' + i, symbolStr: 'BULK' + i });
+  await f.add(); await f.add(); await f.add();
+  const cfgs = (await f.state()).widgets.map(w => w.config);
+  const pairs = start => Array.from({ length: 50 }, (_, n) => ({ id: 'pair-' + (start + n), a: 'bulk-' + (start + n * 2), b: 'bulk-' + (start + n * 2 + 1) }));
+  for (const [index, cfg] of cfgs.entries()) {
+    const saved = await f.request('ratiosEdit', { ...await f.args(), widgetId: cfg.id, revision: 0, pairs: pairs(index * 100) });
+    assert.equal(saved.error, undefined);
+  }
+  assert.equal(Object.keys((await f.state()).quotes).length, 300);
+  const callsBefore = f.calls.filter(Array.isArray).length;
+  await f.state();
+  assert.equal(f.calls.filter(Array.isArray).length, callsBefore, 'unchanged instruments are not resubscribed');
+  for (const [revision, start] of [[1, 300], [2, 0]]) {
+    const saved = await f.request('ratiosEdit', { ...await f.args(), widgetId: cfgs[0].id, revision, pairs: pairs(start) });
+    assert.equal(saved.error, undefined);
+    assert.equal(Object.keys(saved.result.quotes).length, 300);
+  }
+  assert.ok(f.calls.filter(Array.isArray).every(([topic, ids]) => topic === 'md' && ids.length <= 100));
+  f.ms.webSocketConnectionStatus = false;
+  assert.equal(Object.keys((await f.state()).quotes).length, 0);
+  const beforeReconnect = f.calls.filter(Array.isArray).length;
+  f.ms.webSocketConnectionStatus = true;
+  assert.equal(Object.keys((await f.state()).quotes).length, 300);
+  assert.deepEqual(f.calls.filter(Array.isArray).slice(beforeReconnect).map(([, ids]) => ids.length), [100, 100, 100]);
+});
+
 test('search separates market/currency/settlement, excludes portfolios, exposes no account data', async () => {
   const f = fixture(); const result = await f.request('ratiosSearch', { ...await f.args(), query: 'AL30' });
   assert.equal(result.result.length, 4);

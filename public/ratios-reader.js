@@ -97,13 +97,20 @@
       return { config, width: w.w, height: w.h };
     });
     const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id])))];
+    const active = new Set(ids);
+    // Track only this dashboard's active instruments. Native subscriptions can
+    // be shared with other widgets, so never cancel them when a ratio is removed.
+    for (const id of subscriptions) if (!active.has(id)) subscriptions.delete(id);
+    for (const id of sequences.keys()) if (!active.has(id)) sequences.delete(id);
     if (connected && ids.length) {
       if (typeof c.ms.dmaWebSocket?.addSubscription !== "function") throw Error("Suscripciones de mercado no disponibles.");
       const fresh = ids.filter(id => !subscriptions.has(id) && c.ss.securities.some(s => s.id === id));
-      if (new Set([...subscriptions, ...fresh]).size > 256) throw Error("Límite de instrumentos leídos alcanzado. Recargá Matriz.");
-      if (fresh.length) {
-        c.ms.dmaWebSocket.addSubscription("md", fresh.map(id => "md." + id));
-        fresh.forEach(id => subscriptions.add(id));
+      // A panel supports 50 pairs and several panels may coexist. Send bounded
+      // batches without imposing a cumulative limit that could hide all quotes.
+      for (let offset = 0; offset < fresh.length; offset += 100) {
+        const batch = fresh.slice(offset, offset + 100);
+        c.ms.dmaWebSocket.addSubscription("md", batch.map(id => "md." + id));
+        batch.forEach(id => subscriptions.add(id));
       }
     }
     return { context: c.revision, dashboardId: c.d.id, canAdd: !finite(c.ds.widgetsLimit) || c.d.layout.length < c.ds.widgetsLimit,
