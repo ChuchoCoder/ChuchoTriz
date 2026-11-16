@@ -20,7 +20,9 @@
 .ct-ratio-picker li[aria-selected=true] { background:#039be530; }
 .ct-ratio-picker li strong,.ct-ratio-picker li span { display:block; }
 .ct-ratio-picker li span { font-size:11px; opacity:.85; white-space:nowrap; }
-.ct-ratios-editor-actions { display:flex; align-items:center; gap:7px; margin-top:7px; }
+.ct-ratios-editor-actions { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:7px; }
+.ct-ratios-format { display:flex; align-items:center; gap:5px; font-size:11px; }
+.ct-ratios-format select { border:1px solid #8190a5; border-radius:3px; padding:3px; background:var(--ratio-bg); color:inherit; font:inherit; }
 .ct-ratios-editor-actions span { flex:1; font-size:10px; opacity:.8; }
 .ct-ratios-editor-actions button { border:1px solid #8190a5; border-radius:3px; padding:3px 9px; background:transparent; }
 .ct-ratios-editor-actions button[type=submit] { border-color:#039be5; background:#039be5; color:#fff; }

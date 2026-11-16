@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
-import { calculateRatio, emptyState, instrumentDetail, numberLabel, tradeLabel, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
+import { calculateRatio, emptyState, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, tickerKey, tradeLabel, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize";
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
-function InstrumentPicker({ label, value, onChange, search, disabled }: {
+export function InstrumentPicker({ label, value, onChange, search, disabled }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean;
 }) {
   const id = useId(), [query, setQuery] = useState(value?.symbol || ""), [options, setOptions] = useState<RatioInstrument[]>([]);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [issue, setIssue] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const generation = useRef(0), latestQuery = useRef(query);
+  latestQuery.current = query;
+  useEffect(() => () => { generation.current++; }, []);
   useEffect(() => { if (value) setQuery(value.symbol); }, [value?.id, value?.symbol]);
   useEffect(() => {
     if (!open || !query.trim()) { setOptions([]); return; }
@@ -23,20 +27,34 @@ function InstrumentPicker({ label, value, onChange, search, disabled }: {
     }, 180);
     return () => { closed = true; clearTimeout(timer); };
   }, [query, open, search]);
-  const choose = (item: RatioInstrument) => { onChange(item); setQuery(item.symbol); setOpen(false); setOptions([]); };
+  const choose = (item: RatioInstrument) => { generation.current++; setResolving(false); onChange(item); setQuery(item.symbol); setOpen(false); setOptions([]); setIssue(""); };
+  const resolveOnBlur = async () => {
+    setOpen(false);
+    const text = latestQuery.current.trim();
+    if (!text || (value && tickerKey(value.symbol) === tickerKey(text))) return;
+    const request = ++generation.current;
+    setResolving(true); setIssue("");
+    try {
+      const matches = exactTickerMatches(text, await search(text));
+      if (request !== generation.current) return;
+      if (matches.length === 1) choose(matches[0]);
+      else setIssue(matches.length > 1 ? "Más de un instrumento coincide; elegí uno de la lista." : "No se encontró ese ticker exacto.");
+    } catch (error) { if (request === generation.current) setIssue(error instanceof Error ? error.message : "No se pudo buscar el instrumento."); }
+    finally { if (request === generation.current) setResolving(false); }
+  };
   return <div className="ct-ratio-picker">
     <label htmlFor={id}>{label}</label>
     <input id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-options`} aria-autocomplete="list"
       aria-activedescendant={open && options[active] ? `${id}-option-${active}` : undefined}
       value={query} disabled={disabled} autoComplete="off" maxLength={60} placeholder="Buscar instrumento"
-      onChange={event => { setOptions([]); setActive(0); setIssue(""); setQuery(event.target.value); onChange(undefined); setOpen(true); }}
-      onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
+      onChange={event => { generation.current++; setResolving(false); latestQuery.current = event.target.value; setOptions([]); setActive(0); setIssue(""); setQuery(event.target.value); onChange(undefined); setOpen(true); }}
+      onFocus={() => { generation.current++; setResolving(false); setOpen(true); }} onBlur={() => void resolveOnBlur()}
       onKeyDown={event => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive(n => Math.max(0, Math.min(options.length - 1, n + (event.key === "ArrowDown" ? 1 : -1)))); }
         if (event.key === "Enter" && open && options[active]) { event.preventDefault(); choose(options[active]); }
       }} />
-    <small title={value?.id}>{value ? instrumentDetail(value) : "Seleccioná un instrumento"}</small>
+    <small title={value?.id} role="status">{value ? instrumentDetail(value) : resolving ? "Buscando ticker…" : issue || "Ingresá el ticker o elegí un instrumento"}</small>
     {open && query.trim() && <ul id={`${id}-options`} role="listbox" aria-label={`Resultados de ${label}`}>
       {options.map((item, index) => <li key={item.id} id={`${id}-option-${index}`} role="option" aria-selected={active === index}
         onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => choose(item)}>
@@ -51,19 +69,20 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const cfg = widget.config;
   const [editing, setEditing] = useState<string | null>(cfg.pairs.length ? null : "new");
   const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>();
+  const [format, setFormat] = useState<RatioFormat>("number"), [editorSession, setEditorSession] = useState(0);
   const [issue, setIssue] = useState("");
   const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
-  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
+  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setFormat(pair?.format || "number"); setEditorSession(n => n + 1); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
   const run = async (method: Mutation, params: Record<string, unknown>) => {
     setIssue("");
     try { await command(method, { widgetId: cfg.id, revision: cfg.revision, ...params }); return true; }
     catch (error) { setIssue(error instanceof Error ? error.message : "No se pudo guardar el cambio."); return false; }
   };
   const savePairs = (pairs: RatioPair[], expectedRevision = cfg.revision) => run("ratiosEdit", {
-    revision: expectedRevision, pairs: pairs.map(p => ({ id: p.id, a: p.a.id, b: p.b.id }))
+    revision: expectedRevision, pairs: pairs.map(p => ({ id: p.id, a: p.a.id, b: p.b.id, format: p.format || "number" }))
   });
   const finishResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!resize.current) return;
@@ -81,16 +100,17 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         event.preventDefault();
         if (!a || !b) { setIssue("Seleccioná los dos instrumentos de la lista."); return; }
         if (a.id === b.id) { setIssue("Elegí instrumentos diferentes para A y B."); return; }
-        const pair = { id: editing === "new" ? crypto.randomUUID() : editing, a, b };
+        const pair = { id: editing === "new" ? crypto.randomUUID() : editing, a, b, format };
         const pairs = editing === "new" ? [...cfg.pairs, pair] : cfg.pairs.map(p => p.id === editing ? pair : p);
         void savePairs(pairs, revision.current).then(saved => { if (saved) setEditing(null); });
       }}>
         <div className="ct-ratios-pickers">
-          <InstrumentPicker key={`${editing}-a`} label="A · Numerador" value={a} onChange={setA} search={search} disabled={busy} />
+          <InstrumentPicker key={`${editorSession}-a`} label="A · Numerador" value={a} onChange={setA} search={search} disabled={busy} />
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
-          <InstrumentPicker key={`${editing}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
+          <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
-        <div className="ct-ratios-editor-actions"><span>Último A ÷ último B · sin conversiones</span>
+        <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormat(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
+          <span>{format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>
           <button type="submit" disabled={busy || !a || !b}>{busy ? "Guardando…" : editing === "new" ? "Agregar" : "Guardar"}</button>
         </div>
@@ -109,7 +129,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             </td>
             <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>
             <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>
-            <td className="ct-ratios-value" title={result.issue} aria-label={result.issue}>{numberLabel(result.ratio)}</td>
+            <td className="ct-ratios-value" title={result.issue || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format)}</td>
             <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>

@@ -9,6 +9,7 @@
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
+  const tickerKey = s => s.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase();
   const ownConfig = w => w?.component === TYPE && w.settings?.[KEY]?.schema === 1 && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
   function restore(d) {
     const hook = patched.get(d);
@@ -56,7 +57,8 @@
   function configOf(w) {
     const cfg = ownConfig(w);
     if (!cfg || !Number.isSafeInteger(cfg.revision) || cfg.revision < 0 || cfg.pairs.some(p => !short(p?.id) || !short(p?.a?.id) || !short(p?.b?.id))) throw Error("Configuración de Ratios inválida o de otra versión.");
-    return { schema: 1, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id,
+    if (cfg.pairs.some(p => p.format !== undefined && !["number", "percent"].includes(p.format))) throw Error("Formato de ratio no compatible.");
+    return { schema: 1, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id, format: p.format || "number",
       a: { id: p.a.id, symbol: clean(p.a.symbol), market: clean(p.a.market), currency: clean(p.a.currency), settlement: clean(p.a.settlement) },
       b: { id: p.b.id, symbol: clean(p.b.symbol), market: clean(p.b.market), currency: clean(p.b.currency), settlement: clean(p.b.settlement) } })) };
   }
@@ -181,7 +183,9 @@
             const live = c.ss.securities.find(s => s?.id === id);
             return instrument(live) || existing || instrument(byId(c, id));
           };
-          return { id: p.id, a: resolve(p.a), b: resolve(p.b) };
+          const format = p.format ?? previous?.format ?? "number";
+          if (!["number", "percent"].includes(format)) throw Error("Elegí formato Número o Porcentaje.");
+          return { id: p.id, a: resolve(p.a), b: resolve(p.b), format };
         });
         if (new Set(pairs.map(p => JSON.stringify([p.a.id, p.b.id]))).size !== pairs.length) throw Error("Ese par ya está agregado en el widget.");
         widget.settings = { ...widget.settings, [KEY]: { ...cfg, revision: cfg.revision + 1, pairs } };
@@ -209,9 +213,9 @@
       if (msg.method === "ratiosSearch") {
         selected(c, params);
         if (typeof params.query !== "string" || params.query.length > 60) throw Error("Búsqueda inválida.");
-        const query = params.query.trim().toLocaleUpperCase();
+        const query = tickerKey(params.query);
         if (!query) { reply({ result: [] }); return; }
-        const result = c.ss.securities.map(instrument).filter(s => s && s.symbol.toLocaleUpperCase().includes(query)).sort((a, b) => Number(b.symbol.toLocaleUpperCase() === query) - Number(a.symbol.toLocaleUpperCase() === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 40);
+        const result = c.ss.securities.map(instrument).filter(s => s && tickerKey(s.symbol).includes(query)).sort((a, b) => Number(tickerKey(b.symbol) === query) - Number(tickerKey(a.symbol) === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 40);
         reply({ result }); return;
       }
       if (!["ratiosAdd", "ratiosEdit", "ratiosRemove", "ratiosResize"].includes(msg.method)) throw Error("Método no permitido por Ratios.");

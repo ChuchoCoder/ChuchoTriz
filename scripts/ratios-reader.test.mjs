@@ -121,3 +121,20 @@ test('expired saved instruments do not prevent editing or deleting other rows', 
   const removed = await f.request('ratiosEdit', { ...params, revision: 2, pairs: [] });
   assert.equal(removed.result.widgets[0].config.pairs.length, 0);
 });
+test('persists per-pair formats, defaults legacy pairs to number and preserves format on old-client edits', async () => {
+  const f = fixture(); await f.add(); const cfg = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: cfg.id };
+  const first = await f.request('ratiosEdit', { ...params, revision: 0, pairs: [{ id: 'legacy', a: 'a', b: 'b' }, { id: 'pct', a: 'b', b: 'c', format: 'percent' }] });
+  assert.equal(first.result.widgets[0].config.pairs[0].format, 'number');
+  assert.equal(first.result.widgets[0].config.pairs[1].format, 'percent');
+  const saved = await f.ds.getDashboard();
+  assert.equal(saved.layout.find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.pairs[1].format, 'percent');
+  const updated = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [{ id: 'legacy', a: 'a', b: 'b' }, { id: 'pct', a: 'c', b: 'b' }] });
+  assert.equal(updated.result.widgets[0].config.pairs[1].format, 'percent');
+  assert.match((await f.request('ratiosEdit', { ...params, revision: 2, pairs: [{ id: 'bad', a: 'a', b: 'b', format: 'arbitrary' }] })).error, /Formato|formato/);
+});
+test('search treats CI parentheses and a plain CI suffix as equivalent', async () => {
+  const f = fixture(); f.securities.find(s => s.id === 'ci').symbolStr = 'AL30 (CI)';
+  const result = await f.request('ratiosSearch', { ...await f.args(), query: 'al30 ci' });
+  assert.equal(result.result.length, 1); assert.equal(result.result[0].id, 'ci');
+});

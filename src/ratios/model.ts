@@ -1,7 +1,8 @@
 export interface RatioInstrument {
   id: string; symbol: string; market: string; currency: string; settlement: string;
 }
-export interface RatioPair { id: string; a: RatioInstrument; b: RatioInstrument }
+export type RatioFormat = "number" | "percent";
+export interface RatioPair { id: string; a: RatioInstrument; b: RatioInstrument; format?: RatioFormat }
 export interface RatioConfig { schema: 1; id: string; revision: number; pairs: RatioPair[] }
 export interface RatioQuote {
   last?: number; reference?: number; tradedAt?: number; referenceDate?: string; issue?: string;
@@ -32,11 +33,25 @@ export function calculateRatio(a?: RatioQuote, b?: RatioQuote) {
 export function marketLabel(value: string) { return ({ bm: "BYMA", rx: "A3" } as Record<string, string>)[value] || value || "S/D"; }
 export function currencyLabel(value: string) { return value === "EXT" ? "USD C" : value || "S/D"; }
 export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)}`; }
+export function tickerKey(value: string) { return value.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase(); }
+export function exactTickerMatches(query: string, options: readonly RatioInstrument[]) {
+  const key = tickerKey(query);
+  return key ? options.filter(option => tickerKey(option.symbol) === key) : [];
+}
 export function numberLabel(value?: number) {
   if (!finite(value)) return "—";
   return value !== 0 && Math.abs(value) < 0.000001
     ? value.toLocaleString("es-AR", { maximumSignificantDigits: 7 })
     : value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+export function ratioLabel(value?: number, format: RatioFormat = "number") {
+  if (!finite(value)) return "—";
+  const shown = format === "percent" ? (value - 1) * 100 : value;
+  if (!finite(shown)) return "—";
+  const label = format === "percent" || Math.abs(shown) >= 100
+    ? shown.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : numberLabel(shown);
+  return format === "percent" ? label + "%" : label;
 }
 export function tradeLabel(timestamp?: number) {
   if (!finite(timestamp)) return "Hora de última operación no disponible";

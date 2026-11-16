@@ -140,6 +140,7 @@
   "public/ratios-reader.js",
   "src/ratios/model.ts",
   "src/ratios/model.test.ts",
+  "src/ratios/InstrumentPicker.test.tsx",
   "src/ratios/RatiosDashboard.tsx",
   "src/ratios/RatiosDashboard.css",
   "scripts/ratios-reader.test.mjs",

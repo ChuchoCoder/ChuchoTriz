@@ -26,7 +26,14 @@ async (page) => {
   const snapshot = () => page.evaluate(() => window.mainStore.dashboardStore.currentDashboard.layout.map(w => ({ component: w.component, x: w.x, y: w.y, w: w.w, h: w.h, settings: JSON.parse(JSON.stringify(w.settings)) })));
   const before = await snapshot();
   await idle(); await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
-  await addPair('BMA', 'BMA', 'GGAL', 'GGAL');
+  await b('Agregar ratio').click({ force: true });
+  for (const [index, ticker] of ['BMA', 'GGAL'].entries()) {
+    const input = page.locator('.ct-ratio-picker input').nth(index);
+    await input.fill(ticker, { force: true }); await input.press('Tab');
+    await page.waitForFunction(i => document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=status]')?.textContent.includes('ARS'), index, { polling: 100 });
+  }
+  await save();
+  assert(true, 'Exact typed tickers resolve on blur without selecting a suggestion');
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,090909');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('+9,09%'), 'BMA/GGAL uses last prices and exact daily ratio variation');
   await addPair('ALUA', 'ALUA', 'TXAR', 'TXAR');
@@ -36,6 +43,18 @@ async (page) => {
   await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,181818');
   assert(true, 'Quote update refreshes the ratio');
+  await b('Editar BMA/GGAL').click({ force: true });
+  await page.getByLabel('Formato del ratio').selectOption('percent'); await save();
+  await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '18,18%');
+  assert((await page.locator('.ct-ratios-value').nth(2).innerText()) === '1.400,00', 'Percent uses (A/B - 1) times 100 and each row keeps its own format');
+  await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '9,09%');
+  assert(true, 'Per-row percent format survives a full reload');
+  await b('Editar BMA/GGAL').click({ force: true });
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'Editor restores the persisted format');
+  await page.getByLabel('Formato del ratio').selectOption('number'); await save();
+  await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));
+  await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,181818');
   await b('Invertir BMA/GGAL').click({ force: true }); await idle();
   await wait(() => document.querySelector('.ct-ratios-pair strong')?.textContent === 'GGAL/BMA');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('-15,38%'), 'Inverting A/B recomputes the ratio and its daily variation');
