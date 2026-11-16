@@ -45,6 +45,14 @@ los datos de las ejecuciones de opciones mientras está abierta. Al pulsar
 La preferencia de formato regional se guarda en `chrome.storage.local` dentro del
 perfil de Chrome.
 
+El widget **Ratios** lee el catálogo de instrumentos, sus últimos precios,
+referencias diarias y fechas de operación desde Matriz. Al agregar, editar,
+redimensionar o quitar el panel, usa el guardado nativo del dashboard: los pares
+elegidos (identificadores, símbolos, mercado, moneda y plazo), posición y tamaño
+quedan en el servidor de Matriz asociado a ese dashboard. No consulta reportes
+de cuenta ni envía operaciones. Esos registros del dashboard no se eliminan al
+desinstalar ChuchoTriz; cerrá el panel desde su título si querés retirarlos.
+
 La extensión no incorpora analítica, servidores propios, cuentas de usuario,
 pagos ni transmisión de esos datos a terceros. No lee contraseñas, cookies ni
 tokens de autenticación. Las comunicaciones de Matriz con su broker son

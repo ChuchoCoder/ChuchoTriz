@@ -45,7 +45,7 @@ export class MarketReader {
     clearTimeout(task.timer); this.pending.delete(msg.id);
     if (typeof msg.error === "string") task.reject(Error(msg.error)); else task.resolve(msg.result);
   };
-  constructor(private resource: "options-market-reader.js" | "options-position-reader.js" | "options-executions-reader.js" = "options-market-reader.js") {
+  constructor(private resource: "options-market-reader.js" | "options-position-reader.js" | "options-executions-reader.js" | "ratios-reader.js" = "options-market-reader.js") {
     this.channel = `chuchotriz-${resource}-${crypto.randomUUID()}`;
     window.addEventListener("message", this.receive);
     this.script.dataset.channel = this.channel;
@@ -56,7 +56,7 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize", params = {}): Promise<T> {
     await this.ready;
     if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
