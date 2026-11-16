@@ -100,6 +100,7 @@
   "src/optionsSimulator/marketMetrics.ts",
   "src/optionsSimulator/model.test.ts",
   "src/optionsSimulator/model.ts",
+  "src/optionsSimulator/OptionQuoteValue.test.tsx",
   "src/optionsSimulator/OptionQuoteValue.tsx",
   "src/optionsSimulator/OptionsMetrics.css",
   "src/optionsSimulator/OptionsMetrics.tsx",
