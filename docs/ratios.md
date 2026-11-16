@@ -3,6 +3,8 @@
 Dentro de un dashboard de Matriz, abrí **Nuevo widget → RATIOS · CHUCHOTRIZ**.
 El panel se mueve desde su título y se redimensiona desde la esquina inferior
 derecha, también con las flechas del teclado sobre ese control.
+El ancho inicial es de 560 px y se puede reducir hasta 360 px. La grilla de Matriz
+impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 
 ## Agregar y editar pares
 
@@ -82,6 +84,12 @@ El recorrido del bundle pasó 18 comprobaciones: cálculo, varios pares y widget
 precios actualizados/faltantes, referencias faltantes, monedas/plazos distintos,
 duplicados, inversión, edición, borrado, desconexión/reconexión, tamaño, cambio de
 dashboard y recarga. Evidencias locales en `test-results/ratios-widget/`.
+
+Los contenedores descartables de pruebas deben retirarse al terminar. Matriz
+reserva su posición aunque no dibuje su contenido: un contenedor de tipo
+desconocido puede quedar invisible y bloquear un destino de arrastre. El
+contenedor inicial de la prueba de integración fue retirado por identidad exacta;
+se comprobó el mismo gesto antes bloqueado y su persistencia tras recargar.
 
 En la sesión de ReMarkets del 16/11/2026, los instrumentos consultados no tenían
 último precio publicado, por lo que se verificó el estado **Sin último precio**.

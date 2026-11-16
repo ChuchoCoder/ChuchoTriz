@@ -149,7 +149,7 @@
     if (method === "ratiosAdd") {
       if (finite(c.ds.widgetsLimit) && d.layout.length >= c.ds.widgetsLimit) throw Error("Se alcanzó el límite de widgets de este dashboard.");
       if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) throw Error("Esperando las dimensiones del dashboard.");
-      const width = Math.min(760, Math.max(360, d.width - 20)), height = 300;
+      const width = Math.min(560, Math.max(360, d.width - 20)), height = 300;
       const config = { schema: 1, id: crypto.randomUUID(), revision: 0, pairs: [] };
       const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{ component: TYPE, ...position(c, width, height), w: width, h: height, settings: { [KEY]: config, chuchotrizRatiosSize: { width, height } }, selectionCriteria: { securities: [] } }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);

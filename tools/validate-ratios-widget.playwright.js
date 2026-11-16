@@ -69,7 +69,7 @@ async (page) => {
   const handle = await b('Redimensionar Ratios').boundingBox();
   await page.mouse.move(handle.x + 10, handle.y + 10); await page.mouse.down(); await page.mouse.move(handle.x + 90, handle.y + 50); await page.mouse.up(); await idle();
   const resized = await snapshot();
-  assert(resized.find(w => w.component === 'ChuchoTrizRatiosWidget').w === 840, 'Pointer resize updates the native widget size');
+  assert(resized.find(w => w.component === 'ChuchoTrizRatiosWidget').w === 640, 'Pointer resize updates the compact native widget size');
   await page.evaluate(() => window.ratiosFixture.switchDashboard());
   await wait(() => !document.querySelector('.ct-ratios'));
   assert(true, 'Changing dashboards removes the previous dashboard table');

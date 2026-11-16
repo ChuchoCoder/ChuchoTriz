@@ -52,6 +52,7 @@ test('adds and removes only the selected empty widget and preserves all native c
   await f.add(); await f.add();
   assert.equal(f.d.layout.length, 4);
   const s = await f.state(); const cfg = s.widgets[0].config;
+  assert.equal(s.widgets[0].width, 560);
   const result = await f.request('ratiosRemove', { ...await f.args(), widgetId: cfg.id, revision: cfg.revision });
   assert.equal(result.result.widgets.length, 1); assert.equal(f.d.layout.length, 3);
   assert.deepEqual(clone(f.controls.map(({ settings, x, y, w, h }) => ({ settings, x, y, w, h }))), before);
