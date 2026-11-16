@@ -112,7 +112,8 @@ export function OptionMetricCell({ contract, field, cell, scale }: {
     const price = field === "extrinsicBid" ? "Bid" : field === "extrinsicAsk" ? "Ask" : "Mid (BID/ASK)";
     const explanation = field === "theta" ? "Theta BSM europeo por unidad de prima y día calendario. Usa VI nativa, fecha de hoy y tasa/dividendos de Análisis. La antigüedad de la VI se consulta en su columna."
       : `Precio ${price} menos valor intrínseco, por unidad de prima. Los valores negativos no se recortan.`;
-    return <td className="ct-opt-metric" aria-label={`${label} ${symbol}`} title={`${explanation}${value === undefined ? " Sin datos compatibles suficientes." : ""}`}>
+    const negativeExtrinsic = field !== "theta" && value !== undefined && value < 0;
+    return <td className={`ct-opt-metric${negativeExtrinsic ? " ct-opt-extrinsic-negative" : ""}`} aria-label={`${label} ${symbol}`} title={`${explanation}${value === undefined ? " Sin datos compatibles suficientes." : ""}`}>
       {value === undefined ? "—" : formatOptionAmount(value)}
     </td>;
   }

@@ -12,15 +12,17 @@ export function OptionQuoteValue({ value, quantity = false }: { value?: number; 
     const node = field.current;
     if (!node || !pulse.kind) return;
     const finish = () => setPulse(current => current === pulse ? { revision: pulse.revision } : current);
+    // Reduced-motion feedback uses a static highlight, so no animation event fires.
+    const timeout = window.setTimeout(finish, pulse.kind === "quantity" ? 700 : 500);
     node.addEventListener("animationend", finish);
     node.addEventListener("animationcancel", finish);
-    return () => { node.removeEventListener("animationend", finish); node.removeEventListener("animationcancel", finish); };
+    return () => { window.clearTimeout(timeout); node.removeEventListener("animationend", finish); node.removeEventListener("animationcancel", finish); };
   }, [pulse]);
   useEffect(() => {
     const previousValue = previous.current;
     if (previousValue === value) return;
     previous.current = value;
-    if (previousValue === undefined || value === undefined || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    if (previousValue === undefined || value === undefined) {
       setPulse(current => current.kind ? { revision: current.revision } : current);
       return;
     }
