@@ -60,6 +60,10 @@
   .ct-sim .ct-opt-quote-value.ct-opt-quote-changed { animation:ct-opt-price-pulse 500ms ease-out; }
   .ct-sim .ct-opt-quote-quantity { animation:ct-opt-quantity-pulse 700ms ease-out; }
 }
+@media(prefers-reduced-motion:reduce) {
+  .ct-sim .ct-opt-quote-value.ct-opt-quote-changed { background-color:var(--ct-opt-price-pulse); }
+  .ct-sim .ct-opt-quote-quantity { background:#1767ac; color:#fff; box-shadow:0 0 0 2px #1767ac; }
+}
 .ct-sim .ct-opt-price.buy .ct-opt-marker { grid-column:3; justify-self:end; }
 .ct-sim .ct-opt-price.buy .ct-opt-quote-value { grid-column:1; text-align:left; }
 .ct-sim .ct-opt-price.buy .ct-opt-quantity { text-align:left; }
