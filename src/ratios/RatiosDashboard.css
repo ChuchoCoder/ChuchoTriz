@@ -29,14 +29,13 @@
 .ct-ratios table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
 .ct-ratios th { padding:4px 8px; background:var(--price-panel-header-background,#52657b); color:var(--price-panel-header-color,#fff); text-align:right; white-space:nowrap; }
 .ct-ratios th:first-child { text-align:left; }
-.ct-ratios td { padding:7px 8px; border-bottom:1px solid #8190a530; text-align:right; vertical-align:middle; white-space:nowrap; }
-.ct-ratios td small { display:block; font-size:10px; opacity:.85; }
-.ct-ratios td.ct-ratios-pair { text-align:left; max-width:260px; white-space:normal; }
-.ct-ratios-pair strong { display:block; font-size:13px; }
-.ct-ratios-pair small { max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ct-ratios td { height:25px; padding:2px 8px; border-bottom:1px solid #8190a530; text-align:right; vertical-align:middle; white-space:nowrap; }
+.ct-ratios td.ct-ratios-pair { text-align:left; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+.ct-ratios-pair strong { font-size:12px; }
+.ct-ratios-pair .ct-ratios-old { margin-left:5px; }
 .ct-ratios-value { font-weight:bold; color:#039be5; }
 .ct-ratios-up { color:#26b56f; }.ct-ratios-down { color:#f05a67; }.ct-ratios-old { color:#d3910c; }
-.ct-ratios-actions button { padding:2px 3px; min-width:23px; border:0; background:transparent; font-size:17px; }
+.ct-ratios-actions button { display:inline-flex; align-items:center; justify-content:center; padding:0; min-width:22px; height:20px; border:0; background:transparent; font-size:16px; line-height:1; }
 .ct-ratios-empty { display:block; margin:20px auto; border:1px solid #039be5; background:transparent; padding:8px 14px; border-radius:3px; }
 .ct-ratios-resize { position:absolute; right:0; bottom:0; border:0; width:22px; height:22px; padding:0; line-height:1!important; font-size:19px!important; cursor:nwse-resize!important; touch-action:none; background:#124d71; color:#fff!important; border-radius:0 0 7px 0; }
 .ct-ratios-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
@@ -45,6 +44,6 @@
 .ct-ratios-notice { position:fixed; z-index:105; bottom:150px; left:50px; max-width:min(520px,calc(100vw - 70px)); display:flex; gap:12px; align-items:center; padding:10px 14px; border:1px solid #d3910c; border-radius:5px; background:#222c3b; color:#fff; font:13px/1.4 Arial,sans-serif; }
 .ct-ratios-notice button { flex-shrink:0; border:0; background:transparent; color:inherit; cursor:pointer; font-size:22px; }
 @container (max-width:520px) {
-  .ct-ratios-pair small { max-width:170px; }.ct-ratios td { padding:5px; }.ct-ratios th { padding:4px 5px; }
+  .ct-ratios td.ct-ratios-pair { max-width:170px; }.ct-ratios td { padding:2px 5px; }.ct-ratios th { padding:4px 5px; }
   .ct-ratios-editor-actions { flex-wrap:wrap; }.ct-ratios-editor-actions span { flex-basis:100%; }
 }

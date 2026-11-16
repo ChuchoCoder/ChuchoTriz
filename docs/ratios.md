@@ -7,7 +7,8 @@ derecha, también con las flechas del teclado sobre ese control.
 ## Agregar y editar pares
 
 1. Pulsá **＋** y buscá el instrumento **A · Numerador**.
-2. Elegí una opción del catálogo, verificando mercado, moneda y plazo.
+2. Elegí una opción del catálogo, verificando ticker, mercado y moneda. El plazo
+   está implícito en el ticker: por ejemplo, AL30 o AL30 CI.
 3. Elegí **B · Denominador** y pulsá **Agregar**.
 
 Cada fila muestra par, último A, último B, ratio y variación diaria. El lápiz
@@ -40,8 +41,11 @@ AL30/AL30D conserva la división entre los dos precios publicados.
 
 Un precio faltante, un denominador cero o un instrumento ausente se informa
 en la fila. Si falta sólo una referencia, el ratio sigue visible sin variación.
-La fila muestra las fechas/horas de ambas últimas operaciones y destaca si
-alguna supera 15 minutos. No se confunde la hora de lectura con la operación.
+Las filas ocupan una sola línea. Al pasar el mouse se pueden consultar mercado,
+moneda y fechas/horas de ambas últimas operaciones. Un indicador de reloj destaca
+si alguna supera 15 minutos. Los motivos de datos faltantes se consultan al pasar
+el mouse por el valor y se conservan para lectores de pantalla. No se confunde la
+hora de lectura con la operación.
 Al desconectarse Matriz se retiran los valores de mercado; al reconectar se
 reinicia la verificación de secuencias y se solicitan suscripciones nuevamente.
 

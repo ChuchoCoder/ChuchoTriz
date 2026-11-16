@@ -14,7 +14,7 @@ function install() {
   const securities = [
     ['BMA', 12000, 10000, 'ARS', '2'], ['GGAL', 11000, 10000, 'ARS', '2'], ['ALUA', 776, 780, 'ARS', '2'], ['TXAR', 724, 732, 'ARS', '2'],
     ['AL30', 70000, 69000, 'ARS', '2'], ['AL30D', 50, 50, 'USD', '2'], ['AL30C', 51, 50, 'EXT', '2'], ['AL30', 71000, 69000, 'ARS', '1']
-  ].map(([symbolStr, lst, refp, currency, settlementType]) => ({ id: symbolStr + '-' + settlementType, symbolStr, marketId: 'bm', currency, settlementType, md: { lst, refp, seq: 1, lstdStr: new Date().toISOString() } }));
+  ].map(([symbolStr, lst, refp, currency, settlementType]) => ({ id: symbolStr + '-' + settlementType, symbolStr: settlementType === '1' ? symbolStr + ' CI' : symbolStr, marketId: 'bm', currency, settlementType, md: { lst, refp, seq: 1, lstdStr: new Date().toISOString() } }));
   let ds;
   function nativeWidget(data, dashboard) {
     return { ...data, dashboard, key: data.component + '-' + (++counter),

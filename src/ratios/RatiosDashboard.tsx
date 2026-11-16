@@ -36,7 +36,7 @@ function InstrumentPicker({ label, value, onChange, search, disabled }: {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive(n => Math.max(0, Math.min(options.length - 1, n + (event.key === "ArrowDown" ? 1 : -1)))); }
         if (event.key === "Enter" && open && options[active]) { event.preventDefault(); choose(options[active]); }
       }} />
-    <small title={value?.id}>{value ? instrumentDetail(value) : "Seleccioná una especie y un plazo"}</small>
+    <small title={value?.id}>{value ? instrumentDetail(value) : "Seleccioná un instrumento"}</small>
     {open && query.trim() && <ul id={`${id}-options`} role="listbox" aria-label={`Resultados de ${label}`}>
       {options.map((item, index) => <li key={item.id} id={`${id}-option-${index}`} role="option" aria-selected={active === index}
         onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => choose(item)}>
@@ -104,16 +104,14 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt);
           const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}`;
           return <tr key={pair.id}>
-            <td className="ct-ratios-pair"><strong>{pair.a.symbol}/{pair.b.symbol}</strong>
-              <small title={pair.a.id}>A: {instrumentDetail(pair.a)}</small><small title={pair.b.id}>B: {instrumentDetail(pair.b)}</small>
-              <small className={age > 15 * 60 * 1000 ? "ct-ratios-old" : ""} title={clock}>{age > 15 * 60 * 1000 ? "Última operación antigua · " : ""}{clock}</small>
+            <td className="ct-ratios-pair" title={`A: ${instrumentDetail(pair.a)} · B: ${instrumentDetail(pair.b)}\n${clock}`}><strong>{pair.a.symbol}/{pair.b.symbol}</strong>
+              {age > 15 * 60 * 1000 && <span className="ct-ratios-old" role="img" aria-label="Última operación antigua" title={clock}>◷</span>}
             </td>
             <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>
             <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>
-            <td className="ct-ratios-value" title={result.issue}>{numberLabel(result.ratio)}{result.issue && <small>{result.issue}</small>}</td>
-            <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"}>
+            <td className="ct-ratios-value" title={result.issue} aria-label={result.issue}>{numberLabel(result.ratio)}</td>
+            <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
-              {result.referenceIssue && <small>{result.referenceIssue}</small>}
             </td>
             <td className="ct-ratios-actions">
               <button type="button" aria-label={`Editar ${pair.a.symbol}/${pair.b.symbol}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>

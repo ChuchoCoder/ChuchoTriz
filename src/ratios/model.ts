@@ -31,8 +31,7 @@ export function calculateRatio(a?: RatioQuote, b?: RatioQuote) {
 }
 export function marketLabel(value: string) { return ({ bm: "BYMA", rx: "A3" } as Record<string, string>)[value] || value || "S/D"; }
 export function currencyLabel(value: string) { return value === "EXT" ? "USD C" : value || "S/D"; }
-export function settlementLabel(value: string) { return ({ "1": "CI", "2": "24 h", "3": "48 h" } as Record<string, string>)[value] || value || "Sin plazo"; }
-export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)} · ${settlementLabel(i.settlement)}`; }
+export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)}`; }
 export function numberLabel(value?: number) {
   if (!finite(value)) return "—";
   return value !== 0 && Math.abs(value) < 0.000001

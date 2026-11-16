@@ -22,7 +22,7 @@ it("handles signed and zero numerator prices without dividing by zero", () => {
   expect(calculateRatio({ last: 0, reference: 10 }, { last: 5, reference: 5 })).toMatchObject({ ratio: 0, change: -100 });
   expect(calculateRatio({ last: -10 }, { last: 5 }).ratio).toBe(-2);
 });
-it("distinguishes cable currency and settlement and does not round tiny ratios to zero", () => {
-  expect(instrumentDetail({ id: "a", symbol: "AL30C", currency: "EXT", market: "bm", settlement: "2" })).toBe("BYMA · USD C · 24 h");
+it("distinguishes cable currency without repeating settlement and does not round tiny ratios to zero", () => {
+  expect(instrumentDetail({ id: "a", symbol: "AL30C", currency: "EXT", market: "bm", settlement: "2" })).toBe("BYMA · USD C");
   expect(numberLabel(1e-9)).not.toBe("0,00");
 });

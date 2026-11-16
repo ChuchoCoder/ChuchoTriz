@@ -10,7 +10,7 @@ async (page) => {
   const wait = fn => page.waitForFunction(fn, null, { polling: 100, timeout: 12000 });
   const idle = () => wait(() => !!document.querySelector('.ct-ratios-add') && !document.querySelector('.ct-ratios-add').disabled);
   const b = name => page.getByRole('button', { name, exact: true });
-  const select = async (index, query, symbol, detail = 'ARS · 24 h') => {
+  const select = async (index, query, symbol, detail = 'ARS') => {
     const picker = page.locator('.ct-ratio-picker').nth(index);
     await picker.locator('input').fill(query, { force: true });
     await page.waitForFunction(i => !!document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=option]'), index, { polling: 100, timeout: 6000 });
@@ -30,7 +30,7 @@ async (page) => {
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,090909');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('+9,09%'), 'BMA/GGAL uses last prices and exact daily ratio variation');
   await addPair('ALUA', 'ALUA', 'TXAR', 'TXAR');
-  await addPair('AL30', 'AL30', 'AL30D', 'AL30D', 'ARS · 24 h', 'USD · 24 h');
+  await addPair('AL30', 'AL30', 'AL30D', 'AL30D', 'ARS', 'USD');
   assert(await page.locator('.ct-ratios tbody tr').count() === 3, 'Three independently selected ratios coexist in one widget');
   assert((await page.locator('.ct-ratios tbody tr').nth(2).innerText()).includes('1.400,00'), 'ARS/USD bond ratio divides raw published prices without conversion');
   await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));
@@ -40,23 +40,23 @@ async (page) => {
   await wait(() => document.querySelector('.ct-ratios-pair strong')?.textContent === 'GGAL/BMA');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('-15,38%'), 'Inverting A/B recomputes the ratio and its daily variation');
   await b('Editar ALUA/TXAR').click({ force: true });
-  await select(0, 'AL30', 'AL30', 'ARS · CI'); await save();
-  assert((await page.locator('.ct-ratios tbody tr').nth(1).innerText()).includes('ARS · CI'), 'Editing supports a different settlement and preserves its label');
+  await select(0, 'AL30', 'AL30 CI'); await save();
+  assert((await page.locator('.ct-ratios tbody tr').nth(1).innerText()).includes('AL30 CI/TXAR'), 'Editing preserves settlement in the ticker without repeating it');
   await b('Agregar ratio').click({ force: true });
-  await select(0, 'AL30', 'AL30'); await select(1, 'AL30D', 'AL30D', 'USD · 24 h');
+  await select(0, 'AL30', 'AL30'); await select(1, 'AL30D', 'AL30D', 'USD');
   await page.locator('.ct-ratios button[type=submit]').click({ force: true });
   await wait(() => document.querySelector('.ct-ratios-issue')?.textContent.includes('ya está'));
   assert(await page.locator('.ct-ratios tbody tr').count() === 3, 'Duplicate pairs are rejected without changing the saved table');
   await b('Cancelar').click({ force: true });
   await page.evaluate(() => window.ratiosFixture.price('GGAL-2', undefined));
-  await wait(() => document.querySelector('.ct-ratios-value')?.textContent.includes('Sin último precio'));
+  await wait(() => document.querySelector('.ct-ratios-value')?.getAttribute('title') === 'Sin último precio');
   assert(true, 'Missing last price is never replaced with a reference or a bid/ask');
   await page.evaluate(() => { window.ratiosFixture.price('GGAL-2', 11000); window.mainStore.securityStore.securities.find(s => s.id === 'GGAL-2').md.refp = undefined; });
-  await wait(() => document.querySelector('.ct-ratios tbody tr td:nth-child(5)')?.textContent.includes('Sin referencia diaria'));
+  await wait(() => document.querySelector('.ct-ratios tbody tr td:nth-child(5)')?.getAttribute('title') === 'Sin referencia diaria');
   assert(true, 'Missing daily reference hides only the daily variation');
   await page.evaluate(() => window.ratiosFixture.connected(false));
   await wait(() => document.querySelector('.ct-ratios-issue')?.textContent.includes('desconectado'));
-  assert((await page.locator('.ct-ratios-value').first().innerText()).includes('Sin último precio'), 'Disconnect clears displayed quote values');
+  assert(await page.locator('.ct-ratios-value').first().getAttribute('title') === 'Sin último precio', 'Disconnect clears displayed quote values');
   await page.evaluate(() => { const s = window.mainStore.securityStore.securities.find(s => s.id === 'GGAL-2'); s.md.refp = 10000; s.md.seq = 0; window.ratiosFixture.connected(true); });
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '0,846154');
   assert(true, 'Reconnect accepts a reset market sequence');
