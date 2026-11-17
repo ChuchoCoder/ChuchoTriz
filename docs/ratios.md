@@ -1,5 +1,125 @@
 # Ratios de instrumentos
 
+## Monitor y registro de operaciones
+
+En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio
+y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
+manual local. Abrir o cerrar un registro no manda órdenes al broker.
+
+El monitor inicial incluye, en este orden: AL30/AL30D, AL30/AL30C,
+AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
+PESOS - 7D/PESOS - 1D. En registros existentes se agregan sólo los faltantes,
+sin reordenar ni duplicar los pares personalizados ni modificar operaciones.
+La inicialización se guarda una sola vez: si quitás un par, no reaparece al
+recargar. **Agregar pares predeterminados** permite recuperar los faltantes.
+Se resuelven coincidencias exactas y únicas de BYMA del catálogo de cada sitio;
+los pares no disponibles o ambiguos se informan para reintentar explícitamente.
+
+Las cauciones PESOS muestran sus últimos valores como **% TNA**. Su ratio
+compara tasas `(TNA A / TNA B − 1) × 100`. Estos pares tienen **Sólo monitor**:
+una TNA no es un precio de compra/venta y no se usa para registrar un long/short
+ni para calcular P&L de instrumentos con precio. El resto del monitor mantiene
+los formatos y el flujo de apertura habituales.
+
+La tabla adapta sus columnas al contenido y agrupa los controles de alta y
+restauración en una fila (se reacomodan en pantallas angostas). **Var. diaria**
+es `(ratio actual / ratio de referencia diaria − 1) × 100`, calculada desde
+`md.refp` y las fechas de referencia de Matriz. No es la diferencia entre los
+porcentajes mostrados del ratio. Sin referencia válida, o con fechas distintas,
+muestra **—** con el motivo al pasar el cursor y conserva el ratio actual.
+
+**⇄ Invertir A/B** conserva la fila y recalcula el ratio y su variación diaria;
+no cambia las operaciones registradas. Si el par inverso ya está en la tabla,
+se informa para evitar duplicados. Precios y ratio usan el mismo resaltado de
+opciones: verde al subir, rojo al bajar, con limpieza a los 500 ms. No se resalta
+la carga inicial, un dato faltante ni el cambio de identidad al invertir. Con
+movimiento reducido se usa una marca estática breve.
+
+- Agregá los pares al monitor; un ticker exacto y único se resuelve al salir del
+  campo. El par sigue en el monitor después de registrar una apertura.
+- Elegí los instrumentos y precios de entrada desde el book, último o
+  escribiéndolos, y luego ingresá la cantidad A. Con la misma moneda, B se dimensiona al lote más cercano para
+  igualar montos brutos, usando factores nativos (bonos por 100 nominales: 0,01).
+  Con monedas distintas, B copia exactamente los nominales de A, sin conversión
+  ni dependencia de los precios; la cantidad debe respetar los lotes de ambas
+  patas. Los precios elegidos no se mueven con el mercado.
+- Cada pata presenta instrumento → precio → cantidad en una sola fila, con los
+  tres inputs alineados y de la misma altura, seguido del book compacto
+  de cinco niveles: Vol. C, Compra, Venta y Vol. V. Los datos son los mismos del
+  book nativo: mejor punta desde `md.bid/bsz/ask/asz` y cuatro niveles siguientes
+  desde `book.*Book1..4`. Un click en cualquier precio publicado lo fija como
+  entrada; no copia volumen a la cantidad, no precarga el Mini Order Form ni
+  registra una operación. Los niveles incompletos muestran — y no se pueden
+  seleccionar. La compra seleccionada se marca en verde y la venta en rojo;
+  El último precio y la variación diaria de cada instrumento se muestran
+  centrados en el encabezado azul, con la misma tipografía de Compra/Venta y
+  sin etiqueta «Último». Tocar el número fija ese precio como entrada; el
+  encabezado sigue mostrando el mercado aunque se elija otro precio. La
+  variación usa `(último / referencia diaria − 1) × 100`; sin referencia muestra —.
+  El precio manual sigue disponible.
+- La apertura empieza con las dos direcciones identificadas por ticker
+  (por ejemplo, Long BMA / Short GGAL y Long GGAL / Short BMA), con el ratio
+  de apertura entre ambas. Se omite el bloque repetido de título y par.
+  Pulsar una dirección carga y resalta la mejor Ask para la pata long y la
+  mejor Bid para la short, incluso al pulsar otra vez la dirección activa.
+  Actualiza el ratio y el dimensionamiento B con esos precios, conservando A.
+  Los precios quedan fijos hasta otra selección. Si falta una punta, deja ese
+  precio vacío y avisa; admite ingreso manual o reintento, sin sustituirlo por
+  último ni niveles más profundos. Elegir la dirección no registra la apertura.
+- La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
+  de entrada y salida. Los DDMM de cada pata son editables y aparecen antes
+  de su Monto A/B, en la misma fila del resumen debajo de los books.
+- Si las monedas coinciden, ratio y objetivo son `(A/B − 1) × 100`; en monedas
+  distintas se usa A/B. El objetivo se guarda siempre como cociente positivo;
+  0% equivale a 1. El objetivo se alcanza al alza para Long A o a la baja para
+  Short A. Es independiente del P&L monetario.
+- No se pide tipo de cambio para dimensionar cantidades. El P&L se muestra
+  separado por moneda; no suma ARS, USD y USD C. Al editar un registro anterior
+  con distinta cantidad B se conserva esa cantidad hasta cambiar A o los
+  instrumentos, sin modificar cantidades históricas al corregir otro campo.
+- Cada operación conserva entradas, cantidades, factores y tasas. Su neto incluye
+  los gastos de apertura y el cierre estimado al último precio. Los cierres del
+  25%, 50% o total usan precios reales ingresados y congelan el realizado.
+- Editar reemplaza el mismo registro y conserva cierres. Tras cierres parciales
+  no se cambian instrumentos/sentido/unidades y las cantidades totales deben
+  cubrir lo cerrado. Corregir la entrada o gastos recalcula el resultado histórico.
+  Eliminar admite deshacer; los registros cerrados también pueden eliminarse.
+
+Se guardan hasta 100 pares y 500 operaciones, separadas por cuenta y sitio en
+`chrome.storage.local`. La revisión y un bloqueo entre pestañas previenen
+sobrescrituras de ediciones viejas. Un cambio de cuenta limpia la vista antes de
+cargar el registro correspondiente. Al desinstalar o borrar los datos del perfil
+se pierde este registro; no es el historial del broker. El widget del dashboard
+continúa usando su guardado nativo independiente.
+
+### Procedencia de los DDMM
+
+Defaults tomados de `C:/git/chuchobot-premium`, commit
+`b12dbdaa84f153b06425788bb5475360a4441bff`,
+`Primary.WinFormsApp/Shared/InstrumentExtensions.cs` (`GetDerechosDeMercado`),
+`Properties/Settings.settings` y `App.config`. Se porta sólo el componente DDMM,
+sin la comisión de Premium:
+
+| CFI de Matriz (BYMA) | Tipo | DDMM inicial |
+| --- | --- | --- |
+| ESXXXX / EMXXXX | Acción / CEDEAR | 0,0847% (0,07% + IVA 21%) |
+| DBXXXX / DBXXFR | Bono / ON | 0,01% |
+| DYXTXR | Letra | 0,001% |
+| OCASPS / OPASPS / OCAFXS / OPAFXS / FXXXSX | Opción / futuro | 0,01% (default general de Premium, sólo BYMA) |
+
+No se infiere el tipo por el ticker. Para tipos o mercados sin regla verificada,
+la tasa queda vacía y debe completarse. Un factor/lote ausente también exige una
+entrada explícita. Son valores iniciales editables, no una consulta de aranceles
+vigentes al broker, ni un vínculo en ejecución con ChuchoBot Premium.
+
+Tests específicos: `src/ratios/trading*.test.ts` y
+`scripts/ratio-operations-reader.test.mjs`. El validador
+`tools/validate-ratio-operations.playwright.js` recorre el bundle real sobre el
+fixture loopback de `tools/preview-free.mjs`, con catálogo/precios sintéticos;
+se ejecuta con Playwright MCP compartido. Ver `docs/manual-regression.md`.
+
+## Widget del dashboard
+
 Dentro de un dashboard de Matriz, abrí **Nuevo widget → RATIOS · CHUCHOTRIZ**.
 El panel se mueve desde su título y se redimensiona desde la esquina inferior
 derecha, también con las flechas del teclado sobre ese control.

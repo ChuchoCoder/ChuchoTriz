@@ -8,7 +8,7 @@
     "build": "npm run check:free && tsc && vite build && node scripts/check-free.mjs --dist",
     "preview": "npm run check:vendor && vite preview",
     "watch": "npm run check:vendor && tsc && vite build --watch",
-    "test": "npm run check:vendor && vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs scripts/ratios-reader.test.mjs && node --test tools/qa/*.test.mjs",
+    "test": "npm run check:vendor && vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs scripts/ratios-reader.test.mjs scripts/ratio-operations-reader.test.mjs && node --test tools/qa/*.test.mjs",
     "check:vendor": "node scripts/security/vendored-picomatch.mjs",
     "check:free": "node scripts/check-free.mjs",
     "package:free": "npm run build && node scripts/package-free.mjs",

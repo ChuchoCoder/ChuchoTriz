@@ -3,6 +3,7 @@ import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
 import OptionsOperations from "./OptionsOperations";
 import OptionsSimulator from "./optionsSimulator/OptionsSimulator";
 import ToolbarIcon from "./ToolbarIcon";
+import RatioOperations from "./ratios/RatioOperations";
 
 export default function ChuchoTrizTools({ embedded = false, active = true, headerAction }: {
   embedded?: boolean; active?: boolean; headerAction?: ReactNode;
@@ -10,6 +11,8 @@ export default function ChuchoTrizTools({ embedded = false, active = true, heade
   const [tab, setTab] = useState(embedded ? "simulator" : "presets");
   const id = useId();
   const navigation = <nav className="ct-tools-tabs" aria-label="Herramientas de ChuchoTriz">
+    <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "ratios"} aria-controls={`${id}-ratios`}
+      onClick={() => setTab("ratios")}><ToolbarIcon name="quotes" />Ratios</button>
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "simulator"} aria-controls={`${id}-simulator`}
       onClick={() => setTab("simulator")}><ToolbarIcon name="simulator" />Simulador de opciones</button>
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "executions"} aria-controls={`${id}-executions`}
@@ -19,6 +22,7 @@ export default function ChuchoTrizTools({ embedded = false, active = true, heade
   </nav>;
   return <div className={`ct-tools${embedded ? " ct-tools-embedded" : ""}`}>
     {embedded ? <header className="ct-free-settings-header"><h1>ChuchoTriz</h1>{navigation}{headerAction}</header> : navigation}
+    <div id={`${id}-ratios`} className="ct-tools-content" hidden={tab !== "ratios"}><RatioOperations active={active && tab === "ratios"} /></div>
     <div id={`${id}-simulator`} className="ct-tools-content" hidden={tab !== "simulator"}><OptionsSimulator active={active && tab === "simulator"} marketReference={embedded} /></div>
     <div id={`${id}-executions`} className="ct-tools-content" hidden={tab !== "executions"}>
       {active && tab === "executions" && <OptionsOperations embedded={embedded} />}

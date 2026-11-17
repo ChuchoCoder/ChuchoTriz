@@ -47,7 +47,7 @@ export function assertManifest(manifest, built = false) {
   if (!built) {
     assert(same(script.js, ['src/main.tsx']), 'Unexpected content-script entry');
     if (manifest.web_accessible_resources !== undefined) {
-      assert([['options-market-reader.js'], ['options-market-reader.js', 'options-position-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js']].some(resources =>
+      assert([['options-market-reader.js'], ['options-market-reader.js', 'options-position-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js']].some(resources =>
         same(manifest.web_accessible_resources, [{ resources, matches: hosts }])),
         'Only the reviewed Matriz readers may be exposed by the source manifest');
     }
@@ -57,7 +57,7 @@ export function assertManifest(manifest, built = false) {
       assert(!('extension_ids' in resource), 'Resource exposure to other extensions is not allowed');
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
-        assert(['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js'].includes(path) || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
+        assert(['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js'].includes(path) || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
       }
     }
   }
