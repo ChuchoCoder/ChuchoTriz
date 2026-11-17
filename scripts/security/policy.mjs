@@ -1,22 +1,41 @@
 // Free retains the stricter source and package manifest contract.
 export { assertManifest as checkManifest } from '../check-free.mjs';
+import { assertVendoredPicomatch } from './vendored-picomatch.mjs';
 
 const version = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const fail = (message) => { throw new Error(message); };
 
 export function checkLock(pkg, lock) {
+  assertVendoredPicomatch();
   if (lock.lockfileVersion !== 3 || !lock.packages?.['']) fail('A v3 npm lockfile is required');
+  if (pkg.devDependencies?.picomatch !== 'file:vendor/picomatch' || pkg.overrides?.picomatch !== '$picomatch' ||
+    lock.packages[''].devDependencies?.picomatch !== 'file:vendor/picomatch' ||
+    !lock.packages['node_modules/picomatch'] || !lock.packages['vendor/picomatch']) fail('Use only the reviewed vendored picomatch');
   for (const section of ['dependencies', 'devDependencies', 'optionalDependencies']) {
     const declared = pkg[section] || {};
     const locked = lock.packages[''][section] || {};
     if (JSON.stringify(Object.keys(declared).sort()) !== JSON.stringify(Object.keys(locked).sort())) fail(`Lockfile drift in ${section}`);
     for (const [name, spec] of Object.entries(declared)) {
+      if (name === 'picomatch' && section === 'devDependencies' && spec === 'file:vendor/picomatch' &&
+        locked[name] === spec && pkg.overrides?.picomatch === '$picomatch') continue;
       if (!version.test(spec)) fail(`Use an exact registry version for ${name}`);
       if (locked[name] !== spec || lock.packages[`node_modules/${name}`]?.version !== spec) fail(`Lockfile drift for ${name}`);
     }
   }
   for (const [path, entry] of Object.entries(lock.packages)) {
     if (!path) continue;
+    if (path === 'node_modules/picomatch') {
+      if (entry.link !== true || entry.resolved !== 'vendor/picomatch' ||
+        Object.keys(entry).sort().join(',') !== 'link,resolved') fail('Unreviewed picomatch link');
+      continue;
+    }
+    if (path === 'vendor/picomatch') {
+      if (entry.name !== '@chuchotriz/picomatch-hardened' || entry.version !== '4.0.8-chuchotriz.1' ||
+        entry.dev !== true || entry.license !== 'MIT' || JSON.stringify(entry.engines) !== JSON.stringify({ node: '>=12' }) ||
+        Object.keys(entry).sort().join(',') !== 'dev,engines,license,name,version') fail('Unreviewed picomatch metadata');
+      continue;
+    }
+    if (path.endsWith('/node_modules/picomatch')) fail('Unexpected nested picomatch implementation');
     if (entry.link || !version.test(entry.version)) fail(`Non-registry package: ${path}`);
     let url;
     try { url = new URL(entry.resolved); } catch { fail(`Missing registry URL: ${path}`); }

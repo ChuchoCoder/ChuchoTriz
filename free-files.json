@@ -150,5 +150,18 @@
   "tools/validate-ratios-widget.playwright.js",
   "tools/ratios-fixture.mjs",
   "docs/qa/0.0.25-2026-11-16-regional-format.md",
-  "docs/qa/0.0.25-2026-11-17-independent-formats.md"
+  "docs/qa/0.0.25-2026-11-17-independent-formats.md",
+  "scripts/security/vendored-picomatch.mjs",
+  "scripts/security/picomatch.test.mjs",
+  "docs/security-picomatch.md",
+  "vendor/picomatch/package.json",
+  "vendor/picomatch/README.md",
+  "vendor/picomatch/LICENSE",
+  "vendor/picomatch/index.js",
+  "vendor/picomatch/posix.js",
+  "vendor/picomatch/lib/constants.js",
+  "vendor/picomatch/lib/parse.js",
+  "vendor/picomatch/lib/picomatch.js",
+  "vendor/picomatch/lib/scan.js",
+  "vendor/picomatch/lib/utils.js"
 ]

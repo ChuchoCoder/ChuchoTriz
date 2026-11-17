@@ -24,6 +24,7 @@ test('rejects mutable versions, Git/file dependencies, foreign registries, missi
   for (const mutate of [
     (p) => { p.dependencies.react = '^18.0.0'; },
     (p) => { p.dependencies.react = 'git+https://example.com/react'; },
+    (p) => { p.dependencies.react = 'file:vendor/picomatch'; },
     (p, l) => { l.packages['node_modules/react'].resolved = 'https://example.com/react.tgz'; },
     (p, l) => { delete l.packages['node_modules/react'].integrity; },
     (p, l) => { l.packages['node_modules/react'].integrity = 'sha512-invalid'; },
@@ -33,6 +34,25 @@ test('rejects mutable versions, Git/file dependencies, foreign registries, missi
   ]) {
     const p = structuredClone(pkg), l = structuredClone(lock);
     mutate(p, l);
+    assert.throws(() => checkLock(p, l));
+  }
+});
+
+test('the reviewed vendor allowance cannot redirect picomatch or admit another local package', () => {
+  for (const mutate of [
+    p => { p.devDependencies.picomatch = 'file:other'; },
+    p => { p.overrides.picomatch = 'file:other'; },
+    p => { delete p.devDependencies.picomatch; },
+    (p, l) => { l.packages['node_modules/picomatch'].resolved = 'other'; },
+    (p, l) => { l.packages['node_modules/picomatch'].integrity = 'unreviewed'; },
+    (p, l) => { l.packages['node_modules/other'] = { link: true, resolved: 'vendor/picomatch' }; },
+    (p, l) => { l.packages['vendor/picomatch'].version = '4.0.7'; },
+    (p, l) => { l.packages['vendor/picomatch'].dependencies = { other: '1.0.0' }; },
+    (p, l) => { l.packages['node_modules/picomatch'] = { ...l.packages['node_modules/react'] }; },
+    (p, l) => { l.packages['vendor/picomatch'] = { ...l.packages['node_modules/react'] }; },
+    (p, l) => { l.packages['node_modules/vite/node_modules/picomatch'] = { ...l.packages['node_modules/react'] }; },
+  ]) {
+    const p = structuredClone(pkg), l = structuredClone(lock); mutate(p, l);
     assert.throws(() => checkLock(p, l));
   }
 });
