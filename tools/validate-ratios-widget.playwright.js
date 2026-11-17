@@ -28,12 +28,19 @@ async (page) => {
   await idle(); await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
   await b('Agregar ratio').click({ force: true });
   assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Opening the ratio editor focuses the numerator input');
+  await b('Cancelar').click({ force: true }); await b('Agregar ratio').click({ force: true });
+  assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Reopening the ratio editor focuses the numerator again');
   for (const [index, ticker] of ['BMA', 'GGAL'].entries()) {
     const input = page.locator('.ct-ratio-picker input').nth(index);
     await input.fill(ticker, { force: true }); await input.press('Tab');
     if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Tab moves directly from numerator to denominator');
     await page.waitForFunction(i => document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=status]')?.textContent.includes('ARS'), index, { polling: 100 });
     if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Resolving the numerator ticker preserves focus in the denominator');
+    if (index === 0) {
+      await page.locator('.ct-ratio-picker input').nth(1).press('Shift+Tab');
+      assert(await input.evaluate(input => document.activeElement === input), 'Shift+Tab returns directly from denominator to numerator');
+      await input.press('Tab');
+    }
   }
   assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'Same-currency BMA/GGAL defaults to percent');
   await select(1, 'AL30D', 'AL30D', 'USD');

@@ -98,7 +98,7 @@ vacío. Para retirarlo antes de desinstalar, cerrá el panel desde su título.
   restringe filenames al workspace original, copiá el validador a su carpeta
   ignorada `.playwright-mcp/` antes de llamarlo. No usa otro perfil.
 
-El recorrido del bundle pasó 31 comprobaciones: formato predeterminado por moneda,
+El recorrido del bundle pasó 33 comprobaciones: formato predeterminado por moneda,
 elección manual, foco inicial, Tab entre instrumentos,
 resolución del ticker sin mover el foco, cálculo, varios pares y widgets,
 precios actualizados/faltantes, referencias faltantes, monedas/plazos distintos,
