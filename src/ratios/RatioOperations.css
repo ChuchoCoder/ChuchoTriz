@@ -58,3 +58,14 @@
 .ct-ratio-ops .ro-book-table thead th.ro-book-buy-heading{background:#294c32;border-bottom-color:#76a56d}
 .ct-ratio-ops .ro-book-table thead th.ro-book-sell-heading{background:#711e28;border-bottom-color:#bf626b}
 .ct-ratio-ops .ro-book-table thead th:nth-child(3){border-left:1px solid #526a7a}
+.ct-ratio-ops .ro-leg>header{display:grid;grid-template-columns:minmax(0,1fr) max-content minmax(0,1fr);gap:7px;align-items:center}
+.ro-leg-header-identity{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.ct-ratio-ops .ro-leg-header-identity .ro-leg-label{margin:0;color:#d5eafa;font-size:10px}
+.ro-leg-header-quote{display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font-size:11px;font-weight:700;font-family:inherit;line-height:1.4;font-variant-numeric:tabular-nums}
+.ct-ratio-ops .ro-header-last{font:inherit;color:#fff;background:transparent;border:0;padding:2px 3px}
+.ro-leg-header-quote .ct-opt-quote-value{display:inline-block;border-radius:2px}
+.ct-ratio-ops .ro-leg>header>.ro-leg-header-note{margin:0;text-align:right;overflow-wrap:anywhere;font-size:10px}
+.ro-entry-fields{align-items:start}
+.ct-ratio-ops .ro-price-source{font-size:9px}
+.ct-ratio-ops .ro-leg-header-quote .ro-up,.ct-free-settings-panel[data-color-scheme=light] .ro-leg-header-quote .ro-up{color:#65dca5}
+.ct-ratio-ops .ro-leg-header-quote .ro-down,.ct-free-settings-panel[data-color-scheme=light] .ro-leg-header-quote .ro-down{color:#ff8d99}

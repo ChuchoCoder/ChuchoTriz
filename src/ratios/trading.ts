@@ -155,6 +155,11 @@ export function currentRatio(o: RatioOperation, quotes: Record<string, TradingQu
   const a = quotes[o.legs[0].instrument.id], b = quotes[o.legs[1].instrument.id];
   return !a?.issue && !b?.issue && positive(a?.last) && positive(b?.last) ? a.last / b.last : undefined;
 }
+export function dailyPriceChange(quote?: TradingQuote): number | undefined {
+  if (quote?.issue || !positive(quote?.last) || !positive(quote?.reference)) return;
+  const change = (quote.last / quote.reference - 1) * 100;
+  return finite(change) ? change : undefined;
+}
 export function validInstrument(value: unknown): value is TradingInstrument {
   if (!value || typeof value !== "object") return false;
   const i = value as TradingInstrument;

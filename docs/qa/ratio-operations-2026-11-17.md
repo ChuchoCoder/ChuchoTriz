@@ -235,3 +235,29 @@ en negrita y blanco, agrupados con verde compra y rojo venta, y separadores.
 - Respaldo: `Free/backups/extension-before-book-headers-20261117-172956`.
 - Capturas locales recortadas: `test-results/book-headers-dark.png`,
   `book-headers-light.png` y `book-headers-cocos.png`.
+
+## Actualización: cotización centrada en el encabezado de cada pata
+
+El último precio y la variación diaria del instrumento pasan al centro del
+encabezado azul. Ambos usan Arial 11 px y peso 700, igual que Compra/Venta.
+Se retira la etiqueta visible «Último»; el número conserva el click para fijar
+la entrada. La fuente elegida se indica debajo del input de precio. La variación
+es la del instrumento, independiente del ratio, y muestra — sin referencia válida.
+
+- `npm test`: **544 Vitest + 62 Node + 2 QA infra = 608 PASS**.
+- Seguridad/política/lint y empaquetado: PASS; los 16 recorridos del validador
+  de operaciones también pasan con el bundle actualizado.
+- Fixture en temas oscuro/claro y ancho reducido a 420: centrado geométrico
+  verificado, misma familia/tamaño/peso que los encabezados de columnas. BMA
+  muestra 104,00 y +4,00% mientras la entrada elegida es 106; tocar el número
+  vuelve a 104. Capturas: `book-headers-dark.png` y `book-headers-light.png`.
+- Cocos: AL30 82.330,00 / +1,02%; AL30D 51,44 / +0,04%. Ambos grupos centrados,
+  Arial 11 px, peso 700. Elegir Venta nivel 2 fija 82.400; tocar la cotización
+  restaura 82.330. Cantidades 100/100, sin registrar operaciones ni enviar órdenes.
+- Los 24 archivos de dist coinciden por hash con la instalación compartida;
+  respaldo `Free/backups/extension-before-centered-book-quote-20261117-175506`.
+- Las siete claves locales conservan el hash agregado
+  `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+- Evidencia recortada: `test-results/centered-book-quote-cocos.png`. Verificación
+  manual reproducible: abrir AL30/AL30D, comparar estilos con Compra/Venta,
+  elegir otro nivel y tocar el precio del encabezado para restaurar la entrada.

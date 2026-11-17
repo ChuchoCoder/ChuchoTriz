@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { applyDefaultWatch, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
+import { applyDefaultWatch, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
 import { calculateRatio } from "./model";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
@@ -42,6 +42,12 @@ it("uses Premium DDMM defaults by CFI, equity VAT included and no broker commiss
     expect(defaultMarketRights({ cfi, market: "bm" })).toBe(fee);
   expect(defaultMarketRights({ cfi: "ESXXXX", market: "rx" })).toBeUndefined();
   expect(defaultMarketRights({ cfi: "UNKNOWN", market: "bm" })).toBeUndefined();
+});
+it("calculates the instrument header's daily price change independently of the pair ratio", () => {
+  expect(dailyPriceChange({ last: 110, reference: 100 })).toBeCloseTo(10);
+  expect(dailyPriceChange({ last: 90, reference: 100 })).toBeCloseTo(-10);
+  expect(dailyPriceChange({ last: 100, reference: 100 })).toBe(0);
+  for (const quote of [undefined, { last: 100 }, { last: 100, reference: 0 }, { last: 110, reference: 100, issue: "disconnected" }, { last: Infinity, reference: 100 }, { last: 1e308, reference: 1e-308 }]) expect(dailyPriceChange(quote)).toBeUndefined();
 });
 it("inverts only the watched pair, retains its row ID/order, and leaves the ledger unchanged", () => {
   const pair = { id: "pair", a: instrument("A"), b: instrument("B") }, other = { id: "other", a: instrument("C"), b: instrument("D") };

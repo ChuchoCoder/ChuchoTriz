@@ -50,7 +50,12 @@ movimiento reducido se usa una marca estática breve.
   entrada; no copia volumen a la cantidad, no precarga el Mini Order Form ni
   registra una operación. Los niveles incompletos muestran — y no se pueden
   seleccionar. La compra seleccionada se marca en verde y la venta en rojo;
-  Último y el precio manual siguen disponibles.
+  El último precio y la variación diaria de cada instrumento se muestran
+  centrados en el encabezado azul, con la misma tipografía de Compra/Venta y
+  sin etiqueta «Último». Tocar el número fija ese precio como entrada; el
+  encabezado sigue mostrando el mercado aunque se elija otro precio. La
+  variación usa `(último / referencia diaria − 1) × 100`; sin referencia muestra —.
+  El precio manual sigue disponible.
 - La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
   de entrada y salida. Los DDMM están dentro de cada pata y son editables.
 - Si las monedas coinciden, ratio y objetivo son `(A/B − 1) × 100`; en monedas
