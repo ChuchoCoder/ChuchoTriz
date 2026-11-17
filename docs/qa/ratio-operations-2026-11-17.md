@@ -213,3 +213,25 @@ Los apartados anteriores documentan las pruebas históricas; esta sección y
   `ratio-entry-book-evidence.json`.
 
 Esta actualización no cambia el lector de opciones, dependencias ni permisos.
+
+## Actualización visual: encabezados del book
+
+Título principal y título de cada pata con barra azul, bordes definidos y texto
+blanco en negrita, siguiendo el estilo del widget. El ticker pasa a ser el título
+de la pata; Pata A/B y Compra/Long o Venta/Short siguen visibles. La franja de
+último/precio elegido se integra al book. Sus cuatro encabezados están centrados,
+en negrita y blanco, agrupados con verde compra y rojo venta, y separadores.
+
+- Sólo presentación y etiquetas de encabezado; no cambian datos ni cálculos.
+- Pruebas focalizadas existentes `RatioOrderBook.test.tsx`: 3 PASS; empaquetado
+  y seguridad/política/lint: PASS. No se repite el total de 607 como una nueva corrida.
+- Inspección del bundle en temas oscuro y claro, ancho 1440 y ajuste a 420:
+  textos de títulos/columnas blancos, peso 700, fondos compra `rgb(41,76,50)`
+  y venta `rgb(113,30,40)`, sin desbordar los contenedores.
+- Verificación en Cocos: título AL30 blanco y negrita sobre barra azul
+  `rgb(23,78,114)`; encabezados de compra/venta coinciden con el fixture.
+- Las siete claves locales conservaron el hash
+  `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+- Respaldo: `Free/backups/extension-before-book-headers-20261117-172956`.
+- Capturas locales recortadas: `test-results/book-headers-dark.png`,
+  `book-headers-light.png` y `book-headers-cocos.png`.

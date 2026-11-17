@@ -10,7 +10,7 @@ export default function RatioOrderBook({ leg, quote, selectedPrice, selectedSide
   const depth = quote?.issue ? [] : quote?.depth ?? [{ bid: quote?.bid, ask: quote?.ask }];
   const selectedIndex = selectedSide ? depth.findIndex(row => row[selectedSide]?.price === selectedPrice) : -1;
   return <table className="ro-book-table" aria-label={`Book de ${leg}`}>
-    <thead><tr><th title="Volumen de compra">Vol. C</th><th>Compra</th><th>Venta</th><th title="Volumen de venta">Vol. V</th></tr></thead>
+    <thead><tr><th scope="col" className="ro-book-buy-heading" title="Volumen de compra">Vol. C</th><th scope="col" className="ro-book-buy-heading">Compra</th><th scope="col" className="ro-book-sell-heading">Venta</th><th scope="col" className="ro-book-sell-heading" title="Volumen de venta">Vol. V</th></tr></thead>
     <tbody>{Array.from({ length: 5 }, (_, i) => {
       const bid = depth[i]?.bid, ask = depth[i]?.ask;
       const price = (side: "bid" | "ask", level?: TradingDepthLevel) => <button type="button" className={`ro-book-price ${side}`}
