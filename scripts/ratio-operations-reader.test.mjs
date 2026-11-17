@@ -1,0 +1,74 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import { webcrypto } from 'node:crypto';
+
+const source = readFileSync(new URL('../public/ratio-operations-reader.js', import.meta.url), 'utf8');
+function fixture() {
+  let receive, id = 0;
+  const replies = [], subscriptions = [];
+  const s = (id, cfiCode, currency = 'ARS', factor = 1) => ({ id, symbolStr: id, currency, cfiCode, marketId: 'bm', settlementType: '2',
+    refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: 100, seq: 10, bid: 99, bsz: 500, ask: 101, asz: 400 } });
+  const securities = [s('BMA', 'ESXXXX'), s('SPY', 'EMXXXX'), s('AL30', 'DBXXXX', 'ARS', .01), s('AL30D', 'DBXXXX', 'USD', .01), s('LETRA', 'DYXTXR'), s('UNKNOWN', '???'), s('CAUCION', 'RPXXXX')];
+  const ms = { profileStore: { activeAccount: 'opaque-test-A' }, webSocketConnectionStatus: true,
+    securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) }, dmaWebSocket: { addSubscription: (...args) => subscriptions.push(args) } };
+  for (const name of ['orderStore', 'positionStore', 'balanceStore', 'executionStore']) Object.defineProperty(ms, name, { get() { throw Error('Forbidden capability'); } });
+  const window = { mainStore: ms, addEventListener: (_, fn) => { receive = fn; }, postMessage: data => replies.push(structuredClone(data)) };
+  const document = { currentScript: { dataset: { channel: 'test' } }, body: { innerText: 'Versión: 4.24.4' } };
+  const timers = new Set();
+  runInNewContext(source, { window, document, location: { origin: 'https://matriz.cocos.xoms.com.ar' }, crypto: webcrypto, TextEncoder,
+    setTimeout: fn => { timers.add(fn); return fn; }, clearTimeout: fn => timers.delete(fn) });
+  const message = data => receive({ source: window, data: { channel: 'test', ...data } });
+  const request = async (method, params = {}) => { const key = 'r' + (++id); await message({ id: key, kind: 'request', method, params }); return replies.find(r => r.id === key); };
+  const context = async () => (await request('ratioContext', { storageSalt: 'a'.repeat(64) })).result;
+  const quotes = async ids => request('ratioQuotes', { contextId: (await context()).contextId, ids });
+  return { ms, document, securities, subscriptions, request, context, quotes, message, replies, expire: () => [...timers].forEach(fn => fn()) };
+}
+test('projects native CFI, verified monetary units and depth without private reports', async () => {
+  const f = fixture(), c = await f.context();
+  const result = (await f.request('ratioSearch', { contextId: c.contextId, query: 'AL30' })).result;
+  assert.equal(result.length, 2); assert.equal(result[0].amountFactor, .01); assert.equal(result[1].currency, 'USD');
+  const unknown = (await f.request('ratioSearch', { contextId: c.contextId, query: 'UNKNOWN' })).result[0]; assert.equal(unknown.amountFactor, undefined);
+  assert.deepEqual((await f.request('ratioSearch', { contextId: c.contextId, query: 'CAUCION' })).result, []);
+  const quotes = (await f.quotes(['BMA', 'AL30'])).result.instruments;
+  assert.deepEqual(quotes.BMA.bid, { price: 99, size: 500 }); assert.equal(quotes.AL30.amountFactor, .01);
+  assert.deepEqual(f.subscriptions.map(([topic]) => topic), ['md', 'book']);
+  await f.quotes(['BMA']); assert.equal(f.subscriptions.length, 2);
+  assert.doesNotMatch(JSON.stringify({ c, result, quotes }), /opaque-test/);
+});
+test('isolates scopes and retires contexts on account, socket or connectivity changes', async () => {
+  const f = fixture(), a = await f.context(); f.ms.profileStore.activeAccount = 'opaque-test-B'; const b = await f.context();
+  assert.notEqual(a.storageScope, b.storageScope); assert.notEqual(a.contextId, b.contextId);
+  assert.match((await f.request('ratioQuotes', { contextId: a.contextId, ids: ['BMA'] })).error, /cuenta/);
+  f.ms.webSocketConnectionStatus = false;
+  assert.match((await f.quotes(['BMA'])).result.instruments.BMA.issue, /desconectado/); assert.equal(f.subscriptions.length, 0);
+  f.ms.webSocketConnectionStatus = true; await f.quotes(['BMA']); assert.equal(f.subscriptions.length, 2);
+});
+test('rejects unknown methods, oversized requests and unverified Matriz versions', async () => {
+  const f = fixture(); assert.match((await f.request('sendOrder')).error, /no permitido/);
+  assert.match((await f.quotes(Array.from({ length: 101 }, (_, i) => String(i)))).error, /100/);
+  f.document.body.innerText = 'Versión: 99'; assert.match((await f.request('ratioContext', { storageSalt: 'a'.repeat(64) })).error, /Versión/);
+});
+test('does not combine incomplete book levels with md, rejects regressing sequence', async () => {
+  const f = fixture(); f.securities[0].book = { bidBook1: 98, bszBook1: 0, askBook1: 102, aszBook1: 20 };
+  let q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.equal(q.bid, undefined); assert.deepEqual(q.ask, { price: 102, size: 20 });
+  f.securities[0].md.seq = 9; q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.match(q.issue, /secuencia/);
+});
+test('cancels async quote projections when account changes and serializes reads', async () => {
+  const f = fixture(), c = await f.context(); let release;
+  f.ms.securityStore.getSecurity = () => new Promise(resolve => { release = resolve; });
+  const pending = f.request('ratioQuotes', { contextId: c.contextId, ids: ['BMA'] });
+  assert.match((await f.request('ratioQuotes', { contextId: c.contextId, ids: ['AL30'] })).error, /pendiente/);
+  f.ms.profileStore.activeAccount = 'changed'; release(f.securities[0]); assert.match((await pending).error, /cuenta/);
+});
+test('bounds a stalled lookup and recovers after retirement without publishing its late result', async () => {
+  const f = fixture(), c = await f.context(); let release;
+  f.ms.securityStore.getSecurity = () => new Promise(resolve => { release = resolve; });
+  const pending = f.request('ratioQuotes', { contextId: c.contextId, ids: ['BMA'] });
+  f.expire(); assert.match((await pending).error, /demoró/);
+  f.ms.securityStore.getSecurity = async () => f.securities[0];
+  assert.equal((await f.quotes(['BMA'])).result.instruments.BMA.last, 100);
+  release({ ...f.securities[0], md: { lst: 999 } });
+  assert.equal((await f.quotes(['BMA'])).result.instruments.BMA.last, 100);
+});

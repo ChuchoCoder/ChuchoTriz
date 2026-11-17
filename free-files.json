@@ -150,5 +150,17 @@
   "tools/validate-ratios-widget.playwright.js",
   "tools/ratios-fixture.mjs",
   "docs/qa/0.0.25-2026-11-16-regional-format.md",
-  "docs/qa/0.0.25-2026-11-17-independent-formats.md"
+  "docs/qa/0.0.25-2026-11-17-independent-formats.md",
+  "public/ratio-operations-reader.js",
+  "src/ratios/RatioOperations.tsx",
+  "src/ratios/RatioOperations.css",
+  "src/ratios/trading.ts",
+  "src/ratios/tradingMarket.ts",
+  "src/ratios/tradingStorage.ts",
+  "src/ratios/trading.test.ts",
+  "src/ratios/tradingStorage.test.ts",
+  "scripts/ratio-operations-reader.test.mjs",
+  "tools/validate-ratio-operations.playwright.js",
+  "src/ratios/tradingMarket.test.ts",
+  "docs/qa/ratio-operations-2026-11-17.md"
 ]

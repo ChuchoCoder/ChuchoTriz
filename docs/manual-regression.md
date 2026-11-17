@@ -1,5 +1,15 @@
 # Smoke y regresión de ChuchoTriz Free
 
+Para el tab **Ratios**, ejecutá además
+`tools/validate-ratio-operations.playwright.js` en la URL `/fixture?scenario=regression`
+del preview con el MCP compartido. El script instala únicamente en esa página
+loopback un catálogo sintético. Comprueba DDMM, puntas con cantidades, entrada
+fija, dimensionamiento, edición con cierres, borrar/deshacer, recarga, cambio de
+cuenta y bonos de distinta moneda. No debe ejecutarse sobre un broker.
+En Matriz instalada, comprobar selección, precios nativos y tasas por CFI, sin
+alterar cotizaciones ni enviar órdenes. Registrar qué parte fue simulada y cuál
+se observó en el broker.
+
 ## Ejecutar antes de un PR
 
 Desde el checkout del cambio, con dependencias instaladas (`npm ci --ignore-scripts --no-audit`):

@@ -1,5 +1,68 @@
 # Ratios de instrumentos
 
+## Monitor y registro de operaciones
+
+En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio
+y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
+manual local. Abrir o cerrar un registro no manda órdenes al broker.
+
+- Agregá los pares al monitor; un ticker exacto y único se resuelve al salir del
+  campo. El par sigue en el monitor después de registrar una apertura.
+- Ingresá la cantidad A y elegí sus precios y los de B desde Bid, último, Ask o
+  escribiéndolos. B se dimensiona al lote más cercano para igualar los montos
+  brutos, usando factores de cotización verificados del catálogo (bonos por 100
+  nominales: factor 0,01). Los precios elegidos no se mueven con el mercado.
+- La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
+  de entrada y salida. Los DDMM están dentro de cada pata y son editables.
+- Si las monedas coinciden, ratio y objetivo son `(A/B − 1) × 100`; en monedas
+  distintas se usa A/B. El objetivo se guarda siempre como cociente positivo;
+  0% equivale a 1. El objetivo se alcanza al alza para Long A o a la baja para
+  Short A. Es independiente del P&L monetario.
+- Para monedas distintas ingresá una conversión explícita para dimensionar B.
+  El P&L se muestra separado por moneda; no suma ARS, USD y USD C.
+- Cada operación conserva entradas, cantidades, factores y tasas. Su neto incluye
+  los gastos de apertura y el cierre estimado al último precio. Los cierres del
+  25%, 50% o total usan precios reales ingresados y congelan el realizado.
+- Editar reemplaza el mismo registro y conserva cierres. Tras cierres parciales
+  no se cambian instrumentos/sentido/unidades y las cantidades totales deben
+  cubrir lo cerrado. Corregir la entrada o gastos recalcula el resultado histórico.
+  Eliminar admite deshacer; los registros cerrados también pueden eliminarse.
+
+Se guardan hasta 100 pares y 500 operaciones, separadas por cuenta y sitio en
+`chrome.storage.local`. La revisión y un bloqueo entre pestañas previenen
+sobrescrituras de ediciones viejas. Un cambio de cuenta limpia la vista antes de
+cargar el registro correspondiente. Al desinstalar o borrar los datos del perfil
+se pierde este registro; no es el historial del broker. El widget del dashboard
+continúa usando su guardado nativo independiente.
+
+### Procedencia de los DDMM
+
+Defaults tomados de `C:/git/chuchobot-premium`, commit
+`b12dbdaa84f153b06425788bb5475360a4441bff`,
+`Primary.WinFormsApp/Shared/InstrumentExtensions.cs` (`GetDerechosDeMercado`),
+`Properties/Settings.settings` y `App.config`. Se porta sólo el componente DDMM,
+sin la comisión de Premium:
+
+| CFI de Matriz (BYMA) | Tipo | DDMM inicial |
+| --- | --- | --- |
+| ESXXXX / EMXXXX | Acción / CEDEAR | 0,0847% (0,07% + IVA 21%) |
+| DBXXXX / DBXXFR | Bono / ON | 0,01% |
+| DYXTXR | Letra | 0,001% |
+| OCASPS / OPASPS / OCAFXS / OPAFXS / FXXXSX | Opción / futuro | 0,01% (default general de Premium, sólo BYMA) |
+
+No se infiere el tipo por el ticker. Para tipos o mercados sin regla verificada,
+la tasa queda vacía y debe completarse. Un factor/lote ausente también exige una
+entrada explícita. Son valores iniciales editables, no una consulta de aranceles
+vigentes al broker, ni un vínculo en ejecución con ChuchoBot Premium.
+
+Tests específicos: `src/ratios/trading*.test.ts` y
+`scripts/ratio-operations-reader.test.mjs`. El validador
+`tools/validate-ratio-operations.playwright.js` recorre el bundle real sobre el
+fixture loopback de `tools/preview-free.mjs`, con catálogo/precios sintéticos;
+se ejecuta con Playwright MCP compartido. Ver `docs/manual-regression.md`.
+
+## Widget del dashboard
+
 Dentro de un dashboard de Matriz, abrí **Nuevo widget → RATIOS · CHUCHOTRIZ**.
 El panel se mueve desde su título y se redimensiona desde la esquina inferior
 derecha, también con las flechas del teclado sobre ese control.

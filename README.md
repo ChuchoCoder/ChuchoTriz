@@ -34,6 +34,7 @@ simulados y sin conexión a un broker. La apariencia de Matriz puede variar.*
 | **Preferencias locales** | Guardar la configuración en el perfil de Chrome y actualizarla entre vistas. |
 | **Simulador de opciones** | Armar patas desde una cadena con calls/puts, VI, Theta teórico y Extrínseco; simular resultados y consultar la pérdida máxima al vencimiento. |
 | **Widget de ratios** | Comparar últimos precios de dos instrumentos, con varios pares, variación diaria y guardado en el dashboard de Matriz. |
+| **Operaciones de ratios** | Monitorear pares, registrar aperturas/cierres manuales con DDMM por instrumento y seguir P&L neto y objetivos de ratio desde Configuración → Ratios. |
 
 En **Nuevo widget → RATIOS · CHUCHOTRIZ**, elegí numerador y denominador con
 su moneda y plazo. Podés agregar, editar, invertir y quitar pares, mover el panel

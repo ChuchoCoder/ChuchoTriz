@@ -58,6 +58,15 @@ pagos ni transmisión de esos datos a terceros. No lee contraseñas, cookies ni
 tokens de autenticación. Las comunicaciones de Matriz con su broker son
 independientes de esta extensión.
 
+La pestaña **Ratios** de Configuración lee el catálogo, el tipo de instrumento,
+las unidades de cotización y las puntas/últimos precios desde Matriz. El monitor
+y los registros manuales de apertura/cierre se guardan en `chrome.storage.local`,
+separados por cuenta y sitio mediante una semilla local y una clave opaca.
+Incluyen instrumentos, cantidades, precios, fechas, comisión, DDMM, factores,
+objetivo de ratio y cierres. No consulta reportes de tenencia o ejecuciones ni
+envía órdenes. Los registros permanecen en este perfil; no se sincronizan con
+el servidor del broker. Al desinstalar la extensión se pierde este registro local.
+
 Desde Configuración se pueden modificar o quitar instrumentos, desactivar
 Autocompletar y restablecer los valores predeterminados. Al desinstalar la
 extensión, Chrome elimina su almacenamiento local.
