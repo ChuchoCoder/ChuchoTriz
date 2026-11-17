@@ -22,8 +22,14 @@
 @media(max-width:780px){.ro-monitor-controls .ro-add-watch{grid-template-columns:minmax(125px,1fr) minmax(125px,1fr) max-content}.ro-monitor-controls .ro-add-watch>button{grid-column:auto;margin-top:20px}.ro-monitor-controls>.ro-defaults{margin-top:0}}
 @media(max-width:420px){.ro-monitor-controls .ro-add-watch{grid-template-columns:1fr 1fr;width:100%}.ro-monitor-controls .ro-add-watch>button{grid-column:1/-1;margin-top:0}}
 .ro-leg-instrument .ct-ratio-picker{min-width:0}
-.ro-entry-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:9px 0 7px}
+.ro-entry-fields{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,.85fr);gap:8px;margin:0 0 7px}
 .ct-ratio-ops .ro-entry-fields input{font-size:14px;font-weight:700;padding:8px;text-align:right;font-variant-numeric:tabular-nums}
+.ct-ratio-ops .ro-entry-fields .ct-ratio-picker input{text-align:left;font-size:12px;font-weight:400}
+.ct-ratio-ops .ro-entry-fields input{height:36px}
+.ro-entry-fields>*{min-width:0}
+.ct-ratio-ops .ro-entry-fields>label{grid-template-rows:16px 36px auto}
+.ct-ratio-ops .ro-entry-fields>label>span,.ct-ratio-ops .ro-entry-fields .ct-ratio-picker label{height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct-ratio-ops .ro-entry-fields .ct-ratio-picker label{margin-bottom:4px}
 .ro-book-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
 .ct-ratio-ops .ro-book-heading .ro-last{border-color:var(--ro-line);padding:3px 7px}
 .ct-ratio-ops .ro-book-table{table-layout:fixed;width:100%;font-variant-numeric:tabular-nums;margin:0 0 9px}

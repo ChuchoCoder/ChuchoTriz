@@ -106,12 +106,12 @@ async page => {
   for (const width of [1440, 1024, 420, 1440]) {
     await page.setViewportSize({ width, height: 1000 }); await page.screenshot({ animations: 'disabled', timeout: 10000 });
     const fits = await page.evaluate(() => [...document.querySelectorAll('.ro-leg')].every(leg => {
-      const price = leg.querySelector('[aria-label^="Precio de entrada"]').getBoundingClientRect(), quantity = leg.querySelector('[aria-label^="Cantidad"]').getBoundingClientRect();
+      const instrument = leg.querySelector('.ct-ratio-picker input').getBoundingClientRect(), price = leg.querySelector('[aria-label^="Precio de entrada"]').getBoundingClientRect(), quantity = leg.querySelector('[aria-label^="Cantidad"]').getBoundingClientRect();
       const book = leg.querySelector('.ro-book-table').getBoundingClientRect(), bounds = leg.getBoundingClientRect();
-      return price.left < quantity.left && book.right <= bounds.right + 1 && book.left >= bounds.left - 1;
-    })); assert(fits, 'Price precedes quantity and book fits at ' + width);
+      return instrument.left < price.left && price.left < quantity.left && Math.abs(instrument.top - price.top) < 1 && Math.abs(price.top - quantity.top) < 1 && Math.abs(instrument.height - price.height) < 1 && Math.abs(price.height - quantity.height) < 1 && quantity.right <= bounds.right + 1 && book.right <= bounds.right + 1 && book.left >= bounds.left - 1;
+    })); assert(fits, 'Instrument, price and quantity share an aligned row and book fits at ' + width);
   }
-  checks.push('Price precedes quantity; compact five-level native book fits desktop, tablet and mobile');
+  checks.push('Instrument, price and quantity share an aligned row; compact five-level book fits desktop, tablet and mobile');
   const ticketBefore = await page.locator('#MiniOrderForm input').evaluateAll(es => es.map(e => e.value));
   await click(button('Usar Compra nivel 1 de A')); assert(await label('Precio de entrada A').inputValue() === '99.9', 'Native md best bid sets price');
   await click(button('Usar Venta nivel 2 de A')); assert(await label('Precio de entrada A').inputValue() === '100.2', 'Deeper ask sets entry');

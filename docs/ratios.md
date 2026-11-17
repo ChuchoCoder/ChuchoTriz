@@ -43,7 +43,8 @@ movimiento reducido se usa una marca estática breve.
   Con monedas distintas, B copia exactamente los nominales de A, sin conversión
   ni dependencia de los precios; la cantidad debe respetar los lotes de ambas
   patas. Los precios elegidos no se mueven con el mercado.
-- Cada pata presenta instrumento → precio → cantidad, seguido del book compacto
+- Cada pata presenta instrumento → precio → cantidad en una sola fila, con los
+  tres inputs alineados y de la misma altura, seguido del book compacto
   de cinco niveles: Vol. C, Compra, Venta y Vol. V. Los datos son los mismos del
   book nativo: mejor punta desde `md.bid/bsz/ask/asz` y cuatro niveles siguientes
   desde `book.*Book1..4`. Un click en cualquier precio publicado lo fija como

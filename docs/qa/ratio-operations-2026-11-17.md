@@ -261,3 +261,21 @@ es la del instrumento, independiente del ratio, y muestra — sin referencia vá
 - Evidencia recortada: `test-results/centered-book-quote-cocos.png`. Verificación
   manual reproducible: abrir AL30/AL30D, comparar estilos con Compra/Venta,
   elegir otro nivel y tocar el precio del encabezado para restaurar la entrada.
+
+## Actualización: instrumento, precio y cantidad en una fila
+
+Cada pata muestra los tres inputs en orden instrumento → precio → cantidad,
+alineados y con altura de 36 px; el book permanece debajo. Los títulos largos
+se acortan visualmente con puntos suspensivos y conservan el texto en tooltip.
+
+- Empaquetado y seguridad/política/lint: PASS. Se actualiza el validador existente
+  para comprobar posiciones y alturas de los tres inputs a 1440/1024/420 px;
+  sus **16 recorridos PASS**, incluyendo precios, cantidades automáticas y edición.
+- Cocos: ambas patas alineadas en y=399,6, inputs de 36 px. Altura de cada pata
+  de 450,4 a 375,4 px en el mismo viewport: **75 px menos**. AL30/AL30D conserva
+  cantidades 100/100. Evidencia recortada: `test-results/inline-entry-cocos.png`.
+- No se repite la suite unitaria completa para este cambio de presentación.
+- Instalación comparada por hash (24 archivos), respaldo
+  `Free/backups/extension-before-inline-entry-20261117-180023`.
+- Las siete claves locales conservan el hash agregado
+  `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
