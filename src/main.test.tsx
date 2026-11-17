@@ -133,7 +133,7 @@ it("guarda el formato regional de operaciones y lo recupera al volver a abrir la
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  const storageKey = "OptionsOperationsLocale";
+  const storageKey = "OptionsOperationsNumberLocale";
   const saved: Record<string, unknown> = {};
   const set = vi.fn(async (value: Record<string, unknown>) => { Object.assign(saved, value); });
   vi.stubGlobal("chrome", { storage: { ...chrome.storage, local: { get: async () => ({ ...saved }), set } } });
@@ -153,9 +153,10 @@ it("guarda el formato regional de operaciones y lo recupera al volver a abrir la
     expect(select().value).toBe("es-AR");
     await act(async () => {
       const onChanged = vi.mocked(chrome.storage.onChanged.addListener).mock.lastCall![0];
-      onChanged({ [storageKey]: { oldValue: "es-AR", newValue: "en-US" } }, "local");
+      onChanged({ OptionsOperationsDateLocale: { newValue: "en-US" } }, "local");
     });
-    expect(select().value).toBe("en-US");
+    expect(select().value).toBe("es-AR");
+    expect(host.querySelectorAll<HTMLSelectElement>("select")[1].value).toBe("en-US");
   } finally { await act(async () => { root.unmount(); }); }
 });
 

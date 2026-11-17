@@ -75,7 +75,7 @@ navegador aislado en CI.
 | SM-06 | `tooltip` | VI y griegas, ausencia de VI, Escape y clic exterior. |
 | SM-07, RG-08 | `analysis` | Vistas compartidas, 25 escenarios, vencimiento, zoom/Ajustar y cambio entre tasa automática/manual. Los tests de caución también cubren vencimiento y ausencia de referencia. |
 | SM-08 | `position` | Importación, primas desconocidas y conservación de ajustes al alternar vistas. |
-| SM-09 | `operations` | Lectura y copia de ejecuciones ficticias con cantidades firmadas, vencimientos, bases y primas. |
+| SM-09, SM-09-formats, SM-09-format-storage | `operations` | Lectura y copia de ejecuciones ficticias; las cuatro combinaciones independientes de fecha/números se comprueban en ambas grillas, el vencimiento del encabezado y el texto copiado de Calls/Puts/ambos. Conservación de la preferencia anterior y persistencia tras recargar. |
 | SM-10 | `preload` | Precarga ASK/BID con cantidad elegida y precio editado por pata; ticket ficticio limpiado. |
 | RG-02, RG-03, RG-09 | `baseline` | 24 variantes y 10 comprobaciones de cantidades, strikes, precios, gráficos, VI y desconexión/libro cruzado. |
 | RG-02 | `limits` | Coincidencia de patas entre previsualización/armado y límites de cantidad/strikes. |

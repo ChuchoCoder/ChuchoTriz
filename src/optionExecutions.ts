@@ -66,14 +66,16 @@ export function summarizeExecutions(executions: OptionExecution[], averaged: boo
   return [...rows].sort((a, b) => a.strike - b.strike || b.price - a.price);
 }
 
-export function executionFormatters(preference: ExecutionLocale = "auto", languages: readonly string[] = navigator.languages) {
-  const locale = preference === "auto"
+export function executionFormatters(preference: ExecutionLocale = "auto", languages: readonly string[] = navigator.languages,
+  datePreference: ExecutionLocale = preference) {
+  const localeFor = (value: ExecutionLocale) => value === "auto"
     ? languages.find(language => new Intl.NumberFormat(language).format(1.1).includes(".")) ?? "en-US"
-    : preference;
-  const numbers = new Intl.NumberFormat(locale, { maximumFractionDigits: 4 });
+    : value;
+  const numbers = new Intl.NumberFormat(localeFor(preference), { maximumFractionDigits: 4 });
+  const dateLocale = localeFor(datePreference);
   const dateFields = { year: "numeric", month: "2-digit", day: "2-digit" } as const;
-  const dates = new Intl.DateTimeFormat(locale, dateFields);
-  const expirations = new Intl.DateTimeFormat(locale, { ...dateFields, timeZone: "UTC" });
+  const dates = new Intl.DateTimeFormat(dateLocale, dateFields);
+  const expirations = new Intl.DateTimeFormat(dateLocale, { ...dateFields, timeZone: "UTC" });
   return {
     date: (value: number) => dates.format(value),
     expiration: (value: string) => expirations.format(Date.parse(value)),

@@ -42,7 +42,7 @@ cuenta activa automáticamente cada vez que se entra en la pestaña y al pulsar
 y los eventos originales quedan dentro de Matriz. La pestaña conserva en memoria
 los datos de las ejecuciones de opciones mientras está abierta. Al pulsar
 **Copiar**, coloca vencimiento, cantidad con signo, base y prima en el portapapeles.
-La preferencia de formato regional se guarda en `chrome.storage.local` dentro del
+Las preferencias independientes de formato de fecha y números se guardan en `chrome.storage.local` dentro del
 perfil de Chrome.
 
 El widget **Ratios** lee el catálogo de instrumentos, sus últimos precios,

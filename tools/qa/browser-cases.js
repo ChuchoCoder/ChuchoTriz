@@ -341,7 +341,7 @@ async (page, group) => {
   } else if (group === 'quotes') {
     await open();
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.ask = undefined; c.md.asz = undefined; c.md.lst = 9; c.md.seq++; });
-    await page.waitForFunction(() => document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]').innerText.includes('—'));
+    await page.waitForFunction(() => document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]')?.innerText.includes('—'));
     await selectCall(); equal(await b('Editar Precio pata 1').innerText(), '9', 'Missing ask uses last trade');
     await selectCall(); equal(await b('Quitar pata 1').count(), 0, 'Repeated quote deselects');
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.lst = undefined; c.md.seq++; });
@@ -518,8 +518,13 @@ async (page, group) => {
     equal(await b('Editar Contratos pata 1').innerText(), '+1', 'Adjustment kept across modes');
     pass('SM-08', 'Imported +2/-1 position, unknown premiums blank, adjustments survive mode switches');
   } else if (group === 'operations') {
+    await page.evaluate(() => chrome.storage.local.set({ OptionsOperationsLocale:'es-AR' }));
     await open(); await b('Operaciones de opciones').click();
     await b('Copiar Calls y Puts').waitFor();
+    const numberFormat = page.getByRole('combobox', { name:'Formato de números', exact:true });
+    const dateFormat = page.getByRole('combobox', { name:'Formato de fecha', exact:true });
+    equal(await numberFormat.inputValue(), 'es-AR', 'Legacy preference retained for numbers');
+    equal(await dateFormat.inputValue(), 'es-AR', 'Legacy preference retained for dates');
     const grouping = page.getByRole('checkbox', { name: 'Agrupar por strike', exact: true });
     assert(await grouping.isChecked(), 'Executions grouped by default');
     equal(await page.getByRole('table', { name: 'Calls', exact: true }).locator('tbody tr').count(), 2, 'Grouped call rows');
@@ -546,7 +551,8 @@ async (page, group) => {
     await b('Actualizar desde Matriz').click();
     await b('Copiar Calls y Puts').waitFor();
     await grouping.uncheck();
-    await page.getByRole('combobox', { name: /Formato regional/ }).selectOption('es-AR');
+    await numberFormat.selectOption('es-AR');
+    await dateFormat.selectOption('es-AR');
     const expiration = await page.evaluate(() => {
       const date = window.mainStore.securityStore.options[0].refData.maturityDateStr;
       return `${date.slice(6, 8)}/${date.slice(4, 6)}/${date.slice(0, 4)}`;
@@ -558,8 +564,54 @@ async (page, group) => {
       const data = copy.split('\n').filter(line => line.includes('\t')).map(line => line.split('\t'));
       equal(data, [[expiration, '6', '100', '16'], [expiration, '-3', '100', '12'], [expiration, '2', '100', '10'], [expiration, '-1', '100', '9']], 'Copied expirations, signed quantities, strikes, premiums');
       assert(copy.includes('OPERACIONES CALLS') && copy.includes('OPERACIONES PUTS'), 'Both sections');
+      await page.evaluate(async () => {
+        const store = window.mainStore.orderEventStore;
+        const rows = await store.getOrderEventsForAccountReport('DEMO-NO-BROKER');
+        const call = rows.find(row => row.securityId.startsWith('call-'));
+        const put = rows.find(row => row.securityId.startsWith('put-'));
+        for (const row of [call, put]) {
+          const contract = await window.mainStore.securityStore.getSecurity(row.securityId);
+          contract.refData.strikePrice = 1234.5; contract.refData.maturityDateStr = '20261218';
+        }
+        const transactTime = new Date(2026, 10, 16, 12).toISOString();
+        store.getOrderEventsForAccountReport = async () => [
+          { ...call, id:101, lastQty:2, lastPx:1234.56, transactTime },
+          { ...put, id:102, lastQty:3, lastPx:12.75, transactTime },
+        ];
+      });
+      await b('Actualizar desde Matriz').click(); await b('Copiar Calls y Puts').waitFor();
+      for (const numbers of ['es-AR', 'en-US']) {
+        for (const dates of ['es-AR', 'en-US']) {
+          await numberFormat.selectOption(numbers); await dateFormat.selectOption(dates);
+          const operationDate = dates === 'es-AR' ? '16/11/2026' : '11/16/2026';
+          const expiry = dates === 'es-AR' ? '18/12/2026' : '12/18/2026';
+          const strike = numbers === 'es-AR' ? '1.234,5' : '1,234.5';
+          const premium = numbers === 'es-AR' ? '1.234,56' : '1,234.56';
+          const putPremium = numbers === 'es-AR' ? '12,75' : '12.75';
+          const tableCells = kind => page.getByRole('table', { name:kind, exact:true }).locator('tbody td').allTextContents();
+          equal(await tableCells('Calls'), [operationDate, '2', strike, premium], `Call grid ${numbers}/${dates}`);
+          equal(await tableCells('Puts'), [operationDate, '-3', strike, putPremium], `Put grid ${numbers}/${dates}`);
+          equal(await page.locator('.ct-operations-group time').innerText(), expiry, 'Displayed header expiry');
+          const callLine = `${expiry}\t2\t${strike}\t${premium}`, putLine = `${expiry}\t-3\t${strike}\t${putPremium}`;
+          for (const [scope, expected] of [['Calls', callLine], ['Puts', putLine],
+            ['both', `OPERACIONES CALLS (SIN PROMEDIOS)\n${callLine}\n\nOPERACIONES PUTS (SIN PROMEDIOS)\n${putLine}`]]) {
+            await page.evaluate(() => { window.ctCopy = ''; });
+            const copyButton = scope === 'both'
+              ? page.locator('.ct-operations-group > .ct-operations-heading > .ct-operations-copy-button')
+              : page.locator('.ct-operations-side').filter({ has:page.getByRole('table', { name:scope, exact:true }) }).locator('.ct-operations-copy-button');
+            await copyButton.click(); await page.waitForFunction(() => window.ctCopy.length > 0);
+            equal(await page.evaluate(() => window.ctCopy), expected, `${scope} clipboard ${numbers}/${dates}`);
+          }
+        }
+      }
+      pass('SM-09-formats', 'Independent date/number combinations update both grids, header and raw clipboard for Calls, Puts and both');
     } finally { await page.evaluate(() => { navigator.clipboard.writeText = window.ctCopyOriginal; delete window.ctCopyOriginal; delete window.ctCopy; }); }
     pass('SM-09', 'Automatic load/re-entry refresh, grouping by default, manual refresh and clipboard over synthetic executions');
+    await numberFormat.selectOption('es-AR'); await dateFormat.selectOption('en-US');
+    await page.reload(); await open(); await b('Operaciones de opciones').click(); await b('Copiar Calls y Puts').waitFor();
+    equal(await numberFormat.inputValue(), 'es-AR', 'Number preference survives reload');
+    equal(await dateFormat.inputValue(), 'en-US', 'Date preference survives reload independently');
+    pass('SM-09-format-storage', 'Legacy regional setting inherited and independent mixed preferences preserved across reload');
   } else if (group === 'analysis') {
     await open(); await selectCall();
     const outputs = () => page.locator('.ct-sim-inspect output').allTextContents();
