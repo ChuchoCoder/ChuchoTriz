@@ -199,7 +199,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
 
   function leg(key: "a" | "b") {
     const first = key === "a", instrument = draft[key], quote = instrument ? quotes[instrument.id] : undefined;
-    const side = first ? draft.direction : -draft.direction, priceKey = first ? "pa" : "pb", factorKey = first ? "fa" : "fb", stepKey = first ? "sa" : "sb", ddmmKey = first ? "ddmma" : "ddmmb", sourceKey = first ? "sourceA" : "sourceB";
+    const side = first ? draft.direction : -draft.direction, priceKey = first ? "pa" : "pb", factorKey = first ? "fa" : "fb", stepKey = first ? "sa" : "sb", sourceKey = first ? "sourceA" : "sourceB";
     const selectedPrice = numeric(draft[priceKey]), source = draft[sourceKey];
     const last = quote?.issue ? undefined : quote?.last, priceChange = dailyPriceChange(quote);
     return <section className="ro-leg" aria-label={`Pata ${key.toUpperCase()}`} key={key}>
@@ -213,11 +213,19 @@ export default function RatioOperations({ active }: { active: boolean }) {
           onChange={e => setDraft(p => ({ ...p, qa: e.target.value, preservedB: undefined }))} /></label></div>
       <RatioOrderBook leg={first ? "A" : "B"} quote={quote} selectedPrice={selectedPrice} selectedSide={source === "bid" || source === "ask" ? source : undefined} disabled={!available}
         onChoose={(side, level) => setDraft(p => ({ ...p, [priceKey]: input(level.price), [sourceKey]: side }))} />
-      <div className="ro-leg-footer"><small>{instrument ? `${instrumentKind(instrument.cfi)} · ${currencyLabel(instrument.currency)} · ${instrument.amountFactor === .01 ? "precio por 100 nominales" : `monto = cantidad × precio × ${numberLabel(numeric(draft[factorKey]))}`}` : "Seleccioná el instrumento"}<br />Última operación: {tradeLabel(quote?.tradedAt)}</small>
-        <label>DDMM %<input aria-label={`DDMM ${key.toUpperCase()} %`} type="number" min="0" max="100" step="0.0001" value={draft[ddmmKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [ddmmKey]: e.target.value }))} required />
-          <small>{instrument && defaultMarketRights(instrument) !== undefined ? `Default Premium: ${input(defaultMarketRights(instrument))}%${["Acción", "CEDEAR"].includes(instrumentKind(instrument.cfi)) ? " · IVA incluido" : ""}` : "Tipo sin default: completá la tasa"}</small></label></div>
+      <div className="ro-leg-footer"><small>{instrument ? `${instrumentKind(instrument.cfi)} · ${currencyLabel(instrument.currency)} · ${instrument.amountFactor === .01 ? "precio por 100 nominales" : `monto = cantidad × precio × ${numberLabel(numeric(draft[factorKey]))}`}` : "Seleccioná el instrumento"}<br />Última operación: {tradeLabel(quote?.tradedAt)}</small></div>
       {instrument && (!instrument.amountFactor || !instrument.quantityStep) && <div className="ro-manual-units"><label>Factor monetario por unidad<input type="number" min="0" step="any" value={draft[factorKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [factorKey]: e.target.value }))} /></label><label>Lote mínimo<input type="number" min="1" step="1" value={draft[stepKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [stepKey]: e.target.value }))} /></label></div>}
     </section>;
+  }
+
+  function sizing(key: "a" | "b") {
+    const first = key === "a", instrument = draft[key], ddmmKey = first ? "ddmma" : "ddmmb";
+    const defaultDdmm = instrument ? defaultMarketRights(instrument) : undefined;
+    return <div className="ro-sizing-leg" aria-label={`Gastos y monto de ${key.toUpperCase()}`}>
+      <label>DDMM {key.toUpperCase()} %<input aria-label={`DDMM ${key.toUpperCase()} %`} type="number" min="0" max="100" step="0.0001" value={draft[ddmmKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [ddmmKey]: e.target.value }))} required />
+        <small>{instrument && defaultDdmm !== undefined ? `Default Premium: ${input(defaultDdmm)}%${["Acción", "CEDEAR"].includes(instrumentKind(instrument.cfi)) ? " · IVA incluido" : ""}` : "Tipo sin default: completá la tasa"}</small></label>
+      <span>Monto {key.toUpperCase()}<strong>{money(first ? qa * pa * fa : qb * pb * fb, instrument?.currency || "")}</strong></span>
+    </div>;
   }
 
   return <section className="ct-ratio-ops" aria-label="Operaciones de ratios">
@@ -247,17 +255,18 @@ export default function RatioOperations({ active }: { active: boolean }) {
       })}</tbody></table></div>
       {ready && !book.watch.length && <p className="ro-empty">Agregá un par al Monitor. Cuando decidas entrar, pulsá Abrir operación.</p>}
     </div>}
-    {view === "opening" && <form onSubmit={e => { e.preventDefault(); void saveEntry(); }}>
-      <div className="ro-entry-heading"><div><h3>{edit ? "Editar operación de ratio" : "Abrir operación de ratio"}</h3><small>{draft.a?.symbol || "A"}/{draft.b?.symbol || "B"} · precios elegidos de entrada</small></div><div><small>Ratio de apertura</small><output>{draft.a && draft.b && pa > 0 && pb > 0 ? pairRatioLabel(pa / pb, draft.a, draft.b) : "—"}</output></div></div>
+    {view === "opening" && <form aria-label={edit ? "Editar operación de ratio" : "Abrir operación de ratio"} onSubmit={e => { e.preventDefault(); void saveEntry(); }}>
       {edit && <p className="ro-notice">Las cantidades son totales de apertura. Los cierres registrados se conservan; corregir precios o gastos recalcula el resultado.</p>}
-      <div className="ro-entry-grid"><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => setDraft(p => ({ ...p, direction: 1 }))}>Long A / Short B</button><button type="button" aria-pressed={draft.direction === -1} disabled={!available || partiallyClosed} onClick={() => setDraft(p => ({ ...p, direction: -1 }))}>Short A / Long B</button></div>
+      <div className="ro-entry-grid"><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => setDraft(p => ({ ...p, direction: 1 }))}>Long {draft.a?.symbol || "A"} / Short {draft.b?.symbol || "B"}</button>
+        <div className="ro-opening-ratio"><small>Ratio de apertura</small><output aria-label="Ratio de apertura">{draft.a && draft.b && pa > 0 && pb > 0 ? pairRatioLabel(pa / pb, draft.a, draft.b) : "—"}</output></div>
+        <button type="button" aria-pressed={draft.direction === -1} disabled={!available || partiallyClosed} onClick={() => setDraft(p => ({ ...p, direction: -1 }))}>Long {draft.b?.symbol || "B"} / Short {draft.a?.symbol || "A"}</button></div>
         {leg("a")}{leg("b")}
         <aside className="ro-entry-costs"><label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
           <label>Fecha/hora de apertura · Argentina<input type="datetime-local" value={draft.at} max={dateInput()} disabled={!available} required onChange={e => setDraft(p => ({ ...p, at: e.target.value }))} /></label>
           <label>Ratio objetivo {draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(%)" : "(número)"} · opcional<input aria-label="Ratio objetivo" type="number" step="any" value={draft.target} disabled={!available} onChange={e => setDraft(p => ({ ...p, target: e.target.value }))} /></label><small>{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(A/B − 1) × 100. Ej.: 1,065 → 6,50%." : "Cociente A/B sin conversiones."} {draft.direction === 1 ? "Objetivo al alza (≥)." : "Objetivo a la baja (≤)."}</small>
           {mixed && <small>{draft.preservedB !== undefined ? "Cantidad B histórica conservada hasta cambiar A." : "Distinta moneda: B copia los nominales de A."} El P&L se mantiene separado por moneda.</small>}
         </aside>
-        <div className="ro-sizing"><span>Monto A <strong>{money(qa * pa * fa, draft.a?.currency || "")}</strong></span><span>Monto B <strong>{money(qb * pb * fb, draft.b?.currency || "")}</strong></span><small>{draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales." : mixed ? "B copia exactamente los nominales de A. La cantidad debe respetar los lotes de ambas patas." : "B se ajusta al lote más cercano con los precios elegidos para igualar montos."} DDMM y factores quedan guardados en cada pata.</small></div>
+        <div className="ro-sizing">{sizing("a")}{sizing("b")}<small>{draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales." : mixed ? "B copia exactamente los nominales de A. La cantidad debe respetar los lotes de ambas patas." : "B se ajusta al lote más cercano con los precios elegidos para igualar montos."} DDMM y factores quedan guardados en cada pata.</small></div>
       </div><div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro de ambas patas; no comprueba tenencia, préstamo de títulos ni ejecución del broker.</small></div>
     </form>}
     {view === "operations" && <div className={`ro-operations-grid${op ? "" : " no-detail"}`}>

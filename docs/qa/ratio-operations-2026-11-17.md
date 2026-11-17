@@ -258,6 +258,32 @@ es la del instrumento, independiente del ratio, y muestra — sin referencia vá
   respaldo `Free/backups/extension-before-centered-book-quote-20261117-175506`.
 - Las siete claves locales conservan el hash agregado
   `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+
+## Actualización: apertura sin título repetido, dirección y gastos compactos
+
+Se elimina el título/subtítulo del formulario y se coloca el ratio de apertura
+entre las direcciones. Las etiquetas usan tickers reales y presentan primero
+la pata long: Long BMA / Short GGAL y Long GGAL / Short BMA. La segunda opción
+mantiene la semántica Short A / Long B. Los DDMM pasan del pie de cada book
+a la izquierda de su Monto A/B en el resumen; conservan defaults, validación,
+edición y guardado por pata.
+
+- Empaquetado y seguridad/política/lint: PASS. **16 recorridos PASS** con
+  comprobaciones adicionales: ausencia de título, ticker y sentido correcto,
+  ratio entre botones y DDMM antes del monto a 1440/1024/420 px. Continúan
+  pasando las aperturas, correcciones, cierres y persistencia del fixture.
+- Inspección del bundle en oscuro/claro y ancho 420. Capturas locales:
+  `test-results/compact-opening-dark.png`, `compact-opening-light.png`,
+  `compact-opening-narrow.png`.
+- Cocos: BMA/GGAL, ratio de apertura 91,13%, ambas direcciones y DDMM 0,0847%
+  antes de sus montos. Al elegir Long GGAL / Short BMA, A indica Venta · Short
+  y B Compra · Long; se restaura Long BMA al finalizar, sin registrar apertura.
+- Perfil compartido actualizado con respaldo
+  `Free/backups/extension-before-compact-opening-20261117-181300`, 24 archivos
+  comparados por hash con dist. Captura recortada: `compact-opening-cocos.png`.
+- Las siete claves locales conservan el hash medido antes y después de esta
+  instalación: `b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
+  No se repite la suite unitaria completa para esta actualización de presentación.
 - Evidencia recortada: `test-results/centered-book-quote-cocos.png`. Verificación
   manual reproducible: abrir AL30/AL30D, comparar estilos con Compra/Venta,
   elegir otro nivel y tocar el precio del encabezado para restaurar la entrada.

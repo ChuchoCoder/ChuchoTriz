@@ -57,8 +57,12 @@ movimiento reducido se usa una marca estática breve.
   encabezado sigue mostrando el mercado aunque se elija otro precio. La
   variación usa `(último / referencia diaria − 1) × 100`; sin referencia muestra —.
   El precio manual sigue disponible.
+- La apertura empieza con las dos direcciones identificadas por ticker
+  (por ejemplo, Long BMA / Short GGAL y Long GGAL / Short BMA), con el ratio
+  de apertura entre ambas. Se omite el bloque repetido de título y par.
 - La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
-  de entrada y salida. Los DDMM están dentro de cada pata y son editables.
+  de entrada y salida. Los DDMM de cada pata son editables y aparecen antes
+  de su Monto A/B, en la misma fila del resumen debajo de los books.
 - Si las monedas coinciden, ratio y objetivo son `(A/B − 1) × 100`; en monedas
   distintas se usa A/B. El objetivo se guarda siempre como cociente positivo;
   0% equivale a 1. El objetivo se alcanza al alza para Long A o a la baja para

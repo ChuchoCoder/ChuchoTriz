@@ -75,3 +75,15 @@
 .ct-ratio-ops .ro-price-source{font-size:9px}
 .ct-ratio-ops .ro-leg-header-quote .ro-up,.ct-free-settings-panel[data-color-scheme=light] .ro-leg-header-quote .ro-up{color:#65dca5}
 .ct-ratio-ops .ro-leg-header-quote .ro-down,.ct-free-settings-panel[data-color-scheme=light] .ro-leg-header-quote .ro-down{color:#ff8d99}
+.ro-direction{display:grid;grid-template-columns:minmax(0,1fr) max-content minmax(0,1fr);align-items:center;gap:8px}
+.ct-ratio-ops .ro-direction button{white-space:normal;overflow-wrap:anywhere;min-height:32px}
+.ro-opening-ratio{text-align:center;white-space:nowrap;padding:0 5px}
+.ro-opening-ratio small{display:block;font-size:9px}
+.ro-opening-ratio output{display:block;color:#60d6b4;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.ct-free-settings-panel[data-color-scheme=light] .ro-opening-ratio output{color:#08745d}
+.ro-leg-footer{display:block}
+.ro-sizing-leg{display:grid;grid-template-columns:minmax(75px,110px) minmax(0,1fr);gap:10px;align-items:start;min-width:0}
+.ro-sizing-leg label small{font-size:9px}
+.ro-sizing-leg input{text-align:right}
+.ro-sizing-leg>span{padding-top:2px;min-width:0;overflow-wrap:anywhere}
+@media(max-width:540px){.ro-sizing{grid-template-columns:1fr}.ro-sizing-leg{grid-template-columns:minmax(75px,110px) minmax(0,1fr)}}

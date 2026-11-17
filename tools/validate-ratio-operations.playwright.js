@@ -97,6 +97,12 @@ async page => {
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('BMA/GGAL'))?.textContent.includes('100,00'));
   checks.push('Exact ticker blur, monitor live prices and percent ratio');
   await click(page.locator('.ro-table-wrap tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación' })); await label('Precio de entrada A').waitFor();
+  assert(await page.locator('.ro-entry-heading').count() === 0, 'No redundant opening title');
+  const longA = button('Long BMA / Short GGAL'), longB = button('Long GGAL / Short BMA');
+  assert(await longA.getAttribute('aria-pressed') === 'true', 'Long A uses its actual ticker');
+  await click(longB);
+  assert((await page.getByRole('region', { name: 'Pata A', exact: true }).innerText()).includes('Venta · Short') && (await page.getByRole('region', { name: 'Pata B', exact: true }).innerText()).includes('Compra · Long'), 'Long B ticker maps to correct leg sides');
+  await click(longA);
   assert(await label('DDMM A %').inputValue() === '0.0847', 'Equity DDMM A'); assert(await label('DDMM B %').inputValue() === '0.0847', 'Equity DDMM B'); assert(await label('Comisión %').inputValue() === '0', 'Commission default');
   await page.waitForFunction(() => document.querySelector('[aria-label="Cantidad B"]').value === '200', null, { polling: 100 });
   const orderBook = page.getByRole('table', { name: 'Book de A', exact: true });
@@ -110,6 +116,10 @@ async page => {
       const book = leg.querySelector('.ro-book-table').getBoundingClientRect(), bounds = leg.getBoundingClientRect();
       return instrument.left < price.left && price.left < quantity.left && Math.abs(instrument.top - price.top) < 1 && Math.abs(price.top - quantity.top) < 1 && Math.abs(instrument.height - price.height) < 1 && Math.abs(price.height - quantity.height) < 1 && quantity.right <= bounds.right + 1 && book.right <= bounds.right + 1 && book.left >= bounds.left - 1;
     })); assert(fits, 'Instrument, price and quantity share an aligned row and book fits at ' + width);
+    const compact = await page.evaluate(() => {
+      const direction = document.querySelector('.ro-direction'), [left, right] = direction.querySelectorAll('button'), ratio = direction.querySelector('output'), l = left.getBoundingClientRect(), r = right.getBoundingClientRect(), v = ratio.getBoundingClientRect();
+      return l.right <= v.left && v.right <= r.left && [...document.querySelectorAll('.ro-sizing-leg')].every(group => { const input = group.querySelector('input').getBoundingClientRect(), amount = group.querySelector('span').getBoundingClientRect(); return input.right <= amount.left && group.querySelector('input').getAttribute('aria-label').includes(group.textContent.includes('Monto A') ? 'A' : 'B'); });
+    }); assert(compact, 'Opening ratio between ticker directions and DDMM before each amount at ' + width);
   }
   checks.push('Instrument, price and quantity share an aligned row; compact five-level book fits desktop, tablet and mobile');
   const ticketBefore = await page.locator('#MiniOrderForm input').evaluateAll(es => es.map(e => e.value));
@@ -159,7 +169,7 @@ async page => {
   await page.waitForFunction(() => { const last = document.querySelector('[aria-label="Usar último de B"]'); return last && !last.disabled && Number(document.querySelector('[aria-label="Precio de entrada A"]').value) > 0; }, null, { polling: 100, timeout: 10000 });
   await click(button('Usar último de B')); assert(await label('Cantidad B').inputValue() === '250', 'Quote selection retains copied nominals');
   await label('Cantidad A').fill('100');
-  assert((await page.locator('.ro-entry-heading output').innerText()).includes('1.600,00'), 'Raw mixed currency ratio');
+  assert((await page.getByLabel('Ratio de apertura', { exact: true }).innerText()).includes('1.600,00'), 'Raw mixed currency ratio');
   await label('Ratio objetivo').fill('1650'); await click(button('Abrir operación'));
   await button('Editar').nth(1).waitFor();
   saved = await book(); assert(saved.operations.length === 2 && saved.operations[1].legs[0].factor === .01 && saved.operations[1].legs[1].quantity === 100 && saved.operations[1].fx === 1, 'Bond units and equal nominal quantities');
