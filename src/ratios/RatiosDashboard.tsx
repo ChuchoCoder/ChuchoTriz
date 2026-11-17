@@ -120,7 +120,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <button type="submit" disabled={busy || !a || !b}>{busy ? "Guardando…" : editing === "new" ? "Agregar" : "Guardar"}</button>
         </div>
       </form>}
-      {(issue || snapshot.issue) && <p className="ct-ratios-issue" role="status">{issue || snapshot.issue}</p>}
+      {(issue || snapshot.issue || widget.issue) && <p className="ct-ratios-issue" role="status">{issue || snapshot.issue || widget.issue}</p>}
       <div className="ct-ratios-table-wrap"><table>
         <thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th><th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span></th></tr></thead>
         <tbody>{cfg.pairs.map(pair => {

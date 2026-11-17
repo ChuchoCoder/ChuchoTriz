@@ -8,6 +8,13 @@ impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 
 ## Agregar y editar pares
 
+Cada widget nuevo comienza, en este orden, con AL30/AL30D, AL30/AL30C,
+AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR y PESOS - 7D/PESOS - 1D.
+Se resuelven las especies BYMA exactas del catálogo y se aplica el formato por
+moneda. Si alguna falta o tiene varias coincidencias, se omite ese par y se
+informa en el widget, sin inventar instrumentos. Las filas se pueden editar o
+eliminar; no se vuelven a insertar al recargar ni se cambian widgets existentes.
+
 1. Pulsá **＋**: el foco queda en **A · Numerador**. **Tab** pasa directamente
    a **B · Denominador**, y **Shift+Tab** vuelve a A.
 2. Ingresá el ticker completo: al salir del campo se elige automáticamente si
@@ -98,7 +105,8 @@ vacío. Para retirarlo antes de desinstalar, cerrá el panel desde su título.
   restringe filenames al workspace original, copiá el validador a su carpeta
   ignorada `.playwright-mcp/` antes de llamarlo. No usa otro perfil.
 
-El recorrido del bundle pasó 33 comprobaciones: formato predeterminado por moneda,
+El recorrido del bundle pasó 37 comprobaciones: pares iniciales y su persistencia,
+formato predeterminado por moneda,
 elección manual, foco inicial, Tab entre instrumentos,
 resolución del ticker sin mover el foco, cálculo, varios pares y widgets,
 precios actualizados/faltantes, referencias faltantes, monedas/plazos distintos,

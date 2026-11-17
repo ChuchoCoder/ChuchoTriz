@@ -4,6 +4,8 @@
   if (!channel) return;
   if (window.__chuchotrizRatiosReader) { window.__chuchotrizRatiosReader.attach(channel); return; }
   const TYPE = "ChuchoTrizRatiosWidget", KEY = "chuchotrizRatios";
+  const DEFAULT_PAIRS = [["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
+    ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"]];
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
   let identity, revision = 0, writing = false;
   const finite = n => typeof n === "number" && Number.isFinite(n);
@@ -54,6 +56,26 @@
     if (!instrument(sec)) throw Error("El instrumento ya no está disponible en el catálogo de Matriz.");
     return sec;
   }
+  function initialPairs(c) {
+    const wanted = new Set(DEFAULT_PAIRS.flat()), matches = new Map(), missing = [];
+    for (const sec of c.ss.securities) {
+      if (sec?.marketId !== "bm") continue;
+      const item = instrument(sec);
+      if (!item) continue;
+      const symbol = tickerKey(item.symbol);
+      if (!wanted.has(symbol)) continue;
+      if (!matches.has(symbol)) matches.set(symbol, new Map());
+      matches.get(symbol).set(item.id, item);
+    }
+    const pairs = DEFAULT_PAIRS.flatMap(([aSymbol, bSymbol]) => {
+      const aMatches = matches.get(aSymbol), bMatches = matches.get(bSymbol);
+      if (aMatches?.size !== 1 || bMatches?.size !== 1) { missing.push(`${aSymbol}/${bSymbol}`); return []; }
+      const a = aMatches.values().next().value, b = bMatches.values().next().value;
+      if (a.id === b.id) { missing.push(`${aSymbol}/${bSymbol}`); return []; }
+      return [{ id: crypto.randomUUID(), a, b, format: a.currency && a.currency === b.currency ? "percent" : "number" }];
+    });
+    return { pairs, missing };
+  }
   function configOf(w) {
     const cfg = ownConfig(w);
     if (!cfg || !Number.isSafeInteger(cfg.revision) || cfg.revision < 0 || cfg.pairs.some(p => !short(p?.id) || !short(p?.a?.id) || !short(p?.b?.id))) throw Error("Configuración de Ratios inválida o de otra versión.");
@@ -94,7 +116,9 @@
     const widgets = owned.map(w => {
       const config = configOf(w), slot = document.querySelector(".DashboardGridItem-" + CSS.escape(w.key));
       if (slot) slot.dataset.ctRatiosSlot = config.id;
-      return { config, width: w.w, height: w.h };
+      const missing = w.settings.chuchotrizRatiosInitialMissing;
+      return { config, width: w.w, height: w.h, issue: Array.isArray(missing) && missing.length && missing.length <= DEFAULT_PAIRS.length && missing.every(p => short(p))
+        ? "No se pudieron cargar estos pares iniciales: " + missing.join(", ") + ". Agregalos manualmente cuando estén disponibles." : undefined };
     });
     const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id])))];
     const active = new Set(ids);
@@ -159,8 +183,9 @@
       if (finite(c.ds.widgetsLimit) && d.layout.length >= c.ds.widgetsLimit) throw Error("Se alcanzó el límite de widgets de este dashboard.");
       if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) throw Error("Esperando las dimensiones del dashboard.");
       const width = Math.min(560, Math.max(360, d.width - 20)), height = 300;
-      const config = { schema: 1, id: crypto.randomUUID(), revision: 0, pairs: [] };
-      const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{ component: TYPE, ...position(c, width, height), w: width, h: height, settings: { [KEY]: config, chuchotrizRatiosSize: { width, height } }, selectionCriteria: { securities: [] } }] }).layout[0];
+      const defaults = initialPairs(c);
+      const config = { schema: 1, id: crypto.randomUUID(), revision: 0, pairs: defaults.pairs };
+      const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{ component: TYPE, ...position(c, width, height), w: width, h: height, settings: { [KEY]: config, chuchotrizRatiosSize: { width, height }, chuchotrizRatiosInitialMissing: defaults.missing }, selectionCriteria: { securities: [] } }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);
     } else {
       const widget = d.layout.find(w => ownConfig(w)?.id === params.widgetId);
@@ -195,7 +220,7 @@
           return { id: p.id, a: resolve(p.a), b: resolve(p.b), format };
         });
         if (new Set(pairs.map(p => JSON.stringify([p.a.id, p.b.id]))).size !== pairs.length) throw Error("Ese par ya está agregado en el widget.");
-        widget.settings = { ...widget.settings, [KEY]: { ...cfg, revision: cfg.revision + 1, pairs } };
+        widget.settings = { ...widget.settings, [KEY]: { ...cfg, revision: cfg.revision + 1, pairs }, chuchotrizRatiosInitialMissing: [] };
       } else throw Error("Cambio de Ratios no permitido.");
     }
     await verifiedSave(c, op);

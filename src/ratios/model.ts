@@ -10,7 +10,7 @@ export interface RatioConfig { schema: 1; id: string; revision: number; pairs: R
 export interface RatioQuote {
   last?: number; reference?: number; tradedAt?: number; referenceDate?: string; issue?: string;
 }
-export interface RatioWidgetState { config: RatioConfig; width: number; height: number }
+export interface RatioWidgetState { config: RatioConfig; width: number; height: number; issue?: string }
 export interface RatiosState {
   context: number; dashboardId?: string; canAdd: boolean; connected: boolean;
   widgets: RatioWidgetState[]; quotes: Record<string, RatioQuote>; issue?: string;
