@@ -341,7 +341,7 @@ async (page, group) => {
   } else if (group === 'quotes') {
     await open();
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.ask = undefined; c.md.asz = undefined; c.md.lst = 9; c.md.seq++; });
-    await page.waitForFunction(() => document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]').innerText.includes('—'));
+    await page.waitForFunction(() => document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]')?.innerText.includes('—'));
     await selectCall(); equal(await b('Editar Precio pata 1').innerText(), '9', 'Missing ask uses last trade');
     await selectCall(); equal(await b('Quitar pata 1').count(), 0, 'Repeated quote deselects');
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.lst = undefined; c.md.seq++; });
