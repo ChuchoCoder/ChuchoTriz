@@ -1,4 +1,4 @@
-import { ratioLabel, type RatioInstrument } from "./model";
+import { ratioLabel, tickerKey, type RatioInstrument } from "./model";
 
 export interface TradingInstrument extends RatioInstrument {
   cfi: string;
@@ -20,9 +20,33 @@ export interface RatioOperation {
   id: string; openedAt: string; direction: 1 | -1; commission: number;
   fx: number; targetRatio: number | null; legs: [TradingLeg, TradingLeg];
 }
-export interface TradingBook { schema: 1; revision: string; watch: TradingPair[]; operations: RatioOperation[] }
+export interface TradingBook { schema: 1; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
 export const emptyBook = (): TradingBook => ({ schema: 1, revision: "", watch: [], operations: [] });
 export const MAX_OPERATIONS = 500, MAX_WATCH = 100;
+export const DEFAULT_WATCH_PAIRS = [ ["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
+  ["BMA", "GGAL"], ["ALUA", "TXAR"], ["TGSU2", "TGNO4"], ["PESOS - 7D", "PESOS - 1D"] ] as const;
+export const isRateInstrument = (i: Pick<TradingInstrument, "cfi">) => i.cfi === "RPXXXX";
+export async function resolveDefaultWatch(search: (query: string) => Promise<TradingInstrument[]>) {
+  const symbols = [...new Set(DEFAULT_WATCH_PAIRS.flat())], instruments = new Map<string, TradingInstrument>();
+  await Promise.all(symbols.map(async symbol => {
+    const matches = new Map((await search(symbol)).filter(i => validInstrument(i) && i.market === "bm" && tickerKey(i.symbol) === tickerKey(symbol)).map(i => [i.id, i]));
+    if (matches.size === 1) instruments.set(symbol, [...matches.values()][0]);
+  }));
+  const watch: TradingPair[] = [], missing: string[] = [];
+  for (const [a, b] of DEFAULT_WATCH_PAIRS) {
+    if (!instruments.has(a) || !instruments.has(b)) { missing.push(`${a}/${b}`); continue; }
+    watch.push({ id: crypto.randomUUID(), a: instruments.get(a)!, b: instruments.get(b)! });
+  }
+  return { watch, missing };
+}
+/** Seed once per saved book. Explicit restoration adds missing pairs without reordering user rows. */
+export function applyDefaultWatch(book: TradingBook, pairs: TradingPair[], restore = false): TradingBook {
+  if (book.watchDefaults === 1 && !restore) return book;
+  const watch = [...book.watch];
+  for (const p of pairs) if (!watch.some(existing => existing.a.id === p.a.id && existing.b.id === p.b.id)) watch.push(p);
+  if (watch.length > MAX_WATCH) throw Error("El monitor no tiene espacio para los pares predeterminados. Quitá un par y volvé a intentarlo.");
+  return { ...book, watch, watchDefaults: 1 };
+}
 const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 const rate = (n: unknown): n is number => finite(n) && n >= 0 && n <= 100;
@@ -70,7 +94,7 @@ export function validateOperation(o: RatioOperation): void {
     o.targetRatio !== null && !positive(o.targetRatio) || !Array.isArray(o.legs) || o.legs.length !== 2 || o.legs[0]?.instrument?.id === o.legs[1]?.instrument?.id) throw Error("Operación de ratio inválida.");
   o.legs.forEach((l, index) => {
     if (!validInstrument(l?.instrument) || l.side !== (index === 0 ? o.direction : -o.direction) || !quantity(l.quantity) || !quantity(l.step) || l.quantity % l.step !== 0 ||
-      !positive(l.entry) || !positive(l.factor) || !rate(l.ddmm) || l.quantity * l.entry * l.factor > 1e15 || !Array.isArray(l.exits) || l.exits.length > 1000) throw Error("Revisá precios, factores, lotes, cantidades y DDMM de ambas patas.");
+      isRateInstrument(l.instrument) || !positive(l.entry) || !positive(l.factor) || !rate(l.ddmm) || l.quantity * l.entry * l.factor > 1e15 || !Array.isArray(l.exits) || l.exits.length > 1000) throw Error("Revisá precios, factores, lotes, cantidades y DDMM de ambas patas. Las cauciones sólo se monitorean como tasas TNA.");
     let at = Date.parse(o.openedAt);
     for (const e of l.exits) {
       if (!quantity(e?.quantity) || e.quantity % l.step !== 0 || !positive(e.price) || e.quantity * e.price * l.factor > 1e15 || !date(e.at) || Date.parse(e.at) < at || Date.parse(e.at) > Date.now()) throw Error("Los cierres registrados son inválidos.");
@@ -135,7 +159,7 @@ export function validInstrument(value: unknown): value is TradingInstrument {
 export function validateBook(value: unknown): TradingBook {
   if (!value || typeof value !== "object") throw Error("Registro de ratios inválido; no se reemplazó el guardado.");
   const b = value as TradingBook;
-  if (b.schema !== 1 || typeof b.revision !== "string" || b.revision.length > 80 || !Array.isArray(b.watch) || b.watch.length > MAX_WATCH ||
+  if (b.schema !== 1 || b.watchDefaults !== undefined && b.watchDefaults !== 1 || typeof b.revision !== "string" || b.revision.length > 80 || !Array.isArray(b.watch) || b.watch.length > MAX_WATCH ||
     !Array.isArray(b.operations) || b.operations.length > MAX_OPERATIONS || new Set(b.operations.map(o => o?.id)).size !== b.operations.length ||
     new Set(b.watch.map(p => p?.id)).size !== b.watch.length ||
     b.watch.some(p => !text(p?.id) || !validInstrument(p.a) || !validInstrument(p.b) || p.a.id === p.b.id) ||

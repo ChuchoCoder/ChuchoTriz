@@ -18,7 +18,9 @@ async page => {
       store = next;
       const make = (id, cfiCode, currency, last, factor = 1) => ({ id, symbolStr: id, marketId: 'bm', currency, settlementType: '2', cfiCode,
         refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: last, seq: 10, bid: last - .1, bsz: 120, ask: last + .1, asz: 150, lstdStr: new Date().toISOString() } });
-      const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100)];
+      const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('AL30C', 'DBXXXX', 'USD', 48, .01), make('GD30', 'DBXXXX', 'ARS', 90000, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100),
+        ...['ALUA', 'TXAR', 'TGSU2', 'TGNO4'].map(id => make(id, 'ESXXXX', 'ARS', 100)),
+        ...[1, 7].map(days => ({ ...make(`bm_MERV_PESOS_${days}D`, 'RPXXXX', 'ARS', days === 1 ? 18.8 : 20.5), symbolStr: `PESOS - ${days}D`, settlementType: null }))];
       next.securityStore.securities = instruments;
       const original = next.securityStore.getSecurity;
       next.securityStore.getSecurity = async id => instruments.find(i => i.id === id) || original(id);
@@ -28,12 +30,26 @@ async page => {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
   await page.waitForFunction(() => { const e = document.querySelector('.ro-add-watch input'); return e && !e.disabled; }, null, { polling: 100 });
-  await choose('Instrumento A', 'BMA'); await choose('Instrumento B', 'GGAL');
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 8);
+  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D']), 'Default order');
+  const rates = page.locator('.ro-table-wrap tr').filter({ hasText: 'PESOS - 7D/PESOS - 1D' });
+  assert(!await rates.getByRole('button', { name: 'Sólo monitor' }).isEnabled(), 'Rates cannot open price operations');
+  await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('PESOS - 7D/PESOS - 1D'))?.textContent.includes('20,50% TNA'));
+  checks.push('Eight initial pairs in requested order, live TNA ratio and monitor-only cauciones');
+  await click(button('Quitar par AL30/AL30D'));
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 7);
+  await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 7);
+  assert((await book()).watchDefaults === 1, 'Initialization retained');
+  await click(button('Agregar pares predeterminados'));
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 8);
+  checks.push('Removed defaults stay removed after reload; explicit restoration adds only missing pairs');
+  await choose('Instrumento A', 'SPY'); await choose('Instrumento B', 'GGAL');
   await page.waitForFunction(() => [...document.querySelectorAll('.ro-add-watch button')].some(b => b.textContent === 'Agregar par' && !b.disabled), null, { polling: 100 });
-  await click(button('Agregar par')); await button('Abrir operación').waitFor();
-  await wait(() => document.querySelector('.ro-ratio')?.textContent.includes('100,00'));
+  await click(button('Agregar par')); await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
+  await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('BMA/GGAL'))?.textContent.includes('100,00'));
   checks.push('Exact ticker blur, monitor live prices and percent ratio');
-  await click(button('Abrir operación')); await label('Precio de entrada A').waitFor();
+  await click(page.locator('.ro-table-wrap tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación' })); await label('Precio de entrada A').waitFor();
   assert(await label('DDMM A %').inputValue() === '0.0847', 'Equity DDMM A'); assert(await label('DDMM B %').inputValue() === '0.0847', 'Equity DDMM B'); assert(await label('Comisión %').inputValue() === '0', 'Commission default');
   await page.waitForFunction(() => document.querySelector('[aria-label="Cantidad B"]').value === '200', null, { polling: 100 });
   assert((await button('Usar Bid de A').innerText()).includes('120'), 'Bid available size');
@@ -44,7 +60,7 @@ async page => {
   assert(await label('Precio de entrada A').inputValue() === '100', 'Live updates preserve entry');
   checks.push('Default DDMM, auto sizing, depth, ask selection and frozen entry');
   await click(button('Abrir operación')); await button('Editar').waitFor();
-  let saved = await book(); assert(saved.operations.length === 1 && saved.watch.length === 1, 'Record and watched pair'); const id = saved.operations[0].id;
+  let saved = await book(); assert(saved.operations.length === 1 && saved.watch.length === 9, 'Record and watched pairs'); const id = saved.operations[0].id;
   assert(saved.operations[0].targetRatio === 2.05, 'Canonical goal');
   await label('Precio cierre A').fill('110'); await label('Precio cierre B').fill('45'); await click(button('Cerrar 25%'));
   await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('Parcial'));
@@ -56,16 +72,13 @@ async page => {
   await click(button('Eliminar')); await button('Deshacer eliminación').waitFor(); assert((await book()).operations.length === 0, 'Delete'); await click(button('Deshacer eliminación')); await button('Editar').waitFor(); assert((await book()).operations[0].id === id, 'Undo');
   const original = JSON.stringify((await book()).operations);
   await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
-  await button('Abrir operación').waitFor(); assert(JSON.stringify((await book()).operations) === original, 'Reload preserves records');
+  await button('Abrir operación').first().waitFor(); assert(JSON.stringify((await book()).operations) === original, 'Reload preserves records');
   checks.push('Delete/undo and reload persistence');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'OTHER-DEMO'; });
-  await wait(() => document.querySelector('.ro-empty')?.textContent.includes('Agregá un par'));
-  assert(await button('Abrir operación').count() === 0, 'Account isolation');
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 8);
+  assert(await page.locator('.ro-table-wrap tr').filter({ hasText: 'SPY/GGAL' }).count() === 0, 'Account isolation');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'DEMO-NO-BROKER'; });
-  await button('Abrir operación').waitFor(); checks.push('Account switch clears old account and restores original local book');
-  await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
-  await page.waitForFunction(() => [...document.querySelectorAll('.ro-add-watch button')].some(b => b.textContent === 'Agregar par' && !b.disabled), null, { polling: 100 });
-  await click(button('Agregar par'));
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9); checks.push('Account switch clears old account, seeds defaults separately and restores original local book');
   const bond = page.locator('tr').filter({ hasText: 'AL30/AL30D' }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
   assert(await label('DDMM A %').inputValue() === '0.01', 'Bond DDMM'); await label('Conversión para cantidades').fill('1600');
   await wait(() => document.querySelector('[aria-label="Cantidad B"]').value === '100');

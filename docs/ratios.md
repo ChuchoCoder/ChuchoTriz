@@ -6,6 +6,21 @@ En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ra
 y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
 manual local. Abrir o cerrar un registro no manda órdenes al broker.
 
+El monitor inicial incluye, en este orden: AL30/AL30D, AL30/AL30C,
+AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
+PESOS - 7D/PESOS - 1D. En registros existentes se agregan sólo los faltantes,
+sin reordenar ni duplicar los pares personalizados ni modificar operaciones.
+La inicialización se guarda una sola vez: si quitás un par, no reaparece al
+recargar. **Agregar pares predeterminados** permite recuperar los faltantes.
+Se resuelven coincidencias exactas y únicas de BYMA del catálogo de cada sitio;
+los pares no disponibles o ambiguos se informan para reintentar explícitamente.
+
+Las cauciones PESOS muestran sus últimos valores como **% TNA**. Su ratio
+compara tasas `(TNA A / TNA B − 1) × 100`. Estos pares tienen **Sólo monitor**:
+una TNA no es un precio de compra/venta y no se usa para registrar un long/short
+ni para calcular P&L de instrumentos con precio. El resto del monitor mantiene
+los formatos y el flujo de apertura habituales.
+
 - Agregá los pares al monitor; un ticker exacto y único se resuelve al salir del
   campo. El par sigue en el monitor después de registrar una apertura.
 - Ingresá la cantidad A y elegí sus precios y los de B desde Bid, último, Ask o

@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { InstrumentPicker } from "./RatiosDashboard";
 import { currencyLabel, numberLabel, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
 import { numeric } from "../optionsSimulator/model";
 import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
-import { closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput,
+import { applyDefaultWatch, closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, remaining, sameCurrency,
   validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingQuote } from "./trading";
 import "./RatioOperations.css";
@@ -33,6 +33,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [deleted, setDeleted] = useState<{ scope: string; op: RatioOperation; index: number }>();
   const [closePrices, setClosePrices] = useState<[string, string]>(["", ""]), closeDirty = useRef([false, false]);
   const [pickerSession, setPickerSession] = useState(0);
+  const [loadingDefaults, setLoadingDefaults] = useState(false), defaultsAttempt = useRef<string | undefined>(undefined), defaultsGeneration = useRef(0);
   const pending = useRef(false), current = useRef({ session, active }); current.current = { session, active };
   const book = session?.book ?? emptyBook();
   const ids = [...book.watch.flatMap(p => [p.a.id, p.b.id]), ...book.operations.filter(o => !isClosed(o)).flatMap(o => o.legs.map(l => l.instrument.id)),
@@ -40,7 +41,8 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const market = useRatioMarket(active, ids, session?.scope), scope = market.context?.storageScope;
   const marketRef = useRef(market); marketRef.current = market;
   const ready = active && !!scope && session?.scope === scope && !session.error;
-  const available = ready && !busy;
+  const available = ready && !busy && !loadingDefaults;
+  const priceSearch = useCallback(async (query: string) => (await market.search(query)).filter(i => !isRateInstrument(i)), [market.search]);
   const op = ready ? book.operations.find(o => o.id === selected) : undefined;
   const edited = ready && edit ? book.operations.find(o => o.id === edit.id) : undefined;
   const partiallyClosed = !!edited?.legs.some(l => l.exits.length);
@@ -48,6 +50,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
 
   useEffect(() => {
     setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined);
+    defaultsGeneration.current++; defaultsAttempt.current = undefined; setLoadingDefaults(false);
     setView("monitor"); setIssue(""); setNotice(""); setPickerSession(n => n + 1);
     if (!active || !scope) return;
     let closed = false;
@@ -62,6 +65,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
     chrome.storage.onChanged.addListener(changed);
     return () => { closed = true; chrome.storage.onChanged.removeListener(changed); };
   }, [scope, active]);
+
+  useEffect(() => {
+    if (ready && scope && book.watchDefaults !== 1 && defaultsAttempt.current !== scope) {
+      defaultsAttempt.current = scope; void loadDefaults(false);
+    }
+  }, [ready, scope, book.watchDefaults]);
 
   useEffect(() => { closeDirty.current = [false, false]; setClosePrices(["", ""]); }, [selected]);
   useEffect(() => {
@@ -87,6 +96,21 @@ export default function RatioOperations({ active }: { active: boolean }) {
       return false;
     } finally { pending.current = false; setBusy(false); }
   }
+  async function loadDefaults(restore: boolean) {
+    const context = marketRef.current.context, generation = defaultsGeneration.current;
+    if (!context || loadingDefaults) return;
+    setLoadingDefaults(true);
+    try {
+      const defaults = await resolveDefaultWatch(marketRef.current.search);
+      await marketRef.current.verify(context);
+      if (generation !== defaultsGeneration.current || !current.current.active || current.current.session?.scope !== context.storageScope) return;
+      if (!defaults.watch.length) throw Error("Los pares predeterminados no están disponibles en este catálogo. Volvé a intentar cuando se complete la carga.");
+      const ok = await commit(base => applyDefaultWatch(base, defaults.watch, restore));
+      if (ok && generation === defaultsGeneration.current && defaults.missing.length) setNotice(`Pares no disponibles o ambiguos en este catálogo: ${defaults.missing.join(", ")}. Podés reintentar con Agregar pares predeterminados.`);
+    } catch (error) {
+      if (generation === defaultsGeneration.current) setIssue(error instanceof Error ? error.message : "No se pudieron cargar los pares predeterminados.");
+    } finally { if (generation === defaultsGeneration.current) setLoadingDefaults(false); }
+  }
   function selectInstrument(key: "a" | "b", instrument?: TradingInstrument) {
     setDraft(previous => {
       if (!instrument) return { ...previous, [key]: undefined };
@@ -97,6 +121,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     });
   }
   function begin(a: TradingInstrument, b: TradingInstrument) {
+    if (isRateInstrument(a) || isRateInstrument(b)) { setIssue("Las cauciones se comparan como tasas TNA y sólo se monitorean."); return; }
     const step = a.quantityStep ?? 1;
     setEdit(undefined); setDraft({ ...emptyDraft(), a, b, pa: input(quotes[a.id]?.last), pb: input(quotes[b.id]?.last), qa: String(Math.ceil(100 / step) * step),
       fa: input(a.amountFactor), fb: input(b.amountFactor), sa: input(a.quantityStep), sb: input(b.quantityStep), ddmma: input(defaultMarketRights(a)), ddmmb: input(defaultMarketRights(b)) });
@@ -184,7 +209,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
       <small>{field === "bid" ? "Bid" : "Ask"}</small><strong>{numberLabel(quote?.[field]?.price)}</strong><small>Disponible {quote?.[field] ? numberLabel(quote[field]!.size) : "—"}</small></button>;
     return <section className="ro-leg" aria-label={`Pata ${key.toUpperCase()}`} key={key}>
       <header><strong>{first ? "1" : "2"} · Pata {key.toUpperCase()}</strong><span className={`ro-chip ${side === 1 ? "buy" : "sell"}`}>{side === 1 ? "Compra · Long" : "Venta · Short"}</span>{!first && <small>Cantidad automática</small>}</header>
-      <div className="ro-leg-ident"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={market.search} disabled={!available || partiallyClosed} />
+      <div className="ro-leg-ident"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={priceSearch} disabled={!available || partiallyClosed} />
         <label>{edit ? "Cantidad total" : "Cantidad"} {key.toUpperCase()} · {instrument?.quantityUnit || "unidades"}<input aria-label={`Cantidad ${key.toUpperCase()}`} type="number" min="1" step={first && Number.isFinite(sa) ? sa : 1} value={first ? draft.qa : Number.isFinite(qb) ? qb : ""} readOnly={!first} disabled={!available}
           onChange={e => setDraft(p => ({ ...p, qa: e.target.value }))} /></label></div>
       <div className="ro-prices">{picker("bid")}<div><button type="button" className="ro-last" disabled={!available || !quote?.last} onClick={() => choose("last")} aria-label={`Usar último de ${key.toUpperCase()}`}>Último <strong>{numberLabel(quote?.last)}</strong></button>
@@ -205,6 +230,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {!ready && !market.issue && !session?.error && <p role="status">Cargando el registro de la cuenta activa…</p>}
     {notice && <div className="ro-notice" role="status">{notice}{deleted?.scope === scope && <button type="button" disabled={!available} onClick={() => void undo()}>Deshacer eliminación</button>}</div>}
     {view === "monitor" && <div>
+      <div className="ro-actions"><button type="button" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button></div>
       <div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
         <button type="button" disabled={!available || !watchA || !watchB} onClick={() => void commit(base => {
           if (!watchA || !watchB || watchA.id === watchB.id) throw Error("Elegí instrumentos diferentes.");
@@ -212,7 +238,10 @@ export default function RatioOperations({ active }: { active: boolean }) {
           if (base.watch.some(p => p.a.id === watchA.id && p.b.id === watchB.id)) throw Error("El par ya está en el monitor.");
           return { ...base, watch: [...base.watch, { id: crypto.randomUUID(), a: watchA, b: watchB }] };
         })}>Agregar par</button></div>
-      <div className="ro-table-wrap"><table><thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th><th>Ratio</th><th>Acciones</th></tr></thead><tbody>{ready && book.watch.map(p => <tr key={p.id}><td><strong>{p.a.symbol}/{p.b.symbol}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}</small></td><td>{numberLabel(quotes[p.a.id]?.last)}</td><td>{numberLabel(quotes[p.b.id]?.last)}</td><td className="ro-ratio">{pairRatioLabel(rawRatio(quotes[p.a.id], quotes[p.b.id]), p.a, p.b)}</td><td><div className="ro-actions"><button type="button" disabled={!available} onClick={() => begin(p.a, p.b)}>Abrir operación</button><button type="button" disabled={!available} aria-label={`Quitar par ${p.a.symbol}/${p.b.symbol}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button></div></td></tr>)}</tbody></table></div>
+      <div className="ro-table-wrap"><table><thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th><th>Ratio</th><th>Acciones</th></tr></thead><tbody>{ready && book.watch.map(p => {
+        const rate = isRateInstrument(p.a) || isRateInstrument(p.b);
+        return <tr key={p.id}><td><strong>{p.a.symbol}/{p.b.symbol}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{rate ? " · tasas TNA" : ""}</small></td><td>{numberLabel(quotes[p.a.id]?.last)}{isRateInstrument(p.a) ? "% TNA" : ""}</td><td>{numberLabel(quotes[p.b.id]?.last)}{isRateInstrument(p.b) ? "% TNA" : ""}</td><td className="ro-ratio">{pairRatioLabel(rawRatio(quotes[p.a.id], quotes[p.b.id]), p.a, p.b)}</td><td><div className="ro-actions"><button type="button" disabled={!available || rate} title={rate ? "Comparación de tasas TNA; no se valúa una operación con tasas como precios." : undefined} onClick={() => begin(p.a, p.b)}>{rate ? "Sólo monitor" : "Abrir operación"}</button><button type="button" disabled={!available} aria-label={`Quitar par ${p.a.symbol}/${p.b.symbol}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button></div></td></tr>;
+      })}</tbody></table></div>
       {ready && !book.watch.length && <p className="ro-empty">Agregá un par al Monitor. Cuando decidas entrar, pulsá Abrir operación.</p>}
     </div>}
     {view === "opening" && <form onSubmit={e => { e.preventDefault(); void saveEntry(); }}>

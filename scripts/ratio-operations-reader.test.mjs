@@ -55,6 +55,15 @@ test('does not combine incomplete book levels with md, rejects regressing sequen
   let q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.equal(q.bid, undefined); assert.deepEqual(q.ask, { price: 102, size: 20 });
   f.securities[0].md.seq = 9; q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.match(q.issue, /secuencia/);
 });
+test('projects catalog-verified ARS caucion TNA without fabricating monetary factors or settlement', async () => {
+  const f = fixture();
+  for (const days of [1, 7]) f.securities.push({ id: `bm_MERV_PESOS_${days}D`, symbolStr: `PESOS - ${days}D`, marketId: 'bm', currency: 'ARS', cfiCode: 'RPXXXX', settlementType: null,
+    refData: { contractMultiplier: 1, roundLot: 1 }, md: { lst: days === 1 ? 18.8 : 20.5, seq: 10 } });
+  f.securities.push({ ...f.securities.at(-1), id: 'bm_MERV_PESOS_8D', symbolStr: 'PESOS - 9D' });
+  const c = await f.context(), search = (await f.request('ratioSearch', { contextId: c.contextId, query: 'PESOS' })).result;
+  assert.equal(search.length, 2); assert.equal(search[0].settlement, 'TNA'); assert.equal(search[0].amountFactor, undefined); assert.equal(search[0].quantityStep, undefined);
+  const quotes = (await f.quotes(search.map(s => s.id))).result.instruments; assert.equal(quotes.bm_MERV_PESOS_7D.last, 20.5); assert.equal(quotes.bm_MERV_PESOS_1D.last, 18.8);
+});
 test('cancels async quote projections when account changes and serializes reads', async () => {
   const f = fixture(), c = await f.context(); let release;
   f.ms.securityStore.getSecurity = () => new Promise(resolve => { release = resolve; });

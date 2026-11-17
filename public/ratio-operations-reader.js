@@ -20,13 +20,16 @@
     return { ms, ss, contextId, connected: !!ms.webSocketConnectionStatus };
   }
   function descriptor(s) {
-    if (!s || s.isProduct || s.isPortfolio || s.cfiCode === "RPXXXX" || !text(s.id) || !text(s.symbolStr || s.symbol, 100) || !text(s.marketId) || !text(s.currency) || !text(s.settlementType)) return;
+    if (!s || s.isProduct || s.isPortfolio || !text(s.id) || !text(s.symbolStr || s.symbol, 100) || !text(s.marketId) || !text(s.currency)) return;
+    const rate = s.cfiCode === "RPXXXX";
+    if (rate ? s.marketId !== "bm" || s.currency !== "ARS" || !/^bm_MERV_PESOS_[1-9]\d{0,2}D$/.test(s.id) ||
+      s.symbolStr !== `PESOS - ${s.id.slice("bm_MERV_PESOS_".length)}` : !text(s.settlementType)) return;
     const ref = s.refData || {}, cfi = typeof s.cfiCode === "string" && s.cfiCode.length <= 12 ? s.cfiCode : "";
     const derivative = /^(?:O[CP]|FXXXSX)/.test(cfi), spot = ["ESXXXX", "EMXXXX", "DBXXXX", "DBXXFR", "DYXTXR"].includes(cfi);
     const amountFactor = positive(ref.totalAmountFactor) && positive(ref.contractMultiplier) && (spot || derivative && positive(ref.roundLot))
       ? ref.totalAmountFactor * ref.contractMultiplier * (derivative ? ref.roundLot : 1) : undefined;
     const quantityStep = derivative ? 1 : spot && Number.isSafeInteger(ref.roundLot) && ref.roundLot > 0 ? ref.roundLot : undefined;
-    return { id: s.id, symbol: s.symbolStr || s.symbol, market: s.marketId, currency: s.currency, settlement: s.settlementType,
+    return { id: s.id, symbol: s.symbolStr || s.symbol, market: s.marketId, currency: s.currency, settlement: rate ? "TNA" : s.settlementType,
       cfi, amountFactor: positive(amountFactor) ? amountFactor : undefined, quantityStep, quantityUnit: derivative ? "contratos" : spot ? "nominales" : "unidades" };
   }
   function current(op) {

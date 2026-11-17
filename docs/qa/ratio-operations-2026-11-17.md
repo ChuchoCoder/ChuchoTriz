@@ -81,3 +81,40 @@ P1/P2 pendientes; los tests incorporados cubren recuperación y conservación.
 Evidencia local ignorada: `test-results/ratio-operations-evidence.json` y
 capturas recortadas al tab (sin balances, posiciones ni datos personales).
 La captura de Cocos anterior al ajuste de contraste se conserva como diagnóstico.
+
+## Actualización: ocho pares predeterminados
+
+Se agrega inicialización persistida por cuenta con los ocho pares solicitados:
+AL30/AL30D, AL30/AL30C, AL30D/AL30C, GD30/AL30, BMA/GGAL,
+ALUA/TXAR, TGSU2/TGNO4, PESOS - 7D/PESOS - 1D. La migración agrega sólo
+faltantes y conserva IDs/orden de filas existentes y registros de operaciones.
+Un par quitado no vuelve al recargar; la restauración explícita agrega faltantes.
+Las cauciones RPXXXX BYMA/ARS se muestran como TNA, con apertura deshabilitada
+y rechazo adicional en el dominio: las tasas no se tratan como precios para P&L.
+
+- `npm test`: PASS, **537 Vitest + 60 Node + 2 QA infra = 599**.
+- `npm run security:check` y `npm run package:free`: PASS.
+- Validador del bundle actualizado: **9 recorridos PASS**, incluyendo orden de
+  los ocho pares, TNA, eliminación/recarga/restauración y cuentas separadas con
+  defaults independientes. También conserva los recorridos de contabilidad.
+- Revisión independiente de esta actualización: sin P1/P2; reejecutó 17 tests
+  de modelo/storage/hook y 7 del lector.
+- Cocos 4.24.4: ocho filas en el orden solicitado, persistidas tras recargar.
+  Sin datos previos de operaciones; la inicialización guardó ocho pares y cero
+  operaciones, con `watchDefaults: 1`.
+- Lecturas nativas PESOS - 7D/PESOS - 1D confirmadas. En la verificación de
+  consistencia, UI y referencia nativa coincidieron en 18,60 para PESOS - 1D;
+  `getSecurity` y el catálogo devuelven la misma referencia. En las muestras
+  anteriores el documento estaba `hidden` y los timers de polling se demoraron
+  respecto de los mensajes nativos; se observó convergencia posterior. Cada
+  ratio mostrado coincidió con las dos TNA mostradas, a dos decimales.
+- Las seis preferencias previas mantienen el hash agregado
+  `554de88b44cea158954131bc756670eaa340a2e0e60edfb26f38ab121fdc23e8`.
+- Los 18 widgets del dashboard CEDEARs mantienen geometría/configuración:
+  SHA256 `9d645070798d4a3d12a87134daa975c75516359243f0f759f044f704cf2a6d09`.
+- Respaldo: `Free/backups/extension-before-default-ratios-20261117-154730`.
+  Archivos instalados comparados por hash con el dist. Captura recortada local:
+  `test-results/default-ratios-cocos.png`.
+
+La advertencia de auditoría de desarrollo del apartado inicial sigue pendiente;
+no cambian dependencias ni permisos en esta actualización.

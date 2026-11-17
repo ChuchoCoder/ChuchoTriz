@@ -1,11 +1,41 @@
 import { expect, it } from "vitest";
-import { closeOperation, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput, goalReached, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
+import { applyDefaultWatch, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput, goalReached, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
 const at = "2026-01-01T13:00:00.000Z", exitAt = "2026-01-02T13:00:00.000Z";
 const operation = (): RatioOperation => ({ id: "operation", openedAt: at, direction: 1, commission: 1, fx: 1, targetRatio: 1.2,
   legs: [ { instrument: instrument("A"), side: 1, quantity: 100, entry: 100, factor: 1, step: 1, ddmm: .1, exits: [] },
     { instrument: instrument("B"), side: -1, quantity: 200, entry: 50, factor: 1, step: 1, ddmm: .2, exits: [] } ] });
+it("resolves the eight defaults in user order using unique exact BYMA matches", async () => {
+  const { watch, missing } = await resolveDefaultWatch(async symbol => [instrument(symbol), { ...instrument(symbol + " CI"), symbol: symbol + " CI" }, { ...instrument("rx-" + symbol), market: "rx", symbol }]);
+  expect(missing).toEqual([]);
+  expect(watch.map(p => `${p.a.symbol}/${p.b.symbol}`)).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D"]);
+  expect(new Set(watch.map(p => p.id)).size).toBe(8);
+});
+it("preserves custom rows, pair IDs and operations; removed defaults stay removed across reload", async () => {
+  const { watch } = await resolveDefaultWatch(async symbol => [instrument(symbol)]);
+  const custom = { id: "custom", a: instrument("SPY"), b: instrument("GGAL") }, existing = { ...watch[4], id: "saved-bma" };
+  const book = { ...emptyBook(), watch: [custom, existing], operations: [operation()] };
+  const seeded = applyDefaultWatch(book, watch);
+  expect(seeded.watch.slice(0, 2)).toEqual(book.watch); expect(seeded.watch).toHaveLength(9); expect(seeded.operations).toBe(book.operations);
+  const removed = validateBook(JSON.parse(JSON.stringify({ ...seeded, watch: seeded.watch.filter(p => p.id !== "saved-bma") })));
+  expect(applyDefaultWatch(removed, watch)).toBe(removed);
+  expect(applyDefaultWatch(removed, watch, true).watch).toHaveLength(9);
+  expect(applyDefaultWatch(seeded, watch, true).watch).toEqual(seeded.watch);
+});
+it("does not guess missing or ambiguous tickers or overwrite a full monitor", async () => {
+  const result = await resolveDefaultWatch(async symbol => symbol === "AL30" ? [instrument("AL30"), { ...instrument("other"), symbol: "AL30" }] : symbol === "AL30C" ? [] : [instrument(symbol)]);
+  expect(result.missing).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30"]);
+  expect(result.watch).toHaveLength(DEFAULT_WATCH_PAIRS.length - result.missing.length);
+  const full = { ...emptyBook(), watch: Array.from({ length: 100 }, (_, i) => ({ id: String(i), a: instrument("custom" + i), b: instrument("GGAL") })) };
+  expect(() => applyDefaultWatch(full, result.watch)).toThrow(/espacio/); expect(full.watch).toHaveLength(100);
+});
+it("allows TNA pairs in the monitor but never accepts a rate as an operation entry price", () => {
+  const rate = { ...instrument("bm_MERV_PESOS_7D"), cfi: "RPXXXX", symbol: "PESOS - 7D", settlement: "TNA" };
+  expect(validateBook({ ...emptyBook(), watchDefaults: 1, watch: [{ id: "rates", a: rate, b: instrument("B") }] }).watch).toHaveLength(1);
+  const o = operation(); o.legs[0].instrument = rate; expect(() => validateOperation(o)).toThrow(/TNA/);
+  expect(() => validateBook({ ...emptyBook(), watchDefaults: 2 })).toThrow();
+});
 it("uses Premium DDMM defaults by CFI, equity VAT included and no broker commission", () => {
   for (const [cfi, fee] of [["ESXXXX", .0847], ["EMXXXX", .0847], ["DBXXXX", .01], ["DBXXFR", .01], ["DYXTXR", .001], ["OCASPS", .01], ["FXXXSX", .01]] as const)
     expect(defaultMarketRights({ cfi, market: "bm" })).toBe(fee);
