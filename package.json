@@ -4,18 +4,19 @@
   "version": "0.0.25",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run check:vendor && vite",
     "build": "npm run check:free && tsc && vite build && node scripts/check-free.mjs --dist",
-    "preview": "vite preview",
-    "watch": "tsc && vite build --watch",
-    "test": "vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs scripts/ratios-reader.test.mjs && node --test tools/qa/*.test.mjs",
+    "preview": "npm run check:vendor && vite preview",
+    "watch": "npm run check:vendor && tsc && vite build --watch",
+    "test": "npm run check:vendor && vitest run && node --test scripts/check-free.test.mjs scripts/options-market-reader.test.mjs scripts/options-position-reader.test.mjs scripts/options-executions-reader.test.mjs scripts/ratios-reader.test.mjs && node --test tools/qa/*.test.mjs",
+    "check:vendor": "node scripts/security/vendored-picomatch.mjs",
     "check:free": "node scripts/check-free.mjs",
     "package:free": "npm run build && node scripts/package-free.mjs",
-    "security:lint": "eslint \"src/**/*.{ts,tsx,js,jsx,mjs,cjs}\" \"public/**/*.{ts,tsx,js,jsx,mjs,cjs}\" --no-error-on-unmatched-pattern --max-warnings=0",
+    "security:lint": "npm run check:vendor && eslint \"src/**/*.{ts,tsx,js,jsx,mjs,cjs}\" \"public/**/*.{ts,tsx,js,jsx,mjs,cjs}\" --no-error-on-unmatched-pattern --max-warnings=0",
     "security:policy": "node scripts/security/check-policy.mjs",
-    "security:test": "node --test scripts/security/*.test.mjs",
+    "security:test": "npm run check:vendor && node --test scripts/security/*.test.mjs",
     "security:tools": "node scripts/security/run-tools.mjs",
-    "security:check": "npm run security:test && npm run security:policy && npm run security:lint",
+    "security:check": "npm run security:policy && npm run security:test && npm run security:lint",
     "test:smoke": "npm run package:free && node tools/qa/run.mjs --smoke",
     "test:regression": "npm run package:free && node tools/qa/run.mjs",
     "test:pr": "npm run security:check && npm test && npm run package:free && npm audit --audit-level=moderate && node tools/qa/run.mjs"
@@ -39,10 +40,12 @@
     "eslint": "10.13.0",
     "@typescript-eslint/parser": "8.72.0",
     "eslint-plugin-no-unsanitized": "4.1.5",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "picomatch": "file:vendor/picomatch"
   },
   "overrides": {
-    "minimatch": "11.0.1"
+    "minimatch": "11.0.1",
+    "picomatch": "$picomatch"
   },
   "engines": {
     "node": "^24.15.0 || >=26.0.0"

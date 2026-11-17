@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertVendoredPicomatch } from './security/vendored-picomatch.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -72,6 +73,7 @@ export function assertFreeText(text, path) {
 }
 
 export function checkFree({ built = false, directory = root } = {}) {
+  assertVendoredPicomatch(new URL('../vendor/picomatch/', import.meta.url));
   const allowed = readJson(join(directory, 'free-files.json'));
   const paths = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     { cwd: directory, encoding: 'utf8' }).split('\0').filter(Boolean);
