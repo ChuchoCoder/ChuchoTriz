@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { applyDefaultWatch, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput, goalReached, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
+import { applyDefaultWatch, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
+import { calculateRatio } from "./model";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
 const at = "2026-01-01T13:00:00.000Z", exitAt = "2026-01-02T13:00:00.000Z";
@@ -41,6 +42,18 @@ it("uses Premium DDMM defaults by CFI, equity VAT included and no broker commiss
     expect(defaultMarketRights({ cfi, market: "bm" })).toBe(fee);
   expect(defaultMarketRights({ cfi: "ESXXXX", market: "rx" })).toBeUndefined();
   expect(defaultMarketRights({ cfi: "UNKNOWN", market: "bm" })).toBeUndefined();
+});
+it("inverts only the watched pair, retains its row ID/order, and leaves the ledger unchanged", () => {
+  const pair = { id: "pair", a: instrument("A"), b: instrument("B") }, other = { id: "other", a: instrument("C"), b: instrument("D") };
+  const book = { ...emptyBook(), watchDefaults: 1 as const, watch: [pair, other], operations: [operation()] };
+  const next = invertWatchPair(book, pair.id);
+  expect(next.watch).toEqual([{ ...pair, a: pair.b, b: pair.a }, other]); expect(next.operations).toBe(book.operations);
+  expect(book.watch[0]).toBe(pair); expect(next.watchDefaults).toBe(1);
+  const original = calculateRatio({ last: 110, reference: 100 }, { last: 100, reference: 100 });
+  const inverse = calculateRatio({ last: 100, reference: 100 }, { last: 110, reference: 100 });
+  expect(original.change).toBeCloseTo(10); expect(inverse.change).toBeCloseTo(-9.090909);
+  const duplicate = { ...book, watch: [pair, { ...pair, id: "inverse", a: pair.b, b: pair.a }] };
+  expect(() => invertWatchPair(duplicate, "pair")).toThrow(/inverso/); expect(() => invertWatchPair(book, "gone")).toThrow(/no está/);
 });
 it("uses raw positive ratio targets and percentage minus one for equal currencies", () => {
   const a = instrument("A"), b = instrument("B"), usd = instrument("B", "USD");

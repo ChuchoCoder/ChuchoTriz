@@ -21,6 +21,20 @@ una TNA no es un precio de compra/venta y no se usa para registrar un long/short
 ni para calcular P&L de instrumentos con precio. El resto del monitor mantiene
 los formatos y el flujo de apertura habituales.
 
+La tabla adapta sus columnas al contenido y agrupa los controles de alta y
+restauración en una fila (se reacomodan en pantallas angostas). **Var. diaria**
+es `(ratio actual / ratio de referencia diaria − 1) × 100`, calculada desde
+`md.refp` y las fechas de referencia de Matriz. No es la diferencia entre los
+porcentajes mostrados del ratio. Sin referencia válida, o con fechas distintas,
+muestra **—** con el motivo al pasar el cursor y conserva el ratio actual.
+
+**⇄ Invertir A/B** conserva la fila y recalcula el ratio y su variación diaria;
+no cambia las operaciones registradas. Si el par inverso ya está en la tabla,
+se informa para evitar duplicados. Precios y ratio usan el mismo resaltado de
+opciones: verde al subir, rojo al bajar, con limpieza a los 500 ms. No se resalta
+la carga inicial, un dato faltante ni el cambio de identidad al invertir. Con
+movimiento reducido se usa una marca estática breve.
+
 - Agregá los pares al monitor; un ticker exacto y único se resuelve al salir del
   campo. El par sigue en el monitor después de registrar una apertura.
 - Ingresá la cantidad A y elegí sus precios y los de B desde Bid, último, Ask o

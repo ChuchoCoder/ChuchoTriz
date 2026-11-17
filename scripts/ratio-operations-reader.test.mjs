@@ -55,6 +55,15 @@ test('does not combine incomplete book levels with md, rejects regressing sequen
   let q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.equal(q.bid, undefined); assert.deepEqual(q.ask, { price: 102, size: 20 });
   f.securities[0].md.seq = 9; q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.match(q.issue, /secuencia/);
 });
+test('projects daily reference prices and dates without substituting last or read time', async () => {
+  const f = fixture(); Object.assign(f.securities[0].md, { refp: 98, refdStr: '2026-11-16' });
+  let q = (await f.quotes(['BMA'])).result.instruments.BMA;
+  assert.equal(q.reference, 98); assert.equal(q.referenceDate, '2026-11-16');
+  Object.assign(f.securities[0].md, { refp: 0, refdStr: 'invalid' });
+  q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.equal(q.reference, undefined); assert.equal(q.referenceDate, undefined); assert.equal(q.last, 100);
+  Object.assign(f.securities[0].md, { refp: 97, refdStr: undefined, refd: '2026-11-15T03:00:00.000Z' });
+  q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.equal(q.reference, 97); assert.equal(q.referenceDate, '2026-11-15');
+});
 test('projects catalog-verified ARS caucion TNA without fabricating monetary factors or settlement', async () => {
   const f = fixture();
   for (const days of [1, 7]) f.securities.push({ id: `bm_MERV_PESOS_${days}D`, symbolStr: `PESOS - ${days}D`, marketId: 'bm', currency: 'ARS', cfiCode: 'RPXXXX', settlementType: null,

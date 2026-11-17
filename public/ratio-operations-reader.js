@@ -45,7 +45,11 @@
       return positive(md[side]) && positive(md[size]) ? { price: md[side], size: md[size] } : undefined;
     };
     const at = typeof md.lstdStr === "string" ? Date.parse(md.lstdStr) : NaN;
+    const ref = md.refdStr || md.refd;
+    const referenceAt = ref instanceof Date ? ref.getTime() : typeof ref === "string" ? Date.parse(ref) : NaN;
     return { last: positive(md.lst) ? md.lst : undefined, bid: level("bid", "bsz"), ask: level("ask", "asz"),
+      reference: positive(md.refp) ? md.refp : undefined,
+      referenceDate: finite(referenceAt) && referenceAt <= Date.now() ? new Date(referenceAt).toISOString().slice(0, 10) : undefined,
       tradedAt: finite(at) && at <= Date.now() ? at : undefined, amountFactor: descriptor(s)?.amountFactor };
   }
   async function lookup(ss, id) {

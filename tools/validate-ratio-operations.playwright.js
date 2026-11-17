@@ -3,6 +3,7 @@
 async page => {
   if (!/^http:\/\/127\.0\.0\.1:\d+\/fixture\?scenario=regression$/.test(page.url())) throw Error('Select the local regression fixture.');
   const checks = [], assert = (ok, message) => { if (!ok) throw Error(message); };
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const label = name => page.getByLabel(name, { exact: true });
   const button = name => page.getByRole('button', { name, exact: true });
   const click = async locator => { await page.screenshot({ animations: 'disabled', timeout: 10000 }); await locator.click({ force: true }); };
@@ -17,7 +18,7 @@ async page => {
     Object.defineProperty(window, 'mainStore', { configurable: true, get: () => store, set: next => {
       store = next;
       const make = (id, cfiCode, currency, last, factor = 1) => ({ id, symbolStr: id, marketId: 'bm', currency, settlementType: '2', cfiCode,
-        refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: last, seq: 10, bid: last - .1, bsz: 120, ask: last + .1, asz: 150, lstdStr: new Date().toISOString() } });
+        refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: last, refp: last, refdStr: new Date(Date.now() - 86400000).toISOString().slice(0, 10), seq: 10, bid: last - .1, bsz: 120, ask: last + .1, asz: 150, lstdStr: new Date().toISOString() } });
       const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('AL30C', 'DBXXXX', 'USD', 48, .01), make('GD30', 'DBXXXX', 'ARS', 90000, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100),
         ...['ALUA', 'TXAR', 'TGSU2', 'TGNO4'].map(id => make(id, 'ESXXXX', 'ARS', 100)),
         ...[1, 7].map(days => ({ ...make(`bm_MERV_PESOS_${days}D`, 'RPXXXX', 'ARS', days === 1 ? 18.8 : 20.5), symbolStr: `PESOS - ${days}D`, settlementType: null }))];
@@ -36,6 +37,51 @@ async page => {
   assert(!await rates.getByRole('button', { name: 'Sólo monitor' }).isEnabled(), 'Rates cannot open price operations');
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('PESOS - 7D/PESOS - 1D'))?.textContent.includes('20,50% TNA'));
   checks.push('Eight initial pairs in requested order, live TNA ratio and monitor-only cauciones');
+  const bounds = await page.evaluate(() => {
+    const rect = selector => document.querySelector(selector).getBoundingClientRect();
+    return { table: rect('.ro-monitor-table').width, row: rect('.ro-monitor-table tbody tr').height, a: rect('.ro-add-watch input').y, add: rect('.ro-add-watch>button').y, defaults: rect('.ro-defaults').y };
+  });
+  assert(bounds.table < 1000 && bounds.row < 48, 'Compact content-sized columns and rows');
+  assert(Math.abs(bounds.a - bounds.add) < 2 && Math.abs(bounds.a - bounds.defaults) < 2, 'Inputs and actions share one row');
+  for (const width of [1024, 420, 1440]) {
+    await page.setViewportSize({ width, height: 1000 }); await page.screenshot({ animations: 'disabled', timeout: 10000 });
+    const layout = await page.evaluate(() => { const panel = document.querySelector('.ct-ratio-ops').getBoundingClientRect(); return [...document.querySelectorAll('.ro-monitor-controls input,.ro-monitor-controls button')].every(e => { const r = e.getBoundingClientRect(); return r.left >= panel.left - 1 && r.right <= panel.right + 1; }); });
+    assert(layout, 'Monitor controls fit at ' + width);
+  }
+  checks.push('Compact intrinsic table, aligned toolbar and controls at desktop, tablet and narrow widths');
+  const bma = page.locator('.ro-monitor-table tr').filter({ hasText: 'BMA/GGAL' });
+  const originalId = (await book()).watch.find(p => p.a.symbol === 'BMA').id;
+  await click(button('Invertir BMA/GGAL')); await button('Invertir GGAL/BMA').waitFor();
+  const inverse = page.locator('.ro-monitor-table tr').filter({ hasText: 'GGAL/BMA' });
+  assert((await inverse.locator('.ro-ratio').innerText()).includes('-50,00%'), 'Inverse ratio');
+  assert((await book()).watch.find(p => p.id === originalId).a.symbol === 'GGAL', 'Inverse keeps ID');
+  assert(await inverse.locator('.ct-opt-quote-changed').count() === 0, 'New pair identity does not flash');
+  await click(button('Invertir GGAL/BMA')); await button('Invertir BMA/GGAL').waitFor();
+  checks.push('Pair inversion preserves row ID and recalculates values without false update flashes');
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'));
+    window.__ratioMonitorPulses = [];
+    new MutationObserver(() => { for (const index of [1, 2, 3]) { const node = row.cells[index].querySelector('.ct-opt-quote-changed'); if (node) window.__ratioMonitorPulses.push({ index, up: node.classList.contains('ct-opt-quote-up'), down: node.classList.contains('ct-opt-quote-down'), animation: getComputedStyle(node).animationName, background: getComputedStyle(node).backgroundColor }); } }).observe(row, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.lst = 110; s.md.seq++;
+  });
+  await page.waitForFunction(() => window.__ratioMonitorPulses.some(p => p.index === 1 && p.up) && window.__ratioMonitorPulses.some(p => p.index === 3 && p.up), null, { polling: 50, timeout: 10000 });
+  assert((await bma.locator('.ro-daily').innerText()) === '+10,00%', 'Daily variation of ratio');
+  await page.waitForFunction(() => !document.querySelector('.ro-monitor-table .ct-opt-quote-changed'), null, { polling: 50, timeout: 10000 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => { window.__ratioMonitorPulses = []; const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.lst = 105; s.md.seq++; });
+  await page.waitForFunction(() => window.__ratioMonitorPulses.some(p => p.index === 3 && p.down && p.animation === 'none' && p.background !== 'rgba(0, 0, 0, 0)'), null, { polling: 50, timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('.ro-monitor-table .ct-opt-quote-changed'), null, { polling: 50, timeout: 10000 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  checks.push('Daily variation uses native reference prices; subtle directional pulses and reduced-motion cleanup');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.lst = 100; s.md.seq++; s.md.refp = undefined; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'))?.querySelector('.ro-daily').textContent === '—');
+  assert((await bma.locator('.ro-ratio').innerText()).includes('100,00%'), 'Missing reference does not hide current ratio');
+  assert((await bma.locator('.ro-daily').getAttribute('title')).includes('referencia'), 'Missing reference explained');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.refp = 100; s.md.refdStr = '2020-01-01'; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'))?.querySelector('.ro-daily').title.includes('distintas'));
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.refdStr = mainStore.securityStore.securities.find(s => s.id === 'GGAL').md.refdStr; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'))?.querySelector('.ro-daily').textContent === '0,00%');
+  checks.push('Missing or mismatched daily references show a dash while retaining the current ratio');
   await click(button('Quitar par AL30/AL30D'));
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 7);
   await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));

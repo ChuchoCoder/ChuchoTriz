@@ -118,3 +118,37 @@ y rechazo adicional en el dominio: las tasas no se tratan como precios para P&L.
 
 La advertencia de auditoría de desarrollo del apartado inicial sigue pendiente;
 no cambian dependencias ni permisos en esta actualización.
+
+## Actualización: monitor compacto, variación, inversión y resaltado
+
+- Columna Var. diaria del ratio desde referencias nativas `refp`/`refdStr`/`refd`,
+  compartiendo `calculateRatio` con el widget. Sin referencia o con fechas
+  distintas se muestra — sin inventar datos ni ocultar el ratio actual.
+- Columnas con ancho intrínseco y filas de unos 42 px; controles A/B, Agregar par
+  y Agregar pares predeterminados alineados. Tabla de unos 610 px en las muestras
+  del fixture y Cocos, sin distribuir celdas por todo el panel.
+- Inversión por fila: conserva ID/posición y operaciones; evita el inverso duplicado.
+- Reutilización de `OptionQuoteValue` con formato optativo para precios y ratio;
+  sin cambios en el formato por defecto de opciones. Pulsos direccionales de
+  500 ms, modo de movimiento reducido y claves por identidad para no marcar una
+  inversión como una actualización de mercado.
+- `npm test`: PASS, **539 Vitest + 61 Node + 2 QA infra = 602**.
+- Seguridad/política/lint y empaquetado: PASS. Revisión independiente sin P1/P2.
+- Validador del bundle: **13 recorridos PASS**; incluye variación diaria contra
+  oráculo, datos faltantes/fechas distintas, inversión, flashes y limpieza,
+  movimiento reducido, toolbar y anchos 1440/1024/420, más los flujos previos.
+- Regresión focalizada de opciones: suite quotes PASS (SM-04 y SM-04-drag).
+  La regresión completa de 20 suites sigue siendo la corrida base documentada;
+  no se la presenta como una nueva ejecución completa para este cambio.
+- Instalación Free verificada por hashes; respaldo previo:
+  `Free/backups/extension-before-compact-ratio-monitor-20261117-165421`.
+- Cocos: ocho botones de inversión y seis columnas visibles. AL30/AL30D mostró
+  82.250 / 51,50 = 1.597,09 y variación +0,76%, desde referencias 81.500 / 51,42.
+- Las siete claves de almacenamiento mantienen el hash agregado
+  `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+- Los 18 widgets mantienen geometría/configuración antes/después de actualizar:
+  SHA256 `7f49705d9b4b5edd77a6b8021baa25f3c73c17f776cfd1d94162c2dc799cb8e2`.
+- Evidencia local recortada al tab: `test-results/compact-ratios-fixture.png`,
+  `test-results/compact-ratios-cocos.png` y `compact-ratios-evidence.json`.
+  Los pulsos y el modo de movimiento reducido se prueban con datos controlados;
+  las cotizaciones del broker no se alteran.

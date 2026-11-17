@@ -47,3 +47,13 @@ it("clears quantity feedback and cancels pending cleanup on unmount", async () =
   await act(async () => root.unmount()); expect(vi.getTimerCount()).toBe(0);
   root = createRoot(container);
 });
+it("uses a custom ratio or price format with the same directional pulse and no dollar prefix", async () => {
+  const formatValue = (n: number) => ((n - 1) * 100).toFixed(2) + "%";
+  await act(async () => root.render(<OptionQuoteValue value={1.05} formatValue={formatValue} />));
+  expect(container.textContent).toBe("5.00%"); expect(highlighted()).toBeNull();
+  await act(async () => root.render(<OptionQuoteValue value={1.06} formatValue={formatValue} />));
+  expect(container.textContent).toBe("6.00%"); expect(highlighted()?.classList.contains("ct-opt-quote-up")).toBe(true);
+  await advance(500); expect(highlighted()).toBeNull();
+  await act(async () => root.render(<OptionQuoteValue value={undefined} formatValue={formatValue} />));
+  expect(container.textContent).toBe("—"); expect(highlighted()).toBeNull();
+});

@@ -4,7 +4,7 @@ import { formatOptionNumber } from "./format";
 type Pulse = { revision: number; kind?: "up" | "down" | "quantity" };
 
 /** A change is relative to the last displayed value, never to an exchange timestamp. */
-export function OptionQuoteValue({ value, quantity = false }: { value?: number; quantity?: boolean }) {
+export function OptionQuoteValue({ value, quantity = false, formatValue }: { value?: number; quantity?: boolean; formatValue?: (value: number) => string }) {
   const previous = useRef(value);
   const field = useRef<HTMLSpanElement>(null);
   const [pulse, setPulse] = useState<Pulse>({ revision: 0 });
@@ -29,7 +29,7 @@ export function OptionQuoteValue({ value, quantity = false }: { value?: number; 
     const direction = value > previousValue ? "up" : "down";
     setPulse(current => ({ revision: current.revision + 1, kind: quantity ? "quantity" : direction }));
   }, [quantity, value]);
-  const label = value === undefined ? "—" : `${quantity ? "" : "$ "}${formatOptionNumber(value)}`;
+  const label = value === undefined ? "—" : formatValue ? formatValue(value) : `${quantity ? "" : "$ "}${formatOptionNumber(value)}`;
   return <span ref={field} key={pulse.revision} title={value === undefined ? undefined : label}
     className={`${quantity ? "ct-opt-quantity" : "ct-opt-quote-value"}${pulse.kind ? ` ct-opt-quote-changed ct-opt-quote-${pulse.kind}` : ""}`}>
     {label}

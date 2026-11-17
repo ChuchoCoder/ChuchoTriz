@@ -8,7 +8,7 @@ export interface TradingInstrument extends RatioInstrument {
 }
 export interface TradingQuote {
   last?: number; bid?: { price: number; size: number }; ask?: { price: number; size: number };
-  tradedAt?: number; amountFactor?: number; issue?: string;
+  tradedAt?: number; amountFactor?: number; issue?: string; reference?: number; referenceDate?: string;
 }
 export interface TradingPair { id: string; a: TradingInstrument; b: TradingInstrument }
 export interface RatioExit { quantity: number; price: number; at: string }
@@ -21,6 +21,12 @@ export interface RatioOperation {
   fx: number; targetRatio: number | null; legs: [TradingLeg, TradingLeg];
 }
 export interface TradingBook { schema: 1; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
+export function invertWatchPair(book: TradingBook, id: string): TradingBook {
+  const pair = book.watch.find(p => p.id === id);
+  if (!pair) throw Error("El par ya no está en el monitor.");
+  if (book.watch.some(p => p.id !== id && p.a.id === pair.b.id && p.b.id === pair.a.id)) throw Error("El par inverso ya está en el monitor.");
+  return { ...book, watch: book.watch.map(p => p.id === id ? { ...p, a: p.b, b: p.a } : p) };
+}
 export const emptyBook = (): TradingBook => ({ schema: 1, revision: "", watch: [], operations: [] });
 export const MAX_OPERATIONS = 500, MAX_WATCH = 100;
 export const DEFAULT_WATCH_PAIRS = [ ["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
