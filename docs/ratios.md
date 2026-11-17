@@ -38,17 +38,21 @@ movimiento reducido se usa una marca estática breve.
 - Agregá los pares al monitor; un ticker exacto y único se resuelve al salir del
   campo. El par sigue en el monitor después de registrar una apertura.
 - Ingresá la cantidad A y elegí sus precios y los de B desde Bid, último, Ask o
-  escribiéndolos. B se dimensiona al lote más cercano para igualar los montos
-  brutos, usando factores de cotización verificados del catálogo (bonos por 100
-  nominales: factor 0,01). Los precios elegidos no se mueven con el mercado.
+  escribiéndolos. Con la misma moneda, B se dimensiona al lote más cercano para
+  igualar montos brutos, usando factores nativos (bonos por 100 nominales: 0,01).
+  Con monedas distintas, B copia exactamente los nominales de A, sin conversión
+  ni dependencia de los precios; la cantidad debe respetar los lotes de ambas
+  patas. Los precios elegidos no se mueven con el mercado.
 - La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
   de entrada y salida. Los DDMM están dentro de cada pata y son editables.
 - Si las monedas coinciden, ratio y objetivo son `(A/B − 1) × 100`; en monedas
   distintas se usa A/B. El objetivo se guarda siempre como cociente positivo;
   0% equivale a 1. El objetivo se alcanza al alza para Long A o a la baja para
   Short A. Es independiente del P&L monetario.
-- Para monedas distintas ingresá una conversión explícita para dimensionar B.
-  El P&L se muestra separado por moneda; no suma ARS, USD y USD C.
+- No se pide tipo de cambio para dimensionar cantidades. El P&L se muestra
+  separado por moneda; no suma ARS, USD y USD C. Al editar un registro anterior
+  con distinta cantidad B se conserva esa cantidad hasta cambiar A o los
+  instrumentos, sin modificar cantidades históricas al corregir otro campo.
 - Cada operación conserva entradas, cantidades, factores y tasas. Su neto incluye
   los gastos de apertura y el cierre estimado al último precio. Los cierres del
   25%, 50% o total usan precios reales ingresados y congelan el realizado.

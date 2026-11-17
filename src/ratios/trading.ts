@@ -18,7 +18,8 @@ export interface TradingLeg {
 }
 export interface RatioOperation {
   id: string; openedAt: string; direction: 1 | -1; commission: number;
-  fx: number; targetRatio: number | null; legs: [TradingLeg, TradingLeg];
+  fx: number; // Retained for compatibility with historical records; sizing no longer converts currencies.
+  targetRatio: number | null; legs: [TradingLeg, TradingLeg];
 }
 export interface TradingBook { schema: 1; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
 export function invertWatchPair(book: TradingBook, id: string): TradingBook {
@@ -85,14 +86,10 @@ export const goalReached = (o: RatioOperation, raw: number | undefined) => o.tar
 export const closedQuantity = (l: TradingLeg) => l.exits.reduce((n, e) => n + e.quantity, 0);
 export const remaining = (l: TradingLeg) => l.quantity - closedQuantity(l);
 export const isClosed = (o: RatioOperation) => o.legs.every(l => remaining(l) === 0);
-export function counterpart(qa: number, pa: number, pb: number, fa: number, fb: number, step: number, a: RatioInstrument, b: RatioInstrument, fx: number): number {
+export function counterpart(qa: number, pa: number, pb: number, fa: number, fb: number, step: number, a: RatioInstrument, b: RatioInstrument): number {
+  if (!sameCurrency(a, b)) return quantity(qa) ? qa : NaN;
   if (![qa, pa, pb, fa, fb, step].every(positive)) return NaN;
-  let conversion = 1;
-  if (!sameCurrency(a, b)) {
-    if (!positive(fx)) return NaN;
-    conversion = fx;
-  }
-  const result = Math.round(qa * pa * fa * conversion / (pb * fb * step)) * step;
+  const result = Math.round(qa * pa * fa / (pb * fb * step)) * step;
   return quantity(result) ? result : NaN;
 }
 export function validateOperation(o: RatioOperation): void {

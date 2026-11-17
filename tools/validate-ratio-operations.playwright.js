@@ -126,14 +126,39 @@ async page => {
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'DEMO-NO-BROKER'; });
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9); checks.push('Account switch clears old account, seeds defaults separately and restores original local book');
   const bond = page.locator('tr').filter({ hasText: 'AL30/AL30D' }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
-  assert(await label('DDMM A %').inputValue() === '0.01', 'Bond DDMM'); await label('Conversión para cantidades').fill('1600');
+  assert(await label('DDMM A %').inputValue() === '0.01', 'Bond DDMM');
+  assert(await label('Conversión para cantidades').count() === 0, 'Mixed currencies require no FX input');
   await wait(() => document.querySelector('[aria-label="Cantidad B"]').value === '100');
+  await label('Cantidad A').fill('137'); assert(await label('Cantidad B').inputValue() === '137', 'B copies nominal quantity A');
+  await label('Cantidad A').fill('250'); await label('Precio de entrada B').fill('55');
+  assert(await label('Cantidad B').inputValue() === '250', 'Changing entry prices does not rebalance mixed-currency nominals');
+  await page.waitForFunction(() => { const last = document.querySelector('[aria-label="Usar último de B"]'); return last && !last.disabled && Number(document.querySelector('[aria-label="Precio de entrada A"]').value) > 0; }, null, { polling: 100, timeout: 10000 });
+  await click(button('Usar último de B')); assert(await label('Cantidad B').inputValue() === '250', 'Quote selection retains copied nominals');
+  await label('Cantidad A').fill('100');
   assert((await page.locator('.ro-entry-heading output').innerText()).includes('1.600,00'), 'Raw mixed currency ratio');
   await label('Ratio objetivo').fill('1650'); await click(button('Abrir operación'));
   await button('Editar').nth(1).waitFor();
-  saved = await book(); assert(saved.operations.length === 2 && saved.operations[1].legs[0].factor === .01 && saved.operations[1].legs[1].quantity === 100, 'Bond units and FX');
+  saved = await book(); assert(saved.operations.length === 2 && saved.operations[1].legs[0].factor === .01 && saved.operations[1].legs[1].quantity === 100 && saved.operations[1].fx === 1, 'Bond units and equal nominal quantities');
   assert((await page.locator('.ro-operations-table').innerText()).includes('USD'), 'Separate monetary P&L');
-  checks.push('Bond factors, DDMM, FX sizing, numeric ratio target and separate currency P&L');
+  checks.push('Mixed currencies copy A nominals without FX or price rebalancing, retain factors and separate P&L');
+  const mixedId = saved.operations[1].id;
+  await page.evaluate(async id => {
+    const values = await chrome.storage.local.get(null);
+    for (const [key, value] of Object.entries(values)) if (value?.schema === 1 && value.operations.some(o => o.id === id)) {
+      const old = value.operations.find(o => o.id === id); old.legs[1].quantity = 80; old.fx = 1600; value.revision = crypto.randomUUID(); await chrome.storage.local.set({ [key]: value });
+    }
+  }, mixedId);
+  await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('100,00 / 80,00'));
+  const mixedRow = page.locator('.ro-operations-table tr').filter({ hasText: 'AL30/AL30D' });
+  await click(mixedRow.getByRole('button', { name: 'Editar', exact: true }));
+  assert(await label('Cantidad B').inputValue() === '80', 'Historical B quantity retained on edit');
+  await label('Comisión %').fill('0.25'); await click(button('Guardar cambios')); await mixedRow.getByRole('button', { name: 'Editar', exact: true }).waitFor();
+  saved = await book(); assert(saved.operations[1].legs[1].quantity === 80 && saved.operations[1].fx === 1600, 'Unrelated correction does not rewrite historical sizing');
+  await click(mixedRow.getByRole('button', { name: 'Editar', exact: true })); await label('Cantidad A').fill('120');
+  assert(await label('Cantidad B').inputValue() === '120', 'Explicit A change synchronizes historical B');
+  await click(button('Guardar cambios')); await mixedRow.getByRole('button', { name: 'Editar', exact: true }).waitFor();
+  saved = await book(); assert(saved.operations[1].legs[0].quantity === 120 && saved.operations[1].legs[1].quantity === 120, 'Equal nominal correction saved');
+  checks.push('Legacy unequal quantities survive other edits; changing A explicitly synchronizes B');
   await label('Precio cierre A').fill('80000'); await label('Precio cierre B').fill('50'); await click(button('Cerrar todo'));
   await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('Cerrada'));
   const closedRow = page.locator('.ro-operations-table tr').filter({ hasText: 'AL30/AL30D' });

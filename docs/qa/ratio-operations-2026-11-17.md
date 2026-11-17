@@ -152,3 +152,32 @@ no cambian dependencias ni permisos en esta actualización.
   `test-results/compact-ratios-cocos.png` y `compact-ratios-evidence.json`.
   Los pulsos y el modo de movimiento reducido se prueban con datos controlados;
   las cotizaciones del broker no se alteran.
+
+## Actualización: nominales iguales en monedas distintas
+
+La regla vigente de cantidades reemplaza el dimensionamiento con FX para pares
+de distinta moneda: **B copia exactamente A**, independientemente de precios,
+factores o tipos de cambio. No se muestra ni exige conversión monetaria. Las
+cantidades deben respetar los lotes de ambas patas; no se redondea B silenciosamente.
+Con la misma moneda se conserva el cálculo por monto y lote más cercano.
+
+Los registros guardados permanecen intactos. Al editar un registro antiguo con
+B diferente de A se conserva B hasta cambiar A o seleccionar instrumentos.
+Corregir comisión, precios u objetivo no cambia esa cantidad histórica. El campo
+FX anterior se retiene como metadato de compatibilidad, sin usarlo para dimensionar.
+El P&L continúa separado por moneda.
+
+- `npm test`: PASS, **540 Vitest + 61 Node + 2 QA infra = 603**.
+- Seguridad/política/lint y empaquetado: PASS; revisión independiente sin P1/P2.
+- Validador del bundle: **14 recorridos PASS**. Comprueba 137→137 y 250→250,
+  independencia de precios y ausencia de FX, más preservación de un registro
+  histórico 100/80 al corregir comisión, y sincronización 120/120 al cambiar A.
+- En Cocos, AL30/AL30D copió A=137 a B=137 sin conversión. Se dejó el formulario
+  en 100/100 sin registrar la apertura ni enviar órdenes.
+- Las siete claves locales conservaron exactamente el hash agregado
+  `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+- Instalación comparada con dist y respaldada en
+  `Free/backups/extension-before-nominal-copy-20261117-170529`.
+
+Los apartados anteriores documentan las pruebas históricas; esta sección y
+`docs/ratios.md` describen la regla actual. No cambian dependencias ni permisos.

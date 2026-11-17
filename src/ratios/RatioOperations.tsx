@@ -15,10 +15,10 @@ type View = "monitor" | "opening" | "operations";
 type Source = "last" | "bid" | "ask" | "manual" | "saved";
 interface Draft {
   a?: TradingInstrument; b?: TradingInstrument; pa: string; pb: string; qa: string; fa: string; fb: string; sa: string; sb: string;
-  ddmma: string; ddmmb: string; commission: string; fx: string; target: string; at: string; direction: 1 | -1; sourceA: Source; sourceB: Source;
+  ddmma: string; ddmmb: string; commission: string; preservedB?: number; target: string; at: string; direction: 1 | -1; sourceA: Source; sourceB: Source;
 }
 const dateInput = (iso = new Date().toISOString()) => new Date(iso).toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 16).replace(" ", "T");
-const emptyDraft = (): Draft => ({ pa: "", pb: "", qa: "100", fa: "", fb: "", sa: "1", sb: "1", ddmma: "", ddmmb: "", commission: "0", fx: "", target: "", at: dateInput(), direction: 1, sourceA: "last", sourceB: "last" });
+const emptyDraft = (): Draft => ({ pa: "", pb: "", qa: "100", fa: "", fb: "", sa: "1", sb: "1", ddmma: "", ddmmb: "", commission: "0", target: "", at: dateInput(), direction: 1, sourceA: "last", sourceB: "last" });
 const input = (n?: number) => n === undefined ? "" : formatOptionInput(n);
 const signed = (n?: number) => n === undefined ? "" : n > 0 ? "ro-up" : n < 0 ? "ro-down" : "";
 const money = (n: number | undefined, c: string) => `${currencyLabel(c)} ${n === undefined || !Number.isFinite(n) ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -114,9 +114,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
   }
   function selectInstrument(key: "a" | "b", instrument?: TradingInstrument) {
     setDraft(previous => {
-      if (!instrument) return { ...previous, [key]: undefined };
+      if (!instrument) return { ...previous, [key]: undefined, preservedB: undefined };
       const first = key === "a", changed = previous[key]?.id !== instrument.id;
-      return { ...previous, [key]: instrument, [first ? "pa" : "pb"]: input(quotes[instrument.id]?.last),
+      return { ...previous, [key]: instrument, preservedB: undefined, [first ? "pa" : "pb"]: input(quotes[instrument.id]?.last),
         [first ? "fa" : "fb"]: input(instrument.amountFactor), [first ? "sa" : "sb"]: input(instrument.quantityStep),
         [first ? "ddmma" : "ddmmb"]: input(defaultMarketRights(instrument)), [first ? "sourceA" : "sourceB"]: "last", target: changed ? "" : previous.target };
     });
@@ -132,13 +132,13 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setEdit({ id: o.id, snapshot: JSON.stringify(o) }); setSelected(o.id);
     setDraft({ a: o.legs[0].instrument, b: o.legs[1].instrument, pa: input(o.legs[0].entry), pb: input(o.legs[1].entry), qa: input(o.legs[0].quantity),
       fa: input(o.legs[0].factor), fb: input(o.legs[1].factor), sa: input(o.legs[0].step), sb: input(o.legs[1].step), ddmma: input(o.legs[0].ddmm), ddmmb: input(o.legs[1].ddmm),
-      commission: input(o.commission), fx: input(o.fx), target: goalInput(o), at: dateInput(o.openedAt), direction: o.direction, sourceA: "saved", sourceB: "saved" });
+      commission: input(o.commission), preservedB: !sameCurrency(o.legs[0].instrument, o.legs[1].instrument) && o.legs[0].quantity !== o.legs[1].quantity ? o.legs[1].quantity : undefined,
+      target: goalInput(o), at: dateInput(o.openedAt), direction: o.direction, sourceA: "saved", sourceB: "saved" });
     setPickerSession(n => n + 1); setView("opening"); setIssue(""); setNotice("");
   }
   const pa = numeric(draft.pa), pb = numeric(draft.pb), qa = numeric(draft.qa), fa = numeric(draft.fa), fb = numeric(draft.fb), sa = numeric(draft.sa), sb = numeric(draft.sb);
   const mixed = draft.a && draft.b && !sameCurrency(draft.a, draft.b);
-  const fx = mixed ? numeric(draft.fx) : 1;
-  const qb = draft.a && draft.b ? counterpart(qa, pa, pb, fa, fb, sb, draft.a, draft.b, 1 / fx) : NaN;
+  const qb = mixed && draft.preservedB !== undefined ? draft.preservedB : draft.a && draft.b ? counterpart(qa, pa, pb, fa, fb, sb, draft.a, draft.b) : NaN;
 
   async function saveEntry() {
     const a = draft.a, b = draft.b;
@@ -148,7 +148,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
       const openedAt = edited && draft.at === dateInput(edited.openedAt) ? edited.openedAt : new Date(draft.at + ":00-03:00").toISOString();
       const makeLeg = (instrument: TradingInstrument, i: number): TradingLeg => ({ instrument, side: (i === 0 ? draft.direction : -draft.direction) as 1 | -1,
         quantity: i === 0 ? qa : qb, entry: i === 0 ? pa : pb, factor: i === 0 ? fa : fb, step: i === 0 ? sa : sb, ddmm: numeric(i === 0 ? draft.ddmma : draft.ddmmb), exits: [] });
-      let next: RatioOperation = { id: edit?.id ?? crypto.randomUUID(), openedAt, direction: draft.direction, commission: numeric(draft.commission), fx,
+      let next: RatioOperation = { id: edit?.id ?? crypto.randomUUID(), openedAt, direction: draft.direction, commission: numeric(draft.commission), fx: edited?.fx ?? 1,
         targetRatio, legs: [makeLeg(a, 0), makeLeg(b, 1)] };
       validateOperation(next);
       const wasEdit = !!edit;
@@ -209,10 +209,10 @@ export default function RatioOperations({ active }: { active: boolean }) {
       aria-label={`Usar ${field === "bid" ? "Bid" : "Ask"} de ${key.toUpperCase()}`} aria-pressed={source === field && selectedPrice === quote?.[field]?.price} onClick={() => choose(field)}>
       <small>{field === "bid" ? "Bid" : "Ask"}</small><strong>{numberLabel(quote?.[field]?.price)}</strong><small>Disponible {quote?.[field] ? numberLabel(quote[field]!.size) : "—"}</small></button>;
     return <section className="ro-leg" aria-label={`Pata ${key.toUpperCase()}`} key={key}>
-      <header><strong>{first ? "1" : "2"} · Pata {key.toUpperCase()}</strong><span className={`ro-chip ${side === 1 ? "buy" : "sell"}`}>{side === 1 ? "Compra · Long" : "Venta · Short"}</span>{!first && <small>Cantidad automática</small>}</header>
+      <header><strong>{first ? "1" : "2"} · Pata {key.toUpperCase()}</strong><span className={`ro-chip ${side === 1 ? "buy" : "sell"}`}>{side === 1 ? "Compra · Long" : "Venta · Short"}</span>{!first && <small>{draft.preservedB !== undefined ? "Cantidad registrada" : "Cantidad automática"}</small>}</header>
       <div className="ro-leg-ident"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={priceSearch} disabled={!available || partiallyClosed} />
         <label>{edit ? "Cantidad total" : "Cantidad"} {key.toUpperCase()} · {instrument?.quantityUnit || "unidades"}<input aria-label={`Cantidad ${key.toUpperCase()}`} type="number" min="1" step={first && Number.isFinite(sa) ? sa : 1} value={first ? draft.qa : Number.isFinite(qb) ? qb : ""} readOnly={!first} disabled={!available}
-          onChange={e => setDraft(p => ({ ...p, qa: e.target.value }))} /></label></div>
+          onChange={e => setDraft(p => ({ ...p, qa: e.target.value, preservedB: undefined }))} /></label></div>
       <div className="ro-prices">{picker("bid")}<div><button type="button" className="ro-last" disabled={!available || !quote?.last} onClick={() => choose("last")} aria-label={`Usar último de ${key.toUpperCase()}`}>Último <strong>{numberLabel(quote?.last)}</strong></button>
         <label>Precio de entrada {key.toUpperCase()}<input aria-label={`Precio de entrada ${key.toUpperCase()}`} type="number" min="0" step="any" value={draft[priceKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [priceKey]: e.target.value, [sourceKey]: "manual" }))} required /></label>
         <small className="ro-source">Precio elegido: {{ last: "último", bid: "Bid", ask: "Ask", manual: "manual", saved: "registrado" }[source]}</small></div>{picker("ask")}</div>
@@ -258,9 +258,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
         <aside className="ro-entry-costs"><label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
           <label>Fecha/hora de apertura · Argentina<input type="datetime-local" value={draft.at} max={dateInput()} disabled={!available} required onChange={e => setDraft(p => ({ ...p, at: e.target.value }))} /></label>
           <label>Ratio objetivo {draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(%)" : "(número)"} · opcional<input aria-label="Ratio objetivo" type="number" step="any" value={draft.target} disabled={!available} onChange={e => setDraft(p => ({ ...p, target: e.target.value }))} /></label><small>{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(A/B − 1) × 100. Ej.: 1,065 → 6,50%." : "Cociente A/B sin conversiones."} {draft.direction === 1 ? "Objetivo al alza (≥)." : "Objetivo a la baja (≤)."}</small>
-          {mixed && <label>1 {currencyLabel(draft.b!.currency)} = X {currencyLabel(draft.a!.currency)}<input aria-label="Conversión para cantidades" type="number" min="0" step="any" value={draft.fx} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, fx: e.target.value }))} /><small>Sólo para igualar montos. El P&L se mantiene separado por moneda.</small></label>}
+          {mixed && <small>{draft.preservedB !== undefined ? "Cantidad B histórica conservada hasta cambiar A." : "Distinta moneda: B copia los nominales de A."} El P&L se mantiene separado por moneda.</small>}
         </aside>
-        <div className="ro-sizing"><span>Monto A <strong>{money(qa * pa * fa, draft.a?.currency || "")}</strong></span><span>Monto B <strong>{money(qb * pb * fb, draft.b?.currency || "")}</strong></span><small>B se ajusta al lote más cercano con los precios elegidos. DDMM y factores quedan guardados en cada pata.</small></div>
+        <div className="ro-sizing"><span>Monto A <strong>{money(qa * pa * fa, draft.a?.currency || "")}</strong></span><span>Monto B <strong>{money(qb * pb * fb, draft.b?.currency || "")}</strong></span><small>{draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales." : mixed ? "B copia exactamente los nominales de A. La cantidad debe respetar los lotes de ambas patas." : "B se ajusta al lote más cercano con los precios elegidos para igualar montos."} DDMM y factores quedan guardados en cada pata.</small></div>
       </div><div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro de ambas patas; no comprueba tenencia, préstamo de títulos ni ejecución del broker.</small></div>
     </form>}
     {view === "operations" && <div className={`ro-operations-grid${op ? "" : " no-detail"}`}>

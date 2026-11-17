@@ -65,12 +65,19 @@ it("uses raw positive ratio targets and percentage minus one for equal currencie
   const o = operation(); o.targetRatio = 1; expect(goalInput(o)).toBe("0");
   expect(goalReached(o, 1)).toBe(true); o.direction = -1; expect(goalReached(o, .9)).toBe(true);
 });
-it("sizes B using entry prices, nominal factors, lots and explicit FX", () => {
+it("sizes same-currency B using entry prices, nominal factors and lots", () => {
   const a = instrument("A"), b = instrument("B");
-  expect(counterpart(100, 100, 50, 1, 1, 1, a, b, NaN)).toBe(200);
-  expect(counterpart(100, 80000, 50, .01, .01, 1, a, instrument("B", "USD"), 1 / 1600)).toBe(100);
-  expect(counterpart(101, 100, 50, 1, 1, 10, a, b, 1)).toBe(200);
-  expect(counterpart(100, 100, 50, 1, 1, 1, a, instrument("B", "USD"), NaN)).toBeNaN();
+  expect(counterpart(100, 100, 50, 1, 1, 1, a, b)).toBe(200);
+  expect(counterpart(101, 100, 50, 1, 1, 10, a, b)).toBe(200);
+});
+it("copies mixed-currency nominal quantities without FX, prices or silent lot rounding", () => {
+  const a = instrument("AL30"), b = instrument("AL30D", "USD");
+  expect(counterpart(137, 80000, 50, .01, .01, 1, a, b)).toBe(137);
+  expect(counterpart(250, 81000, 53, .01, 1, 1, a, b)).toBe(250);
+  expect(counterpart(103, NaN, NaN, NaN, NaN, 10, a, b)).toBe(103);
+  expect(counterpart(100.5, 80000, 50, .01, .01, 1, a, b)).toBeNaN();
+  const o = operation(); o.legs[0].quantity = 103; o.legs[1].instrument = b; o.legs[1].quantity = 103; o.legs[1].step = 10;
+  expect(() => validateOperation(o)).toThrow(/lotes/);
 });
 it("charges entry and estimated exit fees on both long and short", () => {
   const o = operation(), quotes = { A: { last: 110 }, B: { last: 45 } };
