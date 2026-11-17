@@ -1,5 +1,75 @@
 # Operaciones de ratios — 17/11/2026
 
+## Cierre de validación y revisión del PR #76
+
+Se integró main `0044abf` (predeterminados del widget y corrección auditada de
+picomatch), conservando el lector y los tests del tab Ratios. Se resolvieron
+los conflictos de `free-files.json` y `package.json` por unión de ambos cambios.
+
+La revisión encontró y corrigió un defecto: `min=1` con `step=10` invalidaba
+cantidades como 100 y 110 en HTML aunque fueran múltiplos correctos del lote.
+Desde `7612486`, mínimo y paso de Cantidad A usan el lote positivo configurado.
+Se agregó un recorrido que acepta 100/110, rechaza 105 y guarda una apertura
+con lote 10, comprobando su persistencia y eliminación en el fixture.
+
+| Verificación final | Resultado |
+| --- | --- |
+| Vitest / lectores y contratos / QA infra | 547 + 64 + 2 = **613 PASS** |
+| Widget: `validate-ratios-widget.playwright.js` | **37 PASS** |
+| Tab: `validate-ratio-operations.playwright.js` | **18 PASS**, incluido lote 10 |
+| Regresión general: `tools/qa/run.mjs` | **20 suites / 70 PASS**, reporte completo |
+| Seguridad, lint, escaneos, build y paquete | PASS |
+| `npm audit --audit-level=moderate` | **0 vulnerabilidades**, incluidas herramientas |
+| CI sobre la candidata funcional | Cuatro checks PASS |
+
+Los tres recorridos de Playwright suman **125 comprobaciones**. Usaron el MCP
+del perfil compartido Free, con el bundle de producción y datos sintéticos en
+loopback. El reporte de regresión completo está en
+`test-results/qa-2026-11-17T21-31-59-580Z/report.json` (`complete=true`, 0 FAIL).
+Ese reporte identifica `fc9d880` con cambios locales: incluía la corrección de
+lotes que luego se confirmó en `7612486`. La corrida unitaria local precedió
+esa modificación del atributo HTML; CI también aprobó el commit corregido.
+Los apartados inferiores conservan evidencia histórica; los antiguos avisos
+de auditoría quedaron resueltos al integrar main.
+
+### Standards
+
+Revisión independiente contra `0044abf...fc9d880` de seguridad, privacidad,
+allowlist, RPC, guardado y controles de contexto: **0 incumplimientos documentados
+y 0 observaciones bloqueantes**. No se hallaron smells que justifiquen bloquear.
+
+### Spec
+
+Revisión independiente de conversación y `docs/ratios.md`: monitor, defaults,
+dimensionamiento, objetivo, P&L, gastos, cierres, edición, cuentas y selección
+de puntas cumplen el alcance. **0 hallazgos pendientes**. Una tercera revisión
+contrastó 200 escenarios de cierres y gastos con flujos de caja independientes:
+sin diferencias. Su hallazgo del input por lote quedó corregido y revalidado
+para lotes nativos/manuales 1, 2, 3, 10 y 100; aprobación posterior para merge.
+
+### Instalación y persistencia real en Cocos
+
+- Free 0.0.25 de desarrollo, 24 archivos comparados por hash con dist. Respaldo:
+  `Free/backups/extension-before-ratios-final-20261117-183417`.
+- Se creó un widget temporal con siete pares predeterminados, se arrastró
+  x=192→206, y se redimensionó 560×300→620×325. Al **cerrar la pestaña y volver
+  a abrir la misma URL**, conservó identidad, siete pares, x=206/y=42 y 620×325.
+- Se retiró por su identidad exacta y se cerró/reabrió otra vez para comprobar
+  su eliminación persistida. Las 18 geometrías originales quedaron iguales.
+  La configuración canónica de los otros widgets (instrumentos, filtros,
+  settings y geometría, ordenada y sin identificadores volátiles de la página)
+  conservó el hash `4bf34cc857845a04cedc55bd33387582fec441676ac931721d7af82e1d364464`
+  entre la limpieza y la reapertura. Un hash del objeto bruto no es comparable:
+  Matriz reordena el array y recrea metadatos al recargar.
+- El tab conservó sus ocho pares. En BMA/GGAL se comprobaron las dos direcciones:
+  Bid BMA 9.250 / Ask GGAL 4.850 y Ask BMA 9.330 / Bid GGAL 4.830; ambos precios
+  de entrada coincidieron con las puntas resaltadas y los ratios 90,72%/93,17%.
+- Las siete claves locales de la extensión conservaron exactamente el hash
+  `b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
+  No se tocaron operaciones existentes ni se registraron aperturas en el broker.
+- Captura recortada de la candidata instalada: `test-results/ratios-final-cocos.png`.
+  La sesión y las otras pestañas del navegador compartido permanecen abiertas.
+
 Implementación en `codex/ratio-operations`, desde main `2351007`.
 Compilación de desarrollo instalada sobre Free 0.0.25; no es una release publicada.
 
