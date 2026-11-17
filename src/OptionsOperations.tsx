@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MarketReader } from "./optionsSimulator/market";
 import { executionClipboard, executionFormatters, groupExecutions, normalizeExecutionLocale, type ExecutionGroup, type ExecutionLocale, type OptionExecution, type OptionKind } from "./optionExecutions";
 import "./OptionsOperations.css";
@@ -15,6 +15,14 @@ type CopyNotice = { group: string; scope: CopyScope; error?: boolean };
 const pageSize = 200;
 const copyConfirmationMs = 1600;
 const localeKey = "OptionsOperationsLocale";
+const localeKeys = { numbers:"OptionsOperationsNumberLocale", dates:"OptionsOperationsDateLocale" } as const;
+type LocaleField = keyof typeof localeKeys;
+const localeFields = ["numbers", "dates"] as const;
+const allLocaleKeys = [localeKey, ...Object.values(localeKeys)];
+const localesFrom = (values: Record<string, unknown>): Record<LocaleField, ExecutionLocale> => ({
+  numbers:normalizeExecutionLocale(values[localeKeys.numbers] === undefined ? values[localeKey] : values[localeKeys.numbers]),
+  dates:normalizeExecutionLocale(values[localeKeys.dates] === undefined ? values[localeKey] : values[localeKeys.dates]),
+});
 const contextChanged = "Cambió la cuenta o la sesión de Matriz. Volvé a cargar las operaciones.";
 
 const iconPaths = {
@@ -86,6 +94,58 @@ function OperationsSide({ label, rows, averaged, format, disabled, notice, onCop
   </div>;
 }
 
+function useExecutionLocales(embedded: boolean) {
+  const [locales, setLocales] = useState(() => localesFrom({}));
+  const [pending, setPending] = useState(true);
+  const [issue, setIssue] = useState("");
+  const stored = useRef<Record<string, unknown>>({});
+  const revisions = useRef({ numbers:0, dates:0 });
+  const session = useRef(0);
+
+  useEffect(() => {
+    if (!embedded) return;
+    const current = ++session.current;
+    const changesDuringRead: Record<string, unknown> = {};
+    setPending(true); setIssue("");
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== "local" || current !== session.current) return;
+      const changedKeys = allLocaleKeys.filter(key => Object.hasOwn(changes, key));
+      if (!changedKeys.length) return;
+      for (const field of localeFields) {
+        if (changedKeys.includes(localeKeys[field]) ||
+          (changedKeys.includes(localeKey) && stored.current[localeKeys[field]] === undefined)) revisions.current[field]++;
+      }
+      for (const key of changedKeys) changesDuringRead[key] = changes[key].newValue;
+      stored.current = { ...stored.current, ...Object.fromEntries(changedKeys.map(key => [key, changes[key].newValue])) };
+      setLocales(localesFrom(stored.current)); setIssue("");
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    void chrome.storage.local.get(allLocaleKeys).then(values => {
+      if (current !== session.current) return;
+      stored.current = { ...values, ...changesDuringRead };
+      setLocales(localesFrom(stored.current));
+    }).catch(() => {
+      if (current === session.current) setIssue("No se pudieron leer todos los formatos guardados. Revisá las preferencias.");
+    }).finally(() => { if (current === session.current) setPending(false); });
+    return () => { session.current++; chrome.storage.onChanged.removeListener(onChanged); };
+  }, [embedded]);
+
+  async function save(field: LocaleField, value: string) {
+    const next = normalizeExecutionLocale(value), current = session.current, revision = revisions.current[field];
+    setPending(true); setIssue("");
+    try {
+      await chrome.storage.local.set({ [localeKeys[field]]:next });
+      if (current === session.current && revision === revisions.current[field]) {
+        stored.current = { ...stored.current, [localeKeys[field]]:next };
+        setLocales(localesFrom(stored.current));
+      }
+    } catch {
+      if (current === session.current) setIssue("No se pudo guardar el formato. Volvé a intentar.");
+    } finally { if (current === session.current) setPending(false); }
+  }
+  return { locales, pending, issue, save };
+}
+
 export default function OptionsOperations({ embedded }: { embedded: boolean }) {
   const reader = useRef<MarketReader | null>(null);
   const readRevision = useRef(0);
@@ -94,56 +154,24 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
   const [issue, setIssue] = useState("");
   const [copyNotice, setCopyNotice] = useState<CopyNotice>();
   const [averaged, setAveraged] = useState(true);
-  const [locale, setLocale] = useState<ExecutionLocale>("auto");
-  const [localePending, setLocalePending] = useState(true);
-  const [localeIssue, setLocaleIssue] = useState("");
-  const localeRevision = useRef(0);
-  const format = useMemo(() => executionFormatters(locale), [locale]);
+  const { locales, pending:localePending, issue:localeIssue, save:saveLocale } = useExecutionLocales(embedded);
+  const format = useMemo(() => executionFormatters(locales.numbers, undefined, locales.dates), [locales.numbers, locales.dates]);
+  const currentFormat = useRef(format);
+  useLayoutEffect(() => { currentFormat.current = format; }, [format]);
   const localeOptions = useMemo(() => ([
-    ["auto", "Automático"], ["es-AR", "Argentina"], ["en-US", "Estados Unidos"],
-  ] as const).map(([value, name]) => {
+    ["auto", "Automático", "Automático"], ["es-AR", "Argentina", "Día/mes/año"], ["en-US", "Estados Unidos", "Mes/día/año"],
+  ] as const).map(([value, numberName, dateName]) => {
     const example = executionFormatters(value);
-    return { value, label: `${name} (${example.number(1234.56)} · ${example.expiration("2026-12-18")})` };
+    return { value, numberLabel:`${numberName} (${example.number(1234.56)})`, dateLabel:`${dateName} (${example.expiration("2026-12-18")})` };
   }), []);
+
+  useEffect(() => { setCopyNotice(undefined); }, [locales.numbers, locales.dates]);
 
   useEffect(() => {
     if (!copyNotice || copyNotice.error) return;
     const timer = setTimeout(() => setCopyNotice(current => current === copyNotice ? undefined : current), copyConfirmationMs);
     return () => clearTimeout(timer);
   }, [copyNotice]);
-
-  useEffect(() => {
-    if (!embedded) return;
-    let active = true;
-    const revision = localeRevision.current;
-    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area !== "local" || !Object.hasOwn(changes, localeKey)) return;
-      localeRevision.current++;
-      setLocale(normalizeExecutionLocale(changes[localeKey].newValue));
-      setLocaleIssue("");
-    };
-    chrome.storage.onChanged.addListener(onChanged);
-    void chrome.storage.local.get(localeKey).then(values => {
-      if (active && revision === localeRevision.current) setLocale(normalizeExecutionLocale(values[localeKey]));
-    }).catch(() => {
-      if (active && revision === localeRevision.current) setLocaleIssue("No se pudo leer el formato guardado. Se usa Automático.");
-    }).finally(() => { if (active) setLocalePending(false); });
-    return () => { active = false; chrome.storage.onChanged.removeListener(onChanged); };
-  }, [embedded]);
-
-  async function saveLocale(value: string) {
-    const next = normalizeExecutionLocale(value);
-    const revision = localeRevision.current;
-    setLocalePending(true);
-    setLocaleIssue("");
-    setCopyNotice(undefined);
-    try {
-      await chrome.storage.local.set({ [localeKey]: next });
-      if (revision === localeRevision.current) setLocale(next);
-    } catch {
-      setLocaleIssue("No se pudo guardar el formato regional. Volvé a intentar.");
-    } finally { setLocalePending(false); }
-  }
 
   const groups = useMemo(() => groupExecutions(report?.rows ?? [], averaged), [report, averaged]);
 
@@ -216,7 +244,7 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
     }
     if (reader.current !== current) return;
     try {
-      await navigator.clipboard.writeText(executionClipboard(group.rows, scope, averaged, format));
+      await navigator.clipboard.writeText(executionClipboard(group.rows, scope, averaged, currentFormat.current));
       setCopyNotice({ group: group.key, scope });
     } catch {
       setCopyNotice({ group: group.key, scope, error: true });
@@ -232,9 +260,13 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
       <button type="button" disabled={busy} onClick={() => void refresh()}>
         <OperationIcon icon="refresh" />{busy && !report ? "Leyendo…" : "Actualizar desde Matriz"}
       </button>
-      <label>Formato regional <select value={locale} disabled={busy || localePending}
-        onChange={event => void saveLocale(event.target.value)}>
-        {localeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      <label>Formato de números <select value={locales.numbers} disabled={busy || localePending}
+        onChange={event => { setCopyNotice(undefined); void saveLocale("numbers", event.target.value); }}>
+        {localeOptions.map(option => <option key={option.value} value={option.value}>{option.numberLabel}</option>)}
+      </select></label>
+      <label>Formato de fecha <select value={locales.dates} disabled={busy || localePending}
+        onChange={event => { setCopyNotice(undefined); void saveLocale("dates", event.target.value); }}>
+        {localeOptions.map(option => <option key={option.value} value={option.value}>{option.dateLabel}</option>)}
       </select></label>
       {groups.length > 0 && <label><input type="checkbox" checked={averaged} disabled={busy}
         onChange={event => { setAveraged(event.target.checked); setCopyNotice(undefined); }} /> Agrupar por strike</label>}
@@ -247,9 +279,9 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
     {groups.map(group => {
       const notice = copyNotice?.group === group.key ? copyNotice : undefined;
       const combinedNotice = notice?.scope === "both" ? notice : undefined;
-      return <section key={group.key} className="ct-operations-group" aria-label={`${group.underlying}, vencimiento ${group.expiration}`}>
+      return <section key={group.key} className="ct-operations-group" aria-label={`${group.underlying}, vencimiento ${format.expiration(group.expiration)}`}>
         <div className="ct-operations-toolbar ct-operations-heading">
-          <h3>{group.underlying} <span>· Vencimiento <time dateTime={group.expiration}>{group.expiration}</time></span></h3>
+          <h3>{group.underlying} <span>· Vencimiento <time dateTime={group.expiration}>{format.expiration(group.expiration)}</time></span></h3>
           <CopyButton label="Copiar Calls y Puts" disabled={busy || localePending} notice={combinedNotice} onCopy={() => void copy(group, "both")} />
         </div>
         <CopyError notice={combinedNotice} />

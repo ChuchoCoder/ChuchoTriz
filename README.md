@@ -54,9 +54,13 @@ activado por defecto y calcula
 el precio promedio ponderado por serie y mantiene compras y ventas separadas.
 Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
 Vencimiento, Cantidad, Base y Prima para pegar en una planilla.
-En **Formato regional**, elegí **Automático**, **Argentina** o **Estados Unidos**
-según la configuración de tu planilla. La elección ajusta la fecha y los números
-de la tabla y de la copia, y se guarda en el perfil de Chrome.
+Elegí **Formato de números** y **Formato de fecha** por separado según tu
+planilla. Por ejemplo, podés combinar números argentinos con fechas mes/día/año.
+La fecha de operación en la grilla y el vencimiento del encabezado siguen el
+formato de fecha; la copia usa el vencimiento con ese mismo formato y los
+números con su preferencia independiente. Ambos selectores muestran ejemplos
+y se guardan en el perfil de Chrome. La preferencia regional anterior se conserva
+para ambos campos hasta que elijas un formato propio para cada uno.
 Esta lectura está habilitada para Matriz 4.24.4.
 
 Compatible con `https://*.xoms.com.ar/*` y `https://remarkets.matriz.com.ar/*`.

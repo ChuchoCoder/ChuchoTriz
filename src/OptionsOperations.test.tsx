@@ -6,9 +6,9 @@ import ChuchoTrizTools from "./ChuchoTrizTools";
 import OptionsOperations from "./OptionsOperations";
 import type { OptionExecution } from "./optionExecutions";
 
-const { executions, dispose } = vi.hoisted(() => ({ executions: vi.fn(), dispose: vi.fn() }));
+const { executions, dispose, verifyContext } = vi.hoisted(() => ({ executions: vi.fn(), dispose: vi.fn(), verifyContext:vi.fn() }));
 vi.mock("./optionsSimulator/market", () => ({ MarketReader: class {
-  call(method: string) { return method === "executions" ? executions() : Promise.resolve(true); }
+  call(method: string) { return method === "executions" ? executions() : verifyContext(); }
   dispose = dispose;
 } }));
 vi.mock("./optionsSimulator/OptionsSimulator", () => ({ default: () => null }));
@@ -30,6 +30,7 @@ beforeEach(() => {
     onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
   } });
   executions.mockReset().mockResolvedValue(report());
+  verifyContext.mockReset().mockResolvedValue(true);
   dispose.mockClear();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
@@ -40,6 +41,155 @@ afterEach(async () => {
 const button = (text: string) => [...host.querySelectorAll("button")].find(node => node.textContent === text)!;
 const checkbox = () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
 const cells = () => [...host.querySelectorAll('table[aria-label="Calls"] tbody td')].map(cell => cell.textContent);
+const copyButton = (label: string) => [...host.querySelectorAll("button")]
+  .find(node => node.querySelector('.ct-operations-copy-label > [aria-hidden]')?.textContent === label)!;
+
+const formatRow: OptionExecution = { ...row, timestamp:new Date(2026, 10, 16, 12).getTime(), strike:1234.5, price:10.25 };
+async function changeSelect(select: HTMLSelectElement, value: string) {
+  await act(async () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles:true })); });
+}
+const numberSelect = () => host.querySelectorAll<HTMLSelectElement>("select")[0];
+const dateSelect = () => host.querySelectorAll<HTMLSelectElement>("select")[1];
+const legacyKey = "OptionsOperationsLocale", numberKey = "OptionsOperationsNumberLocale", dateKey = "OptionsOperationsDateLocale";
+
+it.each([
+  ["es-AR", "es-AR", "16/11/2026", "18/12/2026", "1.234,5", "10,25", "1.234,56"],
+  ["es-AR", "en-US", "11/16/2026", "12/18/2026", "1.234,5", "10,25", "1.234,56"],
+  ["en-US", "es-AR", "16/11/2026", "18/12/2026", "1,234.5", "10.25", "1,234.56"],
+  ["en-US", "en-US", "11/16/2026", "12/18/2026", "1,234.5", "10.25", "1,234.56"],
+  ["auto", "es-AR", "16/11/2026", "18/12/2026", "1,234.5", "10.25", "1,234.56"],
+  ["es-AR", "auto", "11/16/2026", "12/18/2026", "1.234,5", "10,25", "1.234,56"],
+])("updates grid and all copy buttons independently: numbers %s, dates %s", async (numbers, dates, operationDate, expiry, strike, callPrice, putPrice) => {
+  executions.mockResolvedValue({ ...report(), rows:[formatRow, { ...formatRow, securityId:"put", kind:"put", quantity:-3, price:1234.56 }] });
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { languages:["en-US"], clipboard:{ writeText } });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  const initialDate = cells()[0];
+  await changeSelect(numberSelect(), numbers);
+  expect(cells()[0]).toBe(initialDate);
+  const currentNumbers = cells().slice(1);
+  await changeSelect(dateSelect(), dates);
+  expect(cells().slice(1)).toEqual(currentNumbers);
+  expect(cells()).toEqual([operationDate, "2", strike, callPrice]);
+  expect([...host.querySelectorAll('table[aria-label="Puts"] tbody td')].map(e => e.textContent))
+    .toEqual([operationDate, "-3", strike, putPrice]);
+  expect(host.querySelector("time")?.textContent).toBe(expiry);
+  expect(host.querySelector("time")?.dateTime).toBe("2026-12-18");
+  const calls = `${expiry}\t2\t${strike}\t${callPrice}`, puts = `${expiry}\t-3\t${strike}\t${putPrice}`;
+  await act(async () => copyButton("Copiar Calls").click());
+  expect(writeText).toHaveBeenLastCalledWith(calls);
+  await act(async () => copyButton("Copiar Puts").click());
+  expect(writeText).toHaveBeenLastCalledWith(puts);
+  await act(async () => copyButton("Copiar Calls y Puts").click());
+  expect(writeText).toHaveBeenLastCalledWith(`OPERACIONES CALLS (CON PROMEDIOS)\n${calls}\n\nOPERACIONES PUTS (CON PROMEDIOS)\n${puts}`);
+});
+
+it("formats the displayed expiry in the group header too", async () => {
+  await act(async () => root.render(<OptionsOperations embedded />));
+  await changeSelect(dateSelect(), "es-AR");
+  expect(host.querySelector("time")?.textContent).toBe("18/12/2026");
+});
+
+function installStorage(initial: Record<string, unknown> = {}) {
+  const values = { ...initial };
+  const listeners = new Set<(changes: Record<string, chrome.storage.StorageChange>, area: chrome.storage.AreaName) => void>();
+  const emit = (patch: Record<string, unknown>) => {
+    const changes = Object.fromEntries(Object.entries(patch).map(([key, newValue]) => [key, { oldValue:values[key], newValue }]));
+    Object.assign(values, patch); listeners.forEach(listener => listener(changes, "local"));
+  };
+  vi.mocked(chrome.storage.local.get).mockImplementation(async () => ({ ...values }));
+  vi.mocked(chrome.storage.local.set).mockImplementation(async patch => emit(patch));
+  vi.mocked(chrome.storage.onChanged.addListener).mockImplementation(listener => { listeners.add(listener); });
+  vi.mocked(chrome.storage.onChanged.removeListener).mockImplementation(listener => { listeners.delete(listener); });
+  return { values, emit };
+}
+
+it("inherits legacy preferences for both fields, writes only the changed field and restores independent choices", async () => {
+  const storage = installStorage({ [legacyKey]:"es-AR" });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["es-AR", "es-AR"]);
+  expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  await changeSelect(numberSelect(), "en-US");
+  expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ [numberKey]:"en-US" });
+  expect(dateSelect().value).toBe("es-AR");
+  await act(async () => root.render(null));
+  await act(async () => root.render(<OptionsOperations embedded />));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["en-US", "es-AR"]);
+  await act(async () => storage.emit({ [legacyKey]:"en-US" }));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["en-US", "en-US"]);
+  await changeSelect(dateSelect(), "es-AR");
+  expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ [dateKey]:"es-AR" });
+  await act(async () => storage.emit({ [legacyKey]:"auto" }));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["en-US", "es-AR"]);
+});
+
+it("merges a format changed during the initial read without dropping the untouched legacy format", async () => {
+  const storage = installStorage();
+  let finishRead!: (values: Record<string, unknown>) => void;
+  vi.mocked(chrome.storage.local.get).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+  await act(async () => root.render(<OptionsOperations embedded />));
+  await act(async () => storage.emit({ [numberKey]:"en-US" }));
+  await act(async () => finishRead({ [legacyKey]:"es-AR" }));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["en-US", "es-AR"]);
+});
+
+it("preserves an external change to dates while a number preference save is pending", async () => {
+  const storage = installStorage({ [legacyKey]:"es-AR" });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  let finishSave!: () => void;
+  vi.mocked(chrome.storage.local.set).mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+  await changeSelect(numberSelect(), "en-US");
+  expect(copyButton("Copiar Calls").disabled).toBe(true);
+  await act(async () => storage.emit({ [dateKey]:"en-US" }));
+  await act(async () => finishSave());
+  expect([numberSelect().value, dateSelect().value]).toEqual(["en-US", "en-US"]);
+});
+
+it("keeps a newer external number preference over a late local save result", async () => {
+  const storage = installStorage({ [legacyKey]:"en-US" });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  let finishSave!: () => void;
+  vi.mocked(chrome.storage.local.set).mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+  await changeSelect(numberSelect(), "es-AR");
+  await act(async () => storage.emit({ [numberKey]:"auto" }));
+  await act(async () => finishSave());
+  expect([numberSelect().value, dateSelect().value]).toEqual(["auto", "en-US"]);
+});
+
+it("keeps the previous formats on save failure and lets the user retry", async () => {
+  installStorage({ [legacyKey]:"es-AR" });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(Error("storage unavailable"));
+  await changeSelect(dateSelect(), "en-US");
+  expect([numberSelect().value, dateSelect().value]).toEqual(["es-AR", "es-AR"]);
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("No se pudo guardar");
+  await changeSelect(dateSelect(), "en-US");
+  expect([numberSelect().value, dateSelect().value]).toEqual(["es-AR", "en-US"]);
+});
+
+it("uses the formats currently displayed if preferences change while clipboard context verification is pending", async () => {
+  const storage = installStorage({ [legacyKey]:"es-AR" });
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { languages:["en-US"], clipboard:{ writeText } });
+  executions.mockResolvedValue({ ...report(), rows:[formatRow] });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  let finishVerify!: (valid: boolean) => void;
+  verifyContext.mockImplementationOnce(() => new Promise(resolve => { finishVerify = resolve; }));
+  await act(async () => copyButton("Copiar Calls").click());
+  await act(async () => storage.emit({ [dateKey]:"en-US" }));
+  expect(cells()[0]).toBe("11/16/2026");
+  await act(async () => finishVerify(true));
+  expect(writeText).toHaveBeenLastCalledWith("12/18/2026\t2\t1.234,5\t10,25");
+});
+
+it("handles removed and invalid independent preferences without changing the other format", async () => {
+  const storage = installStorage({ [legacyKey]:"es-AR", [numberKey]:"en-US", [dateKey]:"en-US" });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  await act(async () => storage.emit({ [dateKey]:undefined }));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["en-US", "es-AR"]);
+  await act(async () => storage.emit({ [numberKey]:"invalid" }));
+  expect([numberSelect().value, dateSelect().value]).toEqual(["auto", "es-AR"]);
+});
 
 it("loads grouped executions immediately on entering and refreshes them on re-entry", async () => {
   await act(async () => root.render(<ChuchoTrizTools embedded />));
