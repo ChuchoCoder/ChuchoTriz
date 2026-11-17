@@ -218,5 +218,19 @@ async page => {
   assert((await book()).operations.length === 1, 'Closed history can be removed');
   await click(button('Deshacer eliminación')); await closedRow.waitFor(); assert((await book()).operations[1].legs[0].exits.length === 1, 'Closed history restored');
   checks.push('Closed-record cleanup and undo retain final exit history');
+  await click(button('1 · Monitor'));
+  await click(page.locator('.ro-monitor-table tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación', exact: true }));
+  await page.evaluate(() => { const s=mainStore.securityStore.securities.find(i=>i.id==='BMA'); mainStore.securityStore.securities.push({ ...s, id:'LOT10', symbolStr:'LOT10', refData:{ ...s.refData, roundLot:10 } }); });
+  await choose('Instrumento A', 'LOT10');
+  await wait(() => document.querySelector('[aria-label="Cantidad A"]').min === '10' && Number(document.querySelector('[aria-label="Precio de entrada A"]').value) > 0);
+  assert(await label('Cantidad A').evaluate(e=>!e.validity.stepMismatch&&e.checkValidity()), 'Default 100 is valid for a native lot of ten');
+  await label('Cantidad A').fill('105'); assert(await label('Cantidad A').evaluate(e=>e.validity.stepMismatch), 'Nonmultiple quantity remains invalid');
+  await label('Cantidad A').fill('110'); await click(button('Long LOT10 / Short GGAL'));
+  assert(await label('Cantidad A').evaluate(e=>e.checkValidity()), 'Another multiple of ten is valid');
+  await click(button('Abrir operación'));
+  const lotRow = page.locator('.ro-operations-table tr').filter({ hasText:'LOT10/GGAL' }); await lotRow.waitFor();
+  assert((await book()).operations.find(o=>o.legs[0].instrument.symbol==='LOT10')?.legs[0].quantity === 110, 'Native lot multiple submits and persists');
+  await click(lotRow.getByRole('button',{name:'Eliminar',exact:true}));
+  checks.push('Native lots greater than one accept and save valid multiples while rejecting nonmultiples');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
