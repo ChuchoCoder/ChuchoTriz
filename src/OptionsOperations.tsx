@@ -99,6 +99,12 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
   const [localeIssue, setLocaleIssue] = useState("");
   const localeRevision = useRef(0);
   const format = useMemo(() => executionFormatters(locale), [locale]);
+  const localeOptions = useMemo(() => ([
+    ["auto", "Automático"], ["es-AR", "Argentina"], ["en-US", "Estados Unidos"],
+  ] as const).map(([value, name]) => {
+    const example = executionFormatters(value);
+    return { value, label: `${name} (${example.number(1234.56)} · ${example.expiration("2026-12-18")})` };
+  }), []);
 
   useEffect(() => {
     if (!copyNotice || copyNotice.error) return;
@@ -228,9 +234,7 @@ export default function OptionsOperations({ embedded }: { embedded: boolean }) {
       </button>
       <label>Formato regional <select value={locale} disabled={busy || localePending}
         onChange={event => void saveLocale(event.target.value)}>
-        <option value="auto">Automático</option>
-        <option value="es-AR">Argentina (1.234,56)</option>
-        <option value="en-US">Estados Unidos (1,234.56)</option>
+        {localeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select></label>
       {groups.length > 0 && <label><input type="checkbox" checked={averaged} disabled={busy}
         onChange={event => { setAveraged(event.target.checked); setCopyNotice(undefined); }} /> Agrupar por strike</label>}
