@@ -8,13 +8,17 @@ type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize";
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
-export function InstrumentPicker({ label, value, onChange, search, disabled }: {
-  label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean;
+export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false }: {
+  label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
 }) {
   const id = useId(), [query, setQuery] = useState(value?.symbol || ""), [options, setOptions] = useState<RatioInstrument[]>([]);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [issue, setIssue] = useState("");
   const [resolving, setResolving] = useState(false);
   const generation = useRef(0), latestQuery = useRef(query);
+  const input = useRef<HTMLInputElement>(null), focused = useRef(false);
+  useEffect(() => {
+    if (autoFocus && !disabled && !focused.current) { input.current?.focus(); focused.current = true; }
+  }, [autoFocus, disabled]);
   latestQuery.current = query;
   useEffect(() => () => { generation.current++; }, []);
   useEffect(() => { if (value) setQuery(value.symbol); }, [value?.id, value?.symbol]);
@@ -44,7 +48,7 @@ export function InstrumentPicker({ label, value, onChange, search, disabled }: {
   };
   return <div className="ct-ratio-picker">
     <label htmlFor={id}>{label}</label>
-    <input id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-options`} aria-autocomplete="list"
+    <input ref={input} id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-options`} aria-autocomplete="list"
       aria-activedescendant={open && options[active] ? `${id}-option-${active}` : undefined}
       value={query} disabled={disabled} autoComplete="off" maxLength={60} placeholder="Buscar instrumento"
       onChange={event => { generation.current++; setResolving(false); latestQuery.current = event.target.value; setOptions([]); setActive(0); setIssue(""); setQuery(event.target.value); onChange(undefined); setOpen(true); }}
@@ -105,7 +109,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         void savePairs(pairs, revision.current).then(saved => { if (saved) setEditing(null); });
       }}>
         <div className="ct-ratios-pickers">
-          <InstrumentPicker key={`${editorSession}-a`} label="A · Numerador" value={a} onChange={setA} search={search} disabled={busy} />
+          <InstrumentPicker key={`${editorSession}-a`} label="A · Numerador" value={a} onChange={setA} search={search} disabled={busy} autoFocus />
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>

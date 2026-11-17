@@ -7,9 +7,9 @@ import type { RatioInstrument } from "./model";
 const al30: RatioInstrument = { id: "al30", symbol: "AL30", market: "bm", currency: "ARS", settlement: "2" };
 const ggal: RatioInstrument = { ...al30, id: "ggal", symbol: "GGAL" };
 let container: HTMLDivElement, root: Root, search: ReturnType<typeof vi.fn<(query: string) => Promise<RatioInstrument[]>>>;
-function Probe() {
+function Probe({ autoFocus = false, disabled = false }: { autoFocus?: boolean; disabled?: boolean }) {
   const [value, setValue] = useState<RatioInstrument>();
-  return <><InstrumentPicker label="Instrumento" value={value} onChange={setValue} search={search} disabled={false} /><output>{value?.id}</output></>;
+  return <><InstrumentPicker label="Instrumento" value={value} onChange={setValue} search={search} disabled={disabled} autoFocus={autoFocus} /><output>{value?.id}</output></>;
 }
 beforeEach(async () => {
   vi.useFakeTimers(); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -26,6 +26,18 @@ async function type(text: string) {
   });
 }
 async function blur() { await act(async () => container.querySelector("input")!.blur()); }
+it("focuses the first enabled editor once and does not steal focus after subsequent updates", async () => {
+  await act(async () => root.render(<Probe autoFocus disabled />));
+  const input = container.querySelector("input")!;
+  expect(document.activeElement).not.toBe(input);
+  await act(async () => root.render(<Probe autoFocus />));
+  expect(document.activeElement).toBe(input);
+  const next = container.querySelector("output")!; next.tabIndex = 0;
+  await act(async () => next.focus());
+  await act(async () => root.render(<Probe autoFocus disabled />));
+  await act(async () => root.render(<Probe autoFocus />));
+  expect(document.activeElement).toBe(next);
+});
 it("selects the unique exact ticker on blur without waiting for dropdown selection", async () => {
   await type("al30"); await blur();
   expect(container.querySelector("output")!.textContent).toBe("al30");

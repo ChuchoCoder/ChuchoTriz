@@ -8,7 +8,8 @@ impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 
 ## Agregar y editar pares
 
-1. Pulsá **＋** y buscá el instrumento **A · Numerador**.
+1. Pulsá **＋**: el foco queda en **A · Numerador**. **Tab** pasa directamente
+   a **B · Denominador**, y **Shift+Tab** vuelve a A.
 2. Ingresá el ticker completo: al salir del campo se elige automáticamente si
    hay una coincidencia exacta única. También podés elegir una opción del catálogo,
    verificando ticker, mercado y moneda. El plazo
@@ -94,7 +95,8 @@ vacío. Para retirarlo antes de desinstalar, cerrá el panel desde su título.
   restringe filenames al workspace original, copiá el validador a su carpeta
   ignorada `.playwright-mcp/` antes de llamarlo. No usa otro perfil.
 
-El recorrido del bundle pasó 22 comprobaciones: cálculo, varios pares y widgets,
+El recorrido del bundle pasó 25 comprobaciones: foco inicial, Tab entre instrumentos,
+resolución del ticker sin mover el foco, cálculo, varios pares y widgets,
 precios actualizados/faltantes, referencias faltantes, monedas/plazos distintos,
 duplicados, inversión, edición, borrado, desconexión/reconexión, tamaño, cambio de
 dashboard y recarga, selección exacta al salir del campo y formato persistido por

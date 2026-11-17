@@ -27,10 +27,13 @@ async (page) => {
   const before = await snapshot();
   await idle(); await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
   await b('Agregar ratio').click({ force: true });
+  assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Opening the ratio editor focuses the numerator input');
   for (const [index, ticker] of ['BMA', 'GGAL'].entries()) {
     const input = page.locator('.ct-ratio-picker input').nth(index);
     await input.fill(ticker, { force: true }); await input.press('Tab');
+    if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Tab moves directly from numerator to denominator');
     await page.waitForFunction(i => document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=status]')?.textContent.includes('ARS'), index, { polling: 100 });
+    if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Resolving the numerator ticker preserves focus in the denominator');
   }
   await save();
   assert(true, 'Exact typed tickers resolve on blur without selecting a suggestion');
