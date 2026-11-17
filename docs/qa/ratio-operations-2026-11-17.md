@@ -305,3 +305,28 @@ se acortan visualmente con puntos suspensivos y conservan el texto en tooltip.
   `Free/backups/extension-before-inline-entry-20261117-180023`.
 - Las siete claves locales conservan el hash agregado
   `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+
+## Actualización: dirección selecciona las mejores puntas de entrada
+
+Long A / Short B carga Ask A y Bid B; Long B / Short A carga Bid A y Ask B.
+La elección resalta las dos puntas del book y actualiza ratio y cantidades
+derivadas sin copiar volúmenes ni enviar/registrar órdenes. Pulsar otra vez
+la dirección activa vuelve a cargar las puntas actuales. Los precios quedan
+fijos ante actualizaciones del mercado. Si falta la mejor punta, ese precio
+queda vacío con aviso; no se toma último ni se salta a un nivel más profundo.
+
+- `npm test`: **545 Vitest + 62 Node + 2 QA infra = 609 PASS**.
+- Seguridad/política/lint y empaquetado: PASS.
+- **17 recorridos PASS** del bundle, incluyendo ambos sentidos, resaltado,
+  click repetido, redimensionamiento B, mejor Ask ausente con niveles profundos
+  presentes, recuperación con reintento y ausencia de registro automático.
+- Cocos BMA/GGAL: Long GGAL / Short BMA toma Bid BMA 9.250 y Ask GGAL 4.850;
+  Long BMA / Short GGAL toma Ask BMA 9.330 y Bid GGAL 4.830. Ratio de apertura
+  90,72% y 93,17%, respectivamente. Cantidad A=100 conservada; click repetido
+  repone la punta tras modificar manualmente el precio. Mini Order Form intacto.
+- Instalado en el perfil compartido con 24 archivos comparados por hash;
+  respaldo `Free/backups/extension-before-direction-quotes-20261117-181941`.
+- Las siete claves locales conservan el hash medido antes/después:
+  `b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
+- Captura recortada: `test-results/direction-book-cocos.png`. Sin apertura
+  registrada ni envío de órdenes en la verificación del broker.

@@ -7,7 +7,7 @@ import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
 import { numeric } from "../optionsSimulator/model";
 import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
-import { applyDefaultWatch, closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isRateInstrument, resolveDefaultWatch,
+import { applyDefaultWatch, bestBookPrice, closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, remaining, sameCurrency,
   validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg } from "./trading";
 import "./RatioOperations.css";
@@ -141,6 +141,15 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const mixed = draft.a && draft.b && !sameCurrency(draft.a, draft.b);
   const qb = mixed && draft.preservedB !== undefined ? draft.preservedB : draft.a && draft.b ? counterpart(qa, pa, pb, fa, fb, sb, draft.a, draft.b) : NaN;
 
+  function selectDirection(direction: 1 | -1) {
+    if (!available || partiallyClosed) return;
+    const sourceA = direction === 1 ? "ask" : "bid", sourceB = direction === 1 ? "bid" : "ask";
+    const priceA = bestBookPrice(quotes[draft.a?.id || ""], sourceA), priceB = bestBookPrice(quotes[draft.b?.id || ""], sourceB);
+    setDraft(previous => ({ ...previous, direction, pa: input(priceA), pb: input(priceB), sourceA, sourceB }));
+    const missing = [priceA === undefined ? `${sourceA === "ask" ? "Ask" : "Bid"} de ${draft.a?.symbol || "A"}` : "", priceB === undefined ? `${sourceB === "ask" ? "Ask" : "Bid"} de ${draft.b?.symbol || "B"}` : ""].filter(Boolean);
+    setIssue(missing.length ? `Sin mejor punta publicada: ${missing.join(" y ")}. Ingresá el precio manualmente o volvé a pulsar la dirección cuando esté disponible.` : "");
+  }
+
   async function saveEntry() {
     const a = draft.a, b = draft.b;
     if (!a || !b) { setIssue("Seleccioná ambos instrumentos, con coincidencia exacta o desde el catálogo."); return; }
@@ -257,9 +266,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
     </div>}
     {view === "opening" && <form aria-label={edit ? "Editar operación de ratio" : "Abrir operación de ratio"} onSubmit={e => { e.preventDefault(); void saveEntry(); }}>
       {edit && <p className="ro-notice">Las cantidades son totales de apertura. Los cierres registrados se conservan; corregir precios o gastos recalcula el resultado.</p>}
-      <div className="ro-entry-grid"><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => setDraft(p => ({ ...p, direction: 1 }))}>Long {draft.a?.symbol || "A"} / Short {draft.b?.symbol || "B"}</button>
+      <div className="ro-entry-grid"><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => selectDirection(1)}>Long {draft.a?.symbol || "A"} / Short {draft.b?.symbol || "B"}</button>
         <div className="ro-opening-ratio"><small>Ratio de apertura</small><output aria-label="Ratio de apertura">{draft.a && draft.b && pa > 0 && pb > 0 ? pairRatioLabel(pa / pb, draft.a, draft.b) : "—"}</output></div>
-        <button type="button" aria-pressed={draft.direction === -1} disabled={!available || partiallyClosed} onClick={() => setDraft(p => ({ ...p, direction: -1 }))}>Long {draft.b?.symbol || "B"} / Short {draft.a?.symbol || "A"}</button></div>
+        <button type="button" aria-pressed={draft.direction === -1} disabled={!available || partiallyClosed} onClick={() => selectDirection(-1)}>Long {draft.b?.symbol || "B"} / Short {draft.a?.symbol || "A"}</button></div>
         {leg("a")}{leg("b")}
         <aside className="ro-entry-costs"><label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
           <label>Fecha/hora de apertura · Argentina<input type="datetime-local" value={draft.at} max={dateInput()} disabled={!available} required onChange={e => setDraft(p => ({ ...p, at: e.target.value }))} /></label>

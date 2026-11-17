@@ -160,6 +160,11 @@ export function dailyPriceChange(quote?: TradingQuote): number | undefined {
   const change = (quote.last / quote.reference - 1) * 100;
   return finite(change) ? change : undefined;
 }
+export function bestBookPrice(quote: TradingQuote | undefined, side: "bid" | "ask"): number | undefined {
+  if (quote?.issue) return;
+  const level = quote?.depth ? quote.depth[0]?.[side] : quote?.[side];
+  return positive(level?.price) && positive(level?.size) ? level.price : undefined;
+}
 export function validInstrument(value: unknown): value is TradingInstrument {
   if (!value || typeof value !== "object") return false;
   const i = value as TradingInstrument;

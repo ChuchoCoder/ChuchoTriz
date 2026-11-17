@@ -60,6 +60,12 @@ movimiento reducido se usa una marca estática breve.
 - La apertura empieza con las dos direcciones identificadas por ticker
   (por ejemplo, Long BMA / Short GGAL y Long GGAL / Short BMA), con el ratio
   de apertura entre ambas. Se omite el bloque repetido de título y par.
+  Pulsar una dirección carga y resalta la mejor Ask para la pata long y la
+  mejor Bid para la short, incluso al pulsar otra vez la dirección activa.
+  Actualiza el ratio y el dimensionamiento B con esos precios, conservando A.
+  Los precios quedan fijos hasta otra selección. Si falta una punta, deja ese
+  precio vacío y avisa; admite ingreso manual o reintento, sin sustituirlo por
+  último ni niveles más profundos. Elegir la dirección no registra la apertura.
 - La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
   de entrada y salida. Los DDMM de cada pata son editables y aparecen antes
   de su Monto A/B, en la misma fila del resumen debajo de los books.

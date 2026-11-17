@@ -1,9 +1,16 @@
 import { expect, it } from "vitest";
-import { applyDefaultWatch, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
+import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
 import { calculateRatio } from "./model";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
 const at = "2026-01-01T13:00:00.000Z", exitAt = "2026-01-02T13:00:00.000Z";
+it("uses the complete best published level without substituting last, deeper levels or stale top fields", () => {
+  const bid = { price: 99, size: 10 }, ask = { price: 101, size: 20 };
+  expect(bestBookPrice({ bid, ask }, "ask")).toBe(101);
+  expect(bestBookPrice({ bid, ask }, "bid")).toBe(99);
+  expect(bestBookPrice({ bid, ask, depth: [{ bid, ask: { price: 102, size: 5 } }] }, "ask")).toBe(102);
+  for (const quote of [undefined, { last: 100 }, { ask, depth: [] }, { ask, depth: [{}, { ask }] }, { ask, issue: "disconnected" }, { ask: { price: 101, size: 0 } }, { ask: { price: Infinity, size: 1 } }]) expect(bestBookPrice(quote, "ask")).toBeUndefined();
+});
 const operation = (): RatioOperation => ({ id: "operation", openedAt: at, direction: 1, commission: 1, fx: 1, targetRatio: 1.2,
   legs: [ { instrument: instrument("A"), side: 1, quantity: 100, entry: 100, factor: 1, step: 1, ddmm: .1, exits: [] },
     { instrument: instrument("B"), side: -1, quantity: 200, entry: 50, factor: 1, step: 1, ddmm: .2, exits: [] } ] });
