@@ -50,10 +50,23 @@ test('rejects unknown methods, oversized requests and unverified Matriz versions
   assert.match((await f.quotes(Array.from({ length: 101 }, (_, i) => String(i)))).error, /100/);
   f.document.body.innerText = 'Versión: 99'; assert.match((await f.request('ratioContext', { storageSalt: 'a'.repeat(64) })).error, /Versión/);
 });
-test('does not combine incomplete book levels with md, rejects regressing sequence', async () => {
+test('keeps native top separate from incomplete extra book levels and rejects regressing sequence', async () => {
   const f = fixture(); f.securities[0].book = { bidBook1: 98, bszBook1: 0, askBook1: 102, aszBook1: 20 };
-  let q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.equal(q.bid, undefined); assert.deepEqual(q.ask, { price: 102, size: 20 });
+  let q = (await f.quotes(['BMA'])).result.instruments.BMA;
+  assert.deepEqual(q.bid, { price: 99, size: 500 }); assert.deepEqual(q.ask, { price: 101, size: 400 });
+  assert.equal(q.depth[1].bid, undefined); assert.deepEqual(q.depth[1].ask, { price: 102, size: 20 });
   f.securities[0].md.seq = 9; q = (await f.quotes(['BMA'])).result.instruments.BMA; assert.match(q.issue, /secuencia/);
+});
+test('projects native best md plus Book1..4 as five levels with actual quantities', async () => {
+  const f = fixture(), book = {};
+  for (let i = 1; i <= 5; i++) Object.assign(book, { ['bidBook' + i]: 99 - i, ['bszBook' + i]: 100 * i, ['askBook' + i]: 101 + i, ['aszBook' + i]: 200 * i });
+  f.securities[0].book = book;
+  const q = (await f.quotes(['BMA'])).result.instruments.BMA;
+  assert.equal(q.depth.length, 5); assert.deepEqual(q.depth[0], { bid: { price: 99, size: 500 }, ask: { price: 101, size: 400 } });
+  assert.deepEqual(q.depth[4], { bid: { price: 95, size: 400 }, ask: { price: 105, size: 800 } });
+  f.securities[0].md.bsz = 0;
+  const incomplete = (await f.quotes(['BMA'])).result.instruments.BMA;
+  assert.equal(incomplete.bid, undefined); assert.equal(incomplete.depth[0].bid, undefined); assert.equal(incomplete.depth[1].bid.price, 98);
 });
 test('projects daily reference prices and dates without substituting last or read time', async () => {
   const f = fixture(); Object.assign(f.securities[0].md, { refp: 98, refdStr: '2026-11-16' });

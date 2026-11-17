@@ -162,5 +162,7 @@
   "scripts/ratio-operations-reader.test.mjs",
   "tools/validate-ratio-operations.playwright.js",
   "src/ratios/tradingMarket.test.ts",
-  "docs/qa/ratio-operations-2026-11-17.md"
+  "docs/qa/ratio-operations-2026-11-17.md",
+  "src/ratios/RatioOrderBook.tsx",
+  "src/ratios/RatioOrderBook.test.tsx"
 ]

@@ -39,15 +39,17 @@
     const md = s.md || {}, book = s.book || {};
     if (finite(md.seq) && md.seq < (sequences.get(s.id) ?? -Infinity)) return { issue: "Esperando una secuencia de mercado actual." };
     if (finite(md.seq)) sequences.set(s.id, md.seq);
-    const level = (side, size) => {
-      const p = book[side + "Book1"], q = book[size + "Book1"];
-      if (p !== undefined || q !== undefined) return positive(p) && positive(q) ? { price: p, size: q } : undefined;
-      return positive(md[side]) && positive(md[size]) ? { price: md[side], size: md[size] } : undefined;
+    const level = (side, size, index) => {
+      // Matriz's best level lives in md; Book1..4 are the following four levels.
+      const source = index === 0 ? md : book;
+      const p = source[index === 0 ? side : side + "Book" + index], q = source[index === 0 ? size : size + "Book" + index];
+      return positive(p) && positive(q) ? { price: p, size: q } : undefined;
     };
+    const depth = Array.from({ length: 5 }, (_, i) => ({ bid: level("bid", "bsz", i), ask: level("ask", "asz", i) }));
     const at = typeof md.lstdStr === "string" ? Date.parse(md.lstdStr) : NaN;
     const ref = md.refdStr || md.refd;
     const referenceAt = ref instanceof Date ? ref.getTime() : typeof ref === "string" ? Date.parse(ref) : NaN;
-    return { last: positive(md.lst) ? md.lst : undefined, bid: level("bid", "bsz"), ask: level("ask", "asz"),
+    return { last: positive(md.lst) ? md.lst : undefined, bid: depth[0].bid, ask: depth[0].ask, depth,
       reference: positive(md.refp) ? md.refp : undefined,
       referenceDate: finite(referenceAt) && referenceAt <= Date.now() ? new Date(referenceAt).toISOString().slice(0, 10) : undefined,
       tradedAt: finite(at) && at <= Date.now() ? at : undefined, amountFactor: descriptor(s)?.amountFactor };

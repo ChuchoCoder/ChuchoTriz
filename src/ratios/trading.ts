@@ -6,8 +6,10 @@ export interface TradingInstrument extends RatioInstrument {
   quantityStep?: number;
   quantityUnit: "nominales" | "contratos" | "unidades";
 }
+export interface TradingDepthLevel { price: number; size: number }
 export interface TradingQuote {
-  last?: number; bid?: { price: number; size: number }; ask?: { price: number; size: number };
+  last?: number; bid?: TradingDepthLevel; ask?: TradingDepthLevel;
+  depth?: { bid?: TradingDepthLevel; ask?: TradingDepthLevel }[];
   tradedAt?: number; amountFactor?: number; issue?: string; reference?: number; referenceDate?: string;
 }
 export interface TradingPair { id: string; a: TradingInstrument; b: TradingInstrument }

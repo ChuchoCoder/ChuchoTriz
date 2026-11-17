@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InstrumentPicker } from "./RatiosDashboard";
+import RatioOrderBook from "./RatioOrderBook";
 import { calculateRatio, currencyLabel, numberLabel, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
 import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
@@ -200,22 +201,16 @@ export default function RatioOperations({ active }: { active: boolean }) {
     const first = key === "a", instrument = draft[key], quote = instrument ? quotes[instrument.id] : undefined;
     const side = first ? draft.direction : -draft.direction, priceKey = first ? "pa" : "pb", factorKey = first ? "fa" : "fb", stepKey = first ? "sa" : "sb", ddmmKey = first ? "ddmma" : "ddmmb", sourceKey = first ? "sourceA" : "sourceB";
     const selectedPrice = numeric(draft[priceKey]), source = draft[sourceKey];
-    const choose = (field: "last" | "bid" | "ask") => {
-      const value = field === "last" ? quote?.last : quote?.[field]?.price;
-      if (value === undefined) return;
-      setDraft(p => ({ ...p, [priceKey]: input(value), [sourceKey]: field }));
-    };
-    const picker = (field: "bid" | "ask") => <button type="button" className={`ro-quote ${field}`} disabled={!available || !quote?.[field]}
-      aria-label={`Usar ${field === "bid" ? "Bid" : "Ask"} de ${key.toUpperCase()}`} aria-pressed={source === field && selectedPrice === quote?.[field]?.price} onClick={() => choose(field)}>
-      <small>{field === "bid" ? "Bid" : "Ask"}</small><strong>{numberLabel(quote?.[field]?.price)}</strong><small>Disponible {quote?.[field] ? numberLabel(quote[field]!.size) : "—"}</small></button>;
     return <section className="ro-leg" aria-label={`Pata ${key.toUpperCase()}`} key={key}>
       <header><strong>{first ? "1" : "2"} · Pata {key.toUpperCase()}</strong><span className={`ro-chip ${side === 1 ? "buy" : "sell"}`}>{side === 1 ? "Compra · Long" : "Venta · Short"}</span>{!first && <small>{draft.preservedB !== undefined ? "Cantidad registrada" : "Cantidad automática"}</small>}</header>
-      <div className="ro-leg-ident"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={priceSearch} disabled={!available || partiallyClosed} />
+      <div className="ro-leg-instrument"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={priceSearch} disabled={!available || partiallyClosed} /></div>
+      <div className="ro-entry-fields"><label>Precio de entrada {key.toUpperCase()}<input aria-label={`Precio de entrada ${key.toUpperCase()}`} type="number" min="0" step="any" value={draft[priceKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [priceKey]: e.target.value, [sourceKey]: "manual" }))} required /></label>
         <label>{edit ? "Cantidad total" : "Cantidad"} {key.toUpperCase()} · {instrument?.quantityUnit || "unidades"}<input aria-label={`Cantidad ${key.toUpperCase()}`} type="number" min="1" step={first && Number.isFinite(sa) ? sa : 1} value={first ? draft.qa : Number.isFinite(qb) ? qb : ""} readOnly={!first} disabled={!available}
           onChange={e => setDraft(p => ({ ...p, qa: e.target.value, preservedB: undefined }))} /></label></div>
-      <div className="ro-prices">{picker("bid")}<div><button type="button" className="ro-last" disabled={!available || !quote?.last} onClick={() => choose("last")} aria-label={`Usar último de ${key.toUpperCase()}`}>Último <strong>{numberLabel(quote?.last)}</strong></button>
-        <label>Precio de entrada {key.toUpperCase()}<input aria-label={`Precio de entrada ${key.toUpperCase()}`} type="number" min="0" step="any" value={draft[priceKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [priceKey]: e.target.value, [sourceKey]: "manual" }))} required /></label>
-        <small className="ro-source">Precio elegido: {{ last: "último", bid: "Bid", ask: "Ask", manual: "manual", saved: "registrado" }[source]}</small></div>{picker("ask")}</div>
+      <div className="ro-book-heading"><button type="button" className="ro-last" disabled={!available || !quote?.last} onClick={() => { if (quote?.last !== undefined) setDraft(p => ({ ...p, [priceKey]: input(quote.last), [sourceKey]: "last" })); }} aria-label={`Usar último de ${key.toUpperCase()}`}>Último <strong>{numberLabel(quote?.last)}</strong></button>
+        <small>Precio elegido: {{ last: "último", bid: "Compra", ask: "Venta", manual: "manual", saved: "registrado" }[source]}</small></div>
+      <RatioOrderBook leg={first ? "A" : "B"} quote={quote} selectedPrice={selectedPrice} selectedSide={source === "bid" || source === "ask" ? source : undefined} disabled={!available}
+        onChoose={(side, level) => setDraft(p => ({ ...p, [priceKey]: input(level.price), [sourceKey]: side }))} />
       <div className="ro-leg-footer"><small>{instrument ? `${instrumentKind(instrument.cfi)} · ${currencyLabel(instrument.currency)} · ${instrument.amountFactor === .01 ? "precio por 100 nominales" : `monto = cantidad × precio × ${numberLabel(numeric(draft[factorKey]))}`}` : "Seleccioná el instrumento"}<br />Última operación: {tradeLabel(quote?.tradedAt)}</small>
         <label>DDMM %<input aria-label={`DDMM ${key.toUpperCase()} %`} type="number" min="0" max="100" step="0.0001" value={draft[ddmmKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [ddmmKey]: e.target.value }))} required />
           <small>{instrument && defaultMarketRights(instrument) !== undefined ? `Default Premium: ${input(defaultMarketRights(instrument))}%${["Acción", "CEDEAR"].includes(instrumentKind(instrument.cfi)) ? " · IVA incluido" : ""}` : "Tipo sin default: completá la tasa"}</small></label></div>

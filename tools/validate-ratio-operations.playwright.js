@@ -18,7 +18,8 @@ async page => {
     Object.defineProperty(window, 'mainStore', { configurable: true, get: () => store, set: next => {
       store = next;
       const make = (id, cfiCode, currency, last, factor = 1) => ({ id, symbolStr: id, marketId: 'bm', currency, settlementType: '2', cfiCode,
-        refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: last, refp: last, refdStr: new Date(Date.now() - 86400000).toISOString().slice(0, 10), seq: 10, bid: last - .1, bsz: 120, ask: last + .1, asz: 150, lstdStr: new Date().toISOString() } });
+        refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: last, refp: last, refdStr: new Date(Date.now() - 86400000).toISOString().slice(0, 10), seq: 10, bid: last - .1, bsz: 120, ask: last + .1, asz: 150, lstdStr: new Date().toISOString() },
+        book: Object.fromEntries(Array.from({ length: 4 }, (_, i) => i + 1).flatMap(i => [[`bidBook${i}`, last - (i + 1) / 10], [`bszBook${i}`, 1000 + i], [`askBook${i}`, last + (i + 1) / 10], [`aszBook${i}`, 2000 + i]])) });
       const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('AL30C', 'DBXXXX', 'USD', 48, .01), make('GD30', 'DBXXXX', 'ARS', 90000, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100),
         ...['ALUA', 'TXAR', 'TGSU2', 'TGNO4'].map(id => make(id, 'ESXXXX', 'ARS', 100)),
         ...[1, 7].map(days => ({ ...make(`bm_MERV_PESOS_${days}D`, 'RPXXXX', 'ARS', days === 1 ? 18.8 : 20.5), symbolStr: `PESOS - ${days}D`, settlementType: null }))];
@@ -98,8 +99,31 @@ async page => {
   await click(page.locator('.ro-table-wrap tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación' })); await label('Precio de entrada A').waitFor();
   assert(await label('DDMM A %').inputValue() === '0.0847', 'Equity DDMM A'); assert(await label('DDMM B %').inputValue() === '0.0847', 'Equity DDMM B'); assert(await label('Comisión %').inputValue() === '0', 'Commission default');
   await page.waitForFunction(() => document.querySelector('[aria-label="Cantidad B"]').value === '200', null, { polling: 100 });
-  assert((await button('Usar Bid de A').innerText()).includes('120'), 'Bid available size');
-  await click(button('Usar Ask de A')); assert(await label('Precio de entrada A').inputValue() === '100.1', 'Ask sets entry'); assert(await button('Usar Ask de A').getAttribute('aria-pressed') === 'true', 'Selected ask');
+  const orderBook = page.getByRole('table', { name: 'Book de A', exact: true });
+  assert(await orderBook.locator('tbody tr').count() === 5, 'Five native book levels');
+  assert((await orderBook.locator('tbody tr').first().innerText()).includes('120,00'), 'Best-level volume');
+  assert((await orderBook.locator('tbody tr').nth(4).innerText()).includes('2.004,00'), 'Fifth-level native volume');
+  for (const width of [1440, 1024, 420, 1440]) {
+    await page.setViewportSize({ width, height: 1000 }); await page.screenshot({ animations: 'disabled', timeout: 10000 });
+    const fits = await page.evaluate(() => [...document.querySelectorAll('.ro-leg')].every(leg => {
+      const price = leg.querySelector('[aria-label^="Precio de entrada"]').getBoundingClientRect(), quantity = leg.querySelector('[aria-label^="Cantidad"]').getBoundingClientRect();
+      const book = leg.querySelector('.ro-book-table').getBoundingClientRect(), bounds = leg.getBoundingClientRect();
+      return price.left < quantity.left && book.right <= bounds.right + 1 && book.left >= bounds.left - 1;
+    })); assert(fits, 'Price precedes quantity and book fits at ' + width);
+  }
+  checks.push('Price precedes quantity; compact five-level native book fits desktop, tablet and mobile');
+  const ticketBefore = await page.locator('#MiniOrderForm input').evaluateAll(es => es.map(e => e.value));
+  await click(button('Usar Compra nivel 1 de A')); assert(await label('Precio de entrada A').inputValue() === '99.9', 'Native md best bid sets price');
+  await click(button('Usar Venta nivel 2 de A')); assert(await label('Precio de entrada A').inputValue() === '100.2', 'Deeper ask sets entry');
+  assert(await button('Usar Venta nivel 2 de A').getAttribute('aria-pressed') === 'true', 'Selected ask');
+  const tint = await button('Usar Venta nivel 2 de A').evaluate(e => getComputedStyle(e).backgroundColor.match(/[\d.]+/g).map(Number));
+  assert(tint[0] > tint[1], 'Selected ask is red');
+  assert(await label('Cantidad A').inputValue() === '100', 'Book volume does not overwrite entry quantity');
+  assert(JSON.stringify(await page.locator('#MiniOrderForm input').evaluateAll(es => es.map(e => e.value))) === JSON.stringify(ticketBefore), 'Book clicks leave the ticket unchanged');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(i => i.id === 'BMA'); s.book.askBook1 = 101.2; s.md.seq++; });
+  await page.waitForFunction(() => document.querySelector('[aria-label="Usar Venta nivel 2 de A"]')?.textContent.includes('101,20'), null, { polling: 100, timeout: 10000 });
+  assert(await label('Precio de entrada A').inputValue() === '100.2', 'Live book update does not move chosen entry');
+  checks.push('Native best and deeper prices selectable with volumes, red selection, frozen entry and no ticket or form submission');
   await label('Precio de entrada A').fill('100'); await label('Ratio objetivo').fill('105');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(i => i.id === 'BMA'); s.md.lst = 110; s.md.seq++; });
   await page.waitForFunction(() => document.querySelector('[aria-label="Usar último de A"]')?.textContent.includes('110,00'), null, { polling: 100 });

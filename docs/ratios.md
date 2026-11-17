@@ -37,12 +37,20 @@ movimiento reducido se usa una marca estática breve.
 
 - Agregá los pares al monitor; un ticker exacto y único se resuelve al salir del
   campo. El par sigue en el monitor después de registrar una apertura.
-- Ingresá la cantidad A y elegí sus precios y los de B desde Bid, último, Ask o
-  escribiéndolos. Con la misma moneda, B se dimensiona al lote más cercano para
+- Elegí los instrumentos y precios de entrada desde el book, último o
+  escribiéndolos, y luego ingresá la cantidad A. Con la misma moneda, B se dimensiona al lote más cercano para
   igualar montos brutos, usando factores nativos (bonos por 100 nominales: 0,01).
   Con monedas distintas, B copia exactamente los nominales de A, sin conversión
   ni dependencia de los precios; la cantidad debe respetar los lotes de ambas
   patas. Los precios elegidos no se mueven con el mercado.
+- Cada pata presenta instrumento → precio → cantidad, seguido del book compacto
+  de cinco niveles: Vol. C, Compra, Venta y Vol. V. Los datos son los mismos del
+  book nativo: mejor punta desde `md.bid/bsz/ask/asz` y cuatro niveles siguientes
+  desde `book.*Book1..4`. Un click en cualquier precio publicado lo fija como
+  entrada; no copia volumen a la cantidad, no precarga el Mini Order Form ni
+  registra una operación. Los niveles incompletos muestran — y no se pueden
+  seleccionar. La compra seleccionada se marca en verde y la venta en rojo;
+  Último y el precio manual siguen disponibles.
 - La comisión es un solo porcentaje, inicialmente 0%, para cada compra/venta
   de entrada y salida. Los DDMM están dentro de cada pata y son editables.
 - Si las monedas coinciden, ratio y objetivo son `(A/B − 1) × 100`; en monedas

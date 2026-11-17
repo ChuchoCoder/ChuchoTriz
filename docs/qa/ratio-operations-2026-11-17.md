@@ -181,3 +181,35 @@ El P&L continúa separado por moneda.
 
 Los apartados anteriores documentan las pruebas históricas; esta sección y
 `docs/ratios.md` describen la regla actual. No cambian dependencias ni permisos.
+
+## Actualización: precio antes de cantidad y book de cinco niveles
+
+- Orden de cada pata: instrumento, precio de entrada a la izquierda, cantidad a
+  la derecha y book debajo. Se retiran las cajas grandes Bid/Ask.
+- Vista tipo MiniBook, con Vol. C / Compra / Venta / Vol. V. La inspección nativa
+  de Cocos confirmó que la mejor punta está en `md.bid/bsz/ask/asz`, seguida de
+  `book.bidBook1..4`, `bszBook1..4`, `askBook1..4` y `aszBook1..4`. No se usa
+  Book1 como mejor punta ni se mezcla una cantidad de otro nivel.
+- `RatioOrderBook` sólo muestra mercado y fija el precio del borrador. No monta
+  los controles de órdenes, posiciones o ejecuciones del widget nativo. Los
+  niveles ausentes/incompletos quedan deshabilitados; se conserva la entrada
+  elegida ante actualizaciones. Compra verde, venta roja, también con tema claro.
+- `npm test`: PASS, **543 Vitest + 62 Node + 2 QA infra = 607**.
+- Seguridad/política/lint y empaquetado: PASS. Revisión independiente sin P1/P2.
+- Validador: **16 recorridos PASS**, con book de cinco filas, volúmenes reales,
+  selección de mejor y segundo nivel, entrada fija ante cambios de profundidad,
+  orden precio/cantidad y ajuste a 1440/1024/420. El click no altera el ticket ni
+  envía el formulario de registro; los recorridos anteriores siguen incluidos.
+- Cocos 4.24.4: AL30/AL30D, cinco filas por pata. Se eligió Venta nivel 2 de A:
+  precio de entrada 82.400, coincidente con `askBook1`, mientras la mejor venta
+  nativa era 82.360. Volúmenes de venta: 8.000 / 3.301 / 12.200 / 95.250 / 200.000.
+  Las cantidades permanecieron 100/100 y el precio/cantidad del Mini Order Form
+  no cambió. Se volvió al último precio y no se registró apertura ni envío.
+- Las siete claves locales mantuvieron el hash agregado
+  `1762ccfedd08ae330d4e1ef33775de3da35499c2de5a8c86f9bf2fcf5cd43c41`.
+- Respaldo: `Free/backups/extension-before-ratio-entry-book-20261117-171937`;
+  archivos instalados comparados por hash con dist. Evidencia local recortada:
+  `test-results/ratio-entry-book-fixture.png`, `ratio-entry-book-cocos.png` y
+  `ratio-entry-book-evidence.json`.
+
+Esta actualización no cambia el lector de opciones, dependencias ni permisos.
