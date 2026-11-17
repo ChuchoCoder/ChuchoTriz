@@ -44,6 +44,9 @@ de ejecución del navegador ni los permisos de la extensión.
 No se agregan exclusiones de npm audit ni se cambia su umbral, los workflows o
 las protecciones de main. La auditoría vuelve a pasar al retirar de la cadena
 la implementación afectada, con pruebas del comportamiento real.
+Esta copia local no recibe automáticamente las alertas de la identidad npm
+original: al mantenerla hay que revisar los nuevos avisos upstream y evaluar
+su aplicación al código copiado. Los hashes detectan cambios, no vulnerabilidades.
 
 ## Pruebas y retirada
 
