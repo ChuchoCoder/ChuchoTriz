@@ -17,7 +17,10 @@ impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 3. Elegí **B · Denominador** y pulsá **Agregar**.
 
 El formato **Mostrar → Número / Porcentaje (%)** se configura por cada fila y
-queda guardado con el par. El porcentaje representa `(A/B − 1) × 100`: un ratio
+queda guardado con el par. Al agregar un par, se propone **Porcentaje** si ambos
+instrumentos tienen la misma moneda conocida y **Número** si tienen monedas
+distintas o falta esa información. Una elección manual y los formatos ya guardados
+se respetan. El porcentaje representa `(A/B − 1) × 100`: un ratio
 de 1,065 se muestra como 6,50 %. Es independiente de la columna de variación
 diaria. En formato número, los valores de magnitud al menos 100 se muestran con
 dos decimales; por ejemplo, 1.584,986387 se muestra como 1.584,99. Los ratios
@@ -95,7 +98,8 @@ vacío. Para retirarlo antes de desinstalar, cerrá el panel desde su título.
   restringe filenames al workspace original, copiá el validador a su carpeta
   ignorada `.playwright-mcp/` antes de llamarlo. No usa otro perfil.
 
-El recorrido del bundle pasó 25 comprobaciones: foco inicial, Tab entre instrumentos,
+El recorrido del bundle pasó 31 comprobaciones: formato predeterminado por moneda,
+elección manual, foco inicial, Tab entre instrumentos,
 resolución del ticker sin mover el foco, cálculo, varios pares y widgets,
 precios actualizados/faltantes, referencias faltantes, monedas/plazos distintos,
 duplicados, inversión, edición, borrado, desconexión/reconexión, tamaño, cambio de

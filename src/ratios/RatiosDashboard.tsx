@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
-import { calculateRatio, emptyState, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, tickerKey, tradeLabel, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
+import { calculateRatio, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, tickerKey, tradeLabel, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize";
@@ -73,13 +73,14 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const cfg = widget.config;
   const [editing, setEditing] = useState<string | null>(cfg.pairs.length ? null : "new");
   const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>();
-  const [format, setFormat] = useState<RatioFormat>("number"), [editorSession, setEditorSession] = useState(0);
+  const [formatOverride, setFormatOverride] = useState<RatioFormat>(), [editorSession, setEditorSession] = useState(0);
+  const format = formatOverride ?? defaultRatioFormat(a, b);
   const [issue, setIssue] = useState("");
   const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
-  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setFormat(pair?.format || "number"); setEditorSession(n => n + 1); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
+  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setFormatOverride(pair ? pair.format || "number" : undefined); setEditorSession(n => n + 1); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
   const run = async (method: Mutation, params: Record<string, unknown>) => {
     setIssue("");
     try { await command(method, { widgetId: cfg.id, revision: cfg.revision, ...params }); return true; }
@@ -113,7 +114,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
-        <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormat(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
+        <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormatOverride(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
           <span>{format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>
           <button type="submit" disabled={busy || !a || !b}>{busy ? "Guardando…" : editing === "new" ? "Agregar" : "Guardar"}</button>

@@ -35,12 +35,25 @@ async (page) => {
     await page.waitForFunction(i => document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=status]')?.textContent.includes('ARS'), index, { polling: 100 });
     if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Resolving the numerator ticker preserves focus in the denominator');
   }
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'Same-currency BMA/GGAL defaults to percent');
+  await select(1, 'AL30D', 'AL30D', 'USD');
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'number', 'Changing the new pair to different currencies defaults to number');
+  await select(1, 'GGAL', 'GGAL');
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'The automatic default follows the selected currencies until manually chosen');
+  await save();
+  await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '9,09%');
+  assert(true, 'The inferred percent format is saved with the new pair');
+  await b('Editar BMA/GGAL').click({ force: true });
+  await page.getByLabel('Formato del ratio').selectOption('number');
+  await select(1, 'AL30D', 'AL30D', 'USD'); await select(1, 'GGAL', 'GGAL');
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'number', 'An explicit format choice is preserved when changing instruments');
   await save();
   assert(true, 'Exact typed tickers resolve on blur without selecting a suggestion');
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,090909');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('+9,09%'), 'BMA/GGAL uses last prices and exact daily ratio variation');
   await addPair('ALUA', 'ALUA', 'TXAR', 'TXAR');
   await addPair('AL30', 'AL30', 'AL30D', 'AL30D', 'ARS', 'USD');
+  assert((await page.locator('.ct-ratios-value').nth(1).innerText()).endsWith('%') && !(await page.locator('.ct-ratios-value').nth(2).innerText()).endsWith('%'), 'Each new pair independently defaults by currency, without inheriting a previous manual choice');
   assert(await page.locator('.ct-ratios tbody tr').count() === 3, 'Three independently selected ratios coexist in one widget');
   assert((await page.locator('.ct-ratios tbody tr').nth(2).innerText()).includes('1.400,00'), 'ARS/USD bond ratio divides raw published prices without conversion');
   await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));

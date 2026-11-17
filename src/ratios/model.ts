@@ -2,6 +2,9 @@ export interface RatioInstrument {
   id: string; symbol: string; market: string; currency: string; settlement: string;
 }
 export type RatioFormat = "number" | "percent";
+export function defaultRatioFormat(a?: RatioInstrument, b?: RatioInstrument): RatioFormat {
+  return a?.currency && a.currency === b?.currency ? "percent" : "number";
+}
 export interface RatioPair { id: string; a: RatioInstrument; b: RatioInstrument; format?: RatioFormat }
 export interface RatioConfig { schema: 1; id: string; revision: number; pairs: RatioPair[] }
 export interface RatioQuote {
