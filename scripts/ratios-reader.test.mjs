@@ -8,7 +8,7 @@ function fixture() {
   let receive, id = 0, persisted, failSave = false, saveTimer;
   const calls = [], replies = [];
   const sec = (id, symbol, currency = 'ARS', settlementType = '2') => ({ id, symbolStr: symbol, marketId: 'bm', currency, settlementType, md: { lst: 120, refp: 100, seq: 10, lstdStr: '2026-11-13T15:00:00Z' } });
-  const securities = [sec('a', 'AL30'), sec('b', 'AL30D', 'USD'), sec('c', 'AL30C', 'EXT'), sec('ci', 'AL30', 'ARS', '1'), { ...sec('portfolio', 'AL30'), isPortfolio: true }];
+  const securities = [sec('a', 'AL30'), sec('b', 'AL30D', 'USD'), sec('c', 'AL30C', 'EXT'), sec('ci', 'AL30 CI', 'ARS', '1'), { ...sec('portfolio', 'AL30'), isPortfolio: true }];
   function widget(data, dashboard, index) {
     return { ...clone(data), dashboard, key: data.component + '-' + index,
       settings: clone(data.settings || {}), selectionCriteria: { securities: [], ...(data.selectionCriteria || {}) },
@@ -40,6 +40,45 @@ function fixture() {
   const add = async () => request('ratiosAdd', await args());
   return { ms, ds, d, controls, originalUpdate, securities, document, window, request, state, args, add, calls, failSave: () => { failSave = true; } };
 }
+const defaultNames = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D'];
+function completeDefaultCatalog(f) {
+  f.securities.find(s => s.id === 'c').currency = 'USD';
+  for (const symbol of ['GD30', 'BMA', 'GGAL', 'ALUA', 'TXAR', 'PESOS - 7D', 'PESOS - 1D']) {
+    f.securities.push({ ...f.securities[0], id: symbol, symbolStr: symbol, settlementType: symbol.startsWith('PESOS') ? null : '2' });
+  }
+}
+test('new widgets save all seven defaults in order with native IDs, currencies and independent pair identities', async () => {
+  const f = fixture(); completeDefaultCatalog(f);
+  f.securities.push({ ...f.securities.find(s => s.id === 'BMA'), id: 'rx-bma', marketId: 'rx' });
+  await f.add(); const first = (await f.state()).widgets[0].config;
+  assert.deepEqual(first.pairs.map(p => p.a.symbol + '/' + p.b.symbol), defaultNames);
+  assert.deepEqual(first.pairs.map(p => p.format), ['number', 'number', 'percent', 'percent', 'percent', 'percent', 'percent']);
+  assert.equal(first.pairs[4].a.id, 'BMA');
+  assert.equal(first.pairs[6].a.settlement, '');
+  assert.equal(new Set(first.pairs.map(p => p.id)).size, 7);
+  const saved = (await f.ds.getDashboard()).layout.find(w => w.component === 'ChuchoTrizRatiosWidget');
+  assert.deepEqual(saved.settings.chuchotrizRatios, first);
+  await f.add(); const state = await f.state();
+  assert.deepEqual(state.widgets[0].config, first);
+  assert.equal(new Set(state.widgets.flatMap(w => w.config.pairs.map(p => p.id))).size, 14);
+  const args = { ...await f.args(), widgetId: first.id };
+  await f.request('ratiosEdit', { ...args, revision: 0, pairs: first.pairs.slice(1).map(p => ({ ...p, a: p.a.id, b: p.b.id })) });
+  assert.equal((await f.state()).widgets[0].config.pairs.length, 6);
+  await f.request('ratiosEdit', { ...args, revision: 1, pairs: [] });
+  assert.equal((await f.state()).widgets[0].config.pairs.length, 0, 'saved empty widgets are never repopulated');
+  assert.equal((await f.state()).widgets[1].config.pairs.length, 7);
+});
+test('missing or ambiguous defaults are reported without substituting other instruments', async () => {
+  const f = fixture(); completeDefaultCatalog(f);
+  f.securities.splice(f.securities.findIndex(s => s.id === 'GGAL'), 1);
+  f.securities.push({ ...f.securities[0], id: 'another-al30' }, { id: 'invalid', symbolStr: 123, marketId: 'bm' });
+  await f.add(); const widget = (await f.state()).widgets[0];
+  assert.deepEqual(widget.config.pairs.map(p => p.a.symbol + '/' + p.b.symbol), [defaultNames[2], ...defaultNames.slice(5)]);
+  assert.match(widget.issue, /AL30\/AL30D/); assert.match(widget.issue, /BMA\/GGAL/);
+  await f.request('ratiosEdit', { ...await f.args(), widgetId: widget.config.id, revision: 0, pairs: [] });
+  assert.equal((await f.state()).widgets[0].issue, undefined);
+});
+
 test('multiple full panels and replaced pairs do not exhaust a cumulative subscription budget', async () => {
   const f = fixture();
   for (let i = 0; i < 400; i++) f.securities.push({ ...f.securities[0], id: 'bulk-' + i, symbolStr: 'BULK' + i });

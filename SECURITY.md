@@ -12,8 +12,14 @@ issues públicos. Usar el canal privado habitual con el propietario.
   versiones no habilitan por sí solas las alertas o correcciones de seguridad.
 - npm audit rechaza vulnerabilidades moderadas o superiores, incluidas las herramientas
   de desarrollo. Los fallos de instalación, red o escaneo fallan el check.
-- Las dependencias directas tienen versiones exactas; el lockfile v3 debe coincidir,
+- Las dependencias externas directas tienen versiones exactas; el lockfile v3 debe coincidir,
   usar HTTPS del registro oficial y declarar integridad SHA-512 para cada paquete.
+  La única excepción es `vendor/picomatch`, copia local privada y endurecida del
+  original 4.0.7 para las herramientas de desarrollo. El enlace y el override están
+  restringidos a esa ruta; sus archivos se validan por SHA-256 antes de usar las
+  herramientas. Los demás enlaces y paquetes Git/file siguen rechazados.
+  No se distribuye en la extensión y trata como literales las repeticiones de
+  extglob no acotadas de CVE-2026-112366. [Revisión y retirada](docs/security-picomatch.md).
 - .npmrc deshabilita lifecycle scripts, guarda versiones exactas y exige el engine.
   CI usa npm ci --ignore-scripts --no-audit y no comparte caché npm. Los comandos
   explícitos de build y tests siguen ejecutando código del proyecto y sus dependencias.

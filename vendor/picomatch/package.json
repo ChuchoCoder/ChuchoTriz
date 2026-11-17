@@ -1,0 +1,11 @@
+{
+  "name": "@chuchotriz/picomatch-hardened",
+  "private": true,
+  "version": "4.0.8-chuchotriz.1",
+  "license": "MIT",
+  "main": "index.js",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=12"
+  }
+}

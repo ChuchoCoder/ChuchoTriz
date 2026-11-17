@@ -26,18 +26,51 @@ async (page) => {
   const snapshot = () => page.evaluate(() => window.mainStore.dashboardStore.currentDashboard.layout.map(w => ({ component: w.component, x: w.x, y: w.y, w: w.w, h: w.h, settings: JSON.parse(JSON.stringify(w.settings)) })));
   const before = await snapshot();
   await idle(); await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
+  const defaults = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D'];
+  assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all seven requested pairs in order');
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
+  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.endsWith('%')))) === JSON.stringify([false, false, false, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
+  const seeded = await snapshot();
+  await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  assert(JSON.stringify(await snapshot()) === JSON.stringify(seeded), 'Default pairs and their identities persist after reloading');
+  for (const pair of defaults) { await b('Eliminar ' + pair).click({ force: true }); await idle(); }
+  await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  assert(await page.locator('.ct-ratios tbody tr').count() === 0, 'Deleted defaults do not reappear in an existing widget after reloading');
   await b('Agregar ratio').click({ force: true });
+  assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Opening the ratio editor focuses the numerator input');
+  await b('Cancelar').click({ force: true }); await b('Agregar ratio').click({ force: true });
+  assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Reopening the ratio editor focuses the numerator again');
   for (const [index, ticker] of ['BMA', 'GGAL'].entries()) {
     const input = page.locator('.ct-ratio-picker input').nth(index);
     await input.fill(ticker, { force: true }); await input.press('Tab');
+    if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Tab moves directly from numerator to denominator');
     await page.waitForFunction(i => document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=status]')?.textContent.includes('ARS'), index, { polling: 100 });
+    if (index === 0) assert(await page.locator('.ct-ratio-picker input').nth(1).evaluate(input => document.activeElement === input), 'Resolving the numerator ticker preserves focus in the denominator');
+    if (index === 0) {
+      await page.locator('.ct-ratio-picker input').nth(1).press('Shift+Tab');
+      assert(await input.evaluate(input => document.activeElement === input), 'Shift+Tab returns directly from denominator to numerator');
+      await input.press('Tab');
+    }
   }
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'Same-currency BMA/GGAL defaults to percent');
+  await select(1, 'AL30D', 'AL30D', 'USD');
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'number', 'Changing the new pair to different currencies defaults to number');
+  await select(1, 'GGAL', 'GGAL');
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'The automatic default follows the selected currencies until manually chosen');
+  await save();
+  await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '9,09%');
+  assert(true, 'The inferred percent format is saved with the new pair');
+  await b('Editar BMA/GGAL').click({ force: true });
+  await page.getByLabel('Formato del ratio').selectOption('number');
+  await select(1, 'AL30D', 'AL30D', 'USD'); await select(1, 'GGAL', 'GGAL');
+  assert(await page.getByLabel('Formato del ratio').inputValue() === 'number', 'An explicit format choice is preserved when changing instruments');
   await save();
   assert(true, 'Exact typed tickers resolve on blur without selecting a suggestion');
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,090909');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('+9,09%'), 'BMA/GGAL uses last prices and exact daily ratio variation');
   await addPair('ALUA', 'ALUA', 'TXAR', 'TXAR');
   await addPair('AL30', 'AL30', 'AL30D', 'AL30D', 'ARS', 'USD');
+  assert((await page.locator('.ct-ratios-value').nth(1).innerText()).endsWith('%') && !(await page.locator('.ct-ratios-value').nth(2).innerText()).endsWith('%'), 'Each new pair independently defaults by currency, without inheriting a previous manual choice');
   assert(await page.locator('.ct-ratios tbody tr').count() === 3, 'Three independently selected ratios coexist in one widget');
   assert((await page.locator('.ct-ratios tbody tr').nth(2).innerText()).includes('1.400,00'), 'ARS/USD bond ratio divides raw published prices without conversion');
   await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));
@@ -84,7 +117,7 @@ async (page) => {
   await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
   assert(await page.locator('.ct-ratios').count() === 2, 'Multiple ratio widgets can be added');
   await page.locator('.ct-ratios').nth(1).getByRole('button', { name: 'Cerrar widget de ratios' }).click({ force: true }); await idle();
-  assert(await page.locator('.ct-ratios').count() === 1 && await page.locator('.ct-ratios tbody tr').count() === 2, 'Closing an empty widget does not delete another widget');
+  assert(await page.locator('.ct-ratios').count() === 1 && await page.locator('.ct-ratios tbody tr').count() === 2, 'Closing a new default widget does not delete another widget');
   const handle = await b('Redimensionar Ratios').boundingBox();
   await page.mouse.move(handle.x + 10, handle.y + 10); await page.mouse.down(); await page.mouse.move(handle.x + 90, handle.y + 50); await page.mouse.up(); await idle();
   const resized = await snapshot();

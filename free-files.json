@@ -164,5 +164,18 @@
   "src/ratios/tradingMarket.test.ts",
   "docs/qa/ratio-operations-2026-11-17.md",
   "src/ratios/RatioOrderBook.tsx",
-  "src/ratios/RatioOrderBook.test.tsx"
+  "src/ratios/RatioOrderBook.test.tsx",
+  "scripts/security/vendored-picomatch.mjs",
+  "scripts/security/picomatch.test.mjs",
+  "docs/security-picomatch.md",
+  "vendor/picomatch/package.json",
+  "vendor/picomatch/README.md",
+  "vendor/picomatch/LICENSE",
+  "vendor/picomatch/index.js",
+  "vendor/picomatch/posix.js",
+  "vendor/picomatch/lib/constants.js",
+  "vendor/picomatch/lib/parse.js",
+  "vendor/picomatch/lib/picomatch.js",
+  "vendor/picomatch/lib/scan.js",
+  "vendor/picomatch/lib/utils.js"
 ]

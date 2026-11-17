@@ -1,5 +1,15 @@
 import { expect, it } from "vitest";
-import { calculateRatio, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel } from "./model";
+import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel } from "./model";
+it("defaults to percent only for matching known currencies and keeps USD and cable distinct", () => {
+  const a = { id: "a", symbol: "A", market: "bm", settlement: "2", currency: "ARS" };
+  const b = { ...a, id: "b", symbol: "B" };
+  expect(defaultRatioFormat(a, b)).toBe("percent");
+  expect(defaultRatioFormat({ ...a, currency: "USD" }, { ...b, currency: "USD" })).toBe("percent");
+  expect(defaultRatioFormat(a, { ...b, currency: "USD" })).toBe("number");
+  expect(defaultRatioFormat({ ...a, currency: "USD" }, { ...b, currency: "EXT" })).toBe("number");
+  expect(defaultRatioFormat({ ...a, currency: "" }, { ...b, currency: "" })).toBe("number");
+  expect(defaultRatioFormat(a)).toBe("number");
+});
 it("compares ratios to their daily reference rather than subtracting changes", () => {
   const result = calculateRatio({ last: 120, reference: 100 }, { last: 110, reference: 100 });
   expect(result.ratio).toBeCloseTo(120 / 110); expect(result.change).toBeCloseTo(9.090909);
