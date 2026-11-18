@@ -16,16 +16,16 @@ async (page) => {
     await page.waitForFunction(i => !!document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=option]'), index, { polling: 100, timeout: 6000 });
     const options = picker.getByRole('option').filter({ hasText: detail });
     const chosen = options.filter({ has: page.locator('strong', { hasText: new RegExp('^' + symbol + '$') }) });
-    await chosen.click({ force: true });
+    await chosen.click();
   };
-  const save = async () => { await page.locator('.ct-ratios button[type=submit]').click({ force: true }); await wait(() => !document.querySelector('.ct-ratios-editor')); await idle(); };
+  const save = async () => { await page.locator('.ct-ratios button[type=submit]').click(); await wait(() => !document.querySelector('.ct-ratios-editor')); await idle(); };
   const addPair = async (a, aSymbol, bb, bSymbol, aDetail, bDetail) => {
-    if (!await page.locator('.ct-ratios-editor').count()) await b('Agregar ratio').click({ force: true });
+    if (!await page.locator('.ct-ratios-editor').count()) await b('Agregar ratio').click();
     await select(0, a, aSymbol, aDetail); await select(1, bb, bSymbol, bDetail); await save();
   };
   const snapshot = () => page.evaluate(() => window.mainStore.dashboardStore.currentDashboard.layout.map(w => ({ component: w.component, x: w.x, y: w.y, w: w.w, h: w.h, settings: JSON.parse(JSON.stringify(w.settings)) })));
   const before = await snapshot();
-  await idle(); await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
+  await idle(); await b('RATIOS · CHUCHOTRIZ').click(); await idle();
   const defaults = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D'];
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all seven requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
@@ -33,12 +33,12 @@ async (page) => {
   const seeded = await snapshot();
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(JSON.stringify(await snapshot()) === JSON.stringify(seeded), 'Default pairs and their identities persist after reloading');
-  for (const pair of defaults) { await b('Eliminar ' + pair).click({ force: true }); await idle(); }
+  for (const pair of defaults) { await b('Eliminar ' + pair).click(); await idle(); }
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(await page.locator('.ct-ratios tbody tr').count() === 0, 'Deleted defaults do not reappear in an existing widget after reloading');
-  await b('Agregar ratio').click({ force: true });
+  await b('Agregar ratio').click();
   assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Opening the ratio editor focuses the numerator input');
-  await b('Cancelar').click({ force: true }); await b('Agregar ratio').click({ force: true });
+  await b('Cancelar').click(); await b('Agregar ratio').click();
   assert(await page.locator('.ct-ratio-picker input').first().evaluate(input => document.activeElement === input), 'Reopening the ratio editor focuses the numerator again');
   for (const [index, ticker] of ['BMA', 'GGAL'].entries()) {
     const input = page.locator('.ct-ratio-picker input').nth(index);
@@ -60,7 +60,7 @@ async (page) => {
   await save();
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '9,09%');
   assert(true, 'The inferred percent format is saved with the new pair');
-  await b('Editar BMA/GGAL').click({ force: true });
+  await b('Editar BMA/GGAL').click();
   await page.getByLabel('Formato del ratio').selectOption('number');
   await select(1, 'AL30D', 'AL30D', 'USD'); await select(1, 'GGAL', 'GGAL');
   assert(await page.getByLabel('Formato del ratio').inputValue() === 'number', 'An explicit format choice is preserved when changing instruments');
@@ -76,30 +76,30 @@ async (page) => {
   await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,181818');
   assert(true, 'Quote update refreshes the ratio');
-  await b('Editar BMA/GGAL').click({ force: true });
+  await b('Editar BMA/GGAL').click();
   await page.getByLabel('Formato del ratio').selectOption('percent'); await save();
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '18,18%');
   assert((await page.locator('.ct-ratios-value').nth(2).innerText()) === '1.400,00', 'Percent uses (A/B - 1) times 100 and each row keeps its own format');
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '9,09%');
   assert(true, 'Per-row percent format survives a full reload');
-  await b('Editar BMA/GGAL').click({ force: true });
+  await b('Editar BMA/GGAL').click();
   assert(await page.getByLabel('Formato del ratio').inputValue() === 'percent', 'Editor restores the persisted format');
   await page.getByLabel('Formato del ratio').selectOption('number'); await save();
   await page.evaluate(() => window.ratiosFixture.price('BMA-2', 13000));
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '1,181818');
-  await b('Invertir BMA/GGAL').click({ force: true }); await idle();
+  await b('Invertir BMA/GGAL').click(); await idle();
   await wait(() => document.querySelector('.ct-ratios-pair strong')?.textContent === 'GGAL/BMA');
   assert((await page.locator('.ct-ratios tbody tr').first().innerText()).includes('-15,38%'), 'Inverting A/B recomputes the ratio and its daily variation');
-  await b('Editar ALUA/TXAR').click({ force: true });
+  await b('Editar ALUA/TXAR').click();
   await select(0, 'AL30', 'AL30 CI'); await save();
   assert((await page.locator('.ct-ratios tbody tr').nth(1).innerText()).includes('AL30 CI/TXAR'), 'Editing preserves settlement in the ticker without repeating it');
-  await b('Agregar ratio').click({ force: true });
+  await b('Agregar ratio').click();
   await select(0, 'AL30', 'AL30'); await select(1, 'AL30D', 'AL30D', 'USD');
-  await page.locator('.ct-ratios button[type=submit]').click({ force: true });
+  await page.locator('.ct-ratios button[type=submit]').click();
   await wait(() => document.querySelector('.ct-ratios-issue')?.textContent.includes('ya está'));
   assert(await page.locator('.ct-ratios tbody tr').count() === 3, 'Duplicate pairs are rejected without changing the saved table');
-  await b('Cancelar').click({ force: true });
+  await b('Cancelar').click();
   await page.evaluate(() => window.ratiosFixture.price('GGAL-2', undefined));
   await wait(() => document.querySelector('.ct-ratios-value')?.getAttribute('title') === 'Sin último precio');
   assert(true, 'Missing last price is never replaced with a reference or a bid/ask');
@@ -112,11 +112,11 @@ async (page) => {
   await page.evaluate(() => { const s = window.mainStore.securityStore.securities.find(s => s.id === 'GGAL-2'); s.md.refp = 10000; s.md.seq = 0; window.ratiosFixture.connected(true); });
   await wait(() => document.querySelector('.ct-ratios-value')?.textContent === '0,846154');
   assert(true, 'Reconnect accepts a reset market sequence');
-  await b('Eliminar AL30/AL30D').click({ force: true }); await idle();
+  await b('Eliminar AL30/AL30D').click(); await idle();
   assert(await page.locator('.ct-ratios tbody tr').count() === 2, 'Deleting a pair preserves the other pairs');
-  await b('RATIOS · CHUCHOTRIZ').click({ force: true }); await idle();
+  await b('RATIOS · CHUCHOTRIZ').click(); await idle();
   assert(await page.locator('.ct-ratios').count() === 2, 'Multiple ratio widgets can be added');
-  await page.locator('.ct-ratios').nth(1).getByRole('button', { name: 'Cerrar widget de ratios' }).click({ force: true }); await idle();
+  await page.locator('.ct-ratios').nth(1).getByRole('button', { name: 'Cerrar widget de ratios' }).click(); await idle();
   assert(await page.locator('.ct-ratios').count() === 1 && await page.locator('.ct-ratios tbody tr').count() === 2, 'Closing a new default widget does not delete another widget');
   const handle = await b('Redimensionar Ratios').boundingBox();
   await page.mouse.move(handle.x + 10, handle.y + 10); await page.mouse.down(); await page.mouse.move(handle.x + 90, handle.y + 50); await page.mouse.up(); await idle();
