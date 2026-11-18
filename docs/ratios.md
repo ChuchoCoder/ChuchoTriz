@@ -84,6 +84,9 @@ movimiento reducido se usa una marca estática breve.
   no se cambian instrumentos/sentido/unidades y las cantidades totales deben
   cubrir lo cerrado. Corregir la entrada o gastos recalcula el resultado histórico.
   Eliminar admite deshacer; los registros cerrados también pueden eliminarse.
+- En Operaciones abiertas, el par mantiene el orden A/B: cada instrumento usa
+  un chip verde con «Long» o rojo con «Short», según el lado registrado. El
+  estado Abierta/Parcial/Cerrada permanece debajo, sin repetir el sentido A/B.
 
 Se guardan hasta 100 pares y 500 operaciones, separadas por cuenta y sitio en
 `chrome.storage.local`. La revisión y un bloqueo entre pestañas previenen

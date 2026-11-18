@@ -86,4 +86,6 @@
 .ro-sizing-leg label small{font-size:9px}
 .ro-sizing-leg input{text-align:right}
 .ro-sizing-leg>span{padding-top:2px;min-width:0;overflow-wrap:anywhere}
+.ro-pair-chips{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ro-pair-chips .ro-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 6px}
 @media(max-width:540px){.ro-sizing{grid-template-columns:1fr}.ro-sizing-leg{grid-template-columns:minmax(75px,110px) minmax(0,1fr)}}

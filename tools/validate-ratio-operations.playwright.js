@@ -201,7 +201,7 @@ async page => {
     }
   }, mixedId);
   await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('100,00 / 80,00'));
-  const mixedRow = page.locator('.ro-operations-table tr').filter({ hasText: 'AL30/AL30D' });
+  const mixedRow = page.locator('.ro-operations-table tr').filter({ has: page.getByLabel('Par AL30/AL30D', { exact: true }) });
   await click(mixedRow.getByRole('button', { name: 'Editar', exact: true }));
   assert(await label('Cantidad B').inputValue() === '80', 'Historical B quantity retained on edit');
   await label('Comisión %').fill('0.25'); await click(button('Guardar cambios')); await mixedRow.getByRole('button', { name: 'Editar', exact: true }).waitFor();
@@ -213,7 +213,7 @@ async page => {
   checks.push('Legacy unequal quantities survive other edits; changing A explicitly synchronizes B');
   await label('Precio cierre A').fill('80000'); await label('Precio cierre B').fill('50'); await click(button('Cerrar todo'));
   await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('Cerrada'));
-  const closedRow = page.locator('.ro-operations-table tr').filter({ hasText: 'AL30/AL30D' });
+  const closedRow = page.locator('.ro-operations-table tr').filter({ has: page.getByLabel('Par AL30/AL30D', { exact: true }) });
   await click(closedRow.getByRole('button', { name: 'Eliminar', exact: true })); await button('Deshacer eliminación').waitFor();
   assert((await book()).operations.length === 1, 'Closed history can be removed');
   await click(button('Deshacer eliminación')); await closedRow.waitFor(); assert((await book()).operations[1].legs[0].exits.length === 1, 'Closed history restored');
@@ -228,9 +228,19 @@ async page => {
   await label('Cantidad A').fill('110'); await click(button('Long LOT10 / Short GGAL'));
   assert(await label('Cantidad A').evaluate(e=>e.checkValidity()), 'Another multiple of ten is valid');
   await click(button('Abrir operación'));
-  const lotRow = page.locator('.ro-operations-table tr').filter({ hasText:'LOT10/GGAL' }); await lotRow.waitFor();
+  const lotRow = page.locator('.ro-operations-table tr').filter({ has:page.getByLabel('Par LOT10/GGAL',{exact:true}) }); await lotRow.waitFor();
   assert((await book()).operations.find(o=>o.legs[0].instrument.symbol==='LOT10')?.legs[0].quantity === 110, 'Native lot multiple submits and persists');
   await click(lotRow.getByRole('button',{name:'Eliminar',exact:true}));
   checks.push('Native lots greater than one accept and save valid multiples while rejecting nonmultiples');
+  await click(button('1 · Monitor'));
+  await click(page.locator('.ro-monitor-table tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación', exact: true }));
+  await click(button('Long GGAL / Short BMA')); await click(button('Abrir operación'));
+  const sideRows = page.locator('.ro-operations-table tr').filter({ has: page.getByLabel('Par BMA/GGAL', { exact: true }) });
+  await wait(() => document.querySelectorAll('.ro-operations-table [aria-label="Par BMA/GGAL"]').length === 2);
+  for (const [index, sides] of [[0, ['Long', 'Short']], [1, ['Short', 'Long']]]) {
+    const chips = await sideRows.nth(index).locator('.ro-pair-chips>.ro-chip').evaluateAll(es => es.map(e => ({ ticker:e.querySelector('strong').textContent, side:e.querySelector('span').textContent, buy:e.classList.contains('buy'), sell:e.classList.contains('sell') })));
+    assert(chips.length === 2 && chips.every((c,i) => c.ticker === ['BMA','GGAL'][i] && c.side === sides[i] && c.buy === (sides[i] === 'Long') && c.sell === (sides[i] === 'Short')), 'Operation chips preserve A/B order and identify the actual long/short legs');
+  }
+  checks.push('Operation pairs use green Long and red Short chips in both directions without changing A/B order');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
