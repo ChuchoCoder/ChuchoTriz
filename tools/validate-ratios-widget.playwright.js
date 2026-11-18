@@ -130,6 +130,5 @@ async (page) => {
   const after = await snapshot();
   assert(JSON.stringify(after) === JSON.stringify(resized), 'Pairs, identity, revisions and geometry persist after a complete reload');
   assert(JSON.stringify(before[0]) === JSON.stringify(after[0]), 'The native control widget remains unchanged');
-  await page.screenshot({ path: 'C:/git/ChuchoTriz-ratios-widget/test-results/ratios-widget/simulated.png', animations: 'disabled', timeout: 10000 });
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }
