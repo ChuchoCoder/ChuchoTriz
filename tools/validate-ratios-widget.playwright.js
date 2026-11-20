@@ -29,8 +29,8 @@ async (page) => {
   const defaults = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', '(AL30/AL30D) / DLR/SPOT', '(AL30/AL30C) / DLR/SPOT'];
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
-  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.endsWith('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
-  const expectedSpread = (denominator, official) => ((70000 / denominator / official - 1) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.includes('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
+  const expectedSpread = (denominator, official) => ((70000 / denominator / official - 1) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' }) + '% (' + Math.abs(70000 / denominator - official).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')';
   const initialMep = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
   const initialCcl = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30C) / DLR/SPOT' });
   const waitSpreads = async official => {
@@ -169,15 +169,15 @@ async (page) => {
   await save();
   const spread = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
   await spread.waitFor();
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97% (172,50)'));
   assert((await spread.innerText()).includes('1.572,50'), 'Comparison shows the native official dollar separately from the bond prices');
   assert(await spread.getByRole('button', { name: 'Invertir (AL30/AL30D) / DLR/SPOT', exact: true }).isDisabled(), 'Composite inversion cannot accidentally invert only its bond legs');
   assert((await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.schema === 2, 'Composite widgets use a schema rejected by older readers');
   await page.reload({ waitUntil: 'domcontentloaded' }); await spread.waitFor();
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97% (172,50)'));
   assert((await spread.innerText()).includes('1.572,50'), 'Reference C and spread persist after reload');
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50% (200,00)'));
   assert(true, 'Updating only the dollar quote refreshes the spread');
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 0));
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.title === 'Sin cotización válida de la referencia C' && e.textContent === '—'));
@@ -210,7 +210,7 @@ async (page) => {
   await page.keyboard.press('Escape'); await options.waitFor({ state: 'hidden' });
   assert(await gear.evaluate(e => e === document.activeElement), 'Escape dismisses column options and restores focus to the gear');
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50% (200,00)'));
   assert(true, 'A hidden official quote remains subscribed and refreshes the displayed spread');
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(await primaryWidget.getByRole('columnheader').count() === 4, 'Hidden columns persist after a full dashboard reload');
@@ -255,5 +255,20 @@ async (page) => {
   assert(editedConfig.chuchotrizRatios.pairs.some(p => p.c && p.a.symbol === 'AL30' && p.format === 'number') && !editedConfig.chuchotrizRatiosColumns.visible.lastB, 'Changing column visibility while editing preserves the unsaved pair draft and allows saving it');
   await gear.click(); await options.getByRole('checkbox', { name: 'Último B', exact: true }).click();
   await primaryWidget.getByRole('columnheader', { name: 'Último B', exact: true }).waitFor(); await page.keyboard.press('Escape');
+  const absoluteRow = primaryWidget.locator('tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
+  assert(await absoluteRow.locator('.ct-ratios-value').innerText() === '0,890302 (172,50)', 'Number format with C retains its quotient and appends the unsigned quote difference');
+  await absoluteRow.getByRole('button', { name: 'Editar (AL30/AL30D) / DLR/SPOT', exact: true }).click();
+  await page.getByLabel('Formato del ratio', { exact: true }).selectOption('percent'); await save();
+  await page.evaluate(() => window.ratiosFixture.price('AL30-2', 80000));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '+1,75% (27,50)'));
+  assert(true, 'A positive C spread shows an explicit plus and the unsigned difference');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '0,00% (0,00)'));
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1700));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-5,88% (100,00)'));
+  assert(true, 'Zero and negative C spreads never add a sign inside parentheses');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', undefined));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.title === 'Sin cotización válida de la referencia C' && e.textContent === '—'));
+  assert(true, 'A missing reference clears the percentage and its absolute difference together');
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }

@@ -33,6 +33,16 @@ La fila se identifica como **(AL30/AL30D) / DLR/SPOT** y muestra por separado lo
 ficticios, MEP de 1.600 y oficial de 1.572,50 da **1,75%**; si ambos son 1.600,
 da **0,00%**. En el widget, **Número** muestra `(A / B) / C`.
 
+En las filas con Referencia C, el ratio agrega la diferencia absoluta
+`|A / B − C|` entre paréntesis, en la unidad de cotización de C y con dos
+decimales. El porcentaje conserva su signo: por ejemplo **+6,50% (104,45)**
+o **-6,50% (104,45)**; el número entre paréntesis nunca lleva signo. En el
+widget se respeta el formato elegido: **Número** puede mostrar
+**1,065 (104,45)**. El tab usa porcentaje para las comparaciones con C.
+Las filas sin C conservan su presentación. Ocultar las columnas de precios
+no oculta esta diferencia ni cambia su cálculo; si falta una cotización válida,
+se retiran juntos el ratio y el importe.
+
 La referencia es opcional y también puede ser otro instrumento del catálogo.
 Sin último válido de C o con C menor o igual a cero se muestra **—**, sin volver
 al ratio simple. La variación diaria compara la fórmula completa con las tres

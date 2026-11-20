@@ -171,7 +171,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             {columns.lastA && <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
             {columns.lastB && <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>}
             {showReference && <td title={pair.c ? `${pair.c.symbol} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{pair.c ? numberLabel(qc?.last) : "—"}</td>}
-            <td className="ct-ratios-value" title={result.issue || (pair.c ? "(A/B)/C; porcentaje = ((A/B)/C − 1) × 100" : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format)}</td>
+            <td className="ct-ratios-value" title={result.issue || (pair.c ? "(A/B)/C; porcentaje = ((A/B)/C − 1) × 100. Entre paréntesis: |A/B − C|, en la unidad de C." : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
             <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>
