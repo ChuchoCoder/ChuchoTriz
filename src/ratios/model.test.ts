@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel } from "./model";
+import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, ratioUpdatedAt, ratioTimeLabel } from "./model";
 it("compares MEP against the official dollar and uses all three dated references", () => {
   const a = { last: 80000, reference: 78000, referenceDate: "2026-11-19" };
   const b = { last: 50, reference: 50, referenceDate: "2026-11-19" };
@@ -74,4 +74,14 @@ it("matches exact tickers without treating a prefix or CI as the default species
   expect(exactTickerMatches(" al30 ", [a, ci])).toEqual([a]);
   expect(exactTickerMatches("AL30 CI", [a, ci])).toEqual([ci]);
   expect(exactTickerMatches("AL3", [a, ci])).toEqual([]);
+});
+it("dates a valid ratio from the latest market trade including C, without inventing missing times", () => {
+  const at = Date.parse("2026-11-20T17:42:05Z");
+  const a = { last: 80000, tradedAt: at - 1000 }, b = { last: 50, tradedAt: at }, c = { last: 1500, tradedAt: at + 1000 };
+  expect(ratioUpdatedAt(a, b)).toBe(at);
+  expect(ratioUpdatedAt(a, b, c)).toBe(at + 1000);
+  expect(ratioTimeLabel(at)).toBe("14:42:05");
+  expect(ratioTimeLabel(undefined)).toBe("—");
+  for (const broken of [{ last: 50 }, { last: 0, tradedAt: at }, { last: 50, tradedAt: NaN }, { last: 50, tradedAt: 1e20 }, { last: 50, tradedAt: at, issue: "Sin datos" }]) expect(ratioUpdatedAt(a, broken)).toBeUndefined();
+  expect(ratioUpdatedAt(a, b, {})).toBeUndefined();
 });

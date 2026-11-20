@@ -23,7 +23,7 @@ omiten las dos brechas y se informa cuáles no pudieron cargarse.
 Para agregar manualmente la brecha MEP/oficial, tanto en el Monitor como en el widget:
 
 1. Elegí **AL30** como A y **AL30D** como B, con el plazo que quieras comparar.
-2. Marcá **Comparar A/B con una referencia**.
+2. En el tab, marcá **Agregar referencia C**; en el widget, **Comparar A/B con una referencia**.
 3. En **Referencia C**, buscá **Dólar oficial** y seleccioná **DLR/SPOT**.
 4. Agregá el par. El widget propone **Porcentaje (%)**; el Monitor muestra la
    brecha porcentual. También podés conservar el AL30/AL30D simple en otra fila.
@@ -131,6 +131,20 @@ movimiento reducido se usa una marca estática breve.
 - En Operaciones abiertas, el par mantiene el orden A/B: cada instrumento usa
   un chip verde con «Long» o rojo con «Short», según el lado registrado. El
   estado Abierta/Parcial/Cerrada permanece debajo, sin repetir el sentido A/B.
+
+### Columnas y hora del último valor
+
+En Monitor y Operaciones abiertas, **Columnas** permite mostrar u ocultar los
+campos opcionales y **Restablecer columnas** recupera la configuración inicial.
+Par y Acciones permanecen visibles. Las preferencias se guardan por cuenta/sitio
+y por grilla, independientemente del registro de operaciones. Ocultar una columna
+por la que se está ordenando vuelve al orden manual.
+
+**Últ. valor** muestra `HH:mm:ss` de Argentina: la hora de mercado más reciente
+de los precios que forman el ratio (A/B, incluyendo C si se usa una referencia).
+Se puede ordenar por esa hora. No es la hora del refresco de pantalla; si falta
+alguna hora o no puede calcularse el ratio, muestra **—**. El tooltip incluye
+la fecha y hora completas para distinguir cotizaciones de días anteriores.
 
 ### Orden y lectura de las grillas
 

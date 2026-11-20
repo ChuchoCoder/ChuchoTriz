@@ -1,4 +1,62 @@
-import type { DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+
+export const monitorColumns = [ ["a", "Último A"], ["b", "Último B"], ["c", "Referencia C"], ["ratio", "Ratio / brecha"], ["daily", "Var. diaria"], ["updated", "Últ. valor"] ] as const;
+export const operationColumns = [ ["quantity", "Cant. abiertas A/B"], ["ratio", "Ratio entrada → actual"], ["realized", "Realizado"], ["pending", "Pendiente"], ["net", "Neto total"], ["updated", "Últ. valor"] ] as const;
+type Columns = readonly (readonly [string, string])[];
+export const storedGridColumns = (value: unknown, columns: Columns) => Array.isArray(value)
+  ? columns.map(([id]) => id).filter(id => value.includes(id)) : columns.map(([id]) => id);
+
+/** UI preferences have their own keys; they never rewrite the trading ledger. */
+export function useGridColumns(scope: string | undefined, kind: string, columns: Columns) {
+  const key = scope ? `RatioGridColumnsV1:${scope}:${kind}` : undefined;
+  const [state, setState] = useState<{ key?: string; visible: string[]; busy?: boolean; error?: string }>();
+  const currentKey = useRef(key), writing = useRef(new Map<string, symbol>()); currentKey.current = key;
+  useEffect(() => {
+    if (!key) return;
+    let closed = false, changed = false;
+    const publish = (value: unknown) => { if (!closed) setState({ key, visible: storedGridColumns(value, columns) }); };
+    const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "local" && key in changes) { changed = true; if (!writing.current.has(key)) publish(changes[key].newValue); }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    void chrome.storage.local.get(key).then(values => { if (!changed) publish(values[key]); })
+      .catch(() => { if (!closed && !changed) setState({ key, visible: storedGridColumns(undefined, columns), error: "No se pudieron leer las columnas." }); });
+    return () => { closed = true; chrome.storage.onChanged.removeListener(listener); };
+  }, [key, columns]);
+  async function change(column?: string, checked?: boolean) {
+    if (!key || state?.key !== key || writing.current.has(key)) return;
+    const request = Symbol(); writing.current.set(key, request);
+    const include = column ? checked ?? !state.visible.includes(column) : false;
+    const apply = (visible: string[]) => column ? include ? storedGridColumns([...visible, column], columns) : visible.filter(id => id !== column) : storedGridColumns(undefined, columns);
+    const before = state.visible;
+    setState({ key, visible: apply(before), busy: true });
+    const save = async () => {
+      const values = await chrome.storage.local.get(key);
+      const previous = storedGridColumns(values[key], columns);
+      const visible = apply(previous);
+      if (currentKey.current !== key) return;
+      await chrome.storage.local.set({ [key]: visible });
+      if (currentKey.current === key && writing.current.get(key) === request) setState({ key, visible });
+    };
+    try { if (navigator.locks) await navigator.locks.request(key, save); else await save(); }
+    catch {
+      let visible = before;
+      try { visible = storedGridColumns((await chrome.storage.local.get(key))[key], columns); } catch { /* Keep the last confirmed layout. */ }
+      if (currentKey.current === key && writing.current.get(key) === request) setState({ key, visible, error: "No se pudieron guardar las columnas. Volvé a intentar." });
+    }
+    finally { if (writing.current.get(key) === request) writing.current.delete(key); }
+  }
+  const loaded = !!key && state?.key === key;
+  return { has: (column: string) => (loaded ? state.visible : columns.map(([id]) => id)).includes(column), change, disabled: !loaded || !!state?.busy || !!key && writing.current.has(key), error: loaded ? state.error : undefined };
+}
+
+export function GridColumnPicker({ label, columns, preferences }: { label: string; columns: Columns; preferences: ReturnType<typeof useGridColumns> }) {
+  return <details className="ro-columns"><summary>Columnas<span className="ct-ratios-sr"> de {label}</span></summary><div className="ro-column-options" aria-label={`Columnas de ${label}`}>
+    {columns.map(([id, name]) => <label key={id}><input type="checkbox" checked={preferences.has(id)} disabled={preferences.disabled} onChange={event => void preferences.change(id, event.target.checked)} />{name}</label>)}
+    <button type="button" disabled={preferences.disabled} onClick={() => void preferences.change()}>Restablecer columnas</button>
+    {preferences.error && <small role="alert">{preferences.error}</small>}
+  </div></details>;
+}
 
 export interface GridSort { column: string; direction: "asc" | "desc" }
 export type GridValue = string | number | undefined;

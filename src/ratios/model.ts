@@ -68,3 +68,13 @@ export function tradeLabel(timestamp?: number) {
   if (!finite(timestamp)) return "Hora de última operación no disponible";
   return new Date(timestamp).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "medium" });
 }
+
+/** Market time of the latest input trade, never the polling or render time. */
+export function ratioUpdatedAt(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote) {
+  if (calculateRatio(a, b, c).ratio === undefined) return undefined;
+  const times = (c ? [a, b, c] : [a, b]).map(q => q?.tradedAt);
+  return times.every((at): at is number => finite(at) && at > 0 && Number.isFinite(new Date(at).getTime())) ? Math.max(...times) : undefined;
+}
+export function ratioTimeLabel(timestamp?: number) {
+  return timestamp === undefined ? "—" : new Date(timestamp).toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hourCycle: "h23" });
+}

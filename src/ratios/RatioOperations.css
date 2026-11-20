@@ -96,7 +96,7 @@
 .ro-grid-tools>small{font-size:10px}
 .ro-grid-tools .ro-filters{margin:0 0 0 auto}
 .ct-ratio-ops .ro-manual-order{padding:3px 7px;font-size:10px}
-.ro-grid-wrap{border:1px solid var(--ro-grid-border);border-radius:6px;max-height:min(64vh,720px);scrollbar-gutter:stable}
+.ro-grid-wrap{border:1px solid var(--ro-grid-border);border-radius:6px;max-height:min(64vh,720px);scrollbar-gutter:auto;width:fit-content;max-width:100%}
 .ro-monitor-wrap{width:fit-content;max-width:100%}
 .ct-ratio-ops .ro-monitor-table,.ct-ratio-ops .ro-operations-table{font-variant-numeric:tabular-nums}
 .ct-ratio-ops .ro-grid-wrap thead th{position:sticky;top:0;z-index:1;background:var(--ro-grid-head);color:var(--ro-grid-head-text);font-weight:700;font-size:10px;text-transform:none;border-bottom:2px solid var(--ro-line);padding:0 9px;height:33px}
@@ -129,3 +129,4 @@
 @media(max-width:540px){.ro-sizing{grid-template-columns:1fr}.ro-sizing-leg{grid-template-columns:minmax(75px,110px) minmax(0,1fr)}}
 
 .ro-monitor-controls .ro-add-watch{display:flex;flex-wrap:wrap;align-items:flex-start}.ro-add-watch>.ct-ratio-picker{width:220px}.ct-ratio-ops .ro-compare{display:flex;align-items:center;gap:6px;margin-top:24px;font-size:11px}.ct-ratio-ops .ro-compare input{width:auto;min-height:0}
+.ro-columns{position:relative;font-size:10px;flex:0 0 auto}.ro-columns summary{cursor:pointer;list-style:none;border:1px solid var(--ro-line);border-radius:4px;padding:5px 8px;color:var(--ro-text);background:var(--ro-input)}.ro-columns summary::-webkit-details-marker{display:none}.ro-columns summary::after{content:" ▾"}.ro-column-options{position:absolute;top:calc(100% + 4px);left:0;z-index:10;min-width:185px;padding:8px;border:1px solid var(--ro-line);border-radius:5px;background:var(--ro-bg);box-shadow:0 5px 15px #0004;display:grid;gap:7px}.ct-ratio-ops .ro-column-options label{display:flex;align-items:center;gap:7px;white-space:nowrap;font-size:11px}.ct-ratio-ops .ro-column-options input{width:auto;min-height:0;margin:0}.ro-column-options small{color:var(--ro-muted)}.ro-updated{font-variant-numeric:tabular-nums;color:var(--ro-muted)}

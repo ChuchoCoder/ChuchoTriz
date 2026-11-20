@@ -94,3 +94,44 @@ coinciden por hash con dist. Respaldo previo:
 `Free/backups/extension-before-compact-actions-20261120-171604`.
 Las siete claves locales conservaron el mismo hash agregado indicado arriba;
 no se modificaron operaciones ni se enviaron órdenes.
+
+## Referencia C, columnas y última actualización
+
+El Monitor expone **Agregar referencia C**, con selector **Referencia C · ej.
+DLR/SPOT**, para agregar comparaciones `(A/B)/C` igual que en el widget.
+Se mantienen las restricciones de sólo monitor y el guardado schema 2 existente.
+
+Ambas grillas tienen **Columnas** para mostrar/ocultar campos opcionales y
+restablecerlos por separado. Par y Acciones permanecen visibles. Preferencias
+persistidas por cuenta/sitio/grilla bajo `RatioGridColumnsV1:`, fuera del ledger.
+Ocultar una columna ordenada vuelve al orden manual. El guardado aplica la
+visibilidad solicitada al estado compartido bajo lock; no invierte un cambio
+idéntico de otra pestaña. Los pendientes se identifican por clave y solicitud.
+
+**Últ. valor** muestra y permite ordenar por la hora de mercado del último precio
+que forma el ratio, incluyendo C. Usa Argentina, HH:mm:ss, con fecha completa en
+el tooltip. No usa el reloj del refresco; sin ratio u horas válidas muestra —.
+Se elimina el gutter reservado que generaba una franja vacía al final de ambas
+grillas; el contenedor sigue permitiendo scroll cuando hace falta.
+
+Pruebas nuevas: selección de columnas independiente, recarga/reset, ausencia de
+escrituras al ledger, desaparición del sort oculto, reloj actualizado por C,
+horas ausentes y borde derecho sin franja. Los tests del hook cubren rollback
+tras error, cambios idempotentes de dos pestañas, evento de cuenta nueva con
+lectura/escritura anteriores pendientes y vuelta A→B→A con locks pendientes.
+La revisión independiente detectó dos carreras de concurrencia y un caso de
+solapamiento; corregidos y comprobados por esos tests, sin hallazgos pendientes.
+
+Validación final: **633 tests PASS** (564 Vitest + 67 Node + 2 QA infra),
+**33 recorridos Playwright PASS** sobre el paquete final, build/seguridad PASS.
+Comprobación visual en ambos temas y a 420 px sin desborde del contenedor.
+Capturas locales `columns-monitor-dark.png`, `columns-monitor-light.png`,
+`columns-operations-dark.png` y `columns-operations-light.png`.
+
+Instalación compartida verificada: mismo ID/ruta/versión de desarrollo Free
+0.0.28, 24 archivos coincidentes con dist y respaldo
+`Free/backups/extension-before-ratio-columns-20261120-173402`.
+Cocos muestra Últ. valor en ambas grillas, el selector de C y Columnas;
+la tabla de operaciones mide 879,85 px y el borde derecho restante es 0,8 px
+en ambas tablas (sin gutter reservado). Las siete claves locales mantienen
+el hash agregado anterior. Se conservó la pestaña original y el navegador abierto.

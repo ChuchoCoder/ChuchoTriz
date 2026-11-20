@@ -7,7 +7,7 @@ async page => {
   const label = name => page.getByLabel(name, { exact: true });
   const button = name => page.getByRole('button', { name, exact: true });
   const click = async locator => { await page.screenshot({ animations: 'disabled', timeout: 10000 }); await locator.click({ force: true }); };
-  const wait = async fn => page.waitForFunction(fn, null, { polling: 100, timeout: 10000 });
+  const wait = async (fn, arg = null) => page.waitForFunction(fn, arg, { polling: 100, timeout: 10000 });
   const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => [1, 2].includes(v?.schema) && Array.isArray(v.operations)));
   async function choose(name, value) {
     const control = label(name); await control.fill(value); await control.blur();
@@ -246,8 +246,8 @@ async page => {
   await click(button('1 · Monitor'));
   await click(button('Quitar par (AL30/AL30D) / DLR/SPOT'));
   await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
-  await page.getByLabel('Comparar A/B con una referencia', { exact: true }).check();
-  await choose('Referencia C · ej. Dólar oficial', 'Dólar oficial');
+  await page.getByLabel('Agregar referencia C', { exact: true }).check();
+  await choose('Referencia C · ej. DLR/SPOT', 'Dólar oficial');
   await click(button('Agregar par'));
   const comparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
   await comparison.waitFor();
@@ -373,5 +373,56 @@ async page => {
   assert(JSON.stringify((await book()).operations.map(o=>o.id))===JSON.stringify(beforeRejected)&&await financialSnapshot()===originalFinancial&&staleRows.length===beforeRejected.length,'Concurrent revision changes reject stale drag without overwriting records');
   await transfer.dispose();
   checks.push('Stale drag after another writer changes the revision is rejected without data loss');
+
+  await click(page.getByRole('button',{name:/^1 · Monitor/}));
+  const columnsLedger = JSON.stringify(await book());
+  const monitorPicker=page.locator('.ro-columns');
+  await click(monitorPicker.locator('summary'));
+  await click(button('Ordenar por Último A'));
+  await monitorPicker.getByLabel('Último A',{exact:true}).uncheck();
+  await wait(()=>!document.querySelector('.ro-monitor-table [aria-label="Ordenar por Último A"]'));
+  await wait(()=>document.querySelector('.ro-manual-order')?.disabled);
+  assert(await button('Orden manual').isDisabled(),'Hiding the sorted column clears its invisible sort');
+  await click(monitorPicker.locator('summary'));
+  await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/}));
+  const operationPicker=page.locator('.ro-columns');
+  await click(operationPicker.locator('summary'));
+  await operationPicker.getByLabel('Realizado',{exact:true}).uncheck();
+  await wait(()=>!document.querySelector('.ro-operations-table [aria-label="Ordenar por Realizado"]'));
+  await click(operationPicker.locator('summary'));
+  await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'}));await click(button('Ratios'));
+  await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled')==='false');
+  await wait(()=>!document.querySelector('.ro-monitor-table [aria-label="Ordenar por Último A"]'));
+  assert(await button('Ordenar por Realizado').count()===0,'Only the active grid is rendered');
+  await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/}));
+  await wait(()=>!document.querySelector('.ro-operations-table [aria-label="Ordenar por Realizado"]'));
+  assert(await button('Ordenar por Últ. valor').count()===1,'Update time is available in operations');
+  await click(page.locator('.ro-columns summary'));await click(button('Restablecer columnas'));await click(page.locator('.ro-columns summary'));
+  await click(page.getByRole('button',{name:/^1 · Monitor/}));
+  assert(await button('Ordenar por Último A').count()===0,'Restoring operations does not change monitor preferences');
+  await click(page.locator('.ro-columns summary'));await click(button('Restablecer columnas'));await click(page.locator('.ro-columns summary'));
+  await wait(()=>!!document.querySelector('.ro-monitor-table [aria-label="Ordenar por Último A"]'));
+  assert(JSON.stringify(await book())===columnsLedger,'Column preferences do not write the financial ledger');
+  checks.push('Independent column preferences persist across reload, reset separately and clear hidden sorts without ledger changes');
+  const timed=await page.evaluate(async()=>{
+    const v=await chrome.storage.local.get(null),b=Object.entries(v).find(([k])=>k.startsWith('RatioOperationsV1:'))[1],p=b.watch.find(p=>p.c),at=Date.now()-600000;
+    const ids=[p.a.id,p.b.id,p.c.id];
+    window.__ratioClockBackup=ids.map(id=>{const s=mainStore.securityStore.securities.find(s=>s.id===id);const previous={...s.md};s.md.lstdStr=new Date(at).toISOString();s.md.seq++;return {id,md:previous};});
+    return {id:p.id,c:p.c.id,at};
+  });
+  const clock=at=>new Date(at).toLocaleTimeString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',hourCycle:'h23'});
+  await wait(({id,time})=>document.querySelector('.ro-monitor-table tr[data-row-id="'+id+'"] .ro-updated')?.textContent===time,{id:timed.id,time:clock(timed.at)});
+  await page.evaluate(({id,at})=>{const s=mainStore.securityStore.securities.find(s=>s.id===id);s.md.lstdStr=new Date(at+300000).toISOString();s.md.lst+=1;s.md.seq++;},{id:timed.c,at:timed.at});
+  await wait(({id,time})=>document.querySelector('.ro-monitor-table tr[data-row-id="'+id+'"] .ro-updated')?.textContent===time,{id:timed.id,time:clock(timed.at+300000)});
+  await page.evaluate(id=>{const s=mainStore.securityStore.securities.find(s=>s.id===id);s.md.lstdStr=undefined;s.md.seq++;},timed.c);
+  await wait(id=>document.querySelector('.ro-monitor-table tr[data-row-id="'+id+'"] .ro-updated')?.textContent==='—',timed.id);
+  await page.evaluate(()=>{for(const b of window.__ratioClockBackup)mainStore.securityStore.securities.find(s=>s.id===b.id).md=b.md;delete window.__ratioClockBackup;});
+  checks.push('Latest value uses actual A/B/C market times, updates with C and shows missing times explicitly');
+  for(const view of [1,3]){
+    await click(page.getByRole('button',{name:view===1?/^1 · Monitor/:/^3 · Operaciones abiertas/}));
+    const gap=await page.locator('.ro-grid-wrap').evaluate(el=>{const a=el.getBoundingClientRect(),b=el.querySelector('table').getBoundingClientRect();return a.right-b.right;});
+    assert(gap<=2,'No reserved empty scrollbar gutter at the right of grid '+view);
+  }
+  checks.push('Both grids end at the actions column without a reserved scrollbar strip');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
