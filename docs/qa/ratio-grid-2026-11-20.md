@@ -73,3 +73,24 @@ oscuro rgb(32,61,85) y claro rgb(225,239,251), con borde azul en ambos; los chip
 Long/Short conservan sus fondos verde rgb(22,61,44) y rojo rgb(72,35,45).
 Build aprobado. Capturas locales: `blue-selection-dark.png` y `blue-selection-light.png`.
 No se repite la suite funcional completa por este ajuste exclusivo de CSS.
+
+## Acciones y ancho compacto
+
+Los botones de Detalle, Editar y Eliminar usan iconos con nombre accesible y
+ayuda al pasar el puntero. Las acciones de ambas grillas se alinean a la derecha,
+incluso cuando una fila tiene menos botones. Las flechas de orden también quedan
+al extremo derecho del encabezado. Operaciones abiertas ajusta sus columnas al
+contenido y deja el detalle a 12 px de la tabla, sin repartir el ancho sobrante.
+
+Validación del ajuste: paquete Free y seguridad PASS; los 30 recorridos Playwright
+del tab pasan sobre el bundle actualizado, incluido abrir/editar/eliminar.
+Comprobación visual en ambos temas: tabla de 817,64 px en viewport de 2560 px,
+acciones alineadas sin diferencias y contenedor sin desborde a 420 px.
+Capturas locales: `compact-operations-dark.png` y `compact-operations-light.png`.
+
+Instalado y comprobado en Cocos: tabla de 804,05 px en viewport de 2048 px,
+iconos presentes con nombre accesible y selección azul conservada. Los 24 archivos
+coinciden por hash con dist. Respaldo previo:
+`Free/backups/extension-before-compact-actions-20261120-171604`.
+Las siete claves locales conservaron el mismo hash agregado indicado arriba;
+no se modificaron operaciones ni se enviaron órdenes.

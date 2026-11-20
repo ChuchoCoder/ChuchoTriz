@@ -33,9 +33,15 @@ export function GridSortHeader({ label, column, sort, onSort, disabled, descript
   const active = sort?.column === column;
   return <th scope="col" aria-sort={active ? sort.direction === "asc" ? "ascending" : "descending" : "none"}>
     <button type="button" className="ro-sort-button" disabled={disabled} onClick={() => onSort(column)} aria-label={`Ordenar por ${label}`} title={description || "Ascendente → descendente → orden manual"}>
-      {label}<span aria-hidden="true" className={active ? "ro-sort-active" : "ro-sort-idle"}>{active ? sort.direction === "asc" ? "↑" : "↓" : "↕"}</span>
+      <span className="ro-sort-label">{label}</span><span aria-hidden="true" className={`ro-sort-arrow ${active ? "ro-sort-active" : "ro-sort-idle"}`}>{active ? sort.direction === "asc" ? "↑" : "↓" : "↕"}</span>
     </button>
   </th>;
+}
+
+export function GridActionIcon({ action }: { action: "detail" | "edit" | "delete" }) {
+  return <svg aria-hidden="true" focusable="false" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    {action === "detail" ? <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></> : action === "edit" ? <><path d="m16 4 4 4M4 20l4-1L20 7a2.12 2.12 0 0 0-3-3L5 16l-1 4Z" /></> : <><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></>}
+  </svg>;
 }
 
 export function GridRowHandle({ label, disabled, busy, onStart, onEnd, onMove }: {
