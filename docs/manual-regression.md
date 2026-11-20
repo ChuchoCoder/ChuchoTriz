@@ -6,6 +6,9 @@ del preview con el MCP compartido. El script instala únicamente en esa página
 loopback un catálogo sintético. Comprueba DDMM, puntas con cantidades, entrada
 fija, dimensionamiento, edición con cierres, borrar/deshacer, recarga, cambio de
 cuenta y bonos de distinta moneda. No debe ejecutarse sobre un broker.
+También verifica orden por columna, valores faltantes, arrastre desde una vista
+ordenada, movimientos consecutivos por teclado, persistencia del orden manual,
+P&L por moneda, operaciones ocultas, guardados demorados y revisiones concurrentes.
 Incluye lotes mayores a 1: para un lote de 10, 100 y 110 deben ser válidos,
 105 inválido, y una apertura con 110 debe poder guardarse y eliminarse.
 En Matriz instalada, comprobar selección, precios nativos y tasas por CFI, sin

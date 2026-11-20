@@ -23,7 +23,7 @@ omiten las dos brechas y se informa cuáles no pudieron cargarse.
 Para agregar manualmente la brecha MEP/oficial, tanto en el Monitor como en el widget:
 
 1. Elegí **AL30** como A y **AL30D** como B, con el plazo que quieras comparar.
-2. Marcá **Comparar A/B con una referencia**.
+2. En el tab, marcá **Agregar referencia C**; en el widget, **Comparar A/B con una referencia**.
 3. En **Referencia C**, buscá **Dólar oficial** y seleccioná **DLR/SPOT**.
 4. Agregá el par. El widget propone **Porcentaje (%)**; el Monitor muestra la
    brecha porcentual. También podés conservar el AL30/AL30D simple en otra fila.
@@ -140,7 +140,47 @@ movimiento reducido se usa una marca estática breve.
   Eliminar admite deshacer; los registros cerrados también pueden eliminarse.
 - En Operaciones abiertas, el par mantiene el orden A/B: cada instrumento usa
   un chip verde con «Long» o rojo con «Short», según el lado registrado. El
-  estado Abierta/Parcial/Cerrada permanece debajo, sin repetir el sentido A/B.
+  estado Abierta/Parcial/Cerrada aparece en su propia columna, sin repetir el sentido A/B.
+
+### Columnas y hora del último valor
+
+En Monitor y Operaciones abiertas, **Columnas** permite mostrar u ocultar los
+campos opcionales y **Restablecer columnas** recupera la configuración inicial.
+Par y Acciones permanecen visibles; en Operaciones también permanece Estado,
+separado de los chips Long/Short para mantenerlos centrados en la fila. Las preferencias se guardan por cuenta/sitio
+y por grilla, independientemente del registro de operaciones. Ocultar una columna
+por la que se está ordenando vuelve al orden manual.
+
+**Últ. valor** muestra `HH:mm:ss` de Argentina: la hora de mercado más reciente
+de los precios que forman el ratio (A/B, incluyendo C si se usa una referencia).
+Se puede ordenar por esa hora. No es la hora del refresco de pantalla; si falta
+alguna hora o no puede calcularse el ratio, muestra **—**. El tooltip incluye
+la fecha y hora completas para distinguir cotizaciones de días anteriores.
+
+### Orden y lectura de las grillas
+
+Monitor y Operaciones abiertas tienen encabezados con fondo, filas alternadas,
+resaltado al pasar el cursor y una marca para la operación seleccionada. Los
+encabezados permanecen visibles al desplazarse dentro de una lista larga;
+en pantallas angostas la grilla tiene desplazamiento horizontal propio.
+
+- Clic en un encabezado: ascendente → descendente → orden manual. Se ordenan
+  los valores numéricos publicados, no los textos formateados; los valores
+  ausentes siempre quedan al final. Ratio/brecha usa el valor mostrado y la
+  columna de cantidad ordena por la cantidad abierta de A.
+- Arrastrá el agarre ⠿ hasta otra fila para guardar su posición. También podés
+  enfocarlo y usar ↑/↓ varias veces seguidas. Si partís de una vista ordenada,
+  ese orden visible, con el movimiento aplicado, pasa a ser el nuevo orden manual.
+- El orden manual se guarda por cuenta/sitio y sobrevive a la recarga. Con el
+  filtro Abiertas, las operaciones cerradas conservan sus posiciones ocultas.
+  Ordenar por columna sólo cambia la vista durante la sesión, sin escribir el
+  registro; **Orden manual** recupera las posiciones guardadas.
+- Para ordenar Realizado/Pendiente/Neto con varias monedas, elegí **P&L en**.
+  Se compara sólo esa moneda, sin sumar ARS, USD o USD C; los registros sin
+  importe en la moneda elegida quedan al final.
+- Un movimiento guarda únicamente la posición: conserva instrumentos, cantidades,
+  entradas, tasas, objetivos e historial. Si otra pestaña cambia el registro
+  durante el arrastre, el movimiento desactualizado se rechaza.
 
 Se guardan hasta 100 pares y 500 operaciones, separadas por cuenta y sitio en
 `chrome.storage.local`. La revisión y un bloqueo entre pestañas previenen
