@@ -167,6 +167,7 @@
   "src/ratios/RatioOrderBook.tsx",
   "src/ratios/RatioOrderBook.test.tsx",
   "docs/qa/0.0.27-2026-11-19.md",
+  "docs/qa/0.0.28-2026-11-20.md",
   "scripts/security/vendored-picomatch.mjs",
   "scripts/security/picomatch.test.mjs",
   "docs/security-picomatch.md",
