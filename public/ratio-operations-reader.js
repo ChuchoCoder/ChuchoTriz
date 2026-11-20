@@ -20,6 +20,11 @@
     return { ms, ss, contextId, connected: !!ms.webSocketConnectionStatus };
   }
   function descriptor(s) {
+    // The Dólar USA header reads this spot security, not the product or a future.
+    if (s?.id === "rx_DDF_DLR_SPOT" && s.marketId === "rx" && !s.isProduct && !s.isPortfolio && s.currency === "ARS") {
+      return { id: s.id, symbol: "DLR/SPOT", market: "rx", currency: "ARS", settlement: "Referencia",
+        cfi: "MRIXXX", quantityUnit: "unidades", monitorOnly: true };
+    }
     if (!s || s.isProduct || s.isPortfolio || !text(s.id) || !text(s.symbolStr || s.symbol, 100) || !text(s.marketId) || !text(s.currency)) return;
     const rate = s.cfiCode === "RPXXXX";
     if (rate ? s.marketId !== "bm" || s.currency !== "ARS" || !/^bm_MERV_PESOS_[1-9]\d{0,2}D$/.test(s.id) ||
@@ -82,8 +87,8 @@
       check(p.contextId === c.contextId, "Cambió la cuenta o conexión. Esperá la actualización de ratios.");
       if (m.method === "ratioSearch") {
         check(typeof p.query === "string" && p.query.length <= 60, "Búsqueda de instrumento inválida.");
-        const query = key(p.query);
-        const result = query ? c.ss.securities.map(descriptor).filter(s => s && key(s.symbol).includes(query))
+        const query = key(p.query).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const result = query ? c.ss.securities.map(descriptor).filter(s => s && (key(s.symbol).normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(query) || s.id === "rx_DDF_DLR_SPOT" && "DOLAR OFICIAL DOLAR USA DLR/SPOT".includes(query)))
           .sort((a, b) => Number(key(b.symbol) === query) - Number(key(a.symbol) === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 60) : [];
         current(op); reply({ result }); return;
       }
@@ -98,7 +103,8 @@
         const fresh = p.ids.filter(id => descriptor(catalog.get(id)) && !subscribed.has(id));
         if (fresh.length) {
           c.ms.dmaWebSocket.addSubscription("md", fresh.map(id => "md." + id));
-          c.ms.dmaWebSocket.addSubscription("book", fresh.map(id => "book." + id));
+          const priced = fresh.filter(id => !descriptor(catalog.get(id)).monitorOnly);
+          if (priced.length) c.ms.dmaWebSocket.addSubscription("book", priced.map(id => "book." + id));
           fresh.forEach(id => subscribed.add(id));
         }
         for (const id of p.ids) {

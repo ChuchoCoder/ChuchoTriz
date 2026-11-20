@@ -6,6 +6,44 @@ En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ra
 y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
 manual local. Abrir o cerrar un registro no manda órdenes al broker.
 
+## Dólar oficial y brecha contra MEP
+
+El selector encuentra **DLR/SPOT** al buscar **Dólar oficial**, **Dólar USA** o
+**DLR/SPOT**. Se toma el spot nativo que alimenta el último de la cabecera
+**Dólar USA** de A3, sin usar un contrato de futuro ni el producto agrupador.
+Es una referencia de sólo monitor y no admite registrar una operación long/short.
+Si ese spot no está en el catálogo, no se ofrece una cotización alternativa.
+
+Para seguir la brecha MEP/oficial, tanto en el Monitor como en el widget:
+
+1. Elegí **AL30** como A y **AL30D** como B, con el plazo que quieras comparar.
+2. Marcá **Comparar A/B con una referencia**.
+3. En **Referencia C**, buscá **Dólar oficial** y seleccioná **DLR/SPOT**.
+4. Agregá el par. El widget propone **Porcentaje (%)**; el Monitor muestra la
+   brecha porcentual. También podés conservar el AL30/AL30D simple en otra fila.
+
+La fila se identifica como **(AL30/AL30D) / DLR/SPOT** y muestra por separado los
+últimos A, B y C. La brecha es `((A / B) / C − 1) × 100`. Por ejemplo, con datos
+ficticios, MEP de 1.600 y oficial de 1.572,50 da **1,75%**; si ambos son 1.600,
+da **0,00%**. En el widget, **Número** muestra `(A / B) / C`.
+
+La referencia es opcional y también puede ser otro instrumento del catálogo.
+Sin último válido de C o con C menor o igual a cero se muestra **—**, sin volver
+al ratio simple. La variación diaria compara la fórmula completa con las tres
+referencias diarias nativas; una referencia ausente o fechas distintas oculta
+sólo esa variación. Los datos se actualizan con las cotizaciones de Matriz y la
+selección queda guardada al recargar.
+
+Las comparaciones con C son de sólo monitor. **Invertir A/B** queda desactivado
+en esas filas para no cambiar inadvertidamente la fórmula completa: editá el
+widget o quitá/agregá la fila del Monitor para elegir otra comparación.
+
+Los guardados con C usan schema 2, que las versiones anteriores no interpretan.
+Al quitar la última referencia C vuelven a schema 1. Después de actualizar la
+extensión, recargá las pestañas de Matriz antes de usar estas comparaciones.
+
+## Pares del monitor
+
 El monitor inicial incluye, en este orden: AL30/AL30D, AL30/AL30C,
 AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
 PESOS - 7D/PESOS - 1D. En registros existentes se agregan sólo los faltantes,

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
-import { calculateRatio, currencyLabel, numberLabel, tradeLabel } from "./model";
+import { calculateRatio, currencyLabel, numberLabel, pairKey, pairLabel, ratioLabel, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
 import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
 import { numeric } from "../optionsSimulator/model";
 import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
-import { applyDefaultWatch, bestBookPrice, closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isRateInstrument, resolveDefaultWatch,
+import { applyDefaultWatch, bestBookPrice, closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, remaining, sameCurrency,
   validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg } from "./trading";
 import "./RatioOperations.css";
@@ -28,7 +28,8 @@ const dailyLabel = (n: number) => n.toLocaleString("es-AR", { minimumFractionDig
 export default function RatioOperations({ active }: { active: boolean }) {
   const [session, setSession] = useState<{ scope: string; book: TradingBook; error?: string }>();
   const [view, setView] = useState<View>("monitor"), [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [watchA, setWatchA] = useState<TradingInstrument>(), [watchB, setWatchB] = useState<TradingInstrument>();
+  const [watchA, setWatchA] = useState<TradingInstrument>(), [watchB, setWatchB] = useState<TradingInstrument>(), [watchC, setWatchC] = useState<TradingInstrument>();
+  const [compare, setCompare] = useState(false);
   const [selected, setSelected] = useState<string>(), [all, setAll] = useState(false), [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState(""), [notice, setNotice] = useState("");
   const [edit, setEdit] = useState<{ id: string; snapshot: string }>();
@@ -38,20 +39,20 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [loadingDefaults, setLoadingDefaults] = useState(false), defaultsAttempt = useRef<string | undefined>(undefined), defaultsGeneration = useRef(0);
   const pending = useRef(false), current = useRef({ session, active }); current.current = { session, active };
   const book = session?.book ?? emptyBook();
-  const ids = [...book.watch.flatMap(p => [p.a.id, p.b.id]), ...book.operations.filter(o => !isClosed(o)).flatMap(o => o.legs.map(l => l.instrument.id)),
+  const ids = [...book.watch.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])]), ...book.operations.filter(o => !isClosed(o)).flatMap(o => o.legs.map(l => l.instrument.id)),
     ...(draft.a ? [draft.a.id] : []), ...(draft.b ? [draft.b.id] : [])];
   const market = useRatioMarket(active, ids, session?.scope), scope = market.context?.storageScope;
   const marketRef = useRef(market); marketRef.current = market;
   const ready = active && !!scope && session?.scope === scope && !session.error;
   const available = ready && !busy && !loadingDefaults;
-  const priceSearch = useCallback(async (query: string) => (await market.search(query)).filter(i => !isRateInstrument(i)), [market.search]);
+  const priceSearch = useCallback(async (query: string) => (await market.search(query)).filter(i => !isMonitorOnly(i)), [market.search]);
   const op = ready ? book.operations.find(o => o.id === selected) : undefined;
   const edited = ready && edit ? book.operations.find(o => o.id === edit.id) : undefined;
   const partiallyClosed = !!edited?.legs.some(l => l.exits.length);
   const quotes = market.quotes;
 
   useEffect(() => {
-    setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined);
+    setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined); setWatchC(undefined); setCompare(false);
     defaultsGeneration.current++; defaultsAttempt.current = undefined; setLoadingDefaults(false);
     setView("monitor"); setIssue(""); setNotice(""); setPickerSession(n => n + 1);
     if (!active || !scope) return;
@@ -123,7 +124,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     });
   }
   function begin(a: TradingInstrument, b: TradingInstrument) {
-    if (isRateInstrument(a) || isRateInstrument(b)) { setIssue("Las cauciones se comparan como tasas TNA y sólo se monitorean."); return; }
+    if (isMonitorOnly(a) || isMonitorOnly(b)) { setIssue("Las cauciones y referencias sólo se monitorean."); return; }
     const step = a.quantityStep ?? 1;
     setEdit(undefined); setDraft({ ...emptyDraft(), a, b, pa: input(quotes[a.id]?.last), pb: input(quotes[b.id]?.last), qa: String(Math.ceil(100 / step) * step),
       fa: input(a.amountFactor), fb: input(b.amountFactor), sa: input(a.quantityStep), sb: input(b.quantityStep), ddmma: input(defaultMarketRights(a)), ddmmb: input(defaultMarketRights(b)) });
@@ -246,21 +247,27 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {notice && <div className="ro-notice" role="status">{notice}{deleted?.scope === scope && <button type="button" disabled={!available} onClick={() => void undo()}>Deshacer eliminación</button>}</div>}
     {view === "monitor" && <div>
       <div className="ro-monitor-controls"><div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
-        <button type="button" disabled={!available || !watchA || !watchB} onClick={() => void commit(base => {
+        <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => { setCompare(e.target.checked); setWatchC(undefined); }} />Comparar A/B con una referencia</label>
+        {compare && <InstrumentPicker label="Referencia C · ej. Dólar oficial" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />}
+        <button type="button" disabled={!available || !watchA || !watchB || compare && !watchC} onClick={() => void commit(base => {
           if (!watchA || !watchB || watchA.id === watchB.id) throw Error("Elegí instrumentos diferentes.");
           if (base.watch.length >= MAX_WATCH) throw Error(`Podés observar hasta ${MAX_WATCH} pares.`);
-          if (base.watch.some(p => p.a.id === watchA.id && p.b.id === watchB.id)) throw Error("El par ya está en el monitor.");
-          return { ...base, watch: [...base.watch, { id: crypto.randomUUID(), a: watchA, b: watchB }] };
+          const pair = { id: crypto.randomUUID(), a: watchA, b: watchB, ...(compare && watchC ? { c: watchC } : {}) };
+          if (compare && !watchC) throw Error("Seleccioná la referencia C.");
+          if (base.watch.some(p => pairKey(p) === pairKey(pair))) throw Error("El par ya está en el monitor.");
+          return { ...base, watch: [...base.watch, pair] };
         })}>Agregar par</button></div><button type="button" className="ro-defaults" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button></div>
-      <div className="ro-table-wrap"><table className="ro-monitor-table"><thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th><th>Ratio</th><th>Var. diaria</th><th>Acciones</th></tr></thead><tbody>{ready && book.watch.map(p => {
+      <div className="ro-table-wrap"><table className="ro-monitor-table"><thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th>{book.watch.some(p => p.c) && <th>Referencia C</th>}<th>Ratio / brecha</th><th>Var. diaria</th><th>Acciones</th></tr></thead><tbody>{ready && book.watch.map(p => {
         const rate = isRateInstrument(p.a) || isRateInstrument(p.b);
-        const a = quotes[p.a.id], b = quotes[p.b.id], result = calculateRatio(a, b);
-        return <tr key={p.id}><td><strong>{p.a.symbol}/{p.b.symbol}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{rate ? " · tasas TNA" : ""}</small></td>
+        const monitorOnly = !!p.c || isMonitorOnly(p.a) || isMonitorOnly(p.b);
+        const a = quotes[p.a.id], b = quotes[p.b.id], c = p.c ? quotes[p.c.id] : undefined, result = calculateRatio(a, b, p.c ? c ?? {} : undefined);
+        return <tr key={p.id}><td><strong>{pairLabel(p)}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{p.c ? " · brecha (A/B ÷ C − 1) × 100" : rate ? " · tasas TNA" : ""}</small></td>
           <td title={`Última operación A: ${tradeLabel(a?.tradedAt)}`}><OptionQuoteValue key={p.a.id} value={a?.issue ? undefined : a?.last} formatValue={n => numberLabel(n) + (isRateInstrument(p.a) ? "% TNA" : "")} /></td>
           <td title={`Última operación B: ${tradeLabel(b?.tradedAt)}`}><OptionQuoteValue key={p.b.id} value={b?.issue ? undefined : b?.last} formatValue={n => numberLabel(n) + (isRateInstrument(p.b) ? "% TNA" : "")} /></td>
-          <td className="ro-ratio" title={result.issue}><OptionQuoteValue key={`${p.a.id}/${p.b.id}`} value={result.ratio} formatValue={n => pairRatioLabel(n, p.a, p.b)} /></td>
+          {book.watch.some(row => row.c) && <td title={p.c ? `${p.c.symbol} · ${tradeLabel(c?.tradedAt)}` : undefined}>{p.c ? <OptionQuoteValue key={p.c.id} value={c?.issue ? undefined : c?.last} formatValue={numberLabel} /> : "—"}</td>}
+          <td className="ro-ratio" title={result.issue || (p.c ? "((Último A / último B) / C − 1) × 100" : undefined)}><OptionQuoteValue key={pairKey(p)} value={result.ratio} formatValue={n => p.c ? ratioLabel(n, "percent") : pairRatioLabel(n, p.a, p.b)} /></td>
           <td className={`ro-daily ${signed(result.change)}`} title={result.referenceIssue || result.issue || "(Ratio actual / ratio de referencia diaria − 1) × 100"}>{result.change === undefined ? "—" : dailyLabel(result.change)}</td>
-          <td><div className="ro-actions"><button type="button" disabled={!available || rate} title={rate ? "Comparación de tasas TNA; no se valúa una operación con tasas como precios." : undefined} onClick={() => begin(p.a, p.b)}>{rate ? "Sólo monitor" : "Abrir operación"}</button><button type="button" disabled={!available} aria-label={`Invertir ${p.a.symbol}/${p.b.symbol}`} title="Invertir A/B" onClick={() => void commit(base => invertWatchPair(base, p.id))}>⇄</button><button type="button" disabled={!available} aria-label={`Quitar par ${p.a.symbol}/${p.b.symbol}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button></div></td></tr>;
+          <td><div className="ro-actions"><button type="button" disabled={!available || monitorOnly} title={monitorOnly ? "Las referencias, tasas y comparaciones de tres cotizaciones sólo se monitorean." : undefined} onClick={() => begin(p.a, p.b)}>{monitorOnly ? "Sólo monitor" : "Abrir operación"}</button><button type="button" disabled={!available || !!p.c} aria-label={`Invertir ${pairLabel(p)}`} title={p.c ? "Comparación (A/B)/C; agregá otra fórmula para cambiar el sentido" : "Invertir A/B"} onClick={() => void commit(base => invertWatchPair(base, p.id))}>⇄</button><button type="button" disabled={!available} aria-label={`Quitar par ${p.a.symbol}/${p.b.symbol}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button></div></td></tr>;
       })}</tbody></table></div>
       {ready && !book.watch.length && <p className="ro-empty">Agregá un par al Monitor. Cuando decidas entrar, pulsá Abrir operación.</p>}
     </div>}

@@ -16,6 +16,7 @@ function install() {
     ['AL30', 70000, 69000, 'ARS', '2'], ['AL30D', 50, 50, 'USD', '2'], ['AL30C', 51, 50, 'EXT', '2'], ['AL30', 71000, 69000, 'ARS', '1'],
     ['GD30', 72000, 71000, 'ARS', '2'], ['PESOS - 7D', 40, 39, 'ARS', ''], ['PESOS - 1D', 35, 34, 'ARS', '']
   ].map(([symbolStr, lst, refp, currency, settlementType]) => ({ id: symbolStr + '-' + settlementType, symbolStr: settlementType === '1' ? symbolStr + ' CI' : symbolStr, marketId: 'bm', currency, settlementType, md: { lst, refp, seq: 1, lstdStr: new Date().toISOString() } }));
+  securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'MRIXXX', md: { lst: 1572.5, refp: 1565, seq: 1, lstdStr: new Date().toISOString(), refdStr: '2026-11-19' } });
   let ds;
   function nativeWidget(data, dashboard) {
     return { ...data, dashboard, key: data.component + '-' + (++counter),

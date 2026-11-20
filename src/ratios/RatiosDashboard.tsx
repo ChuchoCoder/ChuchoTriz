@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
-import { calculateRatio, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, tickerKey, tradeLabel, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
+import { calculateRatio, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, tickerKey, tradeLabel, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize";
@@ -72,22 +72,23 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
 function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: RatioWidgetState; snapshot: RatiosState; command: Command; search: Search; busy: boolean }) {
   const cfg = widget.config;
   const [editing, setEditing] = useState<string | null>(cfg.pairs.length ? null : "new");
-  const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>();
+  const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>(), [c, setC] = useState<RatioInstrument>();
+  const [compare, setCompare] = useState(false);
   const [formatOverride, setFormatOverride] = useState<RatioFormat>(), [editorSession, setEditorSession] = useState(0);
-  const format = formatOverride ?? defaultRatioFormat(a, b);
+  const format = formatOverride ?? (compare ? "percent" : defaultRatioFormat(a, b));
   const [issue, setIssue] = useState("");
   const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
-  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setFormatOverride(pair ? pair.format || "number" : undefined); setEditorSession(n => n + 1); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
+  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setC(pair?.c); setCompare(!!pair?.c); setFormatOverride(pair ? pair.format || "number" : undefined); setEditorSession(n => n + 1); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
   const run = async (method: Mutation, params: Record<string, unknown>) => {
     setIssue("");
     try { await command(method, { widgetId: cfg.id, revision: cfg.revision, ...params }); return true; }
     catch (error) { setIssue(error instanceof Error ? error.message : "No se pudo guardar el cambio."); return false; }
   };
   const savePairs = (pairs: RatioPair[], expectedRevision = cfg.revision) => run("ratiosEdit", {
-    revision: expectedRevision, pairs: pairs.map(p => ({ id: p.id, a: p.a.id, b: p.b.id, format: p.format || "number" }))
+    schema: 2, revision: expectedRevision, pairs: pairs.map(p => ({ id: p.id, a: p.a.id, b: p.b.id, ...(p.c ? { c: p.c.id } : {}), format: p.format || "number" }))
   });
   const finishResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!resize.current) return;
@@ -103,9 +104,9 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
     <div className="ct-ratios-content NoDraggable">
       {editing && <form className="ct-ratios-editor" onSubmit={event => {
         event.preventDefault();
-        if (!a || !b) { setIssue("Seleccioná los dos instrumentos de la lista."); return; }
+        if (!a || !b || compare && !c) { setIssue("Seleccioná los instrumentos y la referencia de la lista."); return; }
         if (a.id === b.id) { setIssue("Elegí instrumentos diferentes para A y B."); return; }
-        const pair = { id: editing === "new" ? crypto.randomUUID() : editing, a, b, format };
+        const pair = { id: editing === "new" ? crypto.randomUUID() : editing, a, b, ...(compare && c ? { c } : {}), format };
         const pairs = editing === "new" ? [...cfg.pairs, pair] : cfg.pairs.map(p => p.id === editing ? pair : p);
         void savePairs(pairs, revision.current).then(saved => { if (saved) setEditing(null); });
       }}>
@@ -114,33 +115,36 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
+        <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => { setCompare(e.target.checked); setC(undefined); setFormatOverride(undefined); }} />Comparar A/B con una referencia</label>
+        {compare && <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy} />}
         <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormatOverride(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
-          <span>{format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
+          <span>{compare ? format === "percent" ? "((A ÷ B) ÷ C − 1) × 100" : "(A ÷ B) ÷ C" : format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>
-          <button type="submit" disabled={busy || !a || !b}>{busy ? "Guardando…" : editing === "new" ? "Agregar" : "Guardar"}</button>
+          <button type="submit" disabled={busy || !a || !b || compare && !c}>{busy ? "Guardando…" : editing === "new" ? "Agregar" : "Guardar"}</button>
         </div>
       </form>}
       {(issue || snapshot.issue || widget.issue) && <p className="ct-ratios-issue" role="status">{issue || snapshot.issue || widget.issue}</p>}
       <div className="ct-ratios-table-wrap"><table>
-        <thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th><th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span></th></tr></thead>
+        <thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th>{cfg.pairs.some(p => p.c) && <th>Referencia C</th>}<th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span></th></tr></thead>
         <tbody>{cfg.pairs.map(pair => {
-          const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id];
-          const result = calculateRatio(qa, qb);
-          const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt);
-          const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}`;
+          const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id], qc = pair.c ? snapshot.quotes[pair.c.id] : undefined;
+          const result = calculateRatio(qa, qb, pair.c ? qc ?? {} : undefined);
+          const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt, qc?.tradedAt === undefined ? 0 : Date.now() - qc.tradedAt);
+          const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`;
           return <tr key={pair.id}>
-            <td className="ct-ratios-pair" title={`A: ${instrumentDetail(pair.a)} · B: ${instrumentDetail(pair.b)}\n${clock}`}><strong>{pair.a.symbol}/{pair.b.symbol}</strong>
+            <td className="ct-ratios-pair" title={`A: ${instrumentDetail(pair.a)} · B: ${instrumentDetail(pair.b)}\n${clock}`}><strong>{pairLabel(pair)}</strong>
               {age > 15 * 60 * 1000 && <span className="ct-ratios-old" role="img" aria-label="Última operación antigua" title={clock}>◷</span>}
             </td>
             <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>
-            <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>
-            <td className="ct-ratios-value" title={result.issue || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format)}</td>
+            <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`}>{numberLabel(qb?.last)}</td>
+            {cfg.pairs.some(p => p.c) && <td title={pair.c ? `${pair.c.symbol} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{pair.c ? numberLabel(qc?.last) : "—"}</td>}
+            <td className="ct-ratios-value" title={result.issue || (pair.c ? "(A/B)/C; porcentaje = ((A/B)/C − 1) × 100" : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format)}</td>
             <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>
             <td className="ct-ratios-actions">
               <button type="button" aria-label={`Editar ${pair.a.symbol}/${pair.b.symbol}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
-              <button type="button" aria-label={`Invertir ${pair.a.symbol}/${pair.b.symbol}`} title="Invertir A/B" disabled={busy} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
+              <button type="button" aria-label={`Invertir ${pair.a.symbol}/${pair.b.symbol}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
               <button type="button" aria-label={`Eliminar ${pair.a.symbol}/${pair.b.symbol}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
             </td>
           </tr>;

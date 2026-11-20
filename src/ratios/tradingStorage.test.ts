@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { emptyBook } from "./trading";
+import { emptyBook, type TradingInstrument } from "./trading";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
 let stored: Record<string, unknown>, writes: number;
 beforeEach(() => {
@@ -10,6 +10,16 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 const key = tradingStorageKey("a".repeat(64));
+it("versions composite books so old clients reject them and reads existing two-price books", async () => {
+  const i = (id: string): TradingInstrument => ({ id, symbol: id, market: "bm", currency: "ARS", settlement: "2", cfi: "DBXXXX", quantityUnit: "nominales" });
+  const base = emptyBook(), pair = { id: "spread", a: i("AL30"), b: i("AL30D"), c: i("official") };
+  const saved = await saveTradingBook(key, base, { ...base, watch: [pair] }, async () => {});
+  expect(saved.schema).toBe(2); expect((await readTradingBook(key)).watch[0].c).toEqual(pair.c);
+  const legacy = { ...base, watch: [{ id: pair.id, a: pair.a, b: pair.b }] };
+  await expect(saveTradingBook(key, legacy, legacy, async () => {})).rejects.toThrow(/Otra pestaña/);
+  const cleared = await saveTradingBook(key, saved, { ...saved, watch: [] }, async () => {});
+  expect(cleared.schema).toBe(1);
+});
 it("persists revisions and isolates local books by opaque account scope", async () => {
   const b = await readTradingBook(key), saved = await saveTradingBook(key, b, b, async () => {});
   expect(saved.revision).not.toBe(""); expect(await readTradingBook(key)).toEqual(saved);

@@ -39,7 +39,7 @@ afterEach(async () => {
   host.remove(); vi.unstubAllGlobals();
 });
 const button = (text: string) => [...host.querySelectorAll("button")].find(node => node.textContent === text)!;
-const checkbox = () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+const checkbox = () => host.querySelector<HTMLInputElement>('.ct-operations input[type="checkbox"]')!;
 const cells = () => [...host.querySelectorAll('table[aria-label="Calls"] tbody td')].map(cell => cell.textContent);
 const copyButton = (label: string) => [...host.querySelectorAll("button")]
   .find(node => node.querySelector('.ct-operations-copy-label > [aria-hidden]')?.textContent === label)!;

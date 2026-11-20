@@ -4,6 +4,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 const source = readFileSync(new URL('../public/ratios-reader.js', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
+test('persists a three-price MEP comparison and subscribes to the official dollar spot', async () => {
+  const f = fixture();
+  f.securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, md: { lst: 1572.5, refp: 1565, seq: 1 } });
+  for (const query of ['Dólar oficial', 'Dolar USA', 'DLR/SPOT']) {
+    const r = await f.request('ratiosSearch', { ...await f.args(), query });
+    assert.equal(r.result[0].id, 'rx_DDF_DLR_SPOT'); assert.equal(r.result[0].monitorOnly, true);
+  }
+  await f.add(); const cfg = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: cfg.id, revision: 0, schema: 2, pairs: [
+    { id: 'mep', a: 'a', b: 'b', format: 'number' },
+    { id: 'spread', a: 'a', b: 'b', c: 'rx_DDF_DLR_SPOT', format: 'percent' }
+  ] };
+  const saved = await f.request('ratiosEdit', params); assert.equal(saved.error, undefined);
+  const pair = saved.result.widgets[0].config.pairs[1];
+  assert.equal(saved.result.widgets[0].config.schema, 2, 'old schema-1 readers cannot accept a composite widget');
+  assert.equal(pair.c.id, 'rx_DDF_DLR_SPOT'); assert.equal(saved.result.quotes[pair.c.id].last, 1572.5);
+  assert.ok(f.calls.some(call => Array.isArray(call) && call[1].includes('md.rx_DDF_DLR_SPOT')));
+  assert.deepEqual((await f.ds.getDashboard()).layout.find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.pairs[1], pair);
+  const legacy = await f.request('ratiosEdit', { ...params, schema: undefined, revision: 1, pairs: params.pairs.map(({ c, ...p }) => p) });
+  assert.match(legacy.error, /versión actual/);
+  assert.equal((await f.state()).widgets[0].config.pairs[1].c.id, pair.c.id);
+  const duplicate = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [params.pairs[1], { ...params.pairs[1], id: 'dup' }] });
+  assert.match(duplicate.error, /ya está agregado/);
+  const invalid = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [{ ...params.pairs[1], c: null }] });
+  assert.match(invalid.error, /inválido/);
+});
 function fixture() {
   let receive, id = 0, persisted, failSave = false, saveTimer;
   const calls = [], replies = [];

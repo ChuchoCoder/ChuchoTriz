@@ -49,3 +49,5 @@
   .ct-ratios td.ct-ratios-pair { max-width:170px; }.ct-ratios td { padding:2px 5px; }.ct-ratios th { padding:4px 5px; }
   .ct-ratios-editor-actions { flex-wrap:wrap; }.ct-ratios-editor-actions span { flex-basis:100%; }
 }
+
+.ct-ratios .ct-ratios-compare{display:flex;align-items:center;gap:6px;font-size:11px;margin:6px 0}.ct-ratios .ct-ratios-compare input{width:auto}

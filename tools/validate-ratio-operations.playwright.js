@@ -8,7 +8,7 @@ async page => {
   const button = name => page.getByRole('button', { name, exact: true });
   const click = async locator => { await page.screenshot({ animations: 'disabled', timeout: 10000 }); await locator.click({ force: true }); };
   const wait = async fn => page.waitForFunction(fn, null, { polling: 100, timeout: 10000 });
-  const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => v?.schema === 1 && Array.isArray(v.operations)));
+  const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => [1, 2].includes(v?.schema) && Array.isArray(v.operations)));
   async function choose(name, value) {
     const control = label(name); await control.fill(value); await control.blur();
     await control.locator('..').locator('small[title]').waitFor({ state: 'visible', timeout: 10000 });
@@ -242,5 +242,23 @@ async page => {
     assert(chips.length === 2 && chips.every((c,i) => c.ticker === ['BMA','GGAL'][i] && c.side === sides[i] && c.buy === (sides[i] === 'Long') && c.sell === (sides[i] === 'Short')), 'Operation chips preserve A/B order and identify the actual long/short legs');
   }
   checks.push('Operation pairs use green Long and red Short chips in both directions without changing A/B order');
+  await click(button('1 · Monitor'));
+  await page.evaluate(() => {
+    const spot = { id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'MRIXXX', md: { lst: 1572.5, refp: 1565, seq: 10, refdStr: '2026-11-19', lstdStr: new Date().toISOString() } };
+    mainStore.securityStore.securities.push(spot);
+  });
+  await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
+  await page.getByLabel('Comparar A/B con una referencia', { exact: true }).check();
+  await choose('Referencia C · ej. Dólar oficial', 'Dólar oficial');
+  await click(button('Agregar par'));
+  const comparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
+  await comparison.waitFor();
+  await wait(() => [...document.querySelectorAll('.ro-ratio')].some(e => e.textContent.includes('1,75%')));
+  assert((await comparison.innerText()).includes('1.572,50'), 'The comparison shows native official spot alongside MEP bond prices');
+  assert(await comparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Three-price comparisons cannot become two-leg operations');
+  assert((await book()).schema === 2, 'Three-price monitor books reject legacy readers');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 1600; s.md.seq++; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30D) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '0,00%'));
+  checks.push('MEP/official spread, native spot updates, monitor-only restrictions and schema compatibility');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }

@@ -14,6 +14,20 @@ it("uses the complete best published level without substituting last, deeper lev
 const operation = (): RatioOperation => ({ id: "operation", openedAt: at, direction: 1, commission: 1, fx: 1, targetRatio: 1.2,
   legs: [ { instrument: instrument("A"), side: 1, quantity: 100, entry: 100, factor: 1, step: 1, ddmm: .1, exits: [] },
     { instrument: instrument("B"), side: -1, quantity: 200, entry: 50, factor: 1, step: 1, ddmm: .2, exits: [] } ] });
+it("retains the optional comparison reference across storage and excludes spot references from operations", () => {
+  const a = instrument("AL30"), b = instrument("AL30D", "USD");
+  const c = { ...instrument("rx_DDF_DLR_SPOT"), symbol: "DLR/SPOT", market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true };
+  const book = { ...emptyBook(), schema: 2 as const, watch: [{ id: "mep", a, b }, { id: "spread", a, b, c }] };
+  expect(() => validateBook({ ...book, schema: 1 })).toThrow();
+  expect(validateBook(JSON.parse(JSON.stringify(book)))).toEqual(book);
+  expect(() => validateBook({ ...book, watch: [...book.watch, { ...book.watch[1], id: "duplicate" }] })).toThrow();
+  expect(() => validateBook({ ...book, watch: [{ ...book.watch[1], c: null }] })).toThrow();
+  expect(() => invertWatchPair(book, "spread")).toThrow(/fórmula/);
+  const op = operation(); op.legs[0].instrument = c;
+  expect(() => validateOperation(op)).toThrow(/referencias/);
+  op.legs[0].instrument = { ...c, monitorOnly: undefined };
+  expect(() => validateOperation(op)).toThrow(/referencias/);
+});
 it("resolves the eight defaults in user order using unique exact BYMA matches", async () => {
   const { watch, missing } = await resolveDefaultWatch(async symbol => [instrument(symbol), { ...instrument(symbol + " CI"), symbol: symbol + " CI" }, { ...instrument("rx-" + symbol), market: "rx", symbol }]);
   expect(missing).toEqual([]);

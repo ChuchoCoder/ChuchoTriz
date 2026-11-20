@@ -1,12 +1,13 @@
 export interface RatioInstrument {
   id: string; symbol: string; market: string; currency: string; settlement: string;
+  monitorOnly?: boolean;
 }
 export type RatioFormat = "number" | "percent";
 export function defaultRatioFormat(a?: RatioInstrument, b?: RatioInstrument): RatioFormat {
   return a?.currency && a.currency === b?.currency ? "percent" : "number";
 }
-export interface RatioPair { id: string; a: RatioInstrument; b: RatioInstrument; format?: RatioFormat }
-export interface RatioConfig { schema: 1; id: string; revision: number; pairs: RatioPair[] }
+export interface RatioPair { id: string; a: RatioInstrument; b: RatioInstrument; c?: RatioInstrument; format?: RatioFormat }
+export interface RatioConfig { schema: 1 | 2; id: string; revision: number; pairs: RatioPair[] }
 export interface RatioQuote {
   last?: number; reference?: number; tradedAt?: number; referenceDate?: string; issue?: string;
 }
@@ -17,29 +18,36 @@ export interface RatiosState {
 }
 export const emptyState: RatiosState = { context: 0, canAdd: false, connected: false, widgets: [], quotes: {} };
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
-export function calculateRatio(a?: RatioQuote, b?: RatioQuote) {
-  if (a?.issue || b?.issue) return { issue: a?.issue || b?.issue };
+export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote) {
+  if (a?.issue || b?.issue || c?.issue) return { issue: a?.issue || b?.issue || c?.issue };
   if (!finite(a?.last) || !finite(b?.last)) return { issue: "Sin último precio" };
   if (b.last === 0) return { issue: "El precio de B es cero" };
-  const ratio = a.last / b.last;
+  if (c && (!finite(c.last) || c.last <= 0)) return { issue: "Sin cotización válida de la referencia C" };
+  const ratio = (a.last / b.last) / (c?.last ?? 1);
   if (!finite(ratio)) return { issue: "Ratio fuera de rango" };
-  if (!finite(a.reference) || !finite(b.reference) || a.reference === 0 || b.reference === 0) {
+  if (!finite(a.reference) || !finite(b.reference) || a.reference === 0 || b.reference === 0 || c && (!finite(c.reference) || c.reference <= 0)) {
     return { ratio, referenceIssue: "Sin referencia diaria" };
   }
-  if (a.referenceDate && b.referenceDate && a.referenceDate !== b.referenceDate) {
+  if (new Set([a.referenceDate, b.referenceDate, c?.referenceDate].filter(Boolean)).size > 1) {
     return { ratio, referenceIssue: "Referencias de fechas distintas" };
   }
-  const reference = a.reference / b.reference;
+  const reference = (a.reference / b.reference) / (c?.reference ?? 1);
   const change = (ratio / reference - 1) * 100;
   return finite(reference) && reference !== 0 && finite(change) ? { ratio, change } : { ratio, referenceIssue: "Sin referencia diaria válida" };
 }
+export function pairLabel(p: Pick<RatioPair, "a" | "b" | "c">) {
+  return p.c ? `(${p.a.symbol}/${p.b.symbol}) / ${p.c.symbol}` : `${p.a.symbol}/${p.b.symbol}`;
+}
+export function pairKey(p: { a: { id: string }; b: { id: string }; c?: { id: string } }) {
+  return JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null]);
+}
 export function marketLabel(value: string) { return ({ bm: "BYMA", rx: "A3" } as Record<string, string>)[value] || value || "S/D"; }
 export function currencyLabel(value: string) { return value === "EXT" ? "USD C" : value || "S/D"; }
-export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)}`; }
+export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)}${i.id === "rx_DDF_DLR_SPOT" ? " · Dólar oficial · sólo monitor" : ""}`; }
 export function tickerKey(value: string) { return value.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase(); }
 export function exactTickerMatches(query: string, options: readonly RatioInstrument[]) {
   const key = tickerKey(query);
-  return key ? options.filter(option => tickerKey(option.symbol) === key) : [];
+  return key ? options.filter(option => tickerKey(option.symbol) === key || option.id === "rx_DDF_DLR_SPOT" && ["DOLAR", "DOLAR OFICIAL", "DOLAR USA"].includes(key.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) : [];
 }
 export function numberLabel(value?: number) {
   if (!finite(value)) return "—";
