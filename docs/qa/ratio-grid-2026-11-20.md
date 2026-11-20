@@ -64,3 +64,12 @@ al manual, fondo del header y agarres en Operaciones abiertas. Se conservó la
 pestaña original del usuario y no se arrastraron sus registros ni se enviaron órdenes.
 Las siete claves locales conservaron el hash agregado
 `b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
+
+## Ajuste de color de selección
+
+Por pedido del usuario, la selección, su borde, la flecha de orden y la marca de
+arrastre usan azul. Verificación focalizada con Playwright: fondo seleccionado
+oscuro rgb(32,61,85) y claro rgb(225,239,251), con borde azul en ambos; los chips
+Long/Short conservan sus fondos verde rgb(22,61,44) y rojo rgb(72,35,45).
+Build aprobado. Capturas locales: `blue-selection-dark.png` y `blue-selection-light.png`.
+No se repite la suite funcional completa por este ajuste exclusivo de CSS.
