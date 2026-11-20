@@ -30,6 +30,35 @@ async (page) => {
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
   assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.endsWith('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
+  const expectedSpread = (denominator, official) => ((70000 / denominator / official - 1) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  const initialMep = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
+  const initialCcl = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30C) / DLR/SPOT' });
+  const waitSpreads = async official => {
+    for (const [label, denominator] of [['(AL30/AL30D) / DLR/SPOT', 50], ['(AL30/AL30C) / DLR/SPOT', 51]]) {
+      await page.waitForFunction(({ label, expected }) => [...document.querySelectorAll('.ct-ratios tbody tr')].find(r => r.querySelector('strong')?.textContent === label)?.querySelector('.ct-ratios-value').textContent === expected, { label, expected: expectedSpread(denominator, official) });
+    }
+  };
+  await waitSpreads(1572.5);
+  assert(true, 'Both default MEP and CCL spreads use their own bond denominator and the official reference');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600)); await waitSpreads(1600);
+  assert(true, 'One official-dollar update refreshes both default spreads independently');
+  await page.evaluate(() => window.mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md.refp = undefined);
+  await wait(() => [...document.querySelectorAll('.ct-ratios tbody tr')].filter(r => r.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(r => r.cells[5].textContent === '—'));
+  assert(await initialCcl.locator('.ct-ratios-value').innerText() === expectedSpread(51, 1600), 'Missing official daily reference keeps the CCL spread and hides only its daily variation');
+  await page.evaluate(() => {
+    const ss = window.mainStore.securityStore.securities;
+    for (const id of ['AL30-2', 'AL30D-2', 'AL30C-2']) ss.find(s => s.id === id).md.refdStr = '2026-11-19';
+    Object.assign(ss.find(s => s.id === 'rx_DDF_DLR_SPOT').md, { refp: 1565, refdStr: '2026-11-18' });
+  });
+  await wait(() => [...document.querySelectorAll('.ct-ratios tbody tr')].filter(r => r.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(r => r.cells[5].title === 'Referencias de fechas distintas'));
+  assert(true, 'A mismatched official reference date hides the daily variation of both spreads');
+  await page.evaluate(() => window.ratiosFixture.connected(false));
+  await wait(() => [...document.querySelectorAll('.ct-ratios tbody tr')].filter(r => r.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(r => r.querySelector('.ct-ratios-value').textContent === '—' && r.cells[3].textContent === '—'));
+  assert(true, 'Disconnect clears the official quote and both compound spreads');
+  await page.evaluate(() => { const s = window.mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); Object.assign(s.md, { seq: 0, lst: 1572.5, refdStr: '2026-11-19' }); window.ratiosFixture.connected(true); });
+  await waitSpreads(1572.5);
+  assert(true, 'Reconnect accepts a reset official sequence and restores both default spreads');
+  assert(await initialMep.getByRole('button', { name: 'Invertir (AL30/AL30D) / DLR/SPOT', exact: true }).isDisabled(), 'Default compound rows cannot invert only their bond legs');
   const seeded = await snapshot();
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(JSON.stringify(await snapshot()) === JSON.stringify(seeded), 'Default pairs and their identities persist after reloading');
@@ -155,8 +184,8 @@ async (page) => {
   assert(true, 'Zero or missing comparison quote never falls back to raw MEP');
   await spread.getByRole('button', { name: 'Editar (AL30/AL30D) / DLR/SPOT', exact: true }).click();
   assert(await reference.inputValue() === 'DLR/SPOT', 'Editing restores reference C');
-  await page.getByLabel('A · Numerador', { exact: true }).press('Escape');
   await page.getByLabel('Comparar A/B con una referencia', { exact: true }).uncheck(); await save();
+  assert(true, 'Editing a saved comparison allows a normal pointer click on its reference checkbox without closing an unsolicited dropdown');
   assert((await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.schema === 1, 'Removing the last C returns a plain widget to legacy compatibility');
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }

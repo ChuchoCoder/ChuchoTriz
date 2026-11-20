@@ -257,6 +257,25 @@ async page => {
   assert((await book()).schema === 2, 'Three-price monitor books reject legacy readers');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 1600; s.md.seq++; });
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30D) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '0,00%'));
+  const cclComparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30C) / DLR/SPOT' });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30C) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '4,17%'));
+  assert(await cclComparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'The default CCL comparison also remains monitor-only');
+  checks.push('MEP and CCL spreads refresh independently from the same official spot');
+  await page.evaluate(() => mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md.refp = undefined);
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-daily').textContent === '—'));
+  assert(await cclComparison.locator('.ro-ratio').innerText() === '4,17%', 'Missing C reference retains the CCL ratio');
+  await page.evaluate(() => Object.assign(mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md, { refp: 1565, refdStr: '2020-01-01' }));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-daily').title.includes('distintas')));
+  checks.push('Missing or mismatched official daily references hide only the daily variation of both spreads');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 0; s.md.seq++; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-ratio').textContent === '—'));
+  checks.push('A zero official quote never falls back to unnormalized MEP or CCL');
+  await page.evaluate(() => mainStore.webSocketConnectionStatus = false);
+  await wait(() => !!document.querySelector('.ro-issue')?.textContent.includes('desconectado'));
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); Object.assign(s.md, { lst: 1600, seq: 0, refdStr: mainStore.securityStore.securities.find(s => s.id === 'AL30').md.refdStr }); mainStore.webSocketConnectionStatus = true; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30C) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '4,17%'));
+  assert(await comparison.locator('.ro-ratio').innerText() === '0,00%', 'MEP comparison restored after official reconnect');
+  checks.push('Disconnect/reconnect preserves both saved comparisons and accepts a reset official quote sequence');
   checks.push('MEP/official spread, native spot updates, monitor-only restrictions and schema compatibility');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }

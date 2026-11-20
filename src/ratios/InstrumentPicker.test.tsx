@@ -38,6 +38,17 @@ it("focuses the first enabled editor once and does not steal focus after subsequ
   await act(async () => root.render(<Probe autoFocus />));
   expect(document.activeElement).toBe(next);
 });
+it("keeps a selected instrument's suggestions closed on editor focus and opens them on explicit keyboard request", async () => {
+  await act(async () => root.render(<InstrumentPicker label="Guardado" value={al30} onChange={() => {}} search={search} disabled={false} autoFocus />));
+  const input = container.querySelector("input")!;
+  expect(document.activeElement).toBe(input);
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelector('[role="listbox"]')).toBeNull();
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+  await act(async () => vi.advanceTimersByTimeAsync(180));
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+  expect(container.querySelector('[role="option"]')).not.toBeNull();
+});
 it("selects the unique exact ticker on blur without waiting for dropdown selection", async () => {
   await type("al30"); await blur();
   expect(container.querySelector("output")!.textContent).toBe("al30");

@@ -52,7 +52,7 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
       aria-activedescendant={open && options[active] ? `${id}-option-${active}` : undefined}
       value={query} disabled={disabled} autoComplete="off" maxLength={60} placeholder="Buscar instrumento"
       onChange={event => { generation.current++; setResolving(false); latestQuery.current = event.target.value; setOptions([]); setActive(0); setIssue(""); setQuery(event.target.value); onChange(undefined); setOpen(true); }}
-      onFocus={() => { generation.current++; setResolving(false); setOpen(true); }} onBlur={() => void resolveOnBlur()}
+      onFocus={() => { generation.current++; setResolving(false); setOpen(!value || tickerKey(value.symbol) !== tickerKey(query)); }} onBlur={() => void resolveOnBlur()}
       onKeyDown={event => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive(n => Math.max(0, Math.min(options.length - 1, n + (event.key === "ArrowDown" ? 1 : -1)))); }
