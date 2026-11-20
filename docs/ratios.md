@@ -173,6 +173,14 @@ derecha, también con las flechas del teclado sobre ese control.
 El ancho inicial es de 560 px y se puede reducir hasta 360 px. La grilla de Matriz
 impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 
+El **engranaje del encabezado de Acciones**, a la derecha de la tabla, abre
+**Mostrar columnas**. Podés activar o desactivar por separado **Último A**,
+**Último B** y **Referencia C**. Inicialmente están todas activadas y cada widget
+conserva su elección al recargar el dashboard. Referencia C aparece sólo si hay
+algún par con esa referencia. Ocultar una columna no cambia la fórmula, las
+cotizaciones utilizadas ni la variación diaria. El menú se cierra con Escape,
+con otro clic en el engranaje o al pulsar fuera.
+
 ## Agregar y editar pares
 
 Cada widget nuevo comienza, en este orden, con AL30/AL30D, AL30/AL30C,

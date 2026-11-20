@@ -11,7 +11,9 @@ export interface RatioConfig { schema: 1 | 2; id: string; revision: number; pair
 export interface RatioQuote {
   last?: number; reference?: number; tradedAt?: number; referenceDate?: string; issue?: string;
 }
-export interface RatioWidgetState { config: RatioConfig; width: number; height: number; issue?: string }
+export interface RatioColumns { lastA: boolean; lastB: boolean; referenceC: boolean }
+export const defaultRatioColumns: RatioColumns = { lastA: true, lastB: true, referenceC: true };
+export interface RatioWidgetState { config: RatioConfig; width: number; height: number; columns?: { revision: number; visible: RatioColumns }; issue?: string }
 export interface RatiosState {
   context: number; dashboardId?: string; canAdd: boolean; connected: boolean;
   widgets: RatioWidgetState[]; quotes: Record<string, RatioQuote>; issue?: string;

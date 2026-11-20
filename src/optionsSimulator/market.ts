@@ -56,7 +56,7 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratioContext" | "ratioSearch" | "ratioQuotes", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "verifyExecutionContext" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "ratioContext" | "ratioSearch" | "ratioQuotes", params = {}): Promise<T> {
     await this.ready;
     if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {

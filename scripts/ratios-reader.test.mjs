@@ -4,6 +4,37 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 const source = readFileSync(new URL('../public/ratios-reader.js', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
+test('column visibility defaults to visible, persists per widget, and survives pair edits by legacy clients', async () => {
+  const f = fixture(); await f.add(); await f.add();
+  const initial = (await f.state()).widgets[0];
+  assert.deepEqual(initial.columns, { revision: 0, visible: { lastA: true, lastB: true, referenceC: true } });
+  const base = { ...await f.args(), widgetId: initial.config.id, revision: initial.config.revision, columnsRevision: 0 };
+  const visible = { lastA: false, lastB: false, referenceC: false };
+  const saved = await f.request('ratiosColumns', { ...base, columns: visible });
+  assert.equal(saved.error, undefined);
+  assert.deepEqual(saved.result.widgets[0].columns, { revision: 1, visible });
+  assert.deepEqual(saved.result.widgets[0].config, initial.config, 'display preferences do not change formulas or their editing revision');
+  assert.equal(saved.result.widgets[1].columns.visible.lastA, true, 'the other widget keeps its own preferences');
+  const native = (await f.ds.getDashboard()).layout.find(w => w.settings?.chuchotrizRatios?.id === initial.config.id);
+  assert.deepEqual(native.settings.chuchotrizRatiosColumns, { revision: 1, visible });
+  assert.match((await f.request('ratiosColumns', { ...base, columns: { ...visible, lastA: true } })).error, /Las columnas cambiaron/);
+  for (const invalid of [null, [], { lastA: true }, { ...visible, lastB: 'false' }, { ...visible, extra: true }]) {
+    assert.match((await f.request('ratiosColumns', { ...base, columnsRevision: 1, columns: invalid })).error, /columnas visibles/);
+  }
+  const edit = await f.request('ratiosEdit', { ...base, pairs: [{ id: 'edited', a: 'a', b: 'b' }] });
+  assert.equal(edit.error, undefined);
+  assert.deepEqual(edit.result.widgets[0].columns, { revision: 1, visible });
+  const restore = await f.request('ratiosColumns', { ...base, revision: 1, columnsRevision: 1, columns: { ...visible, lastA: true } });
+  assert.deepEqual(restore.result.widgets[0].columns.visible, { ...visible, lastA: true });
+});
+test('does not acknowledge an unconfirmed column save and rejects changes after a dashboard switch', async () => {
+  const f = fixture(); await f.add(); const widget = (await f.state()).widgets[0];
+  const params = { ...await f.args(), widgetId: widget.config.id, revision: widget.config.revision, columnsRevision: 0, columns: { lastA: false, lastB: true, referenceC: true } };
+  f.failSave();
+  assert.match((await f.request('ratiosColumns', params)).error, /confirmar el guardado/);
+  f.ms.profileStore.activeAccount = 'changed';
+  assert.match((await f.request('ratiosColumns', { ...params, columnsRevision: 1 })).error, /dashboard/);
+});
 test('persists a three-price MEP comparison and subscribes to the official dollar spot', async () => {
   const f = fixture();
   f.securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, md: { lst: 1572.5, refp: 1565, seq: 1 } });

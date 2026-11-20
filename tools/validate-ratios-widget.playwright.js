@@ -187,5 +187,63 @@ async (page) => {
   await page.getByLabel('Comparar A/B con una referencia', { exact: true }).uncheck(); await save();
   assert(true, 'Editing a saved comparison allows a normal pointer click on its reference checkbox without closing an unsolicited dropdown');
   assert((await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.schema === 1, 'Removing the last C returns a plain widget to legacy compatibility');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1572.5));
+  await b('Editar AL30/AL30D').click();
+  await page.getByLabel('Comparar A/B con una referencia', { exact: true }).check();
+  await reference.fill('Dólar oficial'); await reference.blur();
+  await wait(() => [...document.querySelectorAll('.ct-ratio-picker small')].some(e => e.title === 'rx_DDF_DLR_SPOT'));
+  await save();
+  const primaryWidget = page.locator('.ct-ratios').first();
+  const gear = primaryWidget.getByRole('button', { name: 'Opciones de columnas', exact: true });
+  const options = page.getByRole('dialog', { name: 'Columnas del widget de Ratios', exact: true });
+  await gear.click(); await options.waitFor();
+  assert(await options.getByRole('checkbox').count() === 3 && await options.getByRole('checkbox', { checked: true }).count() === 3, 'The actions-header gear offers three initially visible quote columns');
+  const originalRatios = await primaryWidget.locator('.ct-ratios-value').allTextContents();
+  for (const column of ['Último A', 'Último B', 'Referencia C']) {
+    await options.getByRole('checkbox', { name: column, exact: true }).click();
+    await primaryWidget.getByRole('columnheader', { name: column, exact: true }).waitFor({ state: 'detached' });
+    await options.getByRole('checkbox', { name: column, exact: true }).waitFor({ state: 'visible' });
+    await wait(() => !document.querySelector('.ct-ratios-column-menu input:disabled'));
+  }
+  assert(await primaryWidget.getByRole('columnheader').count() === 4, 'All three quote columns can be hidden independently while pair, ratio, daily variation and actions remain');
+  assert(JSON.stringify(await primaryWidget.locator('.ct-ratios-value').allTextContents()) === JSON.stringify(originalRatios), 'Hiding quote columns leaves the calculations unchanged');
+  await page.keyboard.press('Escape'); await options.waitFor({ state: 'hidden' });
+  assert(await gear.evaluate(e => e === document.activeElement), 'Escape dismisses column options and restores focus to the gear');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50%'));
+  assert(true, 'A hidden official quote remains subscribed and refreshes the displayed spread');
+  await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  assert(await primaryWidget.getByRole('columnheader').count() === 4, 'Hidden columns persist after a full dashboard reload');
+  await b('RATIOS · CHUCHOTRIZ').click(); await idle();
+  const secondWidget = page.locator('.ct-ratios').nth(1);
+  assert(await secondWidget.getByRole('columnheader', { name: 'Último A', exact: true }).count() === 1 && await secondWidget.getByRole('columnheader', { name: 'Referencia C', exact: true }).count() === 1, 'A second widget starts with visible columns independently of the first');
+  await secondWidget.getByRole('button', { name: 'Cerrar widget de ratios', exact: true }).click(); await idle();
+  await gear.click();
+  for (const column of ['Último A', 'Último B', 'Referencia C']) {
+    await options.getByRole('checkbox', { name: column, exact: true }).click();
+    await primaryWidget.getByRole('columnheader', { name: column, exact: true }).waitFor();
+    await wait(() => !document.querySelector('.ct-ratios-column-menu input:disabled'));
+  }
+  await gear.click(); await options.waitFor({ state: 'hidden' });
+  assert(await primaryWidget.getByRole('columnheader').count() === 7, 'The same gear restores all three columns and toggles its menu closed');
+  await gear.click(); await page.locator('h1').click(); await options.waitFor({ state: 'hidden' });
+  assert(true, 'Clicking outside dismisses column options');
+  await gear.focus(); await page.keyboard.press('Enter'); await options.waitFor();
+  await wait(() => document.activeElement?.matches('.ct-ratios-column-menu input[data-column=lastA]'));
+  assert(true, 'Column options are keyboard accessible from the header gear');
+  const menuBox = await options.boundingBox(), viewport = page.viewportSize() || await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  assert(menuBox.x >= 0 && menuBox.y >= 0 && menuBox.x + menuBox.width <= viewport.width && menuBox.y + menuBox.height <= viewport.height, 'The popover is inside the viewport even when the table scrolls horizontally');
+  await page.keyboard.press('Escape');
+  for (const width of [360, 560, 640]) {
+    await page.evaluate(width => {
+      const dashboard = window.mainStore.dashboardStore.currentDashboard;
+      const widget = dashboard.layout.find(w => w.component === 'ChuchoTrizRatiosWidget');
+      widget.w = width; widget.settings.chuchotrizRatiosSize.width = width; dashboard.layout = [...dashboard.layout];
+      document.querySelector('.ct-ratios-table-wrap').scrollLeft = 0;
+    }, width);
+    await page.waitForFunction(width => Math.abs(document.querySelector('.ct-ratios').getBoundingClientRect().width - width) < 1, width);
+    const widgetBox = await primaryWidget.boundingBox(), gearBox = await gear.boundingBox();
+    assert(gearBox.x >= widgetBox.x && gearBox.x + gearBox.width <= widgetBox.x + widgetBox.width, 'The gear and actions stay accessible at widget width ' + width);
+  }
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }
