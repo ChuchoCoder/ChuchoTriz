@@ -14,6 +14,13 @@
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
   const tickerKey = s => s.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase();
   const ownConfig = w => w?.component === TYPE && [1, 2].includes(w.settings?.[KEY]?.schema) && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
+  const COLUMN_KEYS = ["lastA", "lastB", "referenceC"];
+  function columnsOf(w) {
+    const stored = w.settings?.chuchotrizRatiosColumns;
+    if (stored === undefined) return { revision: 0, visible: { lastA: true, lastB: true, referenceC: true } };
+    if (!stored || !Number.isSafeInteger(stored.revision) || stored.revision < 0 || COLUMN_KEYS.some(key => typeof stored.visible?.[key] !== "boolean")) throw Error("Configuración de columnas de Ratios inválida.");
+    return { revision: stored.revision, visible: Object.fromEntries(COLUMN_KEYS.map(key => [key, stored.visible[key]])) };
+  }
   function restore(d) {
     const hook = patched.get(d);
     if (hook && d.updateLayout === hook.wrapper) d.updateLayout = hook.original;
@@ -123,7 +130,7 @@
       const config = configOf(w), slot = document.querySelector(".DashboardGridItem-" + CSS.escape(w.key));
       if (slot) slot.dataset.ctRatiosSlot = config.id;
       const missing = w.settings.chuchotrizRatiosInitialMissing;
-      return { config, width: w.w, height: w.h, issue: Array.isArray(missing) && missing.length && missing.length <= DEFAULT_PAIRS.length && missing.every(p => short(p))
+      return { config, width: w.w, height: w.h, columns: columnsOf(w), issue: Array.isArray(missing) && missing.length && missing.length <= DEFAULT_PAIRS.length && missing.every(p => short(p))
         ? "No se pudieron cargar estos pares iniciales: " + missing.join(", ") + ". Agregalos manualmente cuando estén disponibles." : undefined };
     });
     const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])])))];
@@ -154,7 +161,7 @@
     return c.d;
   }
   const delay = ms => new Promise(resolve => setTimeout(() => resolve(), ms));
-  const savedSignature = d => JSON.stringify(d.layout.filter(ownConfig).map(w => ({ config: configOf(w), x: w.x, y: w.y, width: w.w, height: w.h })).sort((a, b) => a.config.id.localeCompare(b.config.id)));
+  const savedSignature = d => JSON.stringify(d.layout.filter(ownConfig).map(w => ({ config: configOf(w), columns: columnsOf(w), x: w.x, y: w.y, width: w.w, height: w.h })).sort((a, b) => a.config.id.localeCompare(b.config.id)));
   async function verifiedSave(c, op) {
     const expected = savedSignature(c.d);
     c.d.onSave(true);
@@ -208,6 +215,11 @@
         widget.h = Math.round(Math.max(180, Math.min(1400, params.height)));
         widget.settings = { ...widget.settings, chuchotrizRatiosSize: { width: widget.w, height: widget.h } };
         d.layout = [...d.layout];
+      } else if (method === "ratiosColumns") {
+        const previous = columnsOf(widget), visible = params.columns;
+        if (params.columnsRevision !== previous.revision) throw Error("Las columnas cambiaron. Revisá la configuración e intentá nuevamente.");
+        if (!visible || Array.isArray(visible) || Object.keys(visible).length !== COLUMN_KEYS.length || COLUMN_KEYS.some(key => typeof visible[key] !== "boolean") || previous.revision === Number.MAX_SAFE_INTEGER) throw Error("Elegí las columnas visibles de Ratios.");
+        widget.settings = { ...widget.settings, chuchotrizRatiosColumns: { revision: previous.revision + 1, visible: Object.fromEntries(COLUMN_KEYS.map(key => [key, visible[key]])) } };
       } else if (method === "ratiosEdit") {
         if (cfg.schema === 2 && params.schema !== 2) throw Error("Esta comparación requiere la versión actual de Ratios. Recargá Matriz antes de editarla.");
         if (!Array.isArray(params.pairs) || params.pairs.length > 50) throw Error("Podés agregar hasta 50 ratios por widget.");
@@ -257,7 +269,7 @@
         const result = c.ss.securities.map(instrument).filter(s => s && (tickerKey(s.symbol).normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(query) || s.id === "rx_DDF_DLR_SPOT" && "DOLAR OFICIAL DOLAR USA DLR/SPOT".includes(query))).sort((a, b) => Number(tickerKey(b.symbol) === query) - Number(tickerKey(a.symbol) === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 40);
         reply({ result }); return;
       }
-      if (!["ratiosAdd", "ratiosEdit", "ratiosRemove", "ratiosResize"].includes(msg.method)) throw Error("Método no permitido por Ratios.");
+      if (!["ratiosAdd", "ratiosEdit", "ratiosRemove", "ratiosResize", "ratiosColumns"].includes(msg.method)) throw Error("Método no permitido por Ratios.");
       if (writing) throw Error("Hay un cambio guardándose. Esperá a que termine.");
       writing = true; ownsWrite = true;
       const result = await mutate(msg.method, params, { id: msg.id, channel: msg.channel, context: c.revision, deadline: Date.now() + 12000 });

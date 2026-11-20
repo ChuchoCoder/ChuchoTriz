@@ -29,8 +29,8 @@ async (page) => {
   const defaults = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', '(AL30/AL30D) / DLR/SPOT', '(AL30/AL30C) / DLR/SPOT'];
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
-  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.endsWith('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
-  const expectedSpread = (denominator, official) => ((70000 / denominator / official - 1) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.includes('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
+  const expectedSpread = (denominator, official) => ((70000 / denominator / official - 1) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' }) + '% (' + Math.abs(70000 / denominator - official).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')';
   const initialMep = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
   const initialCcl = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30C) / DLR/SPOT' });
   const waitSpreads = async official => {
@@ -169,15 +169,15 @@ async (page) => {
   await save();
   const spread = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
   await spread.waitFor();
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97% (172,50)'));
   assert((await spread.innerText()).includes('1.572,50'), 'Comparison shows the native official dollar separately from the bond prices');
   assert(await spread.getByRole('button', { name: 'Invertir (AL30/AL30D) / DLR/SPOT', exact: true }).isDisabled(), 'Composite inversion cannot accidentally invert only its bond legs');
   assert((await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.schema === 2, 'Composite widgets use a schema rejected by older readers');
   await page.reload({ waitUntil: 'domcontentloaded' }); await spread.waitFor();
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97% (172,50)'));
   assert((await spread.innerText()).includes('1.572,50'), 'Reference C and spread persist after reload');
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
-  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50%'));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50% (200,00)'));
   assert(true, 'Updating only the dollar quote refreshes the spread');
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 0));
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.title === 'Sin cotización válida de la referencia C' && e.textContent === '—'));
@@ -187,5 +187,88 @@ async (page) => {
   await page.getByLabel('Comparar A/B con una referencia', { exact: true }).uncheck(); await save();
   assert(true, 'Editing a saved comparison allows a normal pointer click on its reference checkbox without closing an unsolicited dropdown');
   assert((await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.schema === 1, 'Removing the last C returns a plain widget to legacy compatibility');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1572.5));
+  await b('Editar AL30/AL30D').click();
+  await page.getByLabel('Comparar A/B con una referencia', { exact: true }).check();
+  await reference.fill('Dólar oficial'); await reference.blur();
+  await wait(() => [...document.querySelectorAll('.ct-ratio-picker small')].some(e => e.title === 'rx_DDF_DLR_SPOT'));
+  await save();
+  const primaryWidget = page.locator('.ct-ratios').first();
+  const gear = primaryWidget.getByRole('button', { name: 'Opciones de columnas', exact: true });
+  const options = page.getByRole('dialog', { name: 'Columnas del widget de Ratios', exact: true });
+  await gear.click(); await options.waitFor();
+  assert(await options.getByRole('checkbox').count() === 3 && await options.getByRole('checkbox', { checked: true }).count() === 3, 'The actions-header gear offers three initially visible quote columns');
+  const originalRatios = await primaryWidget.locator('.ct-ratios-value').allTextContents();
+  for (const column of ['Último A', 'Último B', 'Referencia C']) {
+    await options.getByRole('checkbox', { name: column, exact: true }).click();
+    await primaryWidget.getByRole('columnheader', { name: column, exact: true }).waitFor({ state: 'detached' });
+    await options.getByRole('checkbox', { name: column, exact: true }).waitFor({ state: 'visible' });
+    await wait(() => !document.querySelector('.ct-ratios-column-menu input:disabled'));
+  }
+  assert(await primaryWidget.getByRole('columnheader').count() === 4, 'All three quote columns can be hidden independently while pair, ratio, daily variation and actions remain');
+  assert(JSON.stringify(await primaryWidget.locator('.ct-ratios-value').allTextContents()) === JSON.stringify(originalRatios), 'Hiding quote columns leaves the calculations unchanged');
+  await page.keyboard.press('Escape'); await options.waitFor({ state: 'hidden' });
+  assert(await gear.evaluate(e => e === document.activeElement), 'Escape dismisses column options and restores focus to the gear');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-12,50% (200,00)'));
+  assert(true, 'A hidden official quote remains subscribed and refreshes the displayed spread');
+  await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  assert(await primaryWidget.getByRole('columnheader').count() === 4, 'Hidden columns persist after a full dashboard reload');
+  await b('RATIOS · CHUCHOTRIZ').click(); await idle();
+  const secondWidget = page.locator('.ct-ratios').nth(1);
+  assert(await secondWidget.getByRole('columnheader', { name: 'Último A', exact: true }).count() === 1 && await secondWidget.getByRole('columnheader', { name: 'Referencia C', exact: true }).count() === 1, 'A second widget starts with visible columns independently of the first');
+  await secondWidget.getByRole('button', { name: 'Cerrar widget de ratios', exact: true }).click(); await idle();
+  await gear.click();
+  for (const column of ['Último A', 'Último B', 'Referencia C']) {
+    await options.getByRole('checkbox', { name: column, exact: true }).click();
+    await primaryWidget.getByRole('columnheader', { name: column, exact: true }).waitFor();
+    await wait(() => !document.querySelector('.ct-ratios-column-menu input:disabled'));
+  }
+  await gear.click(); await options.waitFor({ state: 'hidden' });
+  assert(await primaryWidget.getByRole('columnheader').count() === 7, 'The same gear restores all three columns and toggles its menu closed');
+  await gear.click(); await page.locator('h1').click(); await options.waitFor({ state: 'hidden' });
+  assert(true, 'Clicking outside dismisses column options');
+  await gear.focus(); await page.keyboard.press('Enter'); await options.waitFor();
+  await wait(() => document.activeElement?.matches('.ct-ratios-column-menu input[data-column=lastA]'));
+  assert(true, 'Column options are keyboard accessible from the header gear');
+  const menuBox = await options.boundingBox(), viewport = page.viewportSize() || await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  assert(menuBox.x >= 0 && menuBox.y >= 0 && menuBox.x + menuBox.width <= viewport.width && menuBox.y + menuBox.height <= viewport.height, 'The popover is inside the viewport even when the table scrolls horizontally');
+  await page.keyboard.press('Escape');
+  for (const width of [360, 560, 640]) {
+    await page.evaluate(width => {
+      const dashboard = window.mainStore.dashboardStore.currentDashboard;
+      const widget = dashboard.layout.find(w => w.component === 'ChuchoTrizRatiosWidget');
+      widget.w = width; widget.settings.chuchotrizRatiosSize.width = width; dashboard.layout = [...dashboard.layout];
+      document.querySelector('.ct-ratios-table-wrap').scrollLeft = 0;
+    }, width);
+    await page.waitForFunction(width => Math.abs(document.querySelector('.ct-ratios').getBoundingClientRect().width - width) < 1, width);
+    const widgetBox = await primaryWidget.boundingBox(), gearBox = await gear.boundingBox();
+    assert(gearBox.x >= widgetBox.x && gearBox.x + gearBox.width <= widgetBox.x + widgetBox.width, 'The gear and actions stay accessible at widget width ' + width);
+  }
+  await primaryWidget.getByRole('button', { name: 'Editar (AL30/AL30D) / DLR/SPOT', exact: true }).click();
+  await page.getByLabel('Formato del ratio', { exact: true }).selectOption('number');
+  await gear.click(); await options.getByRole('checkbox', { name: 'Último B', exact: true }).click();
+  await primaryWidget.getByRole('columnheader', { name: 'Último B', exact: true }).waitFor({ state: 'detached' });
+  await wait(() => !document.querySelector('.ct-ratios-column-menu input:disabled'));
+  await page.keyboard.press('Escape'); await save();
+  const editedConfig = (await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings;
+  assert(editedConfig.chuchotrizRatios.pairs.some(p => p.c && p.a.symbol === 'AL30' && p.format === 'number') && !editedConfig.chuchotrizRatiosColumns.visible.lastB, 'Changing column visibility while editing preserves the unsaved pair draft and allows saving it');
+  await gear.click(); await options.getByRole('checkbox', { name: 'Último B', exact: true }).click();
+  await primaryWidget.getByRole('columnheader', { name: 'Último B', exact: true }).waitFor(); await page.keyboard.press('Escape');
+  const absoluteRow = primaryWidget.locator('tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
+  assert(await absoluteRow.locator('.ct-ratios-value').innerText() === '0,890302 (172,50)', 'Number format with C retains its quotient and appends the unsigned quote difference');
+  await absoluteRow.getByRole('button', { name: 'Editar (AL30/AL30D) / DLR/SPOT', exact: true }).click();
+  await page.getByLabel('Formato del ratio', { exact: true }).selectOption('percent'); await save();
+  await page.evaluate(() => window.ratiosFixture.price('AL30-2', 80000));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '+1,75% (27,50)'));
+  assert(true, 'A positive C spread shows an explicit plus and the unsigned difference');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '0,00% (0,00)'));
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1700));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-5,88% (100,00)'));
+  assert(true, 'Zero and negative C spreads never add a sign inside parentheses');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', undefined));
+  await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.title === 'Sin cotización válida de la referencia C' && e.textContent === '—'));
+  assert(true, 'A missing reference clears the percentage and its absolute difference together');
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }
