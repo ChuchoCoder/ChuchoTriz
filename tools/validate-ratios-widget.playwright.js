@@ -245,5 +245,15 @@ async (page) => {
     const widgetBox = await primaryWidget.boundingBox(), gearBox = await gear.boundingBox();
     assert(gearBox.x >= widgetBox.x && gearBox.x + gearBox.width <= widgetBox.x + widgetBox.width, 'The gear and actions stay accessible at widget width ' + width);
   }
+  await primaryWidget.getByRole('button', { name: 'Editar (AL30/AL30D) / DLR/SPOT', exact: true }).click();
+  await page.getByLabel('Formato del ratio', { exact: true }).selectOption('number');
+  await gear.click(); await options.getByRole('checkbox', { name: 'Último B', exact: true }).click();
+  await primaryWidget.getByRole('columnheader', { name: 'Último B', exact: true }).waitFor({ state: 'detached' });
+  await wait(() => !document.querySelector('.ct-ratios-column-menu input:disabled'));
+  await page.keyboard.press('Escape'); await save();
+  const editedConfig = (await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings;
+  assert(editedConfig.chuchotrizRatios.pairs.some(p => p.c && p.a.symbol === 'AL30' && p.format === 'number') && !editedConfig.chuchotrizRatiosColumns.visible.lastB, 'Changing column visibility while editing preserves the unsaved pair draft and allows saving it');
+  await gear.click(); await options.getByRole('checkbox', { name: 'Último B', exact: true }).click();
+  await primaryWidget.getByRole('columnheader', { name: 'Último B', exact: true }).waitFor(); await page.keyboard.press('Escape');
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }
