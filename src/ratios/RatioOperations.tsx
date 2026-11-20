@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
+import { GridRowHandle, GridSortHeader, nextGridSort, reorderGridRows, sortGridRows, type GridSort, type GridValue } from "./RatioGrid";
 import { calculateRatio, currencyLabel, numberLabel, pairKey, pairLabel, ratioLabel, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
 import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
@@ -13,6 +14,8 @@ import { applyDefaultWatch, bestBookPrice, closeOperation, closedQuantity, corre
 import "./RatioOperations.css";
 
 type View = "monitor" | "opening" | "operations";
+type GridKind = "watch" | "operations";
+interface GridDrag { kind: GridKind; scope: string; revision: string; ids: string[]; from: string }
 type Source = "last" | "bid" | "ask" | "manual" | "saved";
 interface Draft {
   a?: TradingInstrument; b?: TradingInstrument; pa: string; pb: string; qa: string; fa: string; fb: string; sa: string; sb: string;
@@ -37,6 +40,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [closePrices, setClosePrices] = useState<[string, string]>(["", ""]), closeDirty = useRef([false, false]);
   const [pickerSession, setPickerSession] = useState(0);
   const [loadingDefaults, setLoadingDefaults] = useState(false), defaultsAttempt = useRef<string | undefined>(undefined), defaultsGeneration = useRef(0);
+  const [monitorSort, setMonitorSort] = useState<GridSort>(), [operationsSort, setOperationsSort] = useState<GridSort>();
+  const gridSortVersion = useRef({ watch: 0, operations: 0 });
+  const [pnlCurrency, setPnlCurrency] = useState("ARS");
+  const [gridDrag, setGridDrag] = useState<GridDrag>(), gridDragRef = useRef<GridDrag | undefined>(undefined);
+  const [dropTarget, setDropTarget] = useState<string>();
   const pending = useRef(false), current = useRef({ session, active }); current.current = { session, active };
   const book = session?.book ?? emptyBook();
   const ids = [...book.watch.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])]), ...book.operations.filter(o => !isClosed(o)).flatMap(o => o.legs.map(l => l.instrument.id)),
@@ -52,6 +60,8 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const quotes = market.quotes;
 
   useEffect(() => {
+    gridSortVersion.current.watch++; gridSortVersion.current.operations++;
+    setMonitorSort(undefined); setOperationsSort(undefined); setPnlCurrency("ARS"); clearGridDrag();
     setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined); setWatchC(undefined); setCompare(false);
     defaultsGeneration.current++; defaultsAttempt.current = undefined; setLoadingDefaults(false);
     setView("monitor"); setIssue(""); setNotice(""); setPickerSession(n => n + 1);
@@ -113,6 +123,51 @@ export default function RatioOperations({ active }: { active: boolean }) {
     } catch (error) {
       if (generation === defaultsGeneration.current) setIssue(error instanceof Error ? error.message : "No se pudieron cargar los pares predeterminados.");
     } finally { if (generation === defaultsGeneration.current) setLoadingDefaults(false); }
+  }
+  function clearGridDrag() { gridDragRef.current = undefined; setGridDrag(undefined); setDropTarget(undefined); }
+  function changeGridSort(kind: GridKind, column?: string) {
+    gridSortVersion.current[kind]++; clearGridDrag();
+    if (kind === "watch") setMonitorSort(previous => column ? nextGridSort(previous, column) : undefined);
+    else setOperationsSort(previous => column ? nextGridSort(previous, column) : undefined);
+  }
+  function projectGrid<T extends { id: string }>(rows: T[], kind: GridKind, sort: GridSort | undefined, value: (row: T, column: string) => GridValue): T[] {
+    if (gridDrag?.kind === kind && gridDrag.scope === scope && gridDrag.revision === book.revision) {
+      const rank = new Map(gridDrag.ids.map((id, index) => [id, index]));
+      return sortGridRows(rows, { column: "drag", direction: "asc" }, row => rank.get(row.id));
+    }
+    return sortGridRows(rows, sort, value);
+  }
+  async function moveGrid(drag: GridDrag, target: string) {
+    if (!available || scope !== drag.scope || drag.from === target) return;
+    const sortVersion = gridSortVersion.current[drag.kind];
+    const ok = await commit(base => {
+      if (base.revision !== drag.revision) throw Error("La grilla cambió durante el movimiento. Volvé a intentarlo.");
+      return drag.kind === "watch" ? { ...base, watch: reorderGridRows(base.watch, drag.ids, drag.from, target) }
+        : { ...base, operations: reorderGridRows(base.operations, drag.ids, drag.from, target) };
+    });
+    if (ok && sortVersion === gridSortVersion.current[drag.kind]) { if (drag.kind === "watch") setMonitorSort(undefined); else setOperationsSort(undefined); }
+  }
+  function rowHandle(kind: GridKind, id: string, label: string, ids: string[]) {
+    return <GridRowHandle label={label} disabled={!ready || loadingDefaults} busy={busy} onEnd={clearGridDrag}
+      onStart={event => {
+        if (!available || !scope) { event.preventDefault(); return; }
+        event.stopPropagation(); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id);
+        const drag = { kind, scope, revision: book.revision, ids, from: id };
+        gridDragRef.current = drag; setGridDrag(drag);
+      }} onMove={direction => {
+        const target = ids[ids.indexOf(id) + direction];
+        if (scope && target) void moveGrid({ kind, scope, revision: book.revision, ids, from: id }, target);
+      }} />;
+  }
+  function rowDrop(kind: GridKind, id: string) {
+    const accepts = () => available && gridDragRef.current?.kind === kind && gridDragRef.current.scope === scope && gridDragRef.current.ids.includes(id);
+    return {
+      onDragOver: (event: DragEvent<HTMLTableRowElement>) => { if (accepts()) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(`${kind}:${id}`); } },
+      onDrop: (event: DragEvent<HTMLTableRowElement>) => {
+        if (!accepts()) return;
+        event.preventDefault(); event.stopPropagation(); const drag = gridDragRef.current!; clearGridDrag(); void moveGrid(drag, id);
+      },
+    };
   }
   function selectInstrument(key: "a" | "b", instrument?: TradingInstrument) {
     setDraft(previous => {
@@ -206,6 +261,30 @@ export default function RatioOperations({ active }: { active: boolean }) {
     <span key={p.currency} className={field === "commission" || field === "ddmm" ? "" : signed(p[field])} title={p.issue}>{money(p[field], p.currency)}</span>);
   const goalText = (o: RatioOperation) => o.targetRatio === null ? "Sin objetivo de ratio" : `Objetivo: ${pairRatioLabel(o.targetRatio, o.legs[0].instrument, o.legs[1].instrument)}${isClosed(o) ? "" : goalReached(o, currentRatio(o, quotes)) ? " · alcanzado" : " · pendiente"}`;
   const selectedPnl = op ? operationPnl(op, quotes) : [];
+  const shownRatio = (raw: number | undefined, percent: boolean) => raw === undefined ? undefined : percent ? (raw - 1) * 100 : raw;
+  const monitorRows = projectGrid(book.watch, "watch", monitorSort, (pair, column) => {
+    if (column === "pair") return pairLabel(pair);
+    const a = quotes[pair.a.id], b = quotes[pair.b.id], c = pair.c ? quotes[pair.c.id] : undefined;
+    if (column === "a") return a?.issue ? undefined : a?.last;
+    if (column === "b") return b?.issue ? undefined : b?.last;
+    if (column === "c") return c?.issue ? undefined : c?.last;
+    const result = calculateRatio(a, b, pair.c ? c ?? {} : undefined);
+    return column === "daily" ? result.change : shownRatio(result.ratio, !!pair.c || sameCurrency(pair.a, pair.b));
+  });
+  const pnlCurrencies = [...new Set(book.operations.flatMap(o => o.legs.map(l => l.instrument.currency)))].sort();
+  const sortCurrency = pnlCurrencies.includes(pnlCurrency) ? pnlCurrency : pnlCurrencies[0] || "ARS";
+  const operationsRows = projectGrid(book.operations.filter(o => all || !isClosed(o)), "operations", operationsSort, (operation, column) => {
+    if (column === "pair") return `${operation.legs[0].instrument.symbol}/${operation.legs[1].instrument.symbol}`;
+    if (column === "quantity") return remaining(operation.legs[0]);
+    if (column === "ratio") return shownRatio(currentRatio(operation, quotes), sameCurrency(operation.legs[0].instrument, operation.legs[1].instrument));
+    if (column === "realized" || column === "pending" || column === "net") return operationPnl(operation, quotes).find(p => p.currency === sortCurrency)?.[column];
+    return undefined;
+  });
+  const monitorRowIds = monitorRows.map(row => row.id), operationsRowIds = operationsRows.map(row => row.id);
+  const monitorHeader = (label: string, column: string) => <GridSortHeader label={label} column={column} sort={monitorSort} disabled={!ready} onSort={key => changeGridSort("watch", key)} />;
+  const operationsHeader = (label: string, column: string) => <GridSortHeader label={label} column={column} sort={operationsSort} disabled={!ready}
+    description={column === "quantity" ? "Ordenar por la cantidad abierta de A" : ["realized", "pending", "net"].includes(column) ? `Ordenar importes en ${currencyLabel(sortCurrency)}; sin valor al final` : undefined}
+    onSort={key => changeGridSort("operations", key)} />;
 
   function leg(key: "a" | "b") {
     const first = key === "a", instrument = draft[key], quote = instrument ? quotes[instrument.id] : undefined;
@@ -257,11 +336,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
           if (base.watch.some(p => pairKey(p) === pairKey(pair))) throw Error("El par ya está en el monitor.");
           return { ...base, watch: [...base.watch, pair] };
         })}>Agregar par</button></div><button type="button" className="ro-defaults" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button></div>
-      <div className="ro-table-wrap"><table className="ro-monitor-table"><thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th>{book.watch.some(p => p.c) && <th>Referencia C</th>}<th>Ratio / brecha</th><th>Var. diaria</th><th>Acciones</th></tr></thead><tbody>{ready && book.watch.map(p => {
+      <div className="ro-grid-tools"><small>Arrastrá ⠿ para mover · con foco, usá ↑/↓</small><button type="button" className="ro-manual-order" disabled={!monitorSort} onClick={() => changeGridSort("watch")}>Orden manual</button></div>
+      <div className="ro-table-wrap ro-grid-wrap ro-monitor-wrap"><table className="ro-monitor-table"><thead><tr>{monitorHeader("Par A/B", "pair")}{monitorHeader("Último A", "a")}{monitorHeader("Último B", "b")}{book.watch.some(p => p.c) && monitorHeader("Referencia C", "c")}{monitorHeader("Ratio / brecha", "ratio")}{monitorHeader("Var. diaria", "daily")}<th scope="col">Acciones</th></tr></thead><tbody>{ready && monitorRows.map(p => {
         const rate = isRateInstrument(p.a) || isRateInstrument(p.b);
         const monitorOnly = !!p.c || isMonitorOnly(p.a) || isMonitorOnly(p.b);
         const a = quotes[p.a.id], b = quotes[p.b.id], c = p.c ? quotes[p.c.id] : undefined, result = calculateRatio(a, b, p.c ? c ?? {} : undefined);
-        return <tr key={p.id}><td><strong>{pairLabel(p)}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{p.c ? " · brecha (A/B ÷ C − 1) × 100" : rate ? " · tasas TNA" : ""}</small></td>
+        return <tr key={p.id} data-row-id={p.id} {...rowDrop("watch", p.id)} className={dropTarget === `watch:${p.id}` ? "ro-drop-target" : gridDrag?.from === p.id ? "ro-dragging" : undefined}><td><div className="ro-pair-cell">{rowHandle("watch", p.id, `par ${pairLabel(p)}`, monitorRowIds)}<div><strong>{pairLabel(p)}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{p.c ? " · brecha (A/B ÷ C − 1) × 100" : rate ? " · tasas TNA" : ""}</small></div></div></td>
           <td title={`Última operación A: ${tradeLabel(a?.tradedAt)}`}><OptionQuoteValue key={p.a.id} value={a?.issue ? undefined : a?.last} formatValue={n => numberLabel(n) + (isRateInstrument(p.a) ? "% TNA" : "")} /></td>
           <td title={`Última operación B: ${tradeLabel(b?.tradedAt)}`}><OptionQuoteValue key={p.b.id} value={b?.issue ? undefined : b?.last} formatValue={n => numberLabel(n) + (isRateInstrument(p.b) ? "% TNA" : "")} /></td>
           {book.watch.some(row => row.c) && <td title={p.c ? `${p.c.symbol} · ${tradeLabel(c?.tradedAt)}` : undefined}>{p.c ? <OptionQuoteValue key={p.c.id} value={c?.issue ? undefined : c?.last} formatValue={numberLabel} /> : "—"}</td>}
@@ -286,9 +366,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
       </div><div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro de ambas patas; no comprueba tenencia, préstamo de títulos ni ejecución del broker.</small></div>
     </form>}
     {view === "operations" && <div className={`ro-operations-grid${op ? "" : " no-detail"}`}>
-      <div><div className="ro-filters"><button type="button" aria-pressed={!all} onClick={() => { setAll(false); if (op && isClosed(op)) setSelected(undefined); }}>Abiertas</button><button type="button" aria-pressed={all} onClick={() => setAll(true)}>Todas</button></div>
-        <div className="ro-table-wrap"><table className="ro-operations-table"><thead><tr><th>Par / sentido</th><th>Cant. abiertas A/B</th><th>Ratio entrada → actual</th><th>Realizado</th><th>Pendiente</th><th>Neto total</th><th>Acciones</th></tr></thead><tbody>{ready && book.operations.filter(o => all || !isClosed(o)).map(o => <tr key={o.id} className={selected === o.id ? "ro-selected" : ""}>
-          <td><div className="ro-pair-chips" aria-label={`Par ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`}>{o.legs.map(l => <span key={l.instrument.id} className={`ro-chip ${l.side === 1 ? "buy" : "sell"}`}><strong>{l.instrument.symbol}</strong><span>{l.side === 1 ? "Long" : "Short"}</span></span>)}</div><small>{isClosed(o) ? "Cerrada" : o.legs.some(l => l.exits.length) ? "Parcial" : "Abierta"}</small></td><td>{o.legs.map(l => numberLabel(remaining(l))).join(" / ")}</td>
+      <div><div className="ro-grid-tools"><small>Arrastrá ⠿ para mover · con foco, usá ↑/↓</small><button type="button" className="ro-manual-order" disabled={!operationsSort} onClick={() => changeGridSort("operations")}>Orden manual</button>
+        {pnlCurrencies.length > 1 && <label className="ro-sort-currency">P&amp;L en <select aria-label="Moneda para ordenar P&L" value={sortCurrency} onChange={event => { gridSortVersion.current.operations++; setPnlCurrency(event.target.value); }}>{pnlCurrencies.map(currency => <option key={currency} value={currency}>{currencyLabel(currency)}</option>)}</select></label>}
+        <div className="ro-filters"><button type="button" aria-pressed={!all} onClick={() => { setAll(false); if (op && isClosed(op)) setSelected(undefined); }}>Abiertas</button><button type="button" aria-pressed={all} onClick={() => setAll(true)}>Todas</button></div></div>
+        <div className="ro-table-wrap ro-grid-wrap"><table className="ro-operations-table"><thead><tr>{operationsHeader("Par / sentido", "pair")}{operationsHeader("Cant. abiertas A/B", "quantity")}{operationsHeader("Ratio entrada → actual", "ratio")}{operationsHeader("Realizado", "realized")}{operationsHeader("Pendiente", "pending")}{operationsHeader("Neto total", "net")}<th scope="col">Acciones</th></tr></thead><tbody>{ready && operationsRows.map(o => <tr key={o.id} data-row-id={o.id} {...rowDrop("operations", o.id)} onClick={event => { if (!(event.target as Element).closest("button,input,select,a")) setSelected(o.id); }} className={[selected === o.id ? "ro-selected" : "", dropTarget === `operations:${o.id}` ? "ro-drop-target" : gridDrag?.from === o.id ? "ro-dragging" : ""].filter(Boolean).join(" ")}>
+          <td><div className="ro-pair-cell">{rowHandle("operations", o.id, `operación ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`, operationsRowIds)}<div><div className="ro-pair-chips" aria-label={`Par ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`}>{o.legs.map(l => <span key={l.instrument.id} className={`ro-chip ${l.side === 1 ? "buy" : "sell"}`}><strong>{l.instrument.symbol}</strong><span>{l.side === 1 ? "Long" : "Short"}</span></span>)}</div><small>{isClosed(o) ? "Cerrada" : o.legs.some(l => l.exits.length) ? "Parcial" : "Abierta"}</small></div></div></td><td>{o.legs.map(l => numberLabel(remaining(l))).join(" / ")}</td>
           <td>{pairRatioLabel(o.legs[0].entry / o.legs[1].entry, o.legs[0].instrument, o.legs[1].instrument)} → {pairRatioLabel(currentRatio(o, quotes), o.legs[0].instrument, o.legs[1].instrument)}<small className={goalReached(o, currentRatio(o, quotes)) ? "ro-up" : ""}>{goalText(o)}</small></td>
           <td>{pnlLines(o, "realized")}</td><td>{pnlLines(o, "pending")}</td><td>{pnlLines(o, "net")}</td><td><div className="ro-actions"><button type="button" onClick={() => { setSelected(o.id); setIssue(""); }}>Detalle</button>{!isClosed(o) && <button type="button" disabled={!available} onClick={() => beginEdit(o)}>Editar</button>}<button type="button" className="ro-danger" disabled={!available} onClick={() => void remove(o)}>Eliminar</button></div></td>
         </tr>)}</tbody></table></div>

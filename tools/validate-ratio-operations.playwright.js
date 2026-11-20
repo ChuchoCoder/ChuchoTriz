@@ -277,5 +277,101 @@ async page => {
   assert(await comparison.locator('.ro-ratio').innerText() === '0,00%', 'MEP comparison restored after official reconnect');
   checks.push('Disconnect/reconnect preserves both saved comparisons and accepts a reset official quote sequence');
   checks.push('MEP/official spread, native spot updates, monitor-only restrictions and schema compatibility');
+  const rowIds = selector => page.locator(selector + ' tbody tr').evaluateAll(es => es.map(e => e.dataset.rowId));
+  const originalOrder = (await book()).watch.map(p => p.id), originalRevision = (await book()).revision;
+  const financialSnapshot = () => book().then(b => JSON.stringify([...b.operations].sort((a,b) => a.id.localeCompare(b.id))));
+  const originalFinancial = await financialSnapshot();
+  await click(button('Ordenar por Último A'));
+  assert(await button('Ordenar por Último A').locator('..').getAttribute('aria-sort') === 'ascending', 'Header exposes ascending order');
+  const visibleNumbers = () => page.locator('.ro-monitor-table tbody tr td:nth-child(2)').allTextContents().then(ts => ts.map(t => parseFloat(t.replace(/\./g,'').replace(',','.'))).filter(Number.isFinite));
+  let numbers = await visibleNumbers(); assert(numbers.every((n,i) => !i || numbers[i-1] <= n), 'Monitor prices sort numerically ascending');
+  await click(button('Ordenar por Último A')); numbers = await visibleNumbers();
+  assert(numbers.every((n,i) => !i || numbers[i-1] >= n), 'Monitor prices sort numerically descending');
+  assert((await book()).revision === originalRevision, 'Column sorting never writes the ledger');
+  await click(button('Ordenar por Último A')); assert(JSON.stringify(await rowIds('.ro-monitor-table')) === JSON.stringify(originalOrder), 'Third click restores saved manual order');
+  for (let i=0;i<2;i++) {
+    await click(button('Ordenar por Referencia C'));
+    const missing = await page.locator('.ro-monitor-table tbody tr td:nth-child(4)').allTextContents();
+    assert(missing.slice(0,2).every(t => t.trim() !== '—') && missing.slice(2).every(t => t.trim() === '—'), 'Missing references remain last in either sort direction');
+  }
+  checks.push('Numeric ascending/descending sorting, accessible headers, missing values last and manual reset do not mutate saved records');
+  await click(button('Ordenar por Par A/B'));
+  const sortedMonitor = await rowIds('.ro-monitor-table'), expectedMonitor = [...sortedMonitor.slice(1), sortedMonitor[0]];
+  await page.locator('.ro-monitor-table tbody tr').first().locator('.ro-row-handle').dragTo(page.locator('.ro-monitor-table tbody tr').last().locator('td').first());
+  await page.waitForFunction(id => document.querySelector('.ro-monitor-table tbody tr')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', expectedMonitor[0], {polling:100,timeout:10000});
+  assert(JSON.stringify((await book()).watch.map(p => p.id)) === JSON.stringify(expectedMonitor), 'Real drag converts the visible sorted order to saved manual order');
+  assert(await button('Ordenar por Par A/B').locator('..').getAttribute('aria-sort') === 'none', 'Drag switches back to manual mode');
+  const keyboardId = expectedMonitor[0];
+  await page.locator('.ro-monitor-table tbody tr').first().locator('.ro-row-handle').focus();
+  await page.locator('.ro-monitor-table tbody tr').first().locator('.ro-row-handle').press('ArrowDown');
+  await page.waitForFunction(id => document.querySelector('.ro-monitor-table tbody tr:nth-child(2)')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', keyboardId, {polling:100,timeout:10000});
+  let keyboardOrder = (await book()).watch.map(p => p.id);
+  assert(keyboardOrder[1] === keyboardId, 'Keyboard moves the focused row one slot');
+  assert(await page.evaluate(id=>document.activeElement?.closest('tr')?.dataset.rowId===id,keyboardId), 'Keyboard focus survives the first save');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(id=>document.querySelector('.ro-monitor-table tbody tr:nth-child(3)')?.dataset.rowId===id&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled')==='false',keyboardId,{polling:100,timeout:10000});
+  keyboardOrder=(await book()).watch.map(p=>p.id);
+  assert(keyboardOrder[2]===keyboardId,'A second keyboard move works without refocusing');
+  assert(await financialSnapshot() === originalFinancial, 'Monitor reordering leaves operation prices, fees and history intact');
+  await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'})); await click(button('Ratios'));
+  await wait(() => !!document.querySelector('.ro-row-handle') && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false');
+  assert(JSON.stringify(await rowIds('.ro-monitor-table')) === JSON.stringify(keyboardOrder), 'Manual monitor order survives reload');
+  checks.push('Real drag from sorted view and keyboard ordering persist by account without changing operation data');
+  await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/})); await click(button('Todas'));
+  await page.getByLabel('Moneda para ordenar P&L',{exact:true}).selectOption('USD');
+  await click(button('Ordenar por Neto total'));
+  const mixedOperation = (await book()).operations.find(o => o.legs[1].instrument.currency === 'USD');
+  assert((await rowIds('.ro-operations-table'))[0] === mixedOperation.id, 'P&L sorting uses only the selected currency, placing other currencies last');
+  assert((await button('Ordenar por Neto total').getAttribute('title')).includes('USD'), 'Money sort describes its currency');
+  const sortedOperations = await rowIds('.ro-operations-table'), expectedOperations = [...sortedOperations.slice(1), sortedOperations[0]];
+  await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').dragTo(page.locator('.ro-operations-table tbody tr').last().locator('td').first());
+  await page.waitForFunction(id => document.querySelector('.ro-operations-table tbody tr')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', expectedOperations[0], {polling:100,timeout:10000});
+  assert(JSON.stringify((await book()).operations.map(o => o.id)) === JSON.stringify(expectedOperations), 'Operation drag saves the projected order');
+  const closedId = mixedOperation.id, closedIndex = expectedOperations.indexOf(closedId);
+  await click(button('Abiertas'));
+  const firstOpenId = (await rowIds('.ro-operations-table'))[0];
+  await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').press('ArrowDown');
+  await page.waitForFunction(id => document.querySelector('.ro-operations-table tbody tr:nth-child(2)')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', firstOpenId, {polling:100,timeout:10000});
+  assert((await rowIds('.ro-operations-table'))[1] === firstOpenId && (await book()).operations[closedIndex].id === closedId, 'Filtered keyboard reorder preserves hidden closed-record slots');
+  assert(await financialSnapshot() === originalFinancial, 'Operation reordering preserves all financial fields and close history');
+  checks.push('Operation ordering separates currencies, supports drag and keyboard, and preserves hidden records and accounting');
+  await page.locator('.ro-operations-table tbody tr').first().locator('.ro-pair-chips').click({force:true});
+  assert(await page.locator('.ro-operations-table tr.ro-selected').count() === 1 && await page.locator('.ro-detail').count() === 1, 'Clicking a row selects it and opens its detail');
+  for (const theme of ['dark','light']) {
+    await page.locator('.ct-free-settings-panel').evaluate((e,t)=>e.dataset.colorScheme=t,theme);
+    const styles = await page.evaluate(()=>{const table=document.querySelector('.ro-operations-table'),header=getComputedStyle(table.querySelector('th')),even=getComputedStyle(table.querySelector('tbody tr:nth-child(2)')),selected=getComputedStyle(table.querySelector('tr.ro-selected'));return{head:header.backgroundColor,weight:header.fontWeight,sticky:header.position,even:even.backgroundColor,selected:selected.backgroundColor};});
+    assert(styles.head !== 'rgba(0, 0, 0, 0)' && styles.weight === '700' && styles.sticky === 'sticky' && styles.even !== styles.head && styles.selected !== styles.head, 'Styled headers, stripes and selected row remain distinct in '+theme);
+  }
+  await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'})); await click(button('Ratios'));
+  await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false');
+  await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/})); await click(button('Todas'));
+  assert(JSON.stringify(await rowIds('.ro-operations-table')) === JSON.stringify((await book()).operations.map(o=>o.id)), 'Manual operation order survives reload');
+  checks.push('Distinct dark/light headers and selected rows retain operation detail and manual order after reload');
+  await page.evaluate(()=>{
+    const original=chrome.storage.local.set; window.__gridOriginalSet=original;
+    chrome.storage.local.set=async values=>{if(Object.keys(values).some(k=>k.startsWith('RatioOperationsV1:')))await new Promise(resolve=>window.__gridReleaseSave=resolve);return original.call(chrome.storage.local,values);};
+  });
+  try {
+    await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').press('ArrowDown');
+    await wait(()=>typeof window.__gridReleaseSave==='function');
+    await click(button('Ordenar por Par / sentido'));
+    await page.evaluate(()=>window.__gridReleaseSave());
+    await wait(()=>document.querySelector('.ro-row-handle').getAttribute('aria-disabled')==='false');
+    assert(await button('Ordenar por Par / sentido').locator('..').getAttribute('aria-sort')==='ascending','A newer column sort survives an earlier reorder save completing');
+    assert(await financialSnapshot()===originalFinancial,'Delayed reorder does not alter financial records');
+  } finally {
+    await page.evaluate(()=>{chrome.storage.local.set=window.__gridOriginalSet;window.__gridReleaseSave?.();delete window.__gridOriginalSet;delete window.__gridReleaseSave;});
+  }
+  checks.push('Repeated keyboard movement retains focus and a later sort choice wins over pending saves');
+  const staleRows=await rowIds('.ro-operations-table'),transfer=await page.evaluateHandle(()=>new DataTransfer());
+  await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').dispatchEvent('dragstart',{dataTransfer:transfer});
+  await page.evaluate(async()=>{const values=await chrome.storage.local.get(null);for(const [key,value] of Object.entries(values))if(key.startsWith('RatioOperationsV1:'))await chrome.storage.local.set({[key]:{...value,revision:crypto.randomUUID()}});});
+  await page.screenshot({animations:'disabled',timeout:10000});
+  const beforeRejected=(await book()).operations.map(o=>o.id);
+  await page.locator('.ro-operations-table tbody tr').last().dispatchEvent('drop',{dataTransfer:transfer});
+  await wait(()=>document.querySelector('.ro-issue')?.textContent.includes('grilla cambió'));
+  assert(JSON.stringify((await book()).operations.map(o=>o.id))===JSON.stringify(beforeRejected)&&await financialSnapshot()===originalFinancial&&staleRows.length===beforeRejected.length,'Concurrent revision changes reject stale drag without overwriting records');
+  await transfer.dispose();
+  checks.push('Stale drag after another writer changes the revision is rejected without data loss');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }

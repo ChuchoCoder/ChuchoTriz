@@ -132,6 +132,31 @@ movimiento reducido se usa una marca estática breve.
   un chip verde con «Long» o rojo con «Short», según el lado registrado. El
   estado Abierta/Parcial/Cerrada permanece debajo, sin repetir el sentido A/B.
 
+### Orden y lectura de las grillas
+
+Monitor y Operaciones abiertas tienen encabezados con fondo, filas alternadas,
+resaltado al pasar el cursor y una marca para la operación seleccionada. Los
+encabezados permanecen visibles al desplazarse dentro de una lista larga;
+en pantallas angostas la grilla tiene desplazamiento horizontal propio.
+
+- Clic en un encabezado: ascendente → descendente → orden manual. Se ordenan
+  los valores numéricos publicados, no los textos formateados; los valores
+  ausentes siempre quedan al final. Ratio/brecha usa el valor mostrado y la
+  columna de cantidad ordena por la cantidad abierta de A.
+- Arrastrá el agarre ⠿ hasta otra fila para guardar su posición. También podés
+  enfocarlo y usar ↑/↓ varias veces seguidas. Si partís de una vista ordenada,
+  ese orden visible, con el movimiento aplicado, pasa a ser el nuevo orden manual.
+- El orden manual se guarda por cuenta/sitio y sobrevive a la recarga. Con el
+  filtro Abiertas, las operaciones cerradas conservan sus posiciones ocultas.
+  Ordenar por columna sólo cambia la vista durante la sesión, sin escribir el
+  registro; **Orden manual** recupera las posiciones guardadas.
+- Para ordenar Realizado/Pendiente/Neto con varias monedas, elegí **P&L en**.
+  Se compara sólo esa moneda, sin sumar ARS, USD o USD C; los registros sin
+  importe en la moneda elegida quedan al final.
+- Un movimiento guarda únicamente la posición: conserva instrumentos, cantidades,
+  entradas, tasas, objetivos e historial. Si otra pestaña cambia el registro
+  durante el arrastre, el movimiento desactualizado se rechaza.
+
 Se guardan hasta 100 pares y 500 operaciones, separadas por cuenta y sitio en
 `chrome.storage.local`. La revisión y un bloqueo entre pestañas previenen
 sobrescrituras de ediciones viejas. Un cambio de cuenta limpia la vista antes de
