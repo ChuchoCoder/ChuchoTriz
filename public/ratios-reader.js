@@ -5,7 +5,8 @@
   if (window.__chuchotrizRatiosReader) { window.__chuchotrizRatiosReader.attach(channel); return; }
   const TYPE = "ChuchoTrizRatiosWidget", KEY = "chuchotrizRatios";
   const DEFAULT_PAIRS = [["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
-    ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"]];
+    ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"],
+    ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"]];
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
   let identity, revision = 0, writing = false;
   const finite = n => typeof n === "number" && Number.isFinite(n);
@@ -62,20 +63,21 @@
   function initialPairs(c) {
     const wanted = new Set(DEFAULT_PAIRS.flat()), matches = new Map(), missing = [];
     for (const sec of c.ss.securities) {
-      if (sec?.marketId !== "bm") continue;
+      if (sec?.marketId !== "bm" && sec?.id !== "rx_DDF_DLR_SPOT") continue;
       const item = instrument(sec);
       if (!item) continue;
       const symbol = tickerKey(item.symbol);
-      if (!wanted.has(symbol)) continue;
+      if (!wanted.has(symbol) || symbol === "DLR/SPOT" && (item.id !== "rx_DDF_DLR_SPOT" || !item.monitorOnly)) continue;
       if (!matches.has(symbol)) matches.set(symbol, new Map());
       matches.get(symbol).set(item.id, item);
     }
-    const pairs = DEFAULT_PAIRS.flatMap(([aSymbol, bSymbol]) => {
-      const aMatches = matches.get(aSymbol), bMatches = matches.get(bSymbol);
-      if (aMatches?.size !== 1 || bMatches?.size !== 1) { missing.push(`${aSymbol}/${bSymbol}`); return []; }
+    const pairs = DEFAULT_PAIRS.flatMap(([aSymbol, bSymbol, cSymbol]) => {
+      const aMatches = matches.get(aSymbol), bMatches = matches.get(bSymbol), cMatches = cSymbol ? matches.get(cSymbol) : undefined;
+      const label = cSymbol ? `(${aSymbol}/${bSymbol}) / ${cSymbol}` : `${aSymbol}/${bSymbol}`;
+      if (aMatches?.size !== 1 || bMatches?.size !== 1 || cSymbol && cMatches?.size !== 1) { missing.push(label); return []; }
       const a = aMatches.values().next().value, b = bMatches.values().next().value;
       if (a.id === b.id) { missing.push(`${aSymbol}/${bSymbol}`); return []; }
-      return [{ id: crypto.randomUUID(), a, b, format: a.currency && a.currency === b.currency ? "percent" : "number" }];
+      return [{ id: crypto.randomUUID(), a, b, ...(cSymbol ? { c: cMatches.values().next().value } : {}), format: cSymbol || a.currency && a.currency === b.currency ? "percent" : "number" }];
     });
     return { pairs, missing };
   }
@@ -188,7 +190,7 @@
       if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) throw Error("Esperando las dimensiones del dashboard.");
       const width = Math.min(560, Math.max(360, d.width - 20)), height = 300;
       const defaults = initialPairs(c);
-      const config = { schema: 1, id: crypto.randomUUID(), revision: 0, pairs: defaults.pairs };
+      const config = { schema: defaults.pairs.some(p => p.c) ? 2 : 1, id: crypto.randomUUID(), revision: 0, pairs: defaults.pairs };
       const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{ component: TYPE, ...position(c, width, height), w: width, h: height, settings: { [KEY]: config, chuchotrizRatiosSize: { width, height }, chuchotrizRatiosInitialMissing: defaults.missing }, selectionCriteria: { securities: [] } }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);
     } else {

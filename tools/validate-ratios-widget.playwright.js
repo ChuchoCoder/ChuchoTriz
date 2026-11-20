@@ -26,10 +26,10 @@ async (page) => {
   const snapshot = () => page.evaluate(() => window.mainStore.dashboardStore.currentDashboard.layout.map(w => ({ component: w.component, x: w.x, y: w.y, w: w.w, h: w.h, settings: JSON.parse(JSON.stringify(w.settings)) })));
   const before = await snapshot();
   await idle(); await b('RATIOS · CHUCHOTRIZ').click(); await idle();
-  const defaults = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D'];
-  assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all seven requested pairs in order');
+  const defaults = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', '(AL30/AL30D) / DLR/SPOT', '(AL30/AL30C) / DLR/SPOT'];
+  assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
-  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.endsWith('%')))) === JSON.stringify([false, false, false, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
+  assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.endsWith('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');
   const seeded = await snapshot();
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(JSON.stringify(await snapshot()) === JSON.stringify(seeded), 'Default pairs and their identities persist after reloading');
@@ -142,7 +142,7 @@ async (page) => {
   await spread.waitFor();
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97%'));
   assert((await spread.innerText()).includes('1.572,50'), 'Comparison shows the native official dollar separately from the bond prices');
-  assert(await spread.getByRole('button', { name: 'Invertir AL30/AL30D', exact: true }).isDisabled(), 'Composite inversion cannot accidentally invert only its bond legs');
+  assert(await spread.getByRole('button', { name: 'Invertir (AL30/AL30D) / DLR/SPOT', exact: true }).isDisabled(), 'Composite inversion cannot accidentally invert only its bond legs');
   assert((await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.schema === 2, 'Composite widgets use a schema rejected by older readers');
   await page.reload({ waitUntil: 'domcontentloaded' }); await spread.waitFor();
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.textContent === '-10,97%'));
@@ -153,7 +153,7 @@ async (page) => {
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 0));
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.title === 'Sin cotización válida de la referencia C' && e.textContent === '—'));
   assert(true, 'Zero or missing comparison quote never falls back to raw MEP');
-  await spread.getByRole('button', { name: 'Editar AL30/AL30D', exact: true }).click();
+  await spread.getByRole('button', { name: 'Editar (AL30/AL30D) / DLR/SPOT', exact: true }).click();
   assert(await reference.inputValue() === 'DLR/SPOT', 'Editing restores reference C');
   await page.getByLabel('A · Numerador', { exact: true }).press('Escape');
   await page.getByLabel('Comparar A/B con una referencia', { exact: true }).uncheck(); await save();

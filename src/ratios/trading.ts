@@ -34,19 +34,22 @@ export function invertWatchPair(book: TradingBook, id: string): TradingBook {
 export const emptyBook = (): TradingBook => ({ schema: 1, revision: "", watch: [], operations: [] });
 export const MAX_OPERATIONS = 500, MAX_WATCH = 100;
 export const DEFAULT_WATCH_PAIRS = [ ["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
-  ["BMA", "GGAL"], ["ALUA", "TXAR"], ["TGSU2", "TGNO4"], ["PESOS - 7D", "PESOS - 1D"] ] as const;
+  ["BMA", "GGAL"], ["ALUA", "TXAR"], ["TGSU2", "TGNO4"], ["PESOS - 7D", "PESOS - 1D"],
+  ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"] ] as const;
 export const isRateInstrument = (i: Pick<TradingInstrument, "cfi">) => i.cfi === "RPXXXX";
 export const isMonitorOnly = (i: TradingInstrument) => isRateInstrument(i) || i.monitorOnly === true || i.id === "rx_DDF_DLR_SPOT";
 export async function resolveDefaultWatch(search: (query: string) => Promise<TradingInstrument[]>) {
   const symbols = [...new Set(DEFAULT_WATCH_PAIRS.flat())], instruments = new Map<string, TradingInstrument>();
   await Promise.all(symbols.map(async symbol => {
-    const matches = new Map((await search(symbol)).filter(i => validInstrument(i) && i.market === "bm" && tickerKey(i.symbol) === tickerKey(symbol)).map(i => [i.id, i]));
+    const matches = new Map((await search(symbol)).filter(i => validInstrument(i) && (symbol === "DLR/SPOT"
+      ? i.id === "rx_DDF_DLR_SPOT" && i.market === "rx" && i.currency === "ARS" && i.monitorOnly === true
+      : i.market === "bm" && tickerKey(i.symbol) === tickerKey(symbol))).map(i => [i.id, i]));
     if (matches.size === 1) instruments.set(symbol, [...matches.values()][0]);
   }));
   const watch: TradingPair[] = [], missing: string[] = [];
-  for (const [a, b] of DEFAULT_WATCH_PAIRS) {
-    if (!instruments.has(a) || !instruments.has(b)) { missing.push(`${a}/${b}`); continue; }
-    watch.push({ id: crypto.randomUUID(), a: instruments.get(a)!, b: instruments.get(b)! });
+  for (const [a, b, c] of DEFAULT_WATCH_PAIRS) {
+    if (!instruments.has(a) || !instruments.has(b) || c && !instruments.has(c)) { missing.push(c ? `(${a}/${b}) / ${c}` : `${a}/${b}`); continue; }
+    watch.push({ id: crypto.randomUUID(), a: instruments.get(a)!, b: instruments.get(b)!, ...(c ? { c: instruments.get(c)! } : {}) });
   }
   return { watch, missing };
 }
@@ -56,7 +59,7 @@ export function applyDefaultWatch(book: TradingBook, pairs: TradingPair[], resto
   const watch = [...book.watch];
   for (const p of pairs) if (!watch.some(existing => pairKey(existing) === pairKey(p))) watch.push(p);
   if (watch.length > MAX_WATCH) throw Error("El monitor no tiene espacio para los pares predeterminados. Quitá un par y volvé a intentarlo.");
-  return { ...book, watch, watchDefaults: 1 };
+  return { ...book, schema: watch.some(p => p.c) ? 2 : 1, watch, watchDefaults: 1 };
 }
 const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);

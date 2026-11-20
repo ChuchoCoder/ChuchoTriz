@@ -143,9 +143,9 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>
             <td className="ct-ratios-actions">
-              <button type="button" aria-label={`Editar ${pair.a.symbol}/${pair.b.symbol}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
-              <button type="button" aria-label={`Invertir ${pair.a.symbol}/${pair.b.symbol}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
-              <button type="button" aria-label={`Eliminar ${pair.a.symbol}/${pair.b.symbol}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
+              <button type="button" aria-label={`Editar ${pairLabel(pair)}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
+              <button type="button" aria-label={`Invertir ${pairLabel(pair)}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
+              <button type="button" aria-label={`Eliminar ${pairLabel(pair)}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
             </td>
           </tr>;
         })}</tbody>

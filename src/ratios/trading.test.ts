@@ -1,8 +1,9 @@
 import { expect, it } from "vitest";
 import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
-import { calculateRatio } from "./model";
+import { calculateRatio, pairLabel } from "./model";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
+const defaultInstrument = (symbol: string): TradingInstrument => symbol === "DLR/SPOT" ? { ...instrument("rx_DDF_DLR_SPOT"), symbol, market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true } : instrument(symbol);
 const at = "2026-01-01T13:00:00.000Z", exitAt = "2026-01-02T13:00:00.000Z";
 it("uses the complete best published level without substituting last, deeper levels or stale top fields", () => {
   const bid = { price: 99, size: 10 }, ask = { price: 101, size: 20 };
@@ -28,26 +29,38 @@ it("retains the optional comparison reference across storage and excludes spot r
   op.legs[0].instrument = { ...c, monitorOnly: undefined };
   expect(() => validateOperation(op)).toThrow(/referencias/);
 });
-it("resolves the eight defaults in user order using unique exact BYMA matches", async () => {
-  const { watch, missing } = await resolveDefaultWatch(async symbol => [instrument(symbol), { ...instrument(symbol + " CI"), symbol: symbol + " CI" }, { ...instrument("rx-" + symbol), market: "rx", symbol }]);
+it("resolves ten defaults including both AL30 dollar spreads with the native official reference", async () => {
+  const { watch, missing } = await resolveDefaultWatch(async symbol => [defaultInstrument(symbol), { ...instrument(symbol + " CI"), symbol: symbol + " CI" }, { ...instrument("rx-" + symbol), market: "rx", symbol }]);
   expect(missing).toEqual([]);
-  expect(watch.map(p => `${p.a.symbol}/${p.b.symbol}`)).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D"]);
-  expect(new Set(watch.map(p => p.id)).size).toBe(8);
+  expect(watch.map(pairLabel)).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D", "(AL30/AL30D) / DLR/SPOT", "(AL30/AL30C) / DLR/SPOT"]);
+  expect(new Set(watch.map(p => p.id)).size).toBe(10);
+});
+it("omits both dollar spreads when the official native spot is absent, then restores them without duplicating MEP or CCL", async () => {
+  const missing = await resolveDefaultWatch(async symbol => [instrument(symbol)]);
+  expect(missing.watch).toHaveLength(8);
+  expect(missing.missing).toEqual(["(AL30/AL30D) / DLR/SPOT", "(AL30/AL30C) / DLR/SPOT"]);
+  const base = applyDefaultWatch(emptyBook(), missing.watch);
+  const complete = await resolveDefaultWatch(async symbol => [defaultInstrument(symbol)]);
+  expect(applyDefaultWatch(base, complete.watch)).toBe(base);
+  const restored = applyDefaultWatch(base, complete.watch, true);
+  expect(restored.watch).toHaveLength(10); expect(restored.watch.slice(0, 8)).toEqual(base.watch);
+  expect(restored.schema).toBe(2); expect(restored.watch.slice(-2).every(p => p.c?.id === "rx_DDF_DLR_SPOT")).toBe(true);
+  expect(applyDefaultWatch(restored, complete.watch, true).watch).toEqual(restored.watch);
 });
 it("preserves custom rows, pair IDs and operations; removed defaults stay removed across reload", async () => {
-  const { watch } = await resolveDefaultWatch(async symbol => [instrument(symbol)]);
+  const { watch } = await resolveDefaultWatch(async symbol => [defaultInstrument(symbol)]);
   const custom = { id: "custom", a: instrument("SPY"), b: instrument("GGAL") }, existing = { ...watch[4], id: "saved-bma" };
   const book = { ...emptyBook(), watch: [custom, existing], operations: [operation()] };
   const seeded = applyDefaultWatch(book, watch);
-  expect(seeded.watch.slice(0, 2)).toEqual(book.watch); expect(seeded.watch).toHaveLength(9); expect(seeded.operations).toBe(book.operations);
+  expect(seeded.watch.slice(0, 2)).toEqual(book.watch); expect(seeded.watch).toHaveLength(11); expect(seeded.operations).toBe(book.operations);
   const removed = validateBook(JSON.parse(JSON.stringify({ ...seeded, watch: seeded.watch.filter(p => p.id !== "saved-bma") })));
   expect(applyDefaultWatch(removed, watch)).toBe(removed);
-  expect(applyDefaultWatch(removed, watch, true).watch).toHaveLength(9);
+  expect(applyDefaultWatch(removed, watch, true).watch).toHaveLength(11);
   expect(applyDefaultWatch(seeded, watch, true).watch).toEqual(seeded.watch);
 });
 it("does not guess missing or ambiguous tickers or overwrite a full monitor", async () => {
-  const result = await resolveDefaultWatch(async symbol => symbol === "AL30" ? [instrument("AL30"), { ...instrument("other"), symbol: "AL30" }] : symbol === "AL30C" ? [] : [instrument(symbol)]);
-  expect(result.missing).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30"]);
+  const result = await resolveDefaultWatch(async symbol => symbol === "AL30" ? [instrument("AL30"), { ...instrument("other"), symbol: "AL30" }] : symbol === "AL30C" ? [] : [defaultInstrument(symbol)]);
+  expect(result.missing).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30", "(AL30/AL30D) / DLR/SPOT", "(AL30/AL30C) / DLR/SPOT"]);
   expect(result.watch).toHaveLength(DEFAULT_WATCH_PAIRS.length - result.missing.length);
   const full = { ...emptyBook(), watch: Array.from({ length: 100 }, (_, i) => ({ id: String(i), a: instrument("custom" + i), b: instrument("GGAL") })) };
   expect(() => applyDefaultWatch(full, result.watch)).toThrow(/espacio/); expect(full.watch).toHaveLength(100);

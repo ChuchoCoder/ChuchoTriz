@@ -14,7 +14,13 @@ El selector encuentra **DLR/SPOT** al buscar **Dólar oficial**, **Dólar USA** 
 Es una referencia de sólo monitor y no admite registrar una operación long/short.
 Si ese spot no está en el catálogo, no se ofrece una cotización alternativa.
 
-Para seguir la brecha MEP/oficial, tanto en el Monitor como en el widget:
+Los widgets y registros nuevos incluyen por defecto las brechas **MEP/oficial**
+y **CCL/oficial** con AL30, ambas en porcentaje. Los widgets guardados conservan
+sus filas; en registros existentes del tab, **Agregar pares predeterminados**
+agrega los faltantes sin duplicar ni reordenar. Si falta el spot oficial, se
+omiten las dos brechas y se informa cuáles no pudieron cargarse.
+
+Para agregar manualmente la brecha MEP/oficial, tanto en el Monitor como en el widget:
 
 1. Elegí **AL30** como A y **AL30D** como B, con el plazo que quieras comparar.
 2. Marcá **Comparar A/B con una referencia**.
@@ -46,7 +52,7 @@ extensión, recargá las pestañas de Matriz antes de usar estas comparaciones.
 
 El monitor inicial incluye, en este orden: AL30/AL30D, AL30/AL30C,
 AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
-PESOS - 7D/PESOS - 1D. En registros existentes se agregan sólo los faltantes,
+PESOS - 7D/PESOS - 1D, (AL30/AL30D) / DLR/SPOT y (AL30/AL30C) / DLR/SPOT. En registros existentes se agregan sólo los faltantes,
 sin reordenar ni duplicar los pares personalizados ni modificar operaciones.
 La inicialización se guarda una sola vez: si quitás un par, no reaparece al
 recargar. **Agregar pares predeterminados** permite recuperar los faltantes.
@@ -170,7 +176,8 @@ impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 ## Agregar y editar pares
 
 Cada widget nuevo comienza, en este orden, con AL30/AL30D, AL30/AL30C,
-AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR y PESOS - 7D/PESOS - 1D.
+AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, PESOS - 7D/PESOS - 1D, (AL30/AL30D) / DLR/SPOT y
+(AL30/AL30C) / DLR/SPOT.
 Se resuelven las especies BYMA exactas del catálogo y se aplica el formato por
 moneda. Si alguna falta o tiene varias coincidencias, se omite ese par y se
 informa en el widget, sin inventar instrumentos. Las filas se pueden editar o
