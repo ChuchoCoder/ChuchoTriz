@@ -5,14 +5,15 @@
   if (window.__chuchotrizRatiosReader) { window.__chuchotrizRatiosReader.attach(channel); return; }
   const TYPE = "ChuchoTrizRatiosWidget", KEY = "chuchotrizRatios";
   const DEFAULT_PAIRS = [["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
-    ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"]];
+    ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"],
+    ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"]];
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
   let identity, revision = 0, writing = false;
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
   const tickerKey = s => s.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase();
-  const ownConfig = w => w?.component === TYPE && w.settings?.[KEY]?.schema === 1 && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
+  const ownConfig = w => w?.component === TYPE && [1, 2].includes(w.settings?.[KEY]?.schema) && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
   function restore(d) {
     const hook = patched.get(d);
     if (hook && d.updateLayout === hook.wrapper) d.updateLayout = hook.original;
@@ -47,6 +48,9 @@
     return { ms, ds, ss, d: custom ? d : undefined, revision };
   }
   function instrument(sec) {
+    if (sec?.id === "rx_DDF_DLR_SPOT" && sec.marketId === "rx" && !sec.isProduct && !sec.isPortfolio && sec.currency === "ARS") {
+      return { id: sec.id, symbol: "DLR/SPOT", market: "rx", currency: "ARS", settlement: "Referencia", monitorOnly: true };
+    }
     if (!sec || sec.isProduct || sec.isPortfolio || !short(sec.id) || !short(sec.symbolStr || sec.symbol, 100)) return;
     return { id: sec.id, symbol: clean(sec.symbolStr || sec.symbol), market: clean(sec.marketId), currency: clean(sec.currency), settlement: clean(sec.settlementType) };
   }
@@ -59,30 +63,32 @@
   function initialPairs(c) {
     const wanted = new Set(DEFAULT_PAIRS.flat()), matches = new Map(), missing = [];
     for (const sec of c.ss.securities) {
-      if (sec?.marketId !== "bm") continue;
+      if (sec?.marketId !== "bm" && sec?.id !== "rx_DDF_DLR_SPOT") continue;
       const item = instrument(sec);
       if (!item) continue;
       const symbol = tickerKey(item.symbol);
-      if (!wanted.has(symbol)) continue;
+      if (!wanted.has(symbol) || symbol === "DLR/SPOT" && (item.id !== "rx_DDF_DLR_SPOT" || !item.monitorOnly)) continue;
       if (!matches.has(symbol)) matches.set(symbol, new Map());
       matches.get(symbol).set(item.id, item);
     }
-    const pairs = DEFAULT_PAIRS.flatMap(([aSymbol, bSymbol]) => {
-      const aMatches = matches.get(aSymbol), bMatches = matches.get(bSymbol);
-      if (aMatches?.size !== 1 || bMatches?.size !== 1) { missing.push(`${aSymbol}/${bSymbol}`); return []; }
+    const pairs = DEFAULT_PAIRS.flatMap(([aSymbol, bSymbol, cSymbol]) => {
+      const aMatches = matches.get(aSymbol), bMatches = matches.get(bSymbol), cMatches = cSymbol ? matches.get(cSymbol) : undefined;
+      const label = cSymbol ? `(${aSymbol}/${bSymbol}) / ${cSymbol}` : `${aSymbol}/${bSymbol}`;
+      if (aMatches?.size !== 1 || bMatches?.size !== 1 || cSymbol && cMatches?.size !== 1) { missing.push(label); return []; }
       const a = aMatches.values().next().value, b = bMatches.values().next().value;
       if (a.id === b.id) { missing.push(`${aSymbol}/${bSymbol}`); return []; }
-      return [{ id: crypto.randomUUID(), a, b, format: a.currency && a.currency === b.currency ? "percent" : "number" }];
+      return [{ id: crypto.randomUUID(), a, b, ...(cSymbol ? { c: cMatches.values().next().value } : {}), format: cSymbol || a.currency && a.currency === b.currency ? "percent" : "number" }];
     });
     return { pairs, missing };
   }
   function configOf(w) {
     const cfg = ownConfig(w);
     if (!cfg || !Number.isSafeInteger(cfg.revision) || cfg.revision < 0 || cfg.pairs.some(p => !short(p?.id) || !short(p?.a?.id) || !short(p?.b?.id))) throw Error("Configuración de Ratios inválida o de otra versión.");
+    if (cfg.pairs.some(p => p.c !== undefined && (cfg.schema !== 2 || !short(p.c?.id)))) throw Error("Referencia de ratio inválida.");
     if (cfg.pairs.some(p => p.format !== undefined && !["number", "percent"].includes(p.format))) throw Error("Formato de ratio no compatible.");
-    return { schema: 1, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id, format: p.format || "number",
-      a: { id: p.a.id, symbol: clean(p.a.symbol), market: clean(p.a.market), currency: clean(p.a.currency), settlement: clean(p.a.settlement) },
-      b: { id: p.b.id, symbol: clean(p.b.symbol), market: clean(p.b.market), currency: clean(p.b.currency), settlement: clean(p.b.settlement) } })) };
+    const descriptor = i => ({ id: i.id, symbol: clean(i.symbol), market: clean(i.market), currency: clean(i.currency), settlement: clean(i.settlement), ...(i.monitorOnly === true ? { monitorOnly: true } : {}) });
+    return { schema: cfg.schema, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id, format: p.format || "number",
+      a: descriptor(p.a), b: descriptor(p.b), ...(p.c ? { c: descriptor(p.c) } : {}) })) };
   }
   function timestamp(raw) {
     const value = raw instanceof Date ? raw.getTime() : typeof raw === "string" ? Date.parse(raw) : NaN;
@@ -120,7 +126,7 @@
       return { config, width: w.w, height: w.h, issue: Array.isArray(missing) && missing.length && missing.length <= DEFAULT_PAIRS.length && missing.every(p => short(p))
         ? "No se pudieron cargar estos pares iniciales: " + missing.join(", ") + ". Agregalos manualmente cuando estén disponibles." : undefined };
     });
-    const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id])))];
+    const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])])))];
     const active = new Set(ids);
     // Track only this dashboard's active instruments. Native subscriptions can
     // be shared with other widgets, so never cancel them when a ratio is removed.
@@ -184,7 +190,7 @@
       if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) throw Error("Esperando las dimensiones del dashboard.");
       const width = Math.min(560, Math.max(360, d.width - 20)), height = 300;
       const defaults = initialPairs(c);
-      const config = { schema: 1, id: crypto.randomUUID(), revision: 0, pairs: defaults.pairs };
+      const config = { schema: defaults.pairs.some(p => p.c) ? 2 : 1, id: crypto.randomUUID(), revision: 0, pairs: defaults.pairs };
       const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{ component: TYPE, ...position(c, width, height), w: width, h: height, settings: { [KEY]: config, chuchotrizRatiosSize: { width, height }, chuchotrizRatiosInitialMissing: defaults.missing }, selectionCriteria: { securities: [] } }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);
     } else {
@@ -203,13 +209,14 @@
         widget.settings = { ...widget.settings, chuchotrizRatiosSize: { width: widget.w, height: widget.h } };
         d.layout = [...d.layout];
       } else if (method === "ratiosEdit") {
+        if (cfg.schema === 2 && params.schema !== 2) throw Error("Esta comparación requiere la versión actual de Ratios. Recargá Matriz antes de editarla.");
         if (!Array.isArray(params.pairs) || params.pairs.length > 50) throw Error("Podés agregar hasta 50 ratios por widget.");
         const ids = new Set(), pairs = params.pairs.map(p => {
           if (!short(p?.id) || ids.has(p.id) || p.a === p.b) throw Error("Elegí instrumentos diferentes y ratios válidos.");
           ids.add(p.id);
           const previous = cfg.pairs.find(old => old.id === p.id);
           const resolve = id => {
-            const existing = previous && [previous.a, previous.b].find(i => i.id === id);
+            const existing = previous && [previous.a, previous.b, previous.c].find(i => i?.id === id);
             // Expired instruments can disappear from Matriz's catalogue. Preserve
             // their saved identity so another row can still be edited or removed.
             const live = c.ss.securities.find(s => s?.id === id);
@@ -217,10 +224,10 @@
           };
           const format = p.format ?? previous?.format ?? "number";
           if (!["number", "percent"].includes(format)) throw Error("Elegí formato Número o Porcentaje.");
-          return { id: p.id, a: resolve(p.a), b: resolve(p.b), format };
+          return { id: p.id, a: resolve(p.a), b: resolve(p.b), ...(p.c !== undefined ? { c: resolve(p.c) } : {}), format };
         });
-        if (new Set(pairs.map(p => JSON.stringify([p.a.id, p.b.id]))).size !== pairs.length) throw Error("Ese par ya está agregado en el widget.");
-        widget.settings = { ...widget.settings, [KEY]: { ...cfg, revision: cfg.revision + 1, pairs }, chuchotrizRatiosInitialMissing: [] };
+        if (new Set(pairs.map(p => JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null]))).size !== pairs.length) throw Error("Ese par ya está agregado en el widget.");
+        widget.settings = { ...widget.settings, [KEY]: { ...cfg, schema: pairs.some(p => p.c) ? 2 : 1, revision: cfg.revision + 1, pairs }, chuchotrizRatiosInitialMissing: [] };
       } else throw Error("Cambio de Ratios no permitido.");
     }
     await verifiedSave(c, op);
@@ -245,9 +252,9 @@
       if (msg.method === "ratiosSearch") {
         selected(c, params);
         if (typeof params.query !== "string" || params.query.length > 60) throw Error("Búsqueda inválida.");
-        const query = tickerKey(params.query);
+        const query = tickerKey(params.query).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         if (!query) { reply({ result: [] }); return; }
-        const result = c.ss.securities.map(instrument).filter(s => s && tickerKey(s.symbol).includes(query)).sort((a, b) => Number(tickerKey(b.symbol) === query) - Number(tickerKey(a.symbol) === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 40);
+        const result = c.ss.securities.map(instrument).filter(s => s && (tickerKey(s.symbol).normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(query) || s.id === "rx_DDF_DLR_SPOT" && "DOLAR OFICIAL DOLAR USA DLR/SPOT".includes(query))).sort((a, b) => Number(tickerKey(b.symbol) === query) - Number(tickerKey(a.symbol) === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 40);
         reply({ result }); return;
       }
       if (!["ratiosAdd", "ratiosEdit", "ratiosRemove", "ratiosResize"].includes(msg.method)) throw Error("Método no permitido por Ratios.");

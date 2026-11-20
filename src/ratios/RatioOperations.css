@@ -89,3 +89,5 @@
 .ro-pair-chips{display:flex;align-items:center;gap:5px;white-space:nowrap}
 .ro-pair-chips .ro-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 6px}
 @media(max-width:540px){.ro-sizing{grid-template-columns:1fr}.ro-sizing-leg{grid-template-columns:minmax(75px,110px) minmax(0,1fr)}}
+
+.ro-monitor-controls .ro-add-watch{display:flex;flex-wrap:wrap;align-items:flex-start}.ro-add-watch>.ct-ratio-picker{width:220px}.ct-ratio-ops .ro-compare{display:flex;align-items:center;gap:6px;margin-top:24px;font-size:11px}.ct-ratio-ops .ro-compare input{width:auto;min-height:0}

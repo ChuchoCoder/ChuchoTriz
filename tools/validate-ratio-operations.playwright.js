@@ -8,7 +8,7 @@ async page => {
   const button = name => page.getByRole('button', { name, exact: true });
   const click = async locator => { await page.screenshot({ animations: 'disabled', timeout: 10000 }); await locator.click({ force: true }); };
   const wait = async fn => page.waitForFunction(fn, null, { polling: 100, timeout: 10000 });
-  const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => v?.schema === 1 && Array.isArray(v.operations)));
+  const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => [1, 2].includes(v?.schema) && Array.isArray(v.operations)));
   async function choose(name, value) {
     const control = label(name); await control.fill(value); await control.blur();
     await control.locator('..').locator('small[title]').waitFor({ state: 'visible', timeout: 10000 });
@@ -23,6 +23,7 @@ async page => {
       const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('AL30C', 'DBXXXX', 'USD', 48, .01), make('GD30', 'DBXXXX', 'ARS', 90000, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100),
         ...['ALUA', 'TXAR', 'TGSU2', 'TGNO4'].map(id => make(id, 'ESXXXX', 'ARS', 100)),
         ...[1, 7].map(days => ({ ...make(`bm_MERV_PESOS_${days}D`, 'RPXXXX', 'ARS', days === 1 ? 18.8 : 20.5), symbolStr: `PESOS - ${days}D`, settlementType: null }))];
+      instruments.push({ ...make('rx_DDF_DLR_SPOT', 'MRIXXX', 'ARS', 1572.5), marketId: 'rx', settlementType: null });
       next.securityStore.securities = instruments;
       const original = next.securityStore.getSecurity;
       next.securityStore.getSecurity = async id => instruments.find(i => i.id === id) || original(id);
@@ -32,12 +33,12 @@ async page => {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
   await page.waitForFunction(() => { const e = document.querySelector('.ro-add-watch input'); return e && !e.disabled; }, null, { polling: 100 });
-  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 8);
-  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D']), 'Default order');
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 10);
+  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D', '(AL30/AL30D) / DLR/SPOT', '(AL30/AL30C) / DLR/SPOT']), 'Default order');
   const rates = page.locator('.ro-table-wrap tr').filter({ hasText: 'PESOS - 7D/PESOS - 1D' });
   assert(!await rates.getByRole('button', { name: 'Sólo monitor' }).isEnabled(), 'Rates cannot open price operations');
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('PESOS - 7D/PESOS - 1D'))?.textContent.includes('20,50% TNA'));
-  checks.push('Eight initial pairs in requested order, live TNA ratio and monitor-only cauciones');
+  checks.push('Ten initial pairs including both dollar spreads in requested order, live TNA ratio and monitor-only cauciones');
   const bounds = await page.evaluate(() => {
     const rect = selector => document.querySelector(selector).getBoundingClientRect();
     return { table: rect('.ro-monitor-table').width, row: rect('.ro-monitor-table tbody tr').height, a: rect('.ro-add-watch input').y, add: rect('.ro-add-watch>button').y, defaults: rect('.ro-defaults').y };
@@ -62,15 +63,15 @@ async page => {
   await page.evaluate(() => {
     const row = [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'));
     window.__ratioMonitorPulses = [];
-    new MutationObserver(() => { for (const index of [1, 2, 3]) { const node = row.cells[index].querySelector('.ct-opt-quote-changed'); if (node) window.__ratioMonitorPulses.push({ index, up: node.classList.contains('ct-opt-quote-up'), down: node.classList.contains('ct-opt-quote-down'), animation: getComputedStyle(node).animationName, background: getComputedStyle(node).backgroundColor }); } }).observe(row, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(() => { for (const index of [1, 2, 4]) { const node = row.cells[index].querySelector('.ct-opt-quote-changed'); if (node) window.__ratioMonitorPulses.push({ index, up: node.classList.contains('ct-opt-quote-up'), down: node.classList.contains('ct-opt-quote-down'), animation: getComputedStyle(node).animationName, background: getComputedStyle(node).backgroundColor }); } }).observe(row, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.lst = 110; s.md.seq++;
   });
-  await page.waitForFunction(() => window.__ratioMonitorPulses.some(p => p.index === 1 && p.up) && window.__ratioMonitorPulses.some(p => p.index === 3 && p.up), null, { polling: 50, timeout: 10000 });
+  await page.waitForFunction(() => window.__ratioMonitorPulses.some(p => p.index === 1 && p.up) && window.__ratioMonitorPulses.some(p => p.index === 4 && p.up), null, { polling: 50, timeout: 10000 });
   assert((await bma.locator('.ro-daily').innerText()) === '+10,00%', 'Daily variation of ratio');
   await page.waitForFunction(() => !document.querySelector('.ro-monitor-table .ct-opt-quote-changed'), null, { polling: 50, timeout: 10000 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.evaluate(() => { window.__ratioMonitorPulses = []; const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.lst = 105; s.md.seq++; });
-  await page.waitForFunction(() => window.__ratioMonitorPulses.some(p => p.index === 3 && p.down && p.animation === 'none' && p.background !== 'rgba(0, 0, 0, 0)'), null, { polling: 50, timeout: 10000 });
+  await page.waitForFunction(() => window.__ratioMonitorPulses.some(p => p.index === 4 && p.down && p.animation === 'none' && p.background !== 'rgba(0, 0, 0, 0)'), null, { polling: 50, timeout: 10000 });
   await page.waitForFunction(() => !document.querySelector('.ro-monitor-table .ct-opt-quote-changed'), null, { polling: 50, timeout: 10000 });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   checks.push('Daily variation uses native reference prices; subtle directional pulses and reduced-motion cleanup');
@@ -84,16 +85,16 @@ async page => {
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'))?.querySelector('.ro-daily').textContent === '0,00%');
   checks.push('Missing or mismatched daily references show a dash while retaining the current ratio');
   await click(button('Quitar par AL30/AL30D'));
-  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 7);
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
   await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
-  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 7);
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
   assert((await book()).watchDefaults === 1, 'Initialization retained');
   await click(button('Agregar pares predeterminados'));
-  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 8);
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 10);
   checks.push('Removed defaults stay removed after reload; explicit restoration adds only missing pairs');
   await choose('Instrumento A', 'SPY'); await choose('Instrumento B', 'GGAL');
   await page.waitForFunction(() => [...document.querySelectorAll('.ro-add-watch button')].some(b => b.textContent === 'Agregar par' && !b.disabled), null, { polling: 100 });
-  await click(button('Agregar par')); await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
+  await click(button('Agregar par')); await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 11);
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('BMA/GGAL'))?.textContent.includes('100,00'));
   checks.push('Exact ticker blur, monitor live prices and percent ratio');
   await click(page.locator('.ro-table-wrap tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación' })); await label('Precio de entrada A').waitFor();
@@ -158,7 +159,7 @@ async page => {
   assert(await label('Precio de entrada A').inputValue() === '100', 'Live updates preserve entry');
   checks.push('Default DDMM, auto sizing, depth, ask selection and frozen entry');
   await click(button('Abrir operación')); await button('Editar').waitFor();
-  let saved = await book(); assert(saved.operations.length === 1 && saved.watch.length === 9, 'Record and watched pairs'); const id = saved.operations[0].id;
+  let saved = await book(); assert(saved.operations.length === 1 && saved.watch.length === 11, 'Record and watched pairs'); const id = saved.operations[0].id;
   assert(saved.operations[0].targetRatio === 2.05, 'Canonical goal');
   await label('Precio cierre A').fill('110'); await label('Precio cierre B').fill('45'); await click(button('Cerrar 25%'));
   await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('Parcial'));
@@ -173,10 +174,10 @@ async page => {
   await button('Abrir operación').first().waitFor(); assert(JSON.stringify((await book()).operations) === original, 'Reload preserves records');
   checks.push('Delete/undo and reload persistence');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'OTHER-DEMO'; });
-  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 8);
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 10);
   assert(await page.locator('.ro-table-wrap tr').filter({ hasText: 'SPY/GGAL' }).count() === 0, 'Account isolation');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'DEMO-NO-BROKER'; });
-  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9); checks.push('Account switch clears old account, seeds defaults separately and restores original local book');
+  await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 11); checks.push('Account switch clears old account, seeds defaults separately and restores original local book');
   const bond = page.locator('tr').filter({ hasText: 'AL30/AL30D' }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
   assert(await label('DDMM A %').inputValue() === '0.01', 'Bond DDMM');
   assert(await label('Conversión para cantidades').count() === 0, 'Mixed currencies require no FX input');
@@ -196,7 +197,7 @@ async page => {
   const mixedId = saved.operations[1].id;
   await page.evaluate(async id => {
     const values = await chrome.storage.local.get(null);
-    for (const [key, value] of Object.entries(values)) if (value?.schema === 1 && value.operations.some(o => o.id === id)) {
+    for (const [key, value] of Object.entries(values)) if ([1, 2].includes(value?.schema) && value.operations.some(o => o.id === id)) {
       const old = value.operations.find(o => o.id === id); old.legs[1].quantity = 80; old.fx = 1600; value.revision = crypto.randomUUID(); await chrome.storage.local.set({ [key]: value });
     }
   }, mixedId);
@@ -242,5 +243,39 @@ async page => {
     assert(chips.length === 2 && chips.every((c,i) => c.ticker === ['BMA','GGAL'][i] && c.side === sides[i] && c.buy === (sides[i] === 'Long') && c.sell === (sides[i] === 'Short')), 'Operation chips preserve A/B order and identify the actual long/short legs');
   }
   checks.push('Operation pairs use green Long and red Short chips in both directions without changing A/B order');
+  await click(button('1 · Monitor'));
+  await click(button('Quitar par (AL30/AL30D) / DLR/SPOT'));
+  await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
+  await page.getByLabel('Comparar A/B con una referencia', { exact: true }).check();
+  await choose('Referencia C · ej. Dólar oficial', 'Dólar oficial');
+  await click(button('Agregar par'));
+  const comparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
+  await comparison.waitFor();
+  await wait(() => [...document.querySelectorAll('.ro-ratio')].some(e => e.textContent.includes('1,75%')));
+  assert((await comparison.innerText()).includes('1.572,50'), 'The comparison shows native official spot alongside MEP bond prices');
+  assert(await comparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Three-price comparisons cannot become two-leg operations');
+  assert((await book()).schema === 2, 'Three-price monitor books reject legacy readers');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 1600; s.md.seq++; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30D) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '0,00%'));
+  const cclComparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30C) / DLR/SPOT' });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30C) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '4,17%'));
+  assert(await cclComparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'The default CCL comparison also remains monitor-only');
+  checks.push('MEP and CCL spreads refresh independently from the same official spot');
+  await page.evaluate(() => mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md.refp = undefined);
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-daily').textContent === '—'));
+  assert(await cclComparison.locator('.ro-ratio').innerText() === '4,17%', 'Missing C reference retains the CCL ratio');
+  await page.evaluate(() => Object.assign(mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md, { refp: 1565, refdStr: '2020-01-01' }));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-daily').title.includes('distintas')));
+  checks.push('Missing or mismatched official daily references hide only the daily variation of both spreads');
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 0; s.md.seq++; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-ratio').textContent === '—'));
+  checks.push('A zero official quote never falls back to unnormalized MEP or CCL');
+  await page.evaluate(() => mainStore.webSocketConnectionStatus = false);
+  await wait(() => !!document.querySelector('.ro-issue')?.textContent.includes('desconectado'));
+  await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); Object.assign(s.md, { lst: 1600, seq: 0, refdStr: mainStore.securityStore.securities.find(s => s.id === 'AL30').md.refdStr }); mainStore.webSocketConnectionStatus = true; });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30C) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '4,17%'));
+  assert(await comparison.locator('.ro-ratio').innerText() === '0,00%', 'MEP comparison restored after official reconnect');
+  checks.push('Disconnect/reconnect preserves both saved comparisons and accepts a reset official quote sequence');
+  checks.push('MEP/official spread, native spot updates, monitor-only restrictions and schema compatibility');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }

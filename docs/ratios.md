@@ -6,9 +6,53 @@ En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ra
 y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
 manual local. Abrir o cerrar un registro no manda órdenes al broker.
 
+## Dólar oficial y brecha contra MEP
+
+El selector encuentra **DLR/SPOT** al buscar **Dólar oficial**, **Dólar USA** o
+**DLR/SPOT**. Se toma el spot nativo que alimenta el último de la cabecera
+**Dólar USA** de A3, sin usar un contrato de futuro ni el producto agrupador.
+Es una referencia de sólo monitor y no admite registrar una operación long/short.
+Si ese spot no está en el catálogo, no se ofrece una cotización alternativa.
+
+Los widgets y registros nuevos incluyen por defecto las brechas **MEP/oficial**
+y **CCL/oficial** con AL30, ambas en porcentaje. Los widgets guardados conservan
+sus filas; en registros existentes del tab, **Agregar pares predeterminados**
+agrega los faltantes sin duplicar ni reordenar. Si falta el spot oficial, se
+omiten las dos brechas y se informa cuáles no pudieron cargarse.
+
+Para agregar manualmente la brecha MEP/oficial, tanto en el Monitor como en el widget:
+
+1. Elegí **AL30** como A y **AL30D** como B, con el plazo que quieras comparar.
+2. Marcá **Comparar A/B con una referencia**.
+3. En **Referencia C**, buscá **Dólar oficial** y seleccioná **DLR/SPOT**.
+4. Agregá el par. El widget propone **Porcentaje (%)**; el Monitor muestra la
+   brecha porcentual. También podés conservar el AL30/AL30D simple en otra fila.
+
+La fila se identifica como **(AL30/AL30D) / DLR/SPOT** y muestra por separado los
+últimos A, B y C. La brecha es `((A / B) / C − 1) × 100`. Por ejemplo, con datos
+ficticios, MEP de 1.600 y oficial de 1.572,50 da **1,75%**; si ambos son 1.600,
+da **0,00%**. En el widget, **Número** muestra `(A / B) / C`.
+
+La referencia es opcional y también puede ser otro instrumento del catálogo.
+Sin último válido de C o con C menor o igual a cero se muestra **—**, sin volver
+al ratio simple. La variación diaria compara la fórmula completa con las tres
+referencias diarias nativas; una referencia ausente o fechas distintas oculta
+sólo esa variación. Los datos se actualizan con las cotizaciones de Matriz y la
+selección queda guardada al recargar.
+
+Las comparaciones con C son de sólo monitor. **Invertir A/B** queda desactivado
+en esas filas para no cambiar inadvertidamente la fórmula completa: editá el
+widget o quitá/agregá la fila del Monitor para elegir otra comparación.
+
+Los guardados con C usan schema 2, que las versiones anteriores no interpretan.
+Al quitar la última referencia C vuelven a schema 1. Después de actualizar la
+extensión, recargá las pestañas de Matriz antes de usar estas comparaciones.
+
+## Pares del monitor
+
 El monitor inicial incluye, en este orden: AL30/AL30D, AL30/AL30C,
 AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
-PESOS - 7D/PESOS - 1D. En registros existentes se agregan sólo los faltantes,
+PESOS - 7D/PESOS - 1D, (AL30/AL30D) / DLR/SPOT y (AL30/AL30C) / DLR/SPOT. En registros existentes se agregan sólo los faltantes,
 sin reordenar ni duplicar los pares personalizados ni modificar operaciones.
 La inicialización se guarda una sola vez: si quitás un par, no reaparece al
 recargar. **Agregar pares predeterminados** permite recuperar los faltantes.
@@ -132,7 +176,8 @@ impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
 ## Agregar y editar pares
 
 Cada widget nuevo comienza, en este orden, con AL30/AL30D, AL30/AL30C,
-AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR y PESOS - 7D/PESOS - 1D.
+AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, PESOS - 7D/PESOS - 1D, (AL30/AL30D) / DLR/SPOT y
+(AL30/AL30C) / DLR/SPOT.
 Se resuelven las especies BYMA exactas del catálogo y se aplica el formato por
 moneda. Si alguna falta o tiene varias coincidencias, se omite ese par y se
 informa en el widget, sin inventar instrumentos. Las filas se pueden editar o

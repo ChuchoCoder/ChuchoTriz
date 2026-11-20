@@ -5,6 +5,21 @@ import { runInNewContext } from 'node:vm';
 import { webcrypto } from 'node:crypto';
 
 const source = readFileSync(new URL('../public/ratio-operations-reader.js', import.meta.url), 'utf8');
+test('finds the dollar header spot by aliases with null settlement and subscribes only to its native price', async () => {
+  const f = fixture(), c = await f.context();
+  f.securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'MRIXXX', md: { lst: 1572.5, refp: 1565, refdStr: '2026-11-19', seq: 1 } },
+    { id: 'rx_DDF_BCRA_A3500', symbolStr: 'Dólar USA', isProduct: true, marketId: 'rx', md: {} });
+  for (const query of ['Dólar oficial', 'Dolar USA', 'DLR/SPOT']) {
+    const r = await f.request('ratioSearch', { contextId: c.contextId, query });
+    assert.equal(r.result.length, 1); assert.equal(r.result[0].id, 'rx_DDF_DLR_SPOT'); assert.equal(r.result[0].monitorOnly, true);
+    assert.equal(r.result[0].amountFactor, undefined);
+  }
+  const q = (await f.quotes(['rx_DDF_DLR_SPOT'])).result.instruments.rx_DDF_DLR_SPOT;
+  assert.equal(q.last, 1572.5); assert.equal(q.reference, 1565); assert.equal(q.referenceDate, '2026-11-19');
+  assert.deepEqual(f.subscriptions, [['md', ['md.rx_DDF_DLR_SPOT']]]);
+  f.securities.at(-2).md.lst = 1573;
+  assert.equal((await f.quotes(['rx_DDF_DLR_SPOT'])).result.instruments.rx_DDF_DLR_SPOT.last, 1573);
+});
 function fixture() {
   let receive, id = 0;
   const replies = [], subscriptions = [];

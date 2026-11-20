@@ -4,6 +4,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 const source = readFileSync(new URL('../public/ratios-reader.js', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
+test('persists a three-price MEP comparison and subscribes to the official dollar spot', async () => {
+  const f = fixture();
+  f.securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, md: { lst: 1572.5, refp: 1565, seq: 1 } });
+  for (const query of ['Dólar oficial', 'Dolar USA', 'DLR/SPOT']) {
+    const r = await f.request('ratiosSearch', { ...await f.args(), query });
+    assert.equal(r.result[0].id, 'rx_DDF_DLR_SPOT'); assert.equal(r.result[0].monitorOnly, true);
+  }
+  await f.add(); const cfg = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: cfg.id, revision: 0, schema: 2, pairs: [
+    { id: 'mep', a: 'a', b: 'b', format: 'number' },
+    { id: 'spread', a: 'a', b: 'b', c: 'rx_DDF_DLR_SPOT', format: 'percent' }
+  ] };
+  const saved = await f.request('ratiosEdit', params); assert.equal(saved.error, undefined);
+  const pair = saved.result.widgets[0].config.pairs[1];
+  assert.equal(saved.result.widgets[0].config.schema, 2, 'old schema-1 readers cannot accept a composite widget');
+  assert.equal(pair.c.id, 'rx_DDF_DLR_SPOT'); assert.equal(saved.result.quotes[pair.c.id].last, 1572.5);
+  assert.ok(f.calls.some(call => Array.isArray(call) && call[1].includes('md.rx_DDF_DLR_SPOT')));
+  assert.deepEqual((await f.ds.getDashboard()).layout.find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.pairs[1], pair);
+  const legacy = await f.request('ratiosEdit', { ...params, schema: undefined, revision: 1, pairs: params.pairs.map(({ c, ...p }) => p) });
+  assert.match(legacy.error, /versión actual/);
+  assert.equal((await f.state()).widgets[0].config.pairs[1].c.id, pair.c.id);
+  const duplicate = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [params.pairs[1], { ...params.pairs[1], id: 'dup' }] });
+  assert.match(duplicate.error, /ya está agregado/);
+  const invalid = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [{ ...params.pairs[1], c: null }] });
+  assert.match(invalid.error, /inválido/);
+});
 function fixture() {
   let receive, id = 0, persisted, failSave = false, saveTimer;
   const calls = [], replies = [];
@@ -40,40 +66,51 @@ function fixture() {
   const add = async () => request('ratiosAdd', await args());
   return { ms, ds, d, controls, originalUpdate, securities, document, window, request, state, args, add, calls, failSave: () => { failSave = true; } };
 }
-const defaultNames = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D'];
+const defaultNames = ['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', '(AL30/AL30D) / DLR/SPOT', '(AL30/AL30C) / DLR/SPOT'];
+const pairName = p => p.c ? `(${p.a.symbol}/${p.b.symbol}) / ${p.c.symbol}` : `${p.a.symbol}/${p.b.symbol}`;
 function completeDefaultCatalog(f) {
+  f.securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, md: { lst: 1572.5, refp: 1565, seq: 1 } });
   f.securities.find(s => s.id === 'c').currency = 'USD';
   for (const symbol of ['GD30', 'BMA', 'GGAL', 'ALUA', 'TXAR', 'PESOS - 7D', 'PESOS - 1D']) {
     f.securities.push({ ...f.securities[0], id: symbol, symbolStr: symbol, settlementType: symbol.startsWith('PESOS') ? null : '2' });
   }
 }
-test('new widgets save all seven defaults in order with native IDs, currencies and independent pair identities', async () => {
+test('new widgets save all nine defaults in order with native IDs, currencies and independent pair identities', async () => {
   const f = fixture(); completeDefaultCatalog(f);
   f.securities.push({ ...f.securities.find(s => s.id === 'BMA'), id: 'rx-bma', marketId: 'rx' });
   await f.add(); const first = (await f.state()).widgets[0].config;
-  assert.deepEqual(first.pairs.map(p => p.a.symbol + '/' + p.b.symbol), defaultNames);
-  assert.deepEqual(first.pairs.map(p => p.format), ['number', 'number', 'percent', 'percent', 'percent', 'percent', 'percent']);
+  assert.deepEqual(first.pairs.map(pairName), defaultNames);
+  assert.deepEqual(first.pairs.map(p => p.format), ['number', 'number', 'percent', 'percent', 'percent', 'percent', 'percent', 'percent', 'percent']);
   assert.equal(first.pairs[4].a.id, 'BMA');
   assert.equal(first.pairs[6].a.settlement, '');
-  assert.equal(new Set(first.pairs.map(p => p.id)).size, 7);
+  assert.equal(new Set(first.pairs.map(p => p.id)).size, 9);
   const saved = (await f.ds.getDashboard()).layout.find(w => w.component === 'ChuchoTrizRatiosWidget');
   assert.deepEqual(saved.settings.chuchotrizRatios, first);
   await f.add(); const state = await f.state();
   assert.deepEqual(state.widgets[0].config, first);
-  assert.equal(new Set(state.widgets.flatMap(w => w.config.pairs.map(p => p.id))).size, 14);
-  const args = { ...await f.args(), widgetId: first.id };
-  await f.request('ratiosEdit', { ...args, revision: 0, pairs: first.pairs.slice(1).map(p => ({ ...p, a: p.a.id, b: p.b.id })) });
-  assert.equal((await f.state()).widgets[0].config.pairs.length, 6);
+  assert.equal(new Set(state.widgets.flatMap(w => w.config.pairs.map(p => p.id))).size, 18);
+  const args = { ...await f.args(), widgetId: first.id, schema: 2 };
+  await f.request('ratiosEdit', { ...args, revision: 0, pairs: first.pairs.slice(1).map(p => ({ ...p, a: p.a.id, b: p.b.id, ...(p.c ? { c: p.c.id } : {}) })) });
+  assert.equal((await f.state()).widgets[0].config.pairs.length, 8);
   await f.request('ratiosEdit', { ...args, revision: 1, pairs: [] });
   assert.equal((await f.state()).widgets[0].config.pairs.length, 0, 'saved empty widgets are never repopulated');
-  assert.equal((await f.state()).widgets[1].config.pairs.length, 7);
+  assert.equal((await f.state()).widgets[1].config.pairs.length, 9);
+});
+test('missing native spot omits only both dollar spreads and never substitutes a matching symbol', async () => {
+  const f = fixture(); completeDefaultCatalog(f);
+  f.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').id = 'unverified-spot';
+  await f.add(); const widget = (await f.state()).widgets[0];
+  assert.deepEqual(widget.config.pairs.map(pairName), defaultNames.slice(0, 7));
+  assert.equal(widget.config.schema, 1);
+  assert.match(widget.issue, /\(AL30\/AL30D\) \/ DLR\/SPOT/);
+  assert.match(widget.issue, /\(AL30\/AL30C\) \/ DLR\/SPOT/);
 });
 test('missing or ambiguous defaults are reported without substituting other instruments', async () => {
   const f = fixture(); completeDefaultCatalog(f);
   f.securities.splice(f.securities.findIndex(s => s.id === 'GGAL'), 1);
   f.securities.push({ ...f.securities[0], id: 'another-al30' }, { id: 'invalid', symbolStr: 123, marketId: 'bm' });
   await f.add(); const widget = (await f.state()).widgets[0];
-  assert.deepEqual(widget.config.pairs.map(p => p.a.symbol + '/' + p.b.symbol), [defaultNames[2], ...defaultNames.slice(5)]);
+  assert.deepEqual(widget.config.pairs.map(pairName), [defaultNames[2], ...defaultNames.slice(5, 7)]);
   assert.match(widget.issue, /AL30\/AL30D/); assert.match(widget.issue, /BMA\/GGAL/);
   await f.request('ratiosEdit', { ...await f.args(), widgetId: widget.config.id, revision: 0, pairs: [] });
   assert.equal((await f.state()).widgets[0].issue, undefined);

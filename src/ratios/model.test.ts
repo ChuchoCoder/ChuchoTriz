@@ -1,5 +1,24 @@
 import { expect, it } from "vitest";
 import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel } from "./model";
+it("compares MEP against the official dollar and uses all three dated references", () => {
+  const a = { last: 80000, reference: 78000, referenceDate: "2026-11-19" };
+  const b = { last: 50, reference: 50, referenceDate: "2026-11-19" };
+  const c = { last: 1572.5, reference: 1565, referenceDate: "2026-11-19" };
+  const result = calculateRatio(a, b, c);
+  expect(result.ratio).toBeCloseTo(1600 / 1572.5);
+  expect(ratioLabel(result.ratio, "percent")).toBe("1,75%");
+  expect(result.change).toBeCloseTo(((1600 / 1572.5) / (1560 / 1565) - 1) * 100);
+  expect(calculateRatio(a, b, { ...c, referenceDate: "2026-11-18" })).toMatchObject({ ratio: result.ratio, referenceIssue: "Referencias de fechas distintas" });
+  expect(calculateRatio(a, b, { last: c.last }).referenceIssue).toContain("referencia");
+  for (const missing of [{}, { last: 0 }, { last: -1 }, { last: Infinity }, { issue: "Mercado desconectado" }]) {
+    expect(calculateRatio(a, b, missing).ratio).toBeUndefined();
+  }
+});
+it("resolves the official-dollar aliases to the native spot identity", () => {
+  const spot = { id: "rx_DDF_DLR_SPOT", symbol: "DLR/SPOT", market: "rx", currency: "ARS", settlement: "Referencia", monitorOnly: true };
+  for (const alias of ["Dólar oficial", "dolar usa", "DLR/SPOT", "Dólar"]) expect(exactTickerMatches(alias, [spot])).toEqual([spot]);
+  expect(instrumentDetail(spot)).toContain("Dólar oficial");
+});
 it("defaults to percent only for matching known currencies and keeps USD and cable distinct", () => {
   const a = { id: "a", symbol: "A", market: "bm", settlement: "2", currency: "ARS" };
   const b = { ...a, id: "b", symbol: "B" };
