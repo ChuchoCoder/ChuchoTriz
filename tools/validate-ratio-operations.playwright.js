@@ -242,7 +242,12 @@ async page => {
     const chips = await sideRows.nth(index).locator('.ro-pair-chips>.ro-chip').evaluateAll(es => es.map(e => ({ ticker:e.querySelector('strong').textContent, side:e.querySelector('span').textContent, buy:e.classList.contains('buy'), sell:e.classList.contains('sell') })));
     assert(chips.length === 2 && chips.every((c,i) => c.ticker === ['BMA','GGAL'][i] && c.side === sides[i] && c.buy === (sides[i] === 'Long') && c.sell === (sides[i] === 'Short')), 'Operation chips preserve A/B order and identify the actual long/short legs');
   }
-  checks.push('Operation pairs use green Long and red Short chips in both directions without changing A/B order');
+  const chipAlignment = await page.locator('.ro-operations-table tbody tr').evaluateAll(es => es.map(e => {
+    const center = selector => { const r = e.querySelector(selector).getBoundingClientRect(); return r.y + r.height / 2; };
+    return !/Abierta|Parcial|Cerrada/.test(e.querySelector('.ro-pair-cell').textContent) && !!e.querySelector('.ro-state') && Math.abs(center('.ro-pair-chips') - center('.ro-actions')) < 1;
+  }));
+  assert(chipAlignment.length && chipAlignment.every(Boolean), 'State has its own column and chips align vertically with row actions');
+  checks.push('Operation pairs use green Long and red Short chips in both directions without changing A/B order; state is separate and chips centered');
   await click(button('1 · Monitor'));
   await click(button('Quitar par (AL30/AL30D) / DLR/SPOT'));
   await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');

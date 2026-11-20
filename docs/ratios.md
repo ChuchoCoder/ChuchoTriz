@@ -136,7 +136,8 @@ movimiento reducido se usa una marca estática breve.
 
 En Monitor y Operaciones abiertas, **Columnas** permite mostrar u ocultar los
 campos opcionales y **Restablecer columnas** recupera la configuración inicial.
-Par y Acciones permanecen visibles. Las preferencias se guardan por cuenta/sitio
+Par y Acciones permanecen visibles; en Operaciones también permanece Estado,
+separado de los chips Long/Short para mantenerlos centrados en la fila. Las preferencias se guardan por cuenta/sitio
 y por grilla, independientemente del registro de operaciones. Ocultar una columna
 por la que se está ordenando vuelve al orden manual.
 

@@ -135,3 +135,19 @@ Cocos muestra Últ. valor en ambas grillas, el selector de C y Columnas;
 la tabla de operaciones mide 879,85 px y el borde derecho restante es 0,8 px
 en ambas tablas (sin gutter reservado). Las siete claves locales mantienen
 el hash agregado anterior. Se conservó la pestaña original y el navegador abierto.
+
+## Estado separado de los chips
+
+Abierta/Parcial/Cerrada pasan a una columna fija **Estado**, ordenable, junto a
+Par/sentido. Los chips quedan en una sola línea y las celdas centradas verticalmente.
+La comprobación focalizada con Playwright cubrió los tres estados en ambos temas:
+diferencia vertical chips/acciones inferior a 0,001 px y chips/estado menor a 0,21 px.
+Ordenar por Estado también se comprobó; el validador general incorpora la
+aserción de alineación para próximas regresiones. Capturas `status-dark.png`
+y `status-light.png`. Build y seguridad PASS. Por ser un cambio de presentación
+se verificó el flujo afectado, sin repetir la suite completa de 33 recorridos.
+
+Cargado y verificado en Cocos: encabezado Estado presente y chips alineados.
+Los 24 archivos coinciden con dist; respaldo previo
+`Free/backups/extension-before-ratio-state-20261120-174056`.
+Las siete claves locales conservaron el hash agregado anterior.
