@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
-import { calculateRatio, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, tickerKey, tradeLabel, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
+import ToolbarIcon from "../ToolbarIcon";
+import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, tickerKey, tradeLabel, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
-type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize";
+type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns";
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
@@ -69,8 +70,40 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
   </div>;
 }
 
+function ColumnOptions({ visible, busy, onChange }: { visible: RatioColumns; busy: boolean; onChange(visible: RatioColumns): void }) {
+  const id = useId(), button = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false), [position, setPosition] = useState({ top: 0, left: 0 });
+  const focusedColumn = useRef<keyof RatioColumns | null>(null);
+  const reposition = useCallback(() => {
+    const anchor = button.current?.getBoundingClientRect();
+    if (!anchor) return;
+    const box = panel.current?.getBoundingClientRect(), width = box?.width || 220, height = box?.height || 150;
+    setPosition({ top: Math.max(8, Math.min(anchor.bottom + 5, window.innerHeight - height - 8)), left: Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8)) });
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    reposition();
+    window.addEventListener("resize", reposition); document.addEventListener("scroll", reposition, true);
+    return () => { window.removeEventListener("resize", reposition); document.removeEventListener("scroll", reposition, true); };
+  }, [open, visible, reposition]);
+  useEffect(() => {
+    if (!busy && focusedColumn.current && panel.current?.matches(":popover-open")) panel.current.querySelector<HTMLInputElement>(`input[data-column="${focusedColumn.current}"]`)?.focus();
+  }, [busy]);
+  return <>
+    <button ref={button} type="button" className="ct-ratios-columns-button" aria-label="Opciones de columnas" title="Mostrar u ocultar columnas" aria-haspopup="dialog" aria-controls={id} aria-expanded={open} popoverTarget={id} disabled={busy} onClick={reposition}><ToolbarIcon name="settings" /></button>
+    <div ref={panel} id={id} popover="auto" role="dialog" aria-label="Columnas del widget de Ratios" className="ct-ratios-column-menu" style={position}
+      onToggle={event => { setOpen(event.newState === "open"); if (event.newState === "open") { focusedColumn.current = null; panel.current?.querySelector<HTMLInputElement>("input")?.focus(); } }}>
+      <strong>Mostrar columnas</strong>
+      {([["lastA", "Último A"], ["lastB", "Último B"], ["referenceC", "Referencia C"]] as const).map(([key, label]) => <label key={key}><input type="checkbox" data-column={key} checked={visible[key]} disabled={busy} onChange={event => { focusedColumn.current = key; onChange({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}
+      {busy && <small role="status">Guardando…</small>}
+    </div>
+  </>;
+}
+
 function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: RatioWidgetState; snapshot: RatiosState; command: Command; search: Search; busy: boolean }) {
   const cfg = widget.config;
+  const columns = widget.columns?.visible ?? defaultRatioColumns;
+  const showReference = columns.referenceC && cfg.pairs.some(p => p.c);
   const [editing, setEditing] = useState<string | null>(cfg.pairs.length ? null : "new");
   const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>(), [c, setC] = useState<RatioInstrument>();
   const [compare, setCompare] = useState(false);
@@ -125,7 +158,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
       </form>}
       {(issue || snapshot.issue || widget.issue) && <p className="ct-ratios-issue" role="status">{issue || snapshot.issue || widget.issue}</p>}
       <div className="ct-ratios-table-wrap"><table>
-        <thead><tr><th>Par A/B</th><th>Último A</th><th>Último B</th>{cfg.pairs.some(p => p.c) && <th>Referencia C</th>}<th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span></th></tr></thead>
+        <thead><tr><th>Par A/B</th>{columns.lastA && <th>Último A</th>}{columns.lastB && <th>Último B</th>}{showReference && <th>Referencia C</th>}<th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span><ColumnOptions visible={columns} busy={busy} onChange={visible => { void run("ratiosColumns", { columnsRevision: widget.columns?.revision ?? 0, columns: visible }); }} /></th></tr></thead>
         <tbody>{cfg.pairs.map(pair => {
           const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id], qc = pair.c ? snapshot.quotes[pair.c.id] : undefined;
           const result = calculateRatio(qa, qb, pair.c ? qc ?? {} : undefined);
@@ -135,10 +168,10 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             <td className="ct-ratios-pair" title={`A: ${instrumentDetail(pair.a)} · B: ${instrumentDetail(pair.b)}\n${clock}`}><strong>{pairLabel(pair)}</strong>
               {age > 15 * 60 * 1000 && <span className="ct-ratios-old" role="img" aria-label="Última operación antigua" title={clock}>◷</span>}
             </td>
-            <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>
-            <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`}>{numberLabel(qb?.last)}</td>
-            {cfg.pairs.some(p => p.c) && <td title={pair.c ? `${pair.c.symbol} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{pair.c ? numberLabel(qc?.last) : "—"}</td>}
-            <td className="ct-ratios-value" title={result.issue || (pair.c ? "(A/B)/C; porcentaje = ((A/B)/C − 1) × 100" : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format)}</td>
+            {columns.lastA && <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
+            {columns.lastB && <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>}
+            {showReference && <td title={pair.c ? `${pair.c.symbol} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{pair.c ? numberLabel(qc?.last) : "—"}</td>}
+            <td className="ct-ratios-value" title={result.issue || (pair.c ? "(A/B)/C; porcentaje = ((A/B)/C − 1) × 100. Entre paréntesis: |A/B − C|, en la unidad de C." : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
             <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>

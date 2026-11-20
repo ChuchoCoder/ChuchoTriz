@@ -11,29 +11,35 @@ export interface RatioConfig { schema: 1 | 2; id: string; revision: number; pair
 export interface RatioQuote {
   last?: number; reference?: number; tradedAt?: number; referenceDate?: string; issue?: string;
 }
-export interface RatioWidgetState { config: RatioConfig; width: number; height: number; issue?: string }
+export interface RatioColumns { lastA: boolean; lastB: boolean; referenceC: boolean }
+export const defaultRatioColumns: RatioColumns = { lastA: true, lastB: true, referenceC: true };
+export interface RatioWidgetState { config: RatioConfig; width: number; height: number; columns?: { revision: number; visible: RatioColumns }; issue?: string }
 export interface RatiosState {
   context: number; dashboardId?: string; canAdd: boolean; connected: boolean;
   widgets: RatioWidgetState[]; quotes: Record<string, RatioQuote>; issue?: string;
 }
 export const emptyState: RatiosState = { context: 0, canAdd: false, connected: false, widgets: [], quotes: {} };
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
-export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote) {
+export interface RatioResult { ratio?: number; absoluteDifference?: number; change?: number; issue?: string; referenceIssue?: string }
+export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote): RatioResult {
   if (a?.issue || b?.issue || c?.issue) return { issue: a?.issue || b?.issue || c?.issue };
   if (!finite(a?.last) || !finite(b?.last)) return { issue: "Sin último precio" };
   if (b.last === 0) return { issue: "El precio de B es cero" };
   if (c && (!finite(c.last) || c.last <= 0)) return { issue: "Sin cotización válida de la referencia C" };
-  const ratio = (a.last / b.last) / (c?.last ?? 1);
-  if (!finite(ratio)) return { issue: "Ratio fuera de rango" };
+  const baseRatio = a.last / b.last;
+  const ratio = baseRatio / (c?.last ?? 1);
+  const absoluteDifference = c ? Math.abs(baseRatio - c.last!) : undefined;
+  if (!finite(ratio) || c && !finite(absoluteDifference)) return { issue: "Ratio fuera de rango" };
+  const current = { ratio, absoluteDifference };
   if (!finite(a.reference) || !finite(b.reference) || a.reference === 0 || b.reference === 0 || c && (!finite(c.reference) || c.reference <= 0)) {
-    return { ratio, referenceIssue: "Sin referencia diaria" };
+    return { ...current, referenceIssue: "Sin referencia diaria" };
   }
   if (new Set([a.referenceDate, b.referenceDate, c?.referenceDate].filter(Boolean)).size > 1) {
-    return { ratio, referenceIssue: "Referencias de fechas distintas" };
+    return { ...current, referenceIssue: "Referencias de fechas distintas" };
   }
   const reference = (a.reference / b.reference) / (c?.reference ?? 1);
   const change = (ratio / reference - 1) * 100;
-  return finite(reference) && reference !== 0 && finite(change) ? { ratio, change } : { ratio, referenceIssue: "Sin referencia diaria válida" };
+  return finite(reference) && reference !== 0 && finite(change) ? { ...current, change } : { ...current, referenceIssue: "Sin referencia diaria válida" };
 }
 export function pairLabel(p: Pick<RatioPair, "a" | "b" | "c">) {
   return p.c ? `(${p.a.symbol}/${p.b.symbol}) / ${p.c.symbol}` : `${p.a.symbol}/${p.b.symbol}`;
@@ -55,14 +61,16 @@ export function numberLabel(value?: number) {
     ? value.toLocaleString("es-AR", { maximumSignificantDigits: 7 })
     : value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 }
-export function ratioLabel(value?: number, format: RatioFormat = "number") {
+export function ratioLabel(value?: number, format: RatioFormat = "number", absoluteDifference?: number) {
   if (!finite(value)) return "—";
+  if (absoluteDifference !== undefined && !finite(absoluteDifference)) return "—";
   const shown = format === "percent" ? (value - 1) * 100 : value;
   if (!finite(shown)) return "—";
   const label = format === "percent" || Math.abs(shown) >= 100
-    ? shown.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? shown.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: format === "percent" && absoluteDifference !== undefined ? "exceptZero" : "auto" })
     : numberLabel(shown);
-  return format === "percent" ? label + "%" : label;
+  const formatted = format === "percent" ? label + "%" : label;
+  return absoluteDifference === undefined ? formatted : `${formatted} (${Math.abs(absoluteDifference).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
 }
 export function tradeLabel(timestamp?: number) {
   if (!finite(timestamp)) return "Hora de última operación no disponible";

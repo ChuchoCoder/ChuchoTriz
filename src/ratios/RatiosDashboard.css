@@ -51,3 +51,14 @@
 }
 
 .ct-ratios .ct-ratios-compare{display:flex;align-items:center;gap:6px;font-size:11px;margin:6px 0}.ct-ratios .ct-ratios-compare input{width:auto}
+
+.ct-ratios .ct-ratios-columns-button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;padding:3px;border:0;border-radius:3px;background:transparent;color:inherit}
+.ct-ratios .ct-ratios-columns-button:hover{background:#039be530}
+.ct-ratios-column-menu{position:fixed;inset:auto;margin:0;width:220px;max-width:calc(100vw - 16px);padding:10px 12px;border:1px solid #8190a5;border-radius:5px;background:var(--ratio-bg,#222c3b);color:var(--ratio-text,#f3f6fa);box-shadow:0 3px 12px #0006;font:12px/1.4 var(--app-font-family,Arial,sans-serif);text-align:left}
+.ct-ratios-column-menu>strong{display:block;margin-bottom:5px}
+.ct-ratios-column-menu label{display:flex;align-items:center;gap:8px;padding:4px 0;font-weight:normal;cursor:pointer}
+.ct-ratios-column-menu input{margin:0;accent-color:#039be5}
+.ct-ratios-column-menu small{display:block;margin-top:4px}
+
+.ct-ratios th:last-child{position:sticky;right:0;z-index:2}
+.ct-ratios td.ct-ratios-actions{position:sticky;right:0;z-index:1;background:var(--ratio-bg);box-shadow:-1px 0 #8190a530}

@@ -1,5 +1,25 @@
 import { expect, it } from "vitest";
 import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel } from "./model";
+it("shows a signed C percentage with an unsigned absolute difference, preserving number format and plain pairs", () => {
+  expect(ratioLabel(1.065, "percent", 104.45)).toBe("+6,50% (104,45)");
+  expect(ratioLabel(.935, "percent", 104.45)).toBe("-6,50% (104,45)");
+  expect(ratioLabel(1, "percent", 0)).toBe("0,00% (0,00)");
+  expect(ratioLabel(1.065, "number", 104.45)).toBe("1,065 (104,45)");
+  expect(ratioLabel(1.065, "percent")).toBe("6,50%");
+  expect(ratioLabel(undefined, "percent", 104.45)).toBe("—");
+  expect(ratioLabel(1.065, "percent", Infinity)).toBe("—");
+});
+it("computes |A/B − C| from current quotes independently of daily references and clears it for invalid C", () => {
+  const a = { last: 80000 }, b = { last: 50 }, c = { last: 1572.5 };
+  const positive = calculateRatio(a, b, c);
+  expect(positive.absoluteDifference).toBe(27.5);
+  expect(ratioLabel(positive.ratio, "percent", positive.absoluteDifference)).toBe("+1,75% (27,50)");
+  expect(calculateRatio({ last: 70000 }, b, c).absoluteDifference).toBe(172.5);
+  expect(calculateRatio(a, b, { last: 1600 }).absoluteDifference).toBe(0);
+  expect(calculateRatio(a, b).absoluteDifference).toBeUndefined();
+  for (const missing of [{}, { last: 0 }, { last: Infinity }, { issue: "Desconectado" }]) expect(calculateRatio(a, b, missing).absoluteDifference).toBeUndefined();
+  expect(calculateRatio({ last: -Number.MAX_VALUE }, { last: 1 }, { last: Number.MAX_VALUE }).ratio).toBeUndefined();
+});
 it("compares MEP against the official dollar and uses all three dated references", () => {
   const a = { last: 80000, reference: 78000, referenceDate: "2026-11-19" };
   const b = { last: 50, reference: 50, referenceDate: "2026-11-19" };

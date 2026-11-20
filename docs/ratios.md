@@ -33,6 +33,16 @@ La fila se identifica como **(AL30/AL30D) / DLR/SPOT** y muestra por separado lo
 ficticios, MEP de 1.600 y oficial de 1.572,50 da **1,75%**; si ambos son 1.600,
 da **0,00%**. En el widget, **Número** muestra `(A / B) / C`.
 
+En las filas con Referencia C, el ratio agrega la diferencia absoluta
+`|A / B − C|` entre paréntesis, en la unidad de cotización de C y con dos
+decimales. El porcentaje conserva su signo: por ejemplo **+6,50% (104,45)**
+o **-6,50% (104,45)**; el número entre paréntesis nunca lleva signo. En el
+widget se respeta el formato elegido: **Número** puede mostrar
+**1,065 (104,45)**. El tab usa porcentaje para las comparaciones con C.
+Las filas sin C conservan su presentación. Ocultar las columnas de precios
+no oculta esta diferencia ni cambia su cálculo; si falta una cotización válida,
+se retiran juntos el ratio y el importe.
+
 La referencia es opcional y también puede ser otro instrumento del catálogo.
 Sin último válido de C o con C menor o igual a cero se muestra **—**, sin volver
 al ratio simple. La variación diaria compara la fórmula completa con las tres
@@ -172,6 +182,14 @@ El panel se mueve desde su título y se redimensiona desde la esquina inferior
 derecha, también con las flechas del teclado sobre ese control.
 El ancho inicial es de 560 px y se puede reducir hasta 360 px. La grilla de Matriz
 impide solapar otros widgets al moverlos: el destino debe tener espacio libre.
+
+El **engranaje del encabezado de Acciones**, a la derecha de la tabla, abre
+**Mostrar columnas**. Podés activar o desactivar por separado **Último A**,
+**Último B** y **Referencia C**. Inicialmente están todas activadas y cada widget
+conserva su elección al recargar el dashboard. Referencia C aparece sólo si hay
+algún par con esa referencia. Ocultar una columna no cambia la fórmula, las
+cotizaciones utilizadas ni la variación diaria. El menú se cierra con Escape,
+con otro clic en el engranaje o al pulsar fuera.
 
 ## Agregar y editar pares
 
