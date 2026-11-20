@@ -151,3 +151,36 @@ Cargado y verificado en Cocos: encabezado Estado presente y chips alineados.
 Los 24 archivos coinciden con dist; respaldo previo
 `Free/backups/extension-before-ratio-state-20261120-174056`.
 Las siete claves locales conservaron el hash agregado anterior.
+
+## Revisión final e integración de main con PR #83
+
+Base final: `69fe8bc16e38995fbc25e2d66c18bcd82597616f`.
+Código integrado probado con árbol limpio:
+`9b48db26a50e2e4cd9eaff88cb466334f0a1fdec`.
+La actualización de este informe no cambia ese código.
+
+Se incorporó #83 y se resolvieron los conflictos del tab, los tests del modelo y
+el validador. Se conserva el importe `|A/B − C|` y su tooltip junto a las columnas
+opcionales de #84, y las preferencias del widget de #83. Sus pruebas de brechas
+negativas e importes que cambian con ratio normalizado constante se ejecutan
+antes de los recorridos de ordenamiento. La limpieza del reloj sintético restaura
+una secuencia creciente. Se corrigió la frase antigua sobre Estado debajo del par.
+
+Revisión independiente por dos ejes después de integrar #83:
+- Estándares: sin hallazgos accionables pendientes.
+- Requisitos: sin hallazgos pendientes; comportamiento de ambos PR conservado.
+
+Validación final:
+- 637 tests PASS: 566 Vitest + 69 Node + 2 QA infra.
+- Seguridad, política/lint, escaneo, build y paquete Free PASS.
+- Auditoría de dependencias: 0 vulnerabilidades.
+- Regresión general compartida: 70 PASS / 0 FAIL, 20/20 suites, complete=true.
+- Tab de ratios: 35 recorridos Playwright PASS, incluida alineación de chips.
+- Widget de ratios: 73 comprobaciones Playwright PASS, incluidas columnas de #83.
+
+Reporte local general:
+`test-results/qa-2026-11-20T20-46-29-320Z/report.md`.
+Los recorridos integrados usan el paquete de producción y datos sintéticos en
+loopback dentro del perfil compartido. La evidencia instalada en Cocos descrita
+arriba corresponde a los ajustes previos de #84; no se reemplazó la instalación
+ni se recargaron las pestañas reales durante esta revisión de la integración.
