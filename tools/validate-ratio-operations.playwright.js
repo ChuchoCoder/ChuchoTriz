@@ -473,6 +473,7 @@ async page => {
   await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/}));await click(button('Todas'));
   await click(page.locator('.ro-operations-table tr[data-row-id="'+manualId+'"]').getByRole('button',{name:'Detalle',exact:true}));
   assert(JSON.stringify(await manual())===manualSnapshot,'Manual close history survives reload');
+  await label('Precio cierre A').fill('110');await label('Precio cierre B').fill('45');
   checks.push('Nominal closes from either leg use remaining quantities, ignore price changes, reject invalid sizes and persist both histories');
   await label('Cantidad cierre B').fill('20');
   await page.evaluate(async id=>{const values=await chrome.storage.local.get(null);for(const [key,value] of Object.entries(values))if(value?.operations?.some(o=>o.id===id)){value.operations.find(o=>o.id===id).targetRatio=2.1;await chrome.storage.local.set({[key]:{...value,revision:crypto.randomUUID()}});}},manualId);
@@ -485,6 +486,7 @@ async page => {
   checks.push('Stale nominal close drafts require a fresh quantity; a full nominal close takes both exact remainders');
   await click(button('1 · Monitor'));
   await click(page.locator('.ro-monitor-table tr').filter({has:button('Invertir BMA/GGAL')}).getByRole('button',{name:'Abrir operación',exact:true}));
+  await page.evaluate(()=>{const s=mainStore.securityStore.securities.find(s=>s.id==='BMA');if(!mainStore.securityStore.securities.some(s=>s.id==='LOT10'))mainStore.securityStore.securities.push({...s,id:'LOT10',symbolStr:'LOT10',refData:{...s.refData,roundLot:10}});});
   await choose('Instrumento A','LOT10');await label('Cantidad A').fill('100');await label('Precio de entrada A').fill('100');await label('Precio de entrada B').fill('50');await click(button('Abrir operación'));await button('Registrar cierre').waitFor();
   const lotCloseId=(await book()).operations.at(-1).id;
   await label('Precio cierre A').fill('110');await label('Precio cierre B').fill('45');
