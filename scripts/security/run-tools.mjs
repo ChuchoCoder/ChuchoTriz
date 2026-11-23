@@ -67,6 +67,40 @@ async function scan(binary, dir, args, scope, input) {
   }
 }
 
+// Exercise the actual pinned scanner and TOML semantics before trusting its verdict.
+async function verifyEmailRule(binary, dir) {
+  const support = ['support', 'github.com'].join('@');
+  const personal = ['fixture', 'mail.vendor.org'].join('@');
+  const account = ['accountId', '12345678'].join(': ');
+  const signoff = `Signed-off-by: dependabot[bot] <${support}>`;
+  const cases = [
+    [signoff, []],
+    [`${signoff}\r\n`, []],
+    [['fixture', 'example.com'].join('@'), []],
+    [['fixture', 'users.noreply.github.com'].join('@'), []],
+    [['noreply', 'github.com'].join('@'), []],
+    [support, ['personal-email']],
+    [personal, ['personal-email']],
+    [signoff.replace('dependabot[bot]', 'contributor'), ['personal-email']],
+    [`+${signoff}`, ['personal-email']],
+    [`${signoff} ${personal}`, ['personal-email']],
+    [`${signoff}\n${personal}`, ['personal-email']],
+    [`${signoff}\n${account}`, ['personal-account-field']],
+  ];
+  const report = join(dir, 'email-rule-fixture.json');
+  for (const [index, [input, expected]] of cases.entries()) {
+    const result = spawnSync(binary, ['stdin', '--config', fileURLToPath(new URL('./outgoing-gitleaks.toml', import.meta.url)),
+      '--ignore-gitleaks-allow', '--redact=100', '--no-banner', '--report-format=json', `--report-path=${report}`],
+    { input, encoding: 'utf8', stdio: ['pipe', 'ignore', 'ignore'], timeout: 10_000 });
+    const findings = JSON.parse(await readFile(report, 'utf8'));
+    const rules = [...new Set(findings.map(finding => finding.RuleID))].sort();
+    if (result.error || result.status !== (expected.length ? 1 : 0) || JSON.stringify(rules) !== JSON.stringify(expected)) {
+      throw new Error(`Gitleaks email-rule regression in fixture ${index + 1}`);
+    }
+  }
+  console.log(`Gitleaks email-rule fixtures passed (${cases.length})`);
+}
+
 // No repository/CI token is passed to these tools. Downloads fail closed on hash mismatch.
 for (const name of prePush ? ['gitleaks'] : ['zizmor', 'gitleaks']) {
   const tool = tools[name];
@@ -105,6 +139,7 @@ for (const name of prePush ? ['gitleaks'] : ['zizmor', 'gitleaks']) {
     }
     if (name === 'zizmor') run(binary, ['--offline', '--no-progress', '--min-severity', 'low', '.github/workflows']);
     else {
+      await verifyEmailRule(binary, dir);
       if (!prePush) await scan(binary, dir, ['git', '.'], 'history');
       if (revisions.length) {
         const config = ['--config', fileURLToPath(new URL('./outgoing-gitleaks.toml', import.meta.url)), '--ignore-gitleaks-allow'];

@@ -11,6 +11,10 @@ regexes = [
   '''(?i)@users\.noreply\.github\.com$''',
   '''(?i)^noreply@github\.com$''',
 ]
+[[rules.allowlists]]
+description = "Exact automated Dependabot sign-off, not a general email exemption"
+regexTarget = "line"
+regexes = ['''^Signed-off-by: dependabot\[bot\] <support@github\.com>\r?$''']
 
 [[rules]]
 id = "ar-tax-or-bank-id"
