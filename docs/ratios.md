@@ -5,6 +5,8 @@
 En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio
 y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
 manual local. Abrir o cerrar un registro no manda órdenes al broker.
+El lector de este tab admite también Matriz 4.24.5, con las mismas verificaciones
+de cuenta, instrumentos y unidades de cotización.
 
 ## Dólar oficial y brecha contra MEP
 
@@ -132,8 +134,17 @@ movimiento reducido se usa una marca estática breve.
   con distinta cantidad B se conserva esa cantidad hasta cambiar A o los
   instrumentos, sin modificar cantidades históricas al corregir otro campo.
 - Cada operación conserva entradas, cantidades, factores y tasas. Su neto incluye
-  los gastos de apertura y el cierre estimado al último precio. Los cierres del
-  25%, 50% o total usan precios reales ingresados y congelan el realizado.
+  los gastos de apertura y el cierre estimado al último precio. En **Registrar
+  cierre**, ingresá los nominales de cualquiera de las patas: la otra se calcula
+  con la proporción que queda abierta, al lote más cercano. Debajo de cada campo
+  se ve la cantidad abierta y la que quedaría después. Los precios de cierre no
+  modifican esas cantidades. Completar todo el remanente de una pata toma
+  exactamente el remanente de la otra.
+  **Registrar cierre** guarda ambas cantidades y sus precios reales, conserva
+  los cierres anteriores y congela el resultado realizado. También se mantienen
+  los accesos **Cerrar 25%**, **Cerrar 50%** y **Cerrar todo**. Cantidades inválidas,
+  mayores al remanente o que no alcanzan un lote impiden el cierre. Si la operación
+  cambia mientras se completa el borrador, hay que volver a ingresar la cantidad.
 - Editar reemplaza el mismo registro y conserva cierres. Tras cierres parciales
   no se cambian instrumentos/sentido/unidades y las cantidades totales deben
   cubrir lo cerrado. Corregir la entrada o gastos recalcula el resultado histórico.

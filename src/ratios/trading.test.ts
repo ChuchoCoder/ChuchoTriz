@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
+import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, closeOperationByQuantity, partialCloseQuantities, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
 import { calculateRatio, pairLabel } from "./model";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
@@ -156,4 +156,57 @@ it("rejects corrupt storage, duplicates, future dates and fractional invalid lot
   for (const invalid of [null, {}, { ...emptyBook(), operations: [null] }, { ...emptyBook(), operations: [operation(), operation()] }]) expect(() => validateBook(invalid)).toThrow();
   const o = operation(); o.legs[0].quantity = 1.1; expect(() => validateOperation(o)).toThrow();
   o.legs[0].quantity = 100; o.openedAt = "2999-01-01T00:00:00.000Z"; expect(() => validateOperation(o)).toThrow();
+});
+
+it("calculates a proportional nominal close from either leg without current prices", () => {
+  const o = operation();
+  expect(partialCloseQuantities(o, 0, 30)).toEqual([30, 60]);
+  expect(partialCloseQuantities(o, 1, 60)).toEqual([30, 60]);
+  const mixed = operation(); mixed.legs[1].instrument.currency = "USD"; mixed.legs[1].quantity = 100;
+  expect(partialCloseQuantities(mixed, 1, 37)).toEqual([37, 37]);
+  mixed.legs[1].quantity = 80;
+  expect(partialCloseQuantities(mixed, 0, 25)).toEqual([25, 20]);
+});
+it("uses the remaining proportion after rounded percentage closes and rounds only the automatic leg", () => {
+  const o = operation(); o.legs[1].quantity = 199;
+  const partial = closeOperation(o, .25, [110, 45], exitAt);
+  expect(partial.legs.map(l => l.exits[0].quantity)).toEqual([25, 49]);
+  expect(partialCloseQuantities(partial, 0, 15)).toEqual([15, 30]);
+  const lots = operation(); lots.legs[0].step = 10; lots.legs[1].step = 5; lots.legs[1].quantity = 195;
+  expect(partialCloseQuantities(lots, 0, 30)).toEqual([30, 60]);
+  expect(partialCloseQuantities(lots, 1, 30)).toEqual([20, 30]);
+  expect(partialCloseQuantities(lots, 0, 100)).toEqual([100, 195]);
+  expect(partialCloseQuantities(lots, 1, 195)).toEqual([100, 195]);
+});
+it("rejects invalid nominal closes and closes below one automatic lot without changing the record", () => {
+  const o = operation(), before = JSON.stringify(o);
+  for (const amount of [0, -1, NaN, Infinity, 1.5, 101, 1e13]) expect(() => partialCloseQuantities(o, 0, amount)).toThrow();
+  o.legs[0].step = 10; expect(() => partialCloseQuantities(o, 0, 25)).toThrow(/múltiplo/);
+  o.legs[0].step = 1; o.legs[1].quantity = 10; o.legs[1].step = 10;
+  expect(() => partialCloseQuantities(o, 0, 1)).toThrow(/lote/);
+  const original = operation();
+  for (const prices of [[0, 10], [10, NaN], [Infinity, 10]]) expect(() => closeOperationByQuantity(original, 0, 25, prices as [number, number], exitAt)).toThrow();
+  expect(JSON.stringify(original)).toBe(before);
+});
+it("persists nominal exit history and keeps realized P&L fixed across subsequent market updates", () => {
+  const original = operation(), snapshot = JSON.stringify(original);
+  const closed = closeOperationByQuantity(original, 1, 60, [110, 45], exitAt);
+  expect(closed.legs.map(l => l.exits)).toEqual([[{ quantity: 30, price: 110, at: exitAt }], [{ quantity: 60, price: 45, at: exitAt }]]);
+  const first = operationPnl(closed, { A: { last: 110 }, B: { last: 45 } })[0];
+  const second = operationPnl(closed, { A: { last: 130 }, B: { last: 40 } })[0];
+  expect(first.realized).toBeCloseTo(1541 * .3); expect(second.realized).toBe(first.realized);
+  expect(second.pending).not.toBe(first.pending); expect(JSON.stringify(original)).toBe(snapshot);
+  expect(validateBook(JSON.parse(JSON.stringify({ ...emptyBook(), operations: [closed] })))).toMatchObject({ operations: [closed] });
+  const done = closeOperationByQuantity(closed, 0, 70, [120, 40], exitAt);
+  expect(isClosed(done)).toBe(true); expect(done.legs.map(l => l.exits.map(e => e.quantity))).toEqual([[30, 70], [60, 140]]);
+  expect(() => closeOperationByQuantity(done, 0, 1, [110, 45], exitAt)).toThrow(/cerrada/);
+});
+it("can finish a historical position with one already closed leg and validates exit dates", () => {
+  const o = operation(); o.legs[1].exits = [{ quantity: 200, price: 45, at: exitAt }];
+  expect(partialCloseQuantities(o, 0, 50)).toEqual([50, 0]);
+  const next = closeOperationByQuantity(o, 0, 50, [110, 45], exitAt);
+  expect(next.legs[1]).toBe(o.legs[1]); expect(next.legs[0].exits[0].quantity).toBe(50);
+  expect(() => partialCloseQuantities(o, 1, 1)).toThrow(/remanente/);
+  expect(() => closeOperationByQuantity(o, 0, 50, [110, 45], at)).not.toThrow();
+  expect(() => closeOperationByQuantity(next, 0, 50, [110, 45], at)).toThrow(/cierres/);
 });

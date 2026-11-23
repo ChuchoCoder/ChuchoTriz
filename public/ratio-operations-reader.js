@@ -13,7 +13,7 @@
   function check(ok, message) { if (!ok) throw new ReadError(message); }
   function context() {
     const ms = window.mainStore, ss = ms?.securityStore, version = document.body?.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1];
-    check(["4.23.16", "4.24.1", "4.24.4"].includes(version), "Versión de Matriz no verificada para operaciones de ratios.");
+    check(["4.23.16", "4.24.1", "4.24.4", "4.24.5"].includes(version), "Versión de Matriz no verificada para operaciones de ratios.");
     check(ss && Array.isArray(ss.securities) && ss.securities.length <= 30000 && typeof ss.getSecurity === "function" && text(ms.profileStore?.activeAccount), "Esperando el catálogo y la cuenta activa de Matriz.");
     const next = [ms, ss, ms.profileStore.activeAccount, ms.dmaWebSocket, ms.webSocketConnectionStatus, version];
     if (!identity || next.some((x, i) => x !== identity[i])) { identity = next; contextId = crypto.randomUUID(); subscribed.clear(); sequences.clear(); }
