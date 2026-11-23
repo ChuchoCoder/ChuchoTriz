@@ -11,7 +11,9 @@ ordenada, movimientos consecutivos por teclado, persistencia del orden manual,
 P&L por moneda, operaciones ocultas, guardados demorados y revisiones concurrentes.
 Los cierres por nominales cubren ingreso desde A/B, proporción del remanente,
 lotes, rechazo de cantidades inválidas, historial tras recarga y borradores
-obsoletos o de otra cuenta.
+obsoletos o de otra cuenta. También verifican P&L ARS/USD con factores y DDMM,
+remanentes históricos desparejos, una pata ya cerrada, doble click y conflictos
+de revisión o cambio de cuenta mientras el cierre espera el lock de guardado.
 Incluye lotes mayores a 1: para un lote de 10, 100 y 110 deben ser válidos,
 105 inválido, y una apertura con 110 debe poder guardarse y eliminarse.
 En Matriz instalada, comprobar selección, precios nativos y tasas por CFI, sin

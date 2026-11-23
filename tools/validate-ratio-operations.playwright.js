@@ -506,6 +506,85 @@ async page => {
   await click(page.locator('.ro-operations-table tr[data-row-id="'+lotCloseId+'"]').getByRole('button',{name:'Detalle',exact:true}));
   assert(await label('Cantidad cierre A').inputValue()===''&&await label('Cantidad cierre B').inputValue()==='','Account switch clears nominal close drafts');
   checks.push('Nominal close inputs enforce source and automatic lots and clear drafts on account changes');
+  const reviewOpen=async (pair,pa,pb)=>{
+    await click(button('1 · Monitor'));
+    await click(page.locator('.ro-monitor-table tr').filter({has:button('Invertir '+pair)}).getByRole('button',{name:'Abrir operación',exact:true}));
+    await label('Cantidad A').fill('100');await label('Precio de entrada A').fill(pa);await label('Precio de entrada B').fill(pb);
+    await click(button('Abrir operación'));await button('Registrar cierre').waitFor();
+    return (await book()).operations.at(-1).id;
+  };
+  const reviewRecord=async id=>(await book()).operations.find(o=>o.id===id);
+  const reviewWaitHistory=async(id,expected)=>page.waitForFunction(({id,expected})=>{
+    const values=JSON.parse(localStorage.getItem('ct-demo-regression')||'{}'),o=Object.values(values).flatMap(b=>b?.operations||[]).find(o=>o.id===id);
+    return JSON.stringify(o?.legs.map(l=>l.exits.map(e=>e.quantity)))===expected;
+  },{id,expected:JSON.stringify(expected)},{polling:100,timeout:10000});
+  const reviewHoldLock=async id=>page.evaluate(async id=>{
+    const values=await chrome.storage.local.get(null),key=Object.entries(values).find(([,v])=>v?.operations?.some(o=>o.id===id))?.[0];
+    if(!key)throw Error('Missing fixture journal');
+    await new Promise(held=>{void navigator.locks.request(key,()=>new Promise(release=>{window.__qaReleaseNominalLock=release;held();}));});
+  },id);
+  const reviewReleaseLock=async()=>page.evaluate(()=>{window.__qaReleaseNominalLock?.();delete window.__qaReleaseNominalLock;});
+  const currencyCloseId=await reviewOpen('AL30/AL30D','80000','50');
+  await label('Precio cierre A').fill('81000');await label('Precio cierre B').fill('49');await label('Cantidad cierre B').fill('40');
+  assert(await label('Cantidad cierre A').inputValue()==='40','Mixed currency nominal close copies equal open quantities without FX');
+  await click(button('Registrar cierre'));await reviewWaitHistory(currencyCloseId,[[40],[40]]);
+  const realizedRow=page.locator('.ro-pnl-lines>div').filter({has:page.getByText('Realizado neto',{exact:true})});
+  await wait(()=>[...document.querySelectorAll('.ro-pnl-lines>div')].some(e=>e.textContent.includes('Realizado neto')&&e.textContent.includes('393,56')&&e.textContent.includes('0,40')));
+  const realizedBeforeMarket=await realizedRow.innerText();
+  await page.evaluate(()=>{const ss=mainStore.securityStore.securities;for(const [id,last] of [['AL30',82000],['AL30D',48]]){const s=ss.find(s=>s.id===id);s.md.lst=last;s.md.seq++;}});
+  await wait(()=>[...document.querySelectorAll('.ro-pnl-lines>div')].some(e=>e.textContent.includes('Remanente neto')&&e.textContent.includes('1.190,28')&&e.textContent.includes('1,19')));
+  assert(await realizedRow.innerText()===realizedBeforeMarket,'Native factors and DDMM produce separately frozen realized ARS/USD P&L');
+  await page.evaluate(async id=>{const values=await chrome.storage.local.get(null);for(const [key,value] of Object.entries(values))if(value?.operations?.some(o=>o.id===id)){value.operations.find(o=>o.id===id).legs[1].quantity=80;await chrome.storage.local.set({[key]:{...value,revision:crypto.randomUUID()}});}},currencyCloseId);
+  await wait(()=>document.querySelector('.ro-detail')?.textContent.includes('40,00 / 80,00'));
+  await label('Cantidad cierre B').fill('20');assert(await label('Cantidad cierre A').inputValue()==='30','Legacy mixed currencies retain the actual remaining proportion 60/40');
+  await click(button('Registrar cierre'));await reviewWaitHistory(currencyCloseId,[[40,30],[40,20]]);
+  await label('Cantidad cierre A').fill('30');assert(await label('Cantidad cierre B').inputValue()==='20','Completing a legacy source takes its exact other remainder');
+  await click(button('Registrar cierre'));await reviewWaitHistory(currencyCloseId,[[40,30,30],[40,20,20]]);
+  checks.push('Mixed-currency nominal closes preserve native factors, DDMM, frozen currency-separated P&L and legacy unequal remainders');
+  const oneLegId=await reviewOpen('BMA/GGAL','100','50');
+  await label('Precio cierre A').fill('110');await label('Precio cierre B').fill('45');
+  await page.evaluate(async id=>{const values=await chrome.storage.local.get(null);for(const [key,value] of Object.entries(values))if(value?.operations?.some(o=>o.id===id)){value.operations.find(o=>o.id===id).legs[1].exits=[{quantity:200,price:45,at:new Date().toISOString()}];await chrome.storage.local.set({[key]:{...value,revision:crypto.randomUUID()}});}},oneLegId);
+  await wait(()=>document.querySelector('[aria-label="Cantidad cierre B"]')?.disabled);
+  await label('Cantidad cierre A').fill('25');assert(await label('Cantidad cierre B').inputValue()==='0','Already-closed counterpart stays at zero and cannot be edited');
+  await click(button('Registrar cierre'));await reviewWaitHistory(oneLegId,[[25],[200]]);
+  await label('Cantidad cierre A').fill('75');await click(button('Registrar cierre'));await reviewWaitHistory(oneLegId,[[25,75],[200]]);
+  checks.push('A historical position with one closed leg finishes without duplicating that leg exit or fees');
+  const revisionCloseId=await reviewOpen('BMA/GGAL','100','50');
+  await label('Precio cierre A').fill('110');await label('Precio cierre B').fill('45');await label('Cantidad cierre A').fill('25');
+  const beforeRejectedClose=JSON.stringify(await reviewRecord(revisionCloseId));
+  await reviewHoldLock(revisionCloseId);
+  try{
+    await click(button('Registrar cierre'));
+    await wait(()=>document.querySelector('.ro-register-close')?.disabled);
+    await page.evaluate(async id=>{const values=await chrome.storage.local.get(null);for(const [key,value] of Object.entries(values))if(value?.operations?.some(o=>o.id===id))await chrome.storage.local.set({[key]:{...value,revision:crypto.randomUUID()}});},revisionCloseId);
+    await reviewReleaseLock();
+    await wait(()=>document.querySelector('.ro-issue')?.textContent.includes('Otra pestaña'));
+    assert(JSON.stringify(await reviewRecord(revisionCloseId))===beforeRejectedClose,'A revision change while awaiting the lock does not append exits');
+  }finally{await reviewReleaseLock();}
+  await page.waitForFunction(()=>document.querySelector('.ro-register-close')?.disabled===false);
+  await button('Registrar cierre').evaluate(e=>{e.click();e.click();});
+  await reviewWaitHistory(revisionCloseId,[[25],[50]]);
+  await wait(()=>document.querySelector('[aria-label="Cantidad cierre A"]')?.value===''&&document.querySelector('[aria-label="Cantidad cierre B"]')?.value==='');
+  assert((await reviewRecord(revisionCloseId)).legs.every(l=>l.exits.length===1),'A double click records each leg exactly once');
+  checks.push('Concurrent revision changes reject a pending nominal close; retry and double click record each exit exactly once');
+  const accountCloseId=await reviewOpen('BMA/GGAL','100','50');
+  await label('Precio cierre A').fill('110');await label('Precio cierre B').fill('45');await label('Cantidad cierre A').fill('25');
+  const beforeAccountClose=JSON.stringify(await reviewRecord(accountCloseId));
+  await reviewHoldLock(accountCloseId);
+  try{
+    await click(button('Registrar cierre'));
+    await page.evaluate(()=>{mainStore.profileStore.activeAccount='OTHER-DEMO';});
+    await wait(()=>document.querySelectorAll('.ro-monitor-table tbody tr').length===10);
+    await reviewReleaseLock();
+    await wait(()=>document.querySelector('.ro-row-handle')?.getAttribute('aria-disabled')==='false');
+    assert(JSON.stringify(await reviewRecord(accountCloseId))===beforeAccountClose,'Account change before save leaves the original operation untouched');
+  }finally{await reviewReleaseLock();}
+  await page.evaluate(()=>{mainStore.profileStore.activeAccount='DEMO-NO-BROKER';});
+  await wait(()=>document.querySelectorAll('.ro-monitor-table tbody tr').length===11&&document.querySelector('.ro-row-handle')?.getAttribute('aria-disabled')==='false');
+  await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/}));await click(button('Todas'));
+  await click(page.locator('.ro-operations-table tr[data-row-id="'+accountCloseId+'"]').getByRole('button',{name:'Detalle',exact:true}));
+  assert(await label('Cantidad cierre A').inputValue()===''&&await label('Cantidad cierre B').inputValue()==='','Returning to the original account never restores a pending close draft');
+  checks.push('Account switching during a locked nominal close cancels the write and clears the draft on return');
   await page.evaluate(()=>{const version=[...document.querySelectorAll('main p')].find(e=>e.textContent==='Versión: 4.24.4');if(!version)throw Error('Missing fixture version');version.textContent='Versión: 4.24.5';});
   const versionContext=await page.evaluate(()=>new Promise((resolve,reject)=>{
     const channel='qa-version-'+crypto.randomUUID(),id=crypto.randomUUID();
