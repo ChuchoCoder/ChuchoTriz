@@ -1,5 +1,26 @@
 # Ratios de instrumentos
 
+## Abrir el gráfico nativo
+
+Cada fila del widget Ratios, del Monitor y de Operaciones abiertas ofrece un
+icono de gráfico. Abre una pestaña nueva del mismo broker con A como instrumento
+principal, velas de 5 minutos y el indicador nativo Ratio configurado como
+`cierre de A / cierre de B`. Conserva los IDs, el orden y las liquidaciones del par.
+
+B se agrega como instrumento a comparar en un eje izquierdo independiente,
+con precios numéricos, sin convertir la escala a porcentajes. Si la fila tiene
+referencia C, se compara C en ese eje en lugar de B. El indicador Ratio sigue
+mostrando A/B; un aviso aclara que no se divide por C. Tampoco reproduce el
+formato porcentual `(ratio − 1) × 100` de la grilla.
+
+La apertura espera al gráfico nativo, reutiliza estudios coincidentes y conserva
+los demás. Si Matriz no puede distinguir el símbolo exacto de otra liquidación
+o mercado, muestra un error. No agrega el indicador con un símbolo alternativo.
+La disponibilidad del histórico depende del broker; la creación del indicador
+no garantiza datos en cada intervalo. No se guardan estudios ni se envían órdenes
+desde esta acción. Funciona con las versiones de Matriz verificadas 4.23.16,
+4.24.1 y 4.24.4, con comprobaciones del contrato del gráfico en tiempo de ejecución.
+
 ## Monitor y registro de operaciones
 
 En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio

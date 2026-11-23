@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
+import { RatioChartLink } from "./RatioChart";
 import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, tickerKey, tradeLabel, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
@@ -176,6 +177,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>
             <td className="ct-ratios-actions">
+              <RatioChartLink pair={pair} />
               <button type="button" aria-label={`Editar ${pairLabel(pair)}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
               <button type="button" aria-label={`Invertir ${pairLabel(pair)}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
               <button type="button" aria-label={`Eliminar ${pairLabel(pair)}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
