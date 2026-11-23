@@ -76,6 +76,8 @@ async function verifyEmailRule(binary, dir) {
   const cases = [
     [signoff, []],
     [`${signoff}\r\n`, []],
+    [`header\n${signoff}\nfooter`, []],
+    [`header\r\n${signoff}\r\nfooter`, []],
     [['fixture', 'example.com'].join('@'), []],
     [['fixture', 'users.noreply.github.com'].join('@'), []],
     [['noreply', 'github.com'].join('@'), []],
@@ -83,8 +85,10 @@ async function verifyEmailRule(binary, dir) {
     [personal, ['personal-email']],
     [signoff.replace('dependabot[bot]', 'contributor'), ['personal-email']],
     [`+${signoff}`, ['personal-email']],
-    [`${signoff} ${personal}`, ['personal-email']],
+    [`${signoff} ${personal}`, ['personal-email', 'personal-email']],
     [`${signoff}\n${personal}`, ['personal-email']],
+    [`${personal}\n${signoff}\nfooter`, ['personal-email']],
+    [`${personal}\n${signoff}\n${personal}`, ['personal-email', 'personal-email']],
     [`${signoff}\n${account}`, ['personal-account-field']],
   ];
   const report = join(dir, 'email-rule-fixture.json');
@@ -93,7 +97,7 @@ async function verifyEmailRule(binary, dir) {
       '--ignore-gitleaks-allow', '--redact=100', '--no-banner', '--report-format=json', `--report-path=${report}`],
     { input, encoding: 'utf8', stdio: ['pipe', 'ignore', 'ignore'], timeout: 10_000 });
     const findings = JSON.parse(await readFile(report, 'utf8'));
-    const rules = [...new Set(findings.map(finding => finding.RuleID))].sort();
+    const rules = findings.map(finding => finding.RuleID).sort();
     if (result.error || result.status !== (expected.length ? 1 : 0) || JSON.stringify(rules) !== JSON.stringify(expected)) {
       throw new Error(`Gitleaks email-rule regression in fixture ${index + 1}`);
     }
