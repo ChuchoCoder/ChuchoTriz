@@ -122,9 +122,31 @@ export function correctOperation(previous: RatioOperation, next: RatioOperation)
 }
 export function closeOperation(o: RatioOperation, fraction: number, prices: [number, number], at: string): RatioOperation {
   if (isClosed(o) || ![.25, .5, 1].includes(fraction) || !prices.every(positive)) throw Error("Revisá los dos precios de cierre.");
-  const legs = o.legs.map((l, i) => {
+  const quantities = o.legs.map(l => {
     const q = fraction === 1 ? remaining(l) : Math.floor(remaining(l) * fraction / l.step) * l.step;
     if (q <= 0 && fraction !== 1) throw Error("El cierre parcial debe alcanzar al menos un lote de cada pata.");
+    return q;
+  }) as [number, number];
+  return recordClose(o, quantities, prices, at);
+}
+/** Preserve the open quantities' proportion, independently of currency or current prices. */
+export function partialCloseQuantities(o: RatioOperation, leg: 0 | 1, amount: number): [number, number] {
+  validateOperation(o);
+  if (![0, 1].includes(leg) || isClosed(o)) throw Error("La operación ya está cerrada o la pata no es válida.");
+  const source = o.legs[leg], other = o.legs[1 - leg], rest = remaining(source), otherRest = remaining(other);
+  if (!quantity(amount) || amount % source.step !== 0) throw Error(`Ingresá una cantidad positiva, múltiplo de ${source.step}, en la pata ${leg === 0 ? "A" : "B"}.`);
+  if (amount > rest) throw Error("La cantidad a cerrar supera el remanente de esa pata.");
+  const calculated = amount === rest ? otherRest : Math.round((amount / rest) * (otherRest / other.step)) * other.step;
+  if (otherRest > 0 && calculated === 0) throw Error("El cierre debe alcanzar al menos un lote de la otra pata.");
+  return leg === 0 ? [amount, calculated] : [calculated, amount];
+}
+export function closeOperationByQuantity(o: RatioOperation, leg: 0 | 1, amount: number, prices: [number, number], at: string): RatioOperation {
+  return recordClose(o, partialCloseQuantities(o, leg, amount), prices, at);
+}
+function recordClose(o: RatioOperation, quantities: [number, number], prices: [number, number], at: string): RatioOperation {
+  if (!prices.every(positive)) throw Error("Revisá los dos precios de cierre.");
+  const legs = o.legs.map((l, i) => {
+    const q = quantities[i];
     if (q === 0) return l;
     return { ...l, exits: [...l.exits, { quantity: q, price: prices[i], at }] };
   }) as RatioOperation["legs"];
