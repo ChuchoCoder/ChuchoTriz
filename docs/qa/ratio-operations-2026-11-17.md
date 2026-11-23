@@ -400,3 +400,45 @@ queda vacío con aviso; no se toma último ni se salta a un nivel más profundo.
   `b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
 - Captura recortada: `test-results/direction-book-cocos.png`. Sin apertura
   registrada ni envío de órdenes en la verificación del broker.
+
+## Cierres por nominales — 23/11/2026
+
+Implementado en rama `codex/ratio-close-nominals`, base main `4040034`.
+El detalle permite ingresar la cantidad de A o B y calcula la otra según los
+remanentes guardados, al lote más cercano. La cantidad ingresada no se redondea.
+Se muestran Abiertos/Luego; completar una pata toma exactamente el remanente
+de la otra. Se mantienen los accesos de 25%, 50% y total y el mismo esquema de
+historial. El cambio de precios no redimensiona cantidades. El registro conserva
+los cierres previos, gastos, P&L por moneda y guardas de cuenta/revisión/WebLocks.
+
+Validación:
+- 643 tests PASS: 571 Vitest, 70 Node y 2 QA infra; cinco casos nuevos del modelo
+  y uno del contrato de lectura de 4.24.5. Seguridad/lint, build/paquete y auditoría
+  PASS, sin vulnerabilidades.
+- 39 recorridos del tab PASS, incluidos fuente A/B, remanentes tras varios cierres,
+  lotes, entradas inválidas, recarga, cambio de cuenta y borradores obsoletos.
+- Regresión general: 70 PASS / 0 FAIL, 20/20 suites, complete=true, sobre el código
+  de cierre `e914a9b80c51e7a083e87b4502a78de6f53d77e0`, antes de agregar únicamente
+  4.24.5 a la allowlist del lector del tab. Reporte local:
+  `test-results/qa-2026-11-23T12-32-43-431Z/report.md`.
+- Revisión independiente sin hallazgos pendientes. Se corrigió una aserción del
+  test de versión para esperar una respuesta nueva del lector real.
+- Capturas sintéticas `test-results/nominal-close-dark.png` y
+  `nominal-close-light.png`; detalle sin desborde en 420 px.
+
+Cocos se actualizó a Matriz 4.24.5. Se verificaron de sólo lectura el catálogo,
+contexto de cuenta, getSecurity, suscripción pública y los factores/lotes de
+BMA/GGAL (1/1) y AL30/AL30D (0,01/1). La muestra no tenía últimos ni puntas
+publicados; no se sustituye ese faltante ni se afirma frescura de precios reales.
+Se agregó esa versión específica sólo al lector del tab Ratios. El test nuevo
+mantiene el rechazo de contexto de cuenta anterior y la falta de precios como
+faltante. No se amplió la lista de otros lectores ni las capacidades de ejecución.
+
+Instalado en el perfil Free compartido, mismo ID/ruta, compilación de desarrollo
+0.0.28. Los 24 archivos coinciden por hash con dist. Respaldos:
+`Free/backups/extension-before-ratio-nominal-close-20261123-093434` y
+`Free/backups/extension-before-ratio-reader245-20261123-094553`.
+En Cocos 4.24.5 se comprobó la presencia de los dos campos y el cálculo automático
+de B al ingresar en A; se limpió el borrador sin registrar cierres. Las siete
+claves locales conservan el hash agregado
+`b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
