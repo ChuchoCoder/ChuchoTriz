@@ -39,3 +39,8 @@ autoría de los commits salientes. Configurá el correo noreply de GitHub como
 `user.email` si usás una dirección privada para trabajar. Revisá manualmente
 nombres, domicilios, saldos y posiciones de personas reales, además de archivos
 con formatos distintos a los contemplados.
+
+La regla de correos admite la línea exacta de firma automática de Dependabot.
+La excepción se limita a esa línea completa: no admite el correo de soporte
+fuera de la firma ni otros correos junto a ella. Antes de cada escaneo se
+comprueban estos límites con el Gitleaks fijado por hash y casos de regresión.
