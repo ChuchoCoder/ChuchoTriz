@@ -5,6 +5,8 @@
 En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio
 y Operaciones abiertas. Este tab usa cotizaciones nativas de Matriz y un registro
 manual local. Abrir o cerrar un registro no manda órdenes al broker.
+El lector de este tab admite también Matriz 4.24.5, con las mismas verificaciones
+de cuenta, instrumentos y unidades de cotización.
 
 ## Dólar oficial y brecha contra MEP
 

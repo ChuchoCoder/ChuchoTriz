@@ -20,7 +20,7 @@ test('finds the dollar header spot by aliases with null settlement and subscribe
   f.securities.at(-2).md.lst = 1573;
   assert.equal((await f.quotes(['rx_DDF_DLR_SPOT'])).result.instruments.rx_DDF_DLR_SPOT.last, 1573);
 });
-function fixture() {
+function fixture(version = '4.24.4') {
   let receive, id = 0;
   const replies = [], subscriptions = [];
   const s = (id, cfiCode, currency = 'ARS', factor = 1) => ({ id, symbolStr: id, currency, cfiCode, marketId: 'bm', settlementType: '2',
@@ -30,7 +30,7 @@ function fixture() {
     securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) }, dmaWebSocket: { addSubscription: (...args) => subscriptions.push(args) } };
   for (const name of ['orderStore', 'positionStore', 'balanceStore', 'executionStore']) Object.defineProperty(ms, name, { get() { throw Error('Forbidden capability'); } });
   const window = { mainStore: ms, addEventListener: (_, fn) => { receive = fn; }, postMessage: data => replies.push(structuredClone(data)) };
-  const document = { currentScript: { dataset: { channel: 'test' } }, body: { innerText: 'Versión: 4.24.4' } };
+  const document = { currentScript: { dataset: { channel: 'test' } }, body: { innerText: `Versión: ${version}` } };
   const timers = new Set();
   runInNewContext(source, { window, document, location: { origin: 'https://matriz.cocos.xoms.com.ar' }, crypto: webcrypto, TextEncoder,
     setTimeout: fn => { timers.add(fn); return fn; }, clearTimeout: fn => timers.delete(fn) });
@@ -117,4 +117,19 @@ test('bounds a stalled lookup and recovers after retirement without publishing i
   assert.equal((await f.quotes(['BMA'])).result.instruments.BMA.last, 100);
   release({ ...f.securities[0], md: { lst: 999 } });
   assert.equal((await f.quotes(['BMA'])).result.instruments.BMA.last, 100);
+});
+
+test('accepts the verified 4.24.5 catalog contract without inventing pre-open prices or weakening account checks', async () => {
+  const f = fixture('4.24.5'), c = await f.context();
+  assert.match(c.storageScope, /^[a-f0-9]{64}$/);
+  const search = (await f.request('ratioSearch', { contextId: c.contextId, query: 'AL30' })).result;
+  assert.deepEqual(search.map(s => [s.currency, s.amountFactor, s.quantityStep]), [['ARS', .01, 1], ['USD', .01, 1]]);
+  f.securities[0].md = {};
+  const empty = (await f.quotes(['BMA'])).result.instruments.BMA;
+  assert.equal(empty.last, undefined); assert.equal(empty.bid, undefined); assert.equal(empty.ask, undefined); assert.equal(empty.tradedAt, undefined);
+  Object.assign(f.securities[0].md, { lst: 110, seq: 11, bid: 109, bsz: 10, ask: 111, asz: 20 });
+  const quoted = (await f.quotes(['BMA'])).result.instruments.BMA;
+  assert.equal(quoted.last, 110); assert.deepEqual(quoted.bid, { price: 109, size: 10 });
+  f.ms.profileStore.activeAccount = 'opaque-test-B';
+  assert.match((await f.request('ratioQuotes', { contextId: c.contextId, ids: ['BMA'] })).error, /cuenta|conexión/);
 });

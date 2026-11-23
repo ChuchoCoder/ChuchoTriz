@@ -506,5 +506,17 @@ async page => {
   await click(page.locator('.ro-operations-table tr[data-row-id="'+lotCloseId+'"]').getByRole('button',{name:'Detalle',exact:true}));
   assert(await label('Cantidad cierre A').inputValue()===''&&await label('Cantidad cierre B').inputValue()==='','Account switch clears nominal close drafts');
   checks.push('Nominal close inputs enforce source and automatic lots and clear drafts on account changes');
+  await page.evaluate(()=>{const version=[...document.querySelectorAll('main p')].find(e=>e.textContent==='Versión: 4.24.4');if(!version)throw Error('Missing fixture version');version.textContent='Versión: 4.24.5';});
+  const versionContext=await page.evaluate(()=>new Promise((resolve,reject)=>{
+    const channel='qa-version-'+crypto.randomUUID(),id=crypto.randomUUID();
+    const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',receive);window.postMessage({channel,kind:'detach'},location.origin);};
+    const receive=event=>{const m=event.data;if(event.source===window&&m?.channel===channel&&m.kind==='response'&&m.id===id){cleanup();resolve(m);}};
+    const timer=setTimeout(()=>{cleanup();reject(Error('No version context response'));},8000);
+    window.addEventListener('message',receive);window.__chuchotrizRatioOperations.attach(channel);
+    window.postMessage({channel,id,kind:'request',method:'ratioContext',params:{storageSalt:'a'.repeat(64)}},location.origin);
+  }));
+  assert(!versionContext.error&&typeof versionContext.result?.contextId==='string'&&/^[a-f0-9]{64}$/.test(versionContext.result.storageScope),'A fresh reader request accepts verified 4.24.5');
+  assert(JSON.stringify((await book()).operations.find(o=>o.id===lotCloseId).legs.map(l=>l.exits[0].quantity))==='[30,60]','Verified 4.24.5 context retains the same local journal');
+  checks.push('Verified Matriz 4.24.5 catalog context retains the journal and existing read-only guards');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
