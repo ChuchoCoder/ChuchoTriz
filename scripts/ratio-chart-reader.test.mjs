@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
 const source = readFileSync(new URL('../public/ratio-chart-reader.js', import.meta.url), 'utf8');
-function fixture({ c, ready = true, version = '4.23.16', create } = {}) {
+function fixture({ c, ready = true, version = '4.23.16', create, comparisons = ['Overlay'], hiddenComparisons = false, widgetReady = true } = {}) {
   const calls = [], replies = [], listeners = new Set(), studies = new Map();
   let id = 0, resolution = 'D', chartType = 2, present = ready;
   const params = { a: 'a', b: 'b', ...(c ? { c } : {}) };
@@ -25,16 +25,19 @@ function fixture({ c, ready = true, version = '4.23.16', create } = {}) {
       getInputValues: () => Object.entries(s.inputs).map(([id, value]) => ({ id, value })),
       priceScale: () => s.scale, changePriceScale(value) { s.options = { priceScale: value }; },
       setVisible(value) { s.visible = value; },
-      paneIndex: () => s.pane ?? (s.name === 'Overlay' ? 0 : 1),
+      paneIndex: () => s.pane ?? (['Overlay', 'Compare'].includes(s.name) ? 0 : 1),
     }; },
     async createStudy(name, forceOverlay, lock, inputs, overrides, options) {
       calls.push({ name, forceOverlay, inputs, options });
+      if (name !== 'Ratio' && !comparisons.includes(name)) throw Error('Comparison indicator unavailable: ' + name);
       if (create) await create(name);
       return add(name, inputs, options);
     },
     removeEntity(id) { studies.delete(id); },
   };
-  const element = { __reactFiberTest: { stateNode: { props: { security: { id: 'a' } }, widget: { activeChart: () => chart } } } };
+  const widget = { _ready: widgetReady, activeChart: () => chart, getStudiesList: () => ['Ratio', ...(hiddenComparisons ? [] : comparisons)],
+    getStudyInputs(name) { if (comparisons.includes(name)) return [{ id: 'symbol' }]; throw Error('Unknown indicator'); } };
+  const element = { __reactFiberTest: { stateNode: { props: { security: { id: 'a' } }, widget } } };
   const ms = { securityStore: { securities } };
   for (const key of ['orderStore', 'positionStore', 'balanceStore']) Object.defineProperty(ms, key, { get() { throw Error('Forbidden: ' + key); } });
   const window = { mainStore: ms, postMessage: msg => replies.push(msg), addEventListener: (_, fn) => listeners.add(fn), removeEventListener: (_, fn) => listeners.delete(fn) };
@@ -44,7 +47,7 @@ function fixture({ c, ready = true, version = '4.23.16', create } = {}) {
   const message = data => Promise.all([...listeners].map(fn => fn({ source: window, origin: location.origin, data: { channel: 'test', ...data } })));
   const request = async () => { const id = 'request-' + (++idCounter); await message({ kind: 'request', method: 'ratioChart', id, params }); return replies.find(r => r.id === id); };
   let idCounter = 0;
-  return { request, message, calls, studies, add, params, replies, securities, url, listeners, mainScale, chart, showChart() { present = true; } };
+  return { request, message, calls, studies, add, params, replies, securities, url, listeners, mainScale, chart, widget, showChart() { present = true; } };
 }
 
 test('opens A/B with B compared on a new left numeric scale and 5-minute candles', async () => {
@@ -63,6 +66,40 @@ test('compares C on the left while the native Ratio remains A/B', async () => {
   const f = fixture({ c: 'c' }); const r = await f.request();
   assert.equal(r.result.comparison, 'C');
   assert.equal(f.calls[1].inputs.symbol2, 'B'); assert.equal(f.calls[2].inputs.symbol, 'C');
+});
+
+test('uses the available comparison indicator when Matriz offers Compare instead of Overlay', async () => {
+  const f = fixture({ comparisons: ['Compare'] });
+  assert.equal((await f.request()).result?.comparison, 'B');
+  const comparison = [...f.studies.values()].find(s => s.name === 'Compare');
+  assert.equal(comparison.inputs.symbol, 'B'); assert.equal(comparison.inputs.source, 'close');
+  assert.equal(comparison.options.priceScale, 'new-left'); assert.equal(comparison.scale.getMode(), 0);
+  await f.request(); assert.equal(f.studies.size, 2);
+});
+
+test('keeps the captured request when Matriz canonicalizes its URL while setting the interval', async () => {
+  const f = fixture({ c: 'c' }), original = f.chart.setResolution;
+  f.chart.setResolution = async value => { await original(value); f.url.search = '?interval=5'; };
+  assert.equal((await f.request()).result?.comparison, 'C');
+});
+
+test('reports missing comparison capability without changing the chart', async () => {
+  const f = fixture({ comparisons: [] });
+  assert.match((await f.request()).error, /indicadores Ratio y comparación/);
+  assert.equal(f.calls.length, 0);
+});
+
+test('detects hidden comparison indicators by their native input metadata', async () => {
+  const f = fixture({ hiddenComparisons: true });
+  assert.equal((await f.request()).result?.comparison, 'B');
+});
+
+test('waits for the native widget to finish initializing before touching the chart', async () => {
+  const f = fixture({ widgetReady: false }); const pending = f.request();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.calls.length, 0);
+  f.widget._ready = true;
+  assert.equal((await pending).result?.comparison, 'B');
 });
 
 test('keeps unrelated studies and reuses the requested studies without duplicates on retry', async () => {
@@ -91,11 +128,18 @@ test('refuses an ambiguous native ticker rather than selecting another settlemen
   assert.match((await f.request()).error, /liquidación o mercado/); assert.equal(f.calls.length, 0);
 });
 
-test('checks C, route identity and supported native versions before any creation', async () => {
+test('checks C and route identity before any creation', async () => {
   const missing = fixture({ c: 'missing' }); assert.match((await missing.request()).error, /no está disponible/);
   const badRoute = fixture(); badRoute.url.searchParams.set('ctRatio', 'other'); assert.match((await badRoute.request()).error, /canceló/);
-  const version = fixture({ version: 'unknown' }); assert.match((await version.request()).error, /versión/);
-  assert.equal(missing.calls.length + badRoute.calls.length + version.calls.length, 0);
+  assert.equal(missing.calls.length + badRoute.calls.length, 0);
+});
+
+test('configures the native chart regardless of the release or absent version label', async () => {
+  for (const version of ['4.24.5', '99.0-beta', '']) {
+    const f = fixture({ version });
+    assert.equal((await f.request()).result?.comparison, 'B', version || 'no footer');
+    assert.equal(f.chart.resolution(), '5');
+  }
 });
 
 test('cleans up a study whose creation completes after the caller detached', async () => {

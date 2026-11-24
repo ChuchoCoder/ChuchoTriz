@@ -11,13 +11,12 @@
   class PositionReadError extends Error {}
   const check = (condition, message) => { if (!condition) throw new PositionReadError(message); };
   function context() {
-    const ms = window.mainStore, version = document.body.innerText.match(/Versi[oó]n:\s*([\d.]+)/)?.[1];
-    check(["4.24.1", "4.24.4"].includes(version), "Versión de Matriz no verificada para importar posiciones.");
+    const ms = window.mainStore;
     check(ms?.portfolioStore && ms.securityStore && typeof ms.portfolioStore.getDetailedPositionReport === "function" &&
       typeof ms.profileStore?.activeAccount === "string" && ms.profileStore.activeAccount.length > 0,
     "La posición de Matriz todavía no está disponible.");
     const current = { ms, portfolio: ms.portfolioStore, securities: ms.securityStore, account: ms.profileStore.activeAccount,
-      collateral: ms.profileStore.context?.riskDetailedCollateralEnabled, version };
+      collateral: ms.profileStore.context?.riskDetailedCollateralEnabled };
     if (!previousContext || Object.keys(current).some(key => previousContext[key] !== current[key])) {
       previousContext = current; contextId = crypto.randomUUID();
     }
@@ -123,7 +122,8 @@
     } catch { underlyingUnavailable = true; }
     assertCurrent(operation);
     check(report === portfolio.detailedPositionReport, "Cambió el reporte durante la lectura. Volvé a cargar la posición.");
-    return { contextId: operation.context.contextId, storageScope, capturedAt: Date.now(), reportedAt, version: operation.context.version,
+    return { contextId: operation.context.contextId, storageScope, capturedAt: Date.now(), reportedAt,
+      version: document.body?.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1] || "",
       positions: [...quantities].map(([securityId, quantity]) => ({ securityId, quantity })),
       underlyingQuantity: underlyingUnavailable ? undefined : nominalQuantity, ...(underlyingUnavailable && { underlyingUnavailable }) };
   }

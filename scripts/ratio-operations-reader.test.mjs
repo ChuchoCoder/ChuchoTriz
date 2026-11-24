@@ -5,6 +5,19 @@ import { runInNewContext } from 'node:vm';
 import { webcrypto } from 'node:crypto';
 
 const source = readFileSync(new URL('../public/ratio-operations-reader.js', import.meta.url), 'utf8');
+
+test('ratio reads depend on capabilities, not a release number or a visible version footer', async () => {
+  const f = fixture(), initial = await f.context();
+  for (const footer of ['Versión: 4.24.5', 'Versión: 99.0-beta', '']) {
+    f.document.body.innerText = footer;
+    const current = await f.context();
+    assert.ok(current, footer || 'no footer');
+    assert.equal(current.contextId, initial.contextId);
+    assert.equal((await f.quotes(['BMA'])).result.instruments.BMA.last, 100);
+  }
+  f.ms.securityStore.getSecurity = undefined;
+  assert.match((await f.request('ratioContext', { storageSalt: 'a'.repeat(64) })).error, /Esperando el catálogo/);
+});
 test('finds the dollar header spot by aliases with null settlement and subscribes only to its native price', async () => {
   const f = fixture(), c = await f.context();
   f.securities.push({ id: 'rx_DDF_DLR_SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'MRIXXX', md: { lst: 1572.5, refp: 1565, refdStr: '2026-11-19', seq: 1 } },
@@ -60,10 +73,9 @@ test('isolates scopes and retires contexts on account, socket or connectivity ch
   assert.match((await f.quotes(['BMA'])).result.instruments.BMA.issue, /desconectado/); assert.equal(f.subscriptions.length, 0);
   f.ms.webSocketConnectionStatus = true; await f.quotes(['BMA']); assert.equal(f.subscriptions.length, 2);
 });
-test('rejects unknown methods, oversized requests and unverified Matriz versions', async () => {
+test('rejects unknown methods and oversized requests', async () => {
   const f = fixture(); assert.match((await f.request('sendOrder')).error, /no permitido/);
   assert.match((await f.quotes(Array.from({ length: 101 }, (_, i) => String(i)))).error, /100/);
-  f.document.body.innerText = 'Versión: 99'; assert.match((await f.request('ratioContext', { storageSalt: 'a'.repeat(64) })).error, /Versión/);
 });
 test('keeps native top separate from incomplete extra book levels and rejects regressing sequence', async () => {
   const f = fixture(); f.securities[0].book = { bidBook1: 98, bszBook1: 0, askBook1: 102, aszBook1: 20 };

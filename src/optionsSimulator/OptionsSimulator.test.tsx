@@ -90,6 +90,15 @@ it("keeps manual valuation before caución support is confirmed and enables it w
   expect(container.querySelector(".ct-sim-analysis-chart .ct-sim-theory-line")).toBeNull();
 });
 
+it.each(["4.24.1", "99.0-beta", ""])("uses available caución capabilities independently of the displayed version (%s)", async version => {
+  marketState.current.catalog!.version = version;
+  caucionState.supported = true;
+  caucionState.current = { currency: "ARS", days: 7, tna: 30, tradedAt: Date.now(), annualRate: .299 };
+  await mount(true);
+  expect(byLabel<HTMLSelectElement>("Origen de la tasa").value).toBe("automatic");
+  expect(byLabel("Tasa automática de valuación").textContent).toContain("Caución ARS 7 días");
+});
+
 it("uses an automatic ARS reference, keeps expiry results if it disappears, and restores the manual override", async () => {
   caucionState.current = { currency: "ARS", days: 6, tna: 30, tradedAt: Date.now(), annualRate: .299 };
   await mount(true);
@@ -120,7 +129,8 @@ it("uses an automatic ARS reference, keeps expiry results if it disappears, and 
   expect(byLabel<HTMLInputElement>("Tasa anual continua %").value).toBe("25");
 });
 
-it("uses the chain currency before adding legs and keeps the ARS and USD manual rates separate", async () => {
+it.each(["4.24.4", ""])("uses the chain currency with version label '%s' and keeps the ARS and USD manual rates separate", async version => {
+  marketState.current.catalog!.version = version;
   marketState.current.catalog!.underlyings.push({ id: "USD-DEMO", symbol: "USD-DEMO", currency: "USD" });
   await mount(true);
   async function selectUnderlying(value: string) {

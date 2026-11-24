@@ -18,8 +18,8 @@ los demás. Si Matriz no puede distinguir el símbolo exacto de otra liquidació
 o mercado, muestra un error. No agrega el indicador con un símbolo alternativo.
 La disponibilidad del histórico depende del broker; la creación del indicador
 no garantiza datos en cada intervalo. No se guardan estudios ni se envían órdenes
-desde esta acción. Funciona con las versiones de Matriz verificadas 4.23.16,
-4.24.1 y 4.24.4, con comprobaciones del contrato del gráfico en tiempo de ejecución.
+desde esta acción. Comprueba las funciones y los datos del gráfico en tiempo de
+ejecución; no bloquea por el número de versión de Matriz ni exige que se muestre.
 
 ## Monitor y registro de operaciones
 
@@ -335,8 +335,9 @@ dimensiones de los otros widgets cuando Matriz redondea sus unidades de grilla.
 
 Disponible en los dominios admitidos por ChuchoTriz: `https://*.xoms.com.ar/*`
 y `https://remarkets.matriz.com.ar/*`. La integración comprueba la estructura del
-dashboard y admite las versiones 4.23.16, 4.24.1 y 4.24.4; rechaza otras versiones
-con un aviso. El recorrido instalado se verificó en ReMarkets 4.23.16.
+dashboard, el catálogo y las funciones necesarias, sin lista de versiones
+admitidas. Un cambio del número de versión no desactiva Ratios. Si falta una
+función o dato necesario, sólo se informa el problema concreto de esa operación.
 
 Sin ChuchoTriz, Matriz conserva el registro del panel pero su contenido queda
 vacío. Para retirarlo antes de desinstalar, cerrá el panel desde su título.

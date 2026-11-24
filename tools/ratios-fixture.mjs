@@ -89,7 +89,7 @@ function installChart() {
     },
     removeEntity(id) { studies.delete(id); },
   };
-  document.getElementById('tv_chart_container').__reactFiberFixture = { stateNode: { props: { security: { id } }, widget: { activeChart: () => chart } } };
+  document.getElementById('tv_chart_container').__reactFiberFixture = { stateNode: { props: { security: { id } }, widget: { activeChart: () => chart, getStudiesList: () => ['Ratio', 'Overlay'] } } };
   window.ratioChartFixture = { chart, snapshot: () => ({ symbol: chart.symbol(), resolution, chartType, mainMode: mainScale.getMode(),
     studies: [...studies.values()].map(s => ({ name: s.name, inputs: s.inputs, options: s.options, scaleMode: s.scale.getMode() })) }) };
 }

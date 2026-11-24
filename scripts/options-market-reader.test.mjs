@@ -72,7 +72,7 @@ test('reads only catalog-verified ARS cauciones, using last traded TNA and times
   caucion(7, { md: { lst: 30, lstdStr: new Date(now - 120_000).toISOString() } });
   assert.equal((await f.call('caucion')).result.trades.length, 0);
 });
-test('reports caución support independently of catalogue and connection availability', async () => {
+test('reports caución capabilities independently of release, catalogue and connection availability', async () => {
   const f = fixture();
   f.store.securityStore.findSecurityFromId = () => { throw Error('PRIVATE_NATIVE_MESSAGE'); };
   async function expectSupport(supported) {
@@ -83,10 +83,12 @@ test('reports caución support independently of catalogue and connection availab
   await expectSupport(true);
   f.store.webSocketConnectionStatus = false;
   await expectSupport(true);
-  for (const version of ['4.24.1', '4.24.4-beta', '4.24.4+otra']) {
+  for (const version of ['4.24.1', '4.24.5', '99.0-beta', '']) {
     f.document.body.innerText = `Versión: ${version}`;
-    await expectSupport(false);
+    await expectSupport(true);
   }
+  f.store.securityStore.findSecurityFromId = undefined;
+  await expectSupport(false);
 });
 test('rejects unknown instruments and does not infer a missing factor or foreign strike currency', async () => {
   const f = fixture(); f.contracts[0].refData.roundLot = undefined; f.contracts[1].refData.strikeCurrency = 'USD';
@@ -112,7 +114,7 @@ test('looks up a small snapshot in a large catalog with linear work', async () =
   assert.deepEqual(f.calls, ['option-0', 'option-1']);
   assert.ok(idReads < size * 8, `Instrument IDs read ${idReads} times for ${size} catalog entries`);
 });
-test('stops native reads if the displayed Matriz version changes mid-snapshot', async () => {
+test('continues native reads when only the displayed version changes mid-snapshot', async () => {
   const f = fixture();
   const original = f.store.securityStore.getSecurity;
   f.store.securityStore.getSecurity = async id => {
@@ -120,8 +122,8 @@ test('stops native reads if the displayed Matriz version changes mid-snapshot', 
     return original(id);
   };
   const params = { underlyingId: 'GGAL', ids: ['option-0', 'option-1'] };
-  assert.match((await f.call('snapshot', params)).error, /Versión/);
-  assert.deepEqual(f.calls, ['option-0']);
+  assert.ok((await f.call('snapshot', params)).result);
+  assert.deepEqual(f.calls, ['option-0', 'option-1']);
 });
 test('serializes native reads even if the client times out or detaches', async () => {
   const f = fixture(); let release;
@@ -139,11 +141,18 @@ test('discards a response if account context changes during native getSecurity',
   f.store.securityStore.getSecurity = async id => { f.store.profileStore.activeAccount = 'OTHER'; return original(id); };
   assert.match((await f.call('snapshot', { underlyingId: 'GGAL', ids: ['option-0'] })).error, /contexto/);
 });
-test('rejects unverified versions and disconnected market data', async () => {
-  const f = fixture(); f.document.body.innerText = 'Versión: 99.0';
-  assert.match((await f.call('catalog')).error, /Versión/);
-  f.document.body.innerText = 'Versión: 4.24.4'; f.store.webSocketConnectionStatus = false;
+test('accepts any release or absent version label while retaining market capability and connection checks', async () => {
+  const f = fixture(); const original = (await f.call('catalog')).result;
+  for (const footer of ['Versión: 4.24.5', 'Versión: 99.0-beta', '']) {
+    f.document.body.innerText = footer;
+    const result = (await f.call('catalog')).result;
+    assert.equal(result?.contracts.length, original.contracts.length, footer || 'no footer');
+    assert.equal(result.contextRevision, original.contextRevision);
+  }
+  f.store.webSocketConnectionStatus = false;
   assert.match((await f.call('catalog')).error, /desconectado/);
+  f.store.securityStore.getSecurity = undefined;
+  assert.match((await f.call('catalog')).error, /catálogo/);
 });
 test('never substitutes read time for missing or invalid trade time', async () => {
   const f = fixture(); f.contracts[0].md.lstdStr = '2026-02-30T17:00:00Z';

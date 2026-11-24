@@ -53,6 +53,12 @@ it("passes both legs and C to the native reader and shows a persistent explanati
   expect(host.textContent).toContain("velas de 5 min"); expect(host.textContent).toContain("DLR/SPOT en el eje izquierdo");
   expect(host.textContent).toContain("A/B sin dividir por C");
   await act(async () => {
+    window.history.replaceState({}, "", `/security/${a.id}?interval=5`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  expect(host.textContent).toContain("DLR/SPOT en el eje izquierdo");
+  expect(dispose).not.toHaveBeenCalled();
+  await act(async () => {
     window.history.pushState({}, "", "/principal/favoritos");
     window.dispatchEvent(new PopStateEvent("popstate"));
   });

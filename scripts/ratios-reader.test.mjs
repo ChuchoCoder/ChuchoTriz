@@ -241,9 +241,14 @@ test('reads only published last and daily reference, invalidates disconnected an
   f.ms.webSocketConnectionStatus = true; f.securities[0].md.seq = 1;
   assert.equal((await f.state()).quotes.a.last, 120);
 });
-test('rejects unreviewed versions and all unlisted methods', async () => {
+test('accepts future or absent version labels while rejecting missing dashboard functions and unlisted methods', async () => {
   const f = fixture(); assert.match((await f.request('arbitraryMethod')).error, /no permitido/);
-  f.document.body.innerText = 'Versión: 999.0'; assert.match((await f.request('ratiosState')).error, /compatible/);
+  for (const footer of ['Versión: 4.24.5', 'Versión: 999.0-beta', '']) {
+    f.document.body.innerText = footer;
+    assert.ok((await f.request('ratiosState')).result, footer || 'no footer');
+  }
+  f.ds.getDashboard = undefined;
+  assert.match((await f.request('ratiosState')).error, /Esperando el catálogo/);
 });
 test('expired saved instruments do not prevent editing or deleting other rows', async () => {
   const f = fixture(); await f.add(); const cfg = (await f.state()).widgets[0].config;

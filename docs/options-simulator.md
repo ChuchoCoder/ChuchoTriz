@@ -243,12 +243,14 @@ pestaña y conserva su borrador al alternar con el simulador.
 un canal de mensajes. No importa los puentes, coordinadores ni motores de Premium.
 La cadena consulta `securityStore.options`, `underlyingsForMatrix`, `getSecurity` y
 suscripciones `md`/`book`. El método de caución usa el catálogo local por ID y
-hasta cinco suscripciones `md` adicionales de caución BYMA en ARS. Informa si la
-versión admite caución y devuelve moneda, plazo, última TNA operada y hora de
+hasta cinco suscripciones `md` adicionales de caución BYMA en ARS. Informa si
+Matriz dispone de las funciones de lectura de caución y devuelve moneda, plazo, última TNA operada y hora de
 cada operación. La cuenta activa participa únicamente en la detección
 interna de cambios de contexto y nunca se devuelve. No lee credenciales.
 
-Versiones admitidas: Matriz 4.24.1 y 4.24.4, como el lector de referencia. La cadena
+No se habilitan ni bloquean funciones por el número de versión de Matriz. Se
+comprueban el catálogo, las funciones y los datos necesarios en cada lectura;
+la ausencia de una versión visible tampoco impide usar la extensión. La cadena
 admite hasta 160 instrumentos por lectura y 256 instrumentos suscritos por contexto. No se
 publica una cadena incompleta: el cliente divide la selección en grupos
 secuenciales de 23 opciones más el subyacente. No se
@@ -269,7 +271,7 @@ Black–Scholes–Merton y las griegas solo para operaciones dentro de esa venta
 Con el filtro desactivado, indica la fecha o antigüedad de la última operación y
 requiere un timestamp verificable para mostrar los cálculos.
 
-En Matriz 4.24.4, la valuación en ARS propone una caución BYMA a 7 días como
+Cuando Matriz ofrece esa referencia, la valuación en ARS propone una caución BYMA a 7 días como
 referencia de corto plazo. Si falta un dato reciente, prueba 6, 5, 4 y 3 días.
 Exige última operación del mismo día de Buenos Aires y con hasta 60 minutos de
 antigüedad. El modelo convierte la TNA simple a una tasa anual continua con

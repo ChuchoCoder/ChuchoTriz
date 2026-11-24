@@ -73,7 +73,7 @@ test('projects distinct execution events for the active account without cumulati
     settlement: '2', timestamp: Date.parse(event.transactTime), quantity: 2, price: 10.25 });
 });
 
-test('reads only the supported report and rejects incomplete pagination, unauthorized calls and unknown versions', async () => {
+test('reads only the supported report and rejects incomplete pagination and unauthorized calls', async () => {
   const f = fixture();
   assert.match((await f.request('otherMethod')).error, /Método no permitido/);
   assert.equal(f.calls.length, 0);
@@ -81,8 +81,18 @@ test('reads only the supported report and rejects incomplete pagination, unautho
   assert.match((await f.request()).error, /reporte incompleto/);
   f.mainStore.orderEventStore.getOrderEventsForAccountReport = async () => { throw { response: { status: 401 } }; };
   assert.match((await f.request()).error, /Volvé a iniciar sesión/);
-  f.document.body.innerText = 'Versión: 4.99.1';
-  assert.match((await f.request()).error, /Versión de Matriz no verificada/);
+});
+
+test('accepts any release or absent version label for executions but rejects missing report functions', async () => {
+  const f = fixture(); const first = (await f.request()).result;
+  for (const footer of ['Versión: 4.24.5', 'Versión: 99.0-beta', '']) {
+    f.document.body.innerText = footer;
+    const result = (await f.request()).result;
+    assert.equal(result?.rows.length, first.rows.length, footer || 'no footer');
+    assert.equal(result.contextId, first.contextId);
+  }
+  f.mainStore.orderEventStore.getOrderEventsForAccountReport = undefined;
+  assert.match((await f.request()).error, /todavía no está disponible/);
 });
 
 test('rejects reads and clipboard verification after the active account changes', async () => {

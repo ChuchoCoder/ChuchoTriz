@@ -8,7 +8,11 @@
   function current(a, b, c) {
     const url = new URL(location.href);
     const match = /^\/security\/([^/]+)\/?$/.exec(url.pathname);
-    try { return !!match && decodeURIComponent(match[1]) === a && url.searchParams.get("ctRatio") === b && (url.searchParams.get("ctRatioC") || undefined) === c; }
+    try {
+      // Matriz can replace the query with only its interval after loading a chart.
+      const canonical = !url.searchParams.has("ctRatio") && !url.searchParams.has("ctRatioC");
+      return !!match && decodeURIComponent(match[1]) === a && (canonical || url.searchParams.get("ctRatio") === b && (url.searchParams.get("ctRatioC") || undefined) === c);
+    }
     catch { return false; }
   }
   function assertCurrent(task, a, b, c) {
@@ -23,8 +27,9 @@
       const component = fiber.stateNode;
       if (component?.props?.security?.id === a && component.widget) {
         try {
+          if (component.widget._ready === false) return;
           const chart = component.widget.activeChart();
-          if (chart && typeof chart.createStudy === "function" && typeof chart.getAllStudies === "function") return chart;
+          if (chart && typeof chart.createStudy === "function" && typeof chart.getAllStudies === "function") return { chart, widget: component.widget };
         } catch { /* The native widget is still initializing. */ }
       }
     }
@@ -43,15 +48,21 @@
     const until = Date.now() + 25000;
     while (Date.now() < until) {
       assertCurrent(task, a, b, c);
-      const version = document.body?.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1];
-      if (version && !["4.23.16", "4.24.1", "4.24.4"].includes(version)) throw Error("Esta versión de Matriz todavía no es compatible con el gráfico de ratios.");
       const securities = window.mainStore?.securityStore?.securities;
-      const chart = chartFor(a);
-      if (version && Array.isArray(securities) && securities.length && chart) {
+      const binding = chartFor(a), chart = binding?.chart;
+      if (Array.isArray(securities) && securities.length && chart) {
         const first = instrument(securities, a), second = instrument(securities, b), comparison = c ? instrument(securities, c) : second;
         if (chart.symbol() !== first.symbol) {
           await new Promise(resolve => setTimeout(() => resolve(), 100)); continue;
         }
+        const studies = typeof binding.widget.getStudiesList === "function" ? binding.widget.getStudiesList() : [];
+        const comparisonName = ["Overlay", "Compare"].find(name => {
+          if (Array.isArray(studies) && studies.includes(name)) return true;
+          // Price comparisons can be hidden from getStudiesList in native Matriz.
+          try { return binding.widget.getStudyInputs(name).some(input => input.id === "symbol"); }
+          catch { return false; }
+        });
+        if (!comparisonName || !studies.includes("Ratio")) throw Error("Matriz no ofrece los indicadores Ratio y comparación necesarios para este gráfico.");
         if (chart.resolution() !== "5") await chart.setResolution("5");
         assertCurrent(task, a, b, c);
         chart.setChartType(1); // Native TradingView enum: candles.
@@ -72,12 +83,18 @@
           const ratio = chart.getStudyById(ratioId), inputs = ratio.getInputValues();
           if (!inputs.some(i => i.id === "source" && i.value === "close") || !inputs.some(i => i.id === "symbol2" && i.value === second.symbol)) throw Error("Matriz no confirmó los instrumentos del indicador Ratio.");
           ratio.setVisible(true); ratio.priceScale().setMode(0);
-          const overlay = chart.getAllStudies().find(study => study.name === "Overlay" && chart.getStudyById(study.id).paneIndex() === 0 && chart.getStudyById(study.id).getInputValues().some(i => i.id === "symbol" && i.value === comparison.symbol));
-          const overlayId = overlay?.id ?? await chart.createStudy("Overlay", true, false, { symbol: comparison.symbol }, undefined, { priceScale: "new-left" });
+          const overlay = chart.getAllStudies().find(study => {
+            if (!["Overlay", "Compare"].includes(study.name)) return false;
+            const candidate = chart.getStudyById(study.id), inputs = candidate.getInputValues();
+            return candidate.paneIndex() === 0 && inputs.some(i => i.id === "symbol" && i.value === comparison.symbol) &&
+              (study.name !== "Compare" || inputs.some(i => i.id === "source" && i.value === "close"));
+          });
+          const overlayId = overlay?.id ?? await chart.createStudy(comparisonName, true, false,
+            { symbol: comparison.symbol, ...(comparisonName === "Compare" ? { source: "close" } : {}) }, undefined, { priceScale: "new-left" });
           if (overlayId == null) throw Error("Matriz no pudo agregar el instrumento a comparar.");
           if (!overlay) added.push(overlayId);
           assertCurrent(task, a, b, c);
-          if (chartFor(a) !== chart || chart.symbol() !== first.symbol) throw Error("El instrumento principal cambió mientras se abría el ratio.");
+          if (chartFor(a)?.chart !== chart || chart.symbol() !== first.symbol) throw Error("El instrumento principal cambió mientras se abría el ratio.");
           const study = chart.getStudyById(overlayId);
           study.setVisible(true);
           if (overlay) study.changePriceScale("new-left");

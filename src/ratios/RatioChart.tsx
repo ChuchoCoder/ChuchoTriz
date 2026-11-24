@@ -43,8 +43,15 @@ export default function RatioChart() {
     // its route changes, including pushState navigation that emits no popstate.
     if (!request) return;
     const refresh = () => {
-      const next = ratioChartRequest(new URL(location.href));
-      setRequest(previous => previous?.a === next?.a && previous?.b === next?.b && previous?.c === next?.c ? previous : next);
+      const url = new URL(location.href), next = ratioChartRequest(url);
+      setRequest(previous => {
+        // Keep the captured pair when Matriz canonicalizes its own query.
+        if (previous && !url.searchParams.has("ctRatio") && !url.searchParams.has("ctRatioC")) {
+          const match = /^\/security\/([^/]+)\/?$/.exec(url.pathname);
+          try { if (match && decodeURIComponent(match[1]) === previous.a) return previous; } catch { /* Invalid native route. */ }
+        }
+        return previous?.a === next?.a && previous?.b === next?.b && previous?.c === next?.c ? previous : next;
+      });
     };
     const timer = setInterval(refresh, 250);
     window.addEventListener("popstate", refresh);
