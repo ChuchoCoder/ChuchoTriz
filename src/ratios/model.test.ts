@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, ratioUpdatedAt, ratioTimeLabel } from "./model";
+import { calculateRatio, defaultRatioFormat, exactTickerMatches, instrumentDetail, numberLabel, ratioLabel, ratioUpdatedAt, ratioTimeLabel, referenceCQuote } from "./model";
 it("shows a signed C percentage with an unsigned absolute difference, preserving number format and plain pairs", () => {
   expect(ratioLabel(1.065, "percent", 104.45)).toBe("+6,50% (104,45)");
   expect(ratioLabel(.935, "percent", 104.45)).toBe("-6,50% (104,45)");
@@ -38,6 +38,20 @@ it("resolves the official-dollar aliases to the native spot identity", () => {
   const spot = { id: "rx_DDF_DLR_SPOT", symbol: "DLR/SPOT", market: "rx", currency: "ARS", settlement: "Referencia", monitorOnly: true };
   for (const alias of ["Dólar oficial", "dolar usa", "DLR/SPOT", "Dólar"]) expect(exactTickerMatches(alias, [spot])).toEqual([spot]);
   expect(instrumentDetail(spot)).toContain("Dólar oficial");
+});
+it("uses the price per nominal for C without changing the shared quote or daily variation", () => {
+  const c = { id: "bond", symbol: "D30N6", market: "bm", settlement: "2", currency: "ARS" };
+  const a = { last: 80000, reference: 78000 }, b = { last: 50, reference: 50 };
+  const quote = { last: 157250, reference: 156500, tradedAt: 123, referenceDate: "2026-11-23" };
+  const quotes = { [c.id]: quote };
+  const normalized = referenceCQuote(quotes, { c, cDivisor: 100 });
+  expect(normalized).toEqual({ ...quote, last: 1572.5, reference: 1565 });
+  const result = calculateRatio(a, b, normalized);
+  expect(ratioLabel(result.ratio, "percent", result.absoluteDifference)).toBe("+1,75% (27,50)");
+  expect(result.change).toBeCloseTo(calculateRatio(a, b, quote).change!);
+  expect(referenceCQuote(quotes, { c })).toBe(quote);
+  expect(quote.last).toBe(157250);
+  expect(calculateRatio(a, b, referenceCQuote({}, { c, cDivisor: 100 })).ratio).toBeUndefined();
 });
 it("defaults to percent only for matching known currencies and keeps USD and cable distinct", () => {
   const a = { id: "a", symbol: "A", market: "bm", settlement: "2", currency: "ARS" };

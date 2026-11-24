@@ -6,8 +6,9 @@ export type RatioFormat = "number" | "percent";
 export function defaultRatioFormat(a?: RatioInstrument, b?: RatioInstrument): RatioFormat {
   return a?.currency && a.currency === b?.currency ? "percent" : "number";
 }
-export interface RatioPair { id: string; a: RatioInstrument; b: RatioInstrument; c?: RatioInstrument; format?: RatioFormat }
-export interface RatioConfig { schema: 1 | 2; id: string; revision: number; pairs: RatioPair[] }
+export interface RatioReference { c?: RatioInstrument; cDivisor?: 100 }
+export interface RatioPair extends RatioReference { id: string; a: RatioInstrument; b: RatioInstrument; format?: RatioFormat }
+export interface RatioConfig { schema: 1 | 2 | 3; id: string; revision: number; pairs: RatioPair[] }
 export interface RatioQuote {
   last?: number; reference?: number; tradedAt?: number; referenceDate?: string; issue?: string;
 }
@@ -20,6 +21,19 @@ export interface RatiosState {
 }
 export const emptyState: RatiosState = { context: 0, canAdd: false, connected: false, widgets: [], quotes: {} };
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+export function referenceCQuote(quotes: Record<string, RatioQuote>, { c, cDivisor }: RatioReference): RatioQuote | undefined {
+  if (!c) return undefined;
+  const quote = quotes[c.id] ?? {};
+  if (!cDivisor) return quote;
+  return {
+    ...quote,
+    last: quote.last === undefined ? undefined : quote.last / cDivisor,
+    reference: quote.reference === undefined ? undefined : quote.reference / cDivisor,
+  };
+}
+export function referenceCFormula(divisor?: RatioReference["cDivisor"]) {
+  return divisor ? `(C ÷ ${divisor})` : "C";
+}
 export interface RatioResult { ratio?: number; absoluteDifference?: number; change?: number; issue?: string; referenceIssue?: string }
 export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote): RatioResult {
   if (a?.issue || b?.issue || c?.issue) return { issue: a?.issue || b?.issue || c?.issue };
@@ -41,11 +55,13 @@ export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote): 
   const change = (ratio / reference - 1) * 100;
   return finite(reference) && reference !== 0 && finite(change) ? { ...current, change } : { ...current, referenceIssue: "Sin referencia diaria válida" };
 }
-export function pairLabel(p: Pick<RatioPair, "a" | "b" | "c">) {
-  return p.c ? `(${p.a.symbol}/${p.b.symbol}) / ${p.c.symbol}` : `${p.a.symbol}/${p.b.symbol}`;
+export function pairLabel(p: Pick<RatioPair, "a" | "b"> & RatioReference) {
+  if (!p.c) return `${p.a.symbol}/${p.b.symbol}`;
+  const reference = p.cDivisor ? `(${p.c.symbol} ÷ ${p.cDivisor})` : p.c.symbol;
+  return `(${p.a.symbol}/${p.b.symbol}) / ${reference}`;
 }
-export function pairKey(p: { a: { id: string }; b: { id: string }; c?: { id: string } }) {
-  return JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null]);
+export function pairKey(p: { a: { id: string }; b: { id: string }; c?: { id: string }; cDivisor?: 100 }) {
+  return JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null, p.cDivisor ?? 1]);
 }
 export function marketLabel(value: string) { return ({ bm: "BYMA", rx: "A3" } as Record<string, string>)[value] || value || "S/D"; }
 export function currencyLabel(value: string) { return value === "EXT" ? "USD C" : value || "S/D"; }
