@@ -12,7 +12,8 @@
 .ct-ratio-ops .ro-monitor-table{width:max-content;table-layout:auto;font-variant-numeric:tabular-nums}
 .ct-ratio-ops .ro-monitor-table td,.ct-ratio-ops .ro-monitor-table th{white-space:nowrap;padding:5px 10px}
 .ct-ratio-ops .ro-monitor-table td:last-child,.ct-ratio-ops .ro-monitor-table th:last-child{text-align:right}
-.ro-monitor-table .ro-actions{justify-content:flex-end}
+.ro-monitor-table .ro-actions{align-items:center}
+.ro-monitor-table .ro-monitor-operation{flex:1 0 auto}
 .ct-ratio-ops .ro-monitor-table .ct-opt-quote-value{display:inline-block;padding:1px 3px;margin:-1px -3px;border-radius:2px}
 .ct-ratio-ops .ct-opt-quote-up{--ct-opt-price-pulse:#65dca53d}
 .ct-ratio-ops .ct-opt-quote-down{--ct-opt-price-pulse:#ff8d993d}

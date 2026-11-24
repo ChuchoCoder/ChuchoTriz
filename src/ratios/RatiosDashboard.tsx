@@ -174,18 +174,20 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         <tbody>{cfg.pairs.map(pair => {
           const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id], qc = referenceCQuote(snapshot.quotes, pair);
           const result = calculateRatio(qa, qb, qc), reference = referenceCFormula(pair.cDivisor);
+          const { change } = result;
+          const changeClass = change === undefined ? undefined : change > 0 ? "ct-ratios-up" : change < 0 ? "ct-ratios-down" : "ct-ratios-flat";
           const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt, qc?.tradedAt === undefined ? 0 : Date.now() - qc.tradedAt);
           const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`;
           return <tr key={pair.id}>
             <td className="ct-ratios-pair" title={`A: ${instrumentDetail(pair.a)} · B: ${instrumentDetail(pair.b)}\n${clock}`}><strong>{pairLabel(pair)}</strong>
               {age > 15 * 60 * 1000 && <span className="ct-ratios-old" role="img" aria-label="Última operación antigua" title={clock}>◷</span>}
             </td>
-            {columns.lastA && <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
-            {columns.lastB && <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>}
-            {showReference && <td title={pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{numberLabel(qc?.last)}</td>}
-            <td className="ct-ratios-value" title={result.issue || (pair.c ? `(A/B) ÷ ${reference}. Porcentaje = ((A/B) ÷ ${reference} − 1) × 100. Diferencia absoluta |A/B − ${reference}| entre paréntesis.` : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
-            <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
-              {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
+            {columns.lastA && <td className={qa?.last === undefined ? undefined : "ct-ratios-quote"} title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
+            {columns.lastB && <td className={qb?.last === undefined ? undefined : "ct-ratios-quote"} title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>}
+            {showReference && <td className={qc?.last === undefined ? undefined : "ct-ratios-quote"} title={pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{numberLabel(qc?.last)}</td>}
+            <td className={result.ratio === undefined ? "ct-ratios-value" : "ct-ratios-value ct-ratios-quote"} title={result.issue || (pair.c ? `(A/B) ÷ ${reference}. Porcentaje = ((A/B) ÷ ${reference} − 1) × 100. Diferencia absoluta |A/B − ${reference}| entre paréntesis.` : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
+            <td className={changeClass} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
+              {change === undefined ? "—" : change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>
             <td className="ct-ratios-actions">
               <RatioChartLink pair={pair} />

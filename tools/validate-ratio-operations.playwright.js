@@ -47,10 +47,21 @@ async page => {
   assert(Math.abs(bounds.a - bounds.add) < 2 && Math.abs(bounds.a - bounds.defaults) < 2, 'Inputs and actions share one row');
   for (const width of [1024, 420, 1440]) {
     await page.setViewportSize({ width, height: 1000 }); await page.screenshot({ animations: 'disabled', timeout: 10000 });
-    const layout = await page.evaluate(() => { const panel = document.querySelector('.ct-ratio-ops').getBoundingClientRect(); return [...document.querySelectorAll('.ro-monitor-controls input,.ro-monitor-controls button')].every(e => { const r = e.getBoundingClientRect(); return r.left >= panel.left - 1 && r.right <= panel.right + 1; }); });
-    assert(layout, 'Monitor controls fit at ' + width);
+    const layout = await page.evaluate(() => {
+      const panel = document.querySelector('.ct-ratio-ops').getBoundingClientRect();
+      const controlsFit = [...document.querySelectorAll('.ro-monitor-controls input,.ro-monitor-controls button')].every(e => {
+        const r = e.getBoundingClientRect();
+        return r.left >= panel.left - 1 && r.right <= panel.right + 1;
+      });
+      const chartLinks = [...document.querySelectorAll('.ro-monitor-table .ct-ratio-chart-link')];
+      const chartX = chartLinks.map(link => link.getBoundingClientRect().left);
+      const chartsAligned = chartLinks.length === 10 && Math.max(...chartX) - Math.min(...chartX) < 1;
+      return { controlsFit, chartsAligned };
+    });
+    assert(layout.controlsFit, 'Monitor controls fit at ' + width);
+    assert(layout.chartsAligned, 'Chart links align in tradable and monitor-only rows at ' + width);
   }
-  checks.push('Compact intrinsic table, aligned toolbar and controls at desktop, tablet and narrow widths');
+  checks.push('Compact table, aligned chart links and toolbar controls at desktop, tablet and narrow widths');
   const bma = page.locator('.ro-monitor-table tr').filter({ hasText: 'BMA/GGAL' });
   const originalId = (await book()).watch.find(p => p.a.symbol === 'BMA').id;
   await click(button('Invertir BMA/GGAL')); await button('Invertir GGAL/BMA').waitFor();

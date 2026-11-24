@@ -29,14 +29,18 @@
 .ct-ratios-issue { margin:0; padding:6px 12px; color:#d3910c; font-size:11px; }
 .ct-ratios-table-wrap { flex:1; min-height:0; overflow:auto; padding-bottom:18px; overscroll-behavior:contain; }
 .ct-ratios table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
-.ct-ratios th { padding:4px 8px; background:var(--price-panel-header-background,#52657b); color:var(--price-panel-header-color,#fff); text-align:right; white-space:nowrap; }
+.ct-ratios th { padding:4px 8px; background:var(--price-panel-header-background,#52657b); color:var(--secondary-text-light-color,#d9d9d9); text-align:right; white-space:nowrap; }
 .ct-ratios th:first-child { text-align:left; }
 .ct-ratios td { height:25px; padding:2px 8px; border-bottom:1px solid #8190a530; text-align:right; vertical-align:middle; white-space:nowrap; }
 .ct-ratios td.ct-ratios-pair { text-align:left; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
-.ct-ratios-pair strong { font-size:12px; }
+.ct-ratios-pair strong { color:var(--dark-text-color,var(--ratio-text)); font-size:12px; }
 .ct-ratios-pair .ct-ratios-old { margin-left:5px; }
-.ct-ratios-value { font-weight:bold; color:#039be5; }
-.ct-ratios-up { color:#26b56f; }.ct-ratios-down { color:#f05a67; }.ct-ratios-old { color:#d3910c; }
+.ct-ratios-value { font-weight:bold; }
+.ct-ratios-quote { color:var(--lst-color,#039be5); }
+.ct-ratios-up { color:var(--green-counter,#0cbd15); }
+.ct-ratios-down { color:var(--red-counter,#f90701); }
+.ct-ratios-flat { color:var(--equal-letter-color,#039be5); }
+.ct-ratios-old { color:#d3910c; }
 .ct-ratios-actions button { display:inline-flex; align-items:center; justify-content:center; padding:0; min-width:22px; height:20px; border:0; background:transparent; font-size:16px; line-height:1; }
 .ct-ratios-empty { display:block; margin:20px auto; border:1px solid #039be5; background:transparent; padding:8px 14px; border-radius:3px; }
 .ct-ratios-resize { position:absolute; right:0; bottom:0; border:0; width:22px; height:22px; padding:0; line-height:1!important; font-size:19px!important; cursor:nwse-resize!important; touch-action:none; background:#124d71; color:#fff!important; border-radius:0 0 7px 0; }
