@@ -553,16 +553,17 @@ async (page, group) => {
     await grouping.uncheck();
     await numberFormat.selectOption('es-AR');
     await dateFormat.selectOption('es-AR');
-    const expiration = await page.evaluate(() => {
-      const date = window.mainStore.securityStore.options[0].refData.maturityDateStr;
-      return `${date.slice(6, 8)}/${date.slice(4, 6)}/${date.slice(0, 4)}`;
-    });
+    const displayedRows = [];
+    for (const kind of ['Calls', 'Puts']) {
+      displayedRows.push(...await page.getByRole('table', { name:kind, exact:true }).locator('tbody tr')
+        .evaluateAll(rows => rows.map(row => [...row.querySelectorAll('td')].map(cell => cell.textContent))));
+    }
     await page.evaluate(() => { window.ctCopyOriginal = navigator.clipboard.writeText; window.ctCopy = ''; navigator.clipboard.writeText = async text => { window.ctCopy = text; }; });
     try {
       await b('Copiar Calls y Puts').click(); await page.waitForFunction(() => window.ctCopy.length > 0);
       const copy = await page.evaluate(() => window.ctCopy);
       const data = copy.split('\n').filter(line => line.includes('\t')).map(line => line.split('\t'));
-      equal(data, [[expiration, '6', '100', '16'], [expiration, '-3', '100', '12'], [expiration, '2', '100', '10'], [expiration, '-1', '100', '9']], 'Copied expirations, signed quantities, strikes, premiums');
+      equal(data, displayedRows, 'Copied operation dates, signed quantities, strikes, premiums match the tables');
       assert(copy.includes('OPERACIONES CALLS') && copy.includes('OPERACIONES PUTS'), 'Both sections');
       await page.evaluate(async () => {
         const store = window.mainStore.orderEventStore;
@@ -592,7 +593,7 @@ async (page, group) => {
           equal(await tableCells('Calls'), [operationDate, '2', strike, premium], `Call grid ${numbers}/${dates}`);
           equal(await tableCells('Puts'), [operationDate, '-3', strike, putPremium], `Put grid ${numbers}/${dates}`);
           equal(await page.locator('.ct-operations-group time').innerText(), expiry, 'Displayed header expiry');
-          const callLine = `${expiry}\t2\t${strike}\t${premium}`, putLine = `${expiry}\t-3\t${strike}\t${putPremium}`;
+          const callLine = `${operationDate}\t2\t${strike}\t${premium}`, putLine = `${operationDate}\t-3\t${strike}\t${putPremium}`;
           for (const [scope, expected] of [['Calls', callLine], ['Puts', putLine],
             ['both', `OPERACIONES CALLS (SIN PROMEDIOS)\n${callLine}\n\nOPERACIONES PUTS (SIN PROMEDIOS)\n${putLine}`]]) {
             await page.evaluate(() => { window.ctCopy = ''; });

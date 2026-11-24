@@ -9,6 +9,11 @@ cuenta y bonos de distinta moneda. No debe ejecutarse sobre un broker.
 También verifica orden por columna, valores faltantes, arrastre desde una vista
 ordenada, movimientos consecutivos por teclado, persistencia del orden manual,
 P&L por moneda, operaciones ocultas, guardados demorados y revisiones concurrentes.
+Los cierres por nominales cubren ingreso desde A/B, proporción del remanente,
+lotes, rechazo de cantidades inválidas, historial tras recarga y borradores
+obsoletos o de otra cuenta. También verifican P&L ARS/USD con factores y DDMM,
+remanentes históricos desparejos, una pata ya cerrada, doble click y conflictos
+de revisión o cambio de cuenta mientras el cierre espera el lock de guardado.
 Incluye lotes mayores a 1: para un lote de 10, 100 y 110 deben ser válidos,
 105 inválido, y una apertura con 110 debe poder guardarse y eliminarse.
 En Matriz instalada, comprobar selección, precios nativos y tasas por CFI, sin
@@ -164,7 +169,7 @@ con broker. Un caso sin posiciones o cotizaciones no cuenta como aprobado.
 | SM-06 | Abrir VI por clic; cerrar por Escape y por clic exterior. Probar una serie con y otra sin VI. | Tooltip identifica serie y datos disponibles; ausencia de VI no produce métricas ficticias ni impide cerrar. |
 | SM-07 | Con una pata válida alternar Armado/Análisis. Cambiar precio, VI y fecha; usar zoom y Ajustar. | Patas conservadas, resultados finitos cuando corresponde, máximo ilimitado explícito y gráficos consistentes. Sin datos, aviso claro. |
 | SM-08 | Abrir Posición actual y consultar Info. Alternar Cotizaciones y el check de incluir posición. | Estado de lectura claro; no mezcla ajustes con primas históricas; una posición vacía/fallo se distingue de una importación exitosa. |
-| SM-09 | Entrar en Operaciones de opciones y volver a entrar después de cambiar de pestaña. Revisar la carga automática y Agrupar por strike activado por defecto. Probar también Actualizar desde Matriz. Si hay filas, copiar una selección y revisar encabezados/orden/decimales en un editor local privado. | Cada entrada carga el reporte vigente sin pulsar Actualizar; la agrupación inicia activada y permite desmarcarla. Carga finaliza; vacío/error explícito; copia vencimiento, cantidad, base y prima, sin datos ajenos. No pegar operaciones reales en Git. |
+| SM-09 | Entrar en Operaciones de opciones y volver a entrar después de cambiar de pestaña. Revisar la carga automática y Agrupar por strike activado por defecto. Probar también Actualizar desde Matriz. Si hay filas, copiar una selección y revisar encabezados/orden/decimales en un editor local privado. Usar una fecha de operación distinta del vencimiento. | Cada entrada carga el reporte vigente sin pulsar Actualizar; la agrupación inicia activada y permite desmarcarla. Carga finaliza; vacío/error explícito; copia la fecha de operación visible, cantidad, strike y precio, sin datos ajenos. No pegar operaciones reales en Git. |
 | SM-10 | Con opción ARS/24 h y prima válida, usar Cargar Op. desde una pata editada y luego desde la barra de cantidad de una punta seleccionada en la cadena (mantener el puntero sobre ella). Revisar ticket sin confirmarlo; Limpiar. | Instrumento, cantidad y precio coinciden; desde la cadena usa ASK compra/BID venta. Si falta precio, no precarga desde esa punta. Ninguna orden enviada. |
 
 ## Regresión ampliada

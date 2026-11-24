@@ -400,3 +400,80 @@ queda vacío con aviso; no se toma último ni se salta a un nivel más profundo.
   `b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
 - Captura recortada: `test-results/direction-book-cocos.png`. Sin apertura
   registrada ni envío de órdenes en la verificación del broker.
+
+## Cierres por nominales — 23/11/2026
+
+Implementado en rama `codex/ratio-close-nominals`, base main `4040034`.
+El detalle permite ingresar la cantidad de A o B y calcula la otra según los
+remanentes guardados, al lote más cercano. La cantidad ingresada no se redondea.
+Se muestran Abiertos/Luego; completar una pata toma exactamente el remanente
+de la otra. Se mantienen los accesos de 25%, 50% y total y el mismo esquema de
+historial. El cambio de precios no redimensiona cantidades. El registro conserva
+los cierres previos, gastos, P&L por moneda y guardas de cuenta/revisión/WebLocks.
+
+Validación:
+- 643 tests PASS: 571 Vitest, 70 Node y 2 QA infra; cinco casos nuevos del modelo
+  y uno del contrato de lectura de 4.24.5. Seguridad/lint, build/paquete y auditoría
+  PASS, sin vulnerabilidades.
+- 39 recorridos del tab PASS, incluidos fuente A/B, remanentes tras varios cierres,
+  lotes, entradas inválidas, recarga, cambio de cuenta y borradores obsoletos.
+- Regresión general: 70 PASS / 0 FAIL, 20/20 suites, complete=true, sobre el código
+  de cierre `e914a9b80c51e7a083e87b4502a78de6f53d77e0`, antes de agregar únicamente
+  4.24.5 a la allowlist del lector del tab. Reporte local:
+  `test-results/qa-2026-11-23T12-32-43-431Z/report.md`.
+- Revisión independiente sin hallazgos pendientes. Se corrigió una aserción del
+  test de versión para esperar una respuesta nueva del lector real.
+- Capturas sintéticas `test-results/nominal-close-dark.png` y
+  `nominal-close-light.png`; detalle sin desborde en 420 px.
+
+Cocos se actualizó a Matriz 4.24.5. Se verificaron de sólo lectura el catálogo,
+contexto de cuenta, getSecurity, suscripción pública y los factores/lotes de
+BMA/GGAL (1/1) y AL30/AL30D (0,01/1). La muestra no tenía últimos ni puntas
+publicados; no se sustituye ese faltante ni se afirma frescura de precios reales.
+Se agregó esa versión específica sólo al lector del tab Ratios. El test nuevo
+mantiene el rechazo de contexto de cuenta anterior y la falta de precios como
+faltante. No se amplió la lista de otros lectores ni las capacidades de ejecución.
+
+Instalado en el perfil Free compartido, mismo ID/ruta, compilación de desarrollo
+0.0.28. Los 24 archivos coinciden por hash con dist. Respaldos:
+`Free/backups/extension-before-ratio-nominal-close-20261123-093434` y
+`Free/backups/extension-before-ratio-reader245-20261123-094553`.
+En Cocos 4.24.5 se comprobó la presencia de los dos campos y el cálculo automático
+de B al ingresar en A; se limpió el borrador sin registrar cierres. Las siete
+claves locales conservan el hash agregado
+`b9ceb7a00a7b64b848d55d0ae72d2019d4202925ce0286d85c8158a371f4a72d`.
+
+## Code review y Playwright ampliado del PR #85 — 23/11/2026
+
+Revisión contra main `4040034b84601719c4d87fa0f77f68c24bc2043c`.
+Código productivo probado: `465597845c1715c5925fe6bd89974755eaafb492`.
+Dos revisiones independientes (estándares y requisitos): sin hallazgos accionables.
+No se requirieron cambios de producción. Se amplió el validador del tab con:
+- P&L de cierres nominales en ARS/USD, factores nativos y DDMM; realizado congelado
+  mientras cambian las cotizaciones y el pendiente.
+- Remanentes históricos 60/40 en monedas distintas y una pata ya cerrada, sin
+  duplicar su salida ni sus gastos.
+- Conflicto de revisión durante la espera del lock de guardado, reintento y doble
+  click que registra exactamente una salida por pata.
+- Cambio de cuenta con un cierre esperando el lock: no escribe en la operación
+  original y no recupera el borrador al volver.
+
+La prueba de compatibilidad 4.24.5 queda al final: su cambio de identidad de
+contexto ya no interfiere con las aperturas de los casos posteriores. La guarda
+rechazó correctamente la apertura del primer ensayo con contexto anterior.
+
+Validación nueva:
+- `npm run test:pr` completo PASS: 643 tests (571 Vitest + 70 Node + 2 QA infra),
+  seguridad/política/lint, build/paquete, auditoría con 0 vulnerabilidades y
+  regresión general 70 PASS / 0 FAIL, 20/20 suites, complete=true.
+- Reporte local general: `test-results/qa-2026-11-23T18-48-49-810Z/report.md`,
+  commit `4655978`, árbol limpio al iniciar.
+- Tab de ratios: 43 recorridos Playwright PASS sobre el bundle de producción.
+- Widget de ratios: 73 comprobaciones Playwright PASS, incluidas columnas,
+  edición, formatos, referencias C, recarga, dashboards y tamaño.
+- Las pruebas ampliadas fueron revisadas independientemente sin hallazgos.
+
+Todos los recorridos usaron datos sintéticos en páginas loopback propias del
+perfil compartido. Se cerraron sólo esas páginas y sus servidores, conservando
+el navegador y la pestaña real del usuario. No se registraron cierres reales ni
+se afirma validación de cotizaciones frescas o aceptación de órdenes del broker.

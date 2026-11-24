@@ -9,7 +9,7 @@ import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
 import { numeric } from "../optionsSimulator/model";
 import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
-import { applyDefaultWatch, bestBookPrice, closeOperation, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
+import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, partialCloseQuantities, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, remaining, sameCurrency,
   validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg } from "./trading";
 import "./RatioOperations.css";
@@ -17,6 +17,7 @@ import "./RatioOperations.css";
 type View = "monitor" | "opening" | "operations";
 type GridKind = "watch" | "operations";
 interface GridDrag { kind: GridKind; scope: string; revision: string; ids: string[]; from: string }
+interface CloseDraft { id: string; snapshot: string; leg: 0 | 1; value: string }
 type Source = "last" | "bid" | "ask" | "manual" | "saved";
 interface Draft {
   a?: TradingInstrument; b?: TradingInstrument; pa: string; pb: string; qa: string; fa: string; fb: string; sa: string; sb: string;
@@ -40,6 +41,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [edit, setEdit] = useState<{ id: string; snapshot: string }>();
   const [deleted, setDeleted] = useState<{ scope: string; op: RatioOperation; index: number }>();
   const [closePrices, setClosePrices] = useState<[string, string]>(["", ""]), closeDirty = useRef([false, false]);
+  const [closeDraft, setCloseDraft] = useState<CloseDraft>();
   const [pickerSession, setPickerSession] = useState(0);
   const [loadingDefaults, setLoadingDefaults] = useState(false), defaultsAttempt = useRef<string | undefined>(undefined), defaultsGeneration = useRef(0);
   const [monitorSort, setMonitorSort] = useState<GridSort>(), [operationsSort, setOperationsSort] = useState<GridSort>();
@@ -95,7 +97,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     }
   }, [ready, scope, book.watchDefaults]);
 
-  useEffect(() => { closeDirty.current = [false, false]; setClosePrices(["", ""]); }, [selected]);
+  useEffect(() => { closeDirty.current = [false, false]; setClosePrices(["", ""]); setCloseDraft(undefined); }, [selected, scope]);
   useEffect(() => {
     setDraft(previous => {
       const pa = previous.pa || previous.sourceA !== "last" ? previous.pa : input(quotes[previous.a?.id || ""]?.last);
@@ -256,16 +258,25 @@ export default function RatioOperations({ active }: { active: boolean }) {
     });
     if (ok) { setSelected(d.op.id); setDeleted(undefined); setNotice("Registro restaurado."); }
   }
-  async function registerClose(fraction: number) {
+  let closeQuantities: [number, number] | undefined, closeIssue: string | undefined;
+  if (op && closeDraft?.id === op.id && closeDraft.value.trim()) {
+    try {
+      if (closeDraft.snapshot !== JSON.stringify(op)) throw Error("La operación cambió. Volvé a ingresar la cantidad para revisar el cierre.");
+      closeQuantities = partialCloseQuantities(op, closeDraft.leg, numeric(closeDraft.value));
+    } catch (error) { closeIssue = error instanceof Error ? error.message : "Revisá las cantidades de cierre."; }
+  }
+  async function registerClose(fraction?: number) {
     if (!op) return;
+    if (fraction === undefined && (!closeDraft || !closeQuantities || closeIssue)) { setIssue(closeIssue || "Ingresá una cantidad válida para el cierre."); return; }
     const snapshot = JSON.stringify(op);
     const ok = await commit(base => {
       const latest = base.operations.find(o => o.id === op.id);
       if (!latest || JSON.stringify(latest) !== snapshot) throw Error("La operación cambió; revisá sus cantidades antes de registrar el cierre.");
-      const next = closeOperation(latest, fraction, closePrices.map(numeric) as [number, number], new Date().toISOString());
+      const prices = closePrices.map(numeric) as [number, number], at = new Date().toISOString();
+      const next = fraction === undefined ? closeOperationByQuantity(latest, closeDraft!.leg, numeric(closeDraft!.value), prices, at) : closeOperation(latest, fraction, prices, at);
       return { ...base, operations: base.operations.map(o => o.id === latest.id ? next : o) };
     });
-    if (ok) { setAll(true); setNotice("Cierre registrado localmente con los precios ingresados."); }
+    if (ok) { setCloseDraft(undefined); setAll(true); setNotice("Cierre registrado localmente con los precios ingresados."); }
   }
   const pnlLines = (o: RatioOperation, field: "realized" | "pending" | "net" | "gross" | "commission" | "ddmm") => operationPnl(o, quotes).map(p =>
     <span key={p.currency} className={field === "commission" || field === "ddmm" ? "" : signed(p[field])} title={p.issue}>{money(p[field], p.currency)}</span>);
@@ -395,7 +406,14 @@ export default function RatioOperations({ active }: { active: boolean }) {
         <div className="ro-pnl-lines">{([ ["gross", "Resultado bruto"], ["commission", "Comisión · apertura + cierre"], ["ddmm", "DDMM · apertura + cierre"], ["net", "Neto al desarme"], ["realized", "Realizado neto"], ["pending", "Remanente neto"] ] as const).map(([field, label]) => <div key={field}><span>{label}</span><strong>{pnlLines(op, field)}</strong></div>)}</div>
         {selectedPnl.some(p => p.issue) && <p className="ro-issue">{selectedPnl.find(p => p.issue)?.issue}</p>}
         <table><thead><tr><th>Pata</th><th>Entrada</th><th>Abierta / total</th></tr></thead><tbody>{op.legs.map((l, i) => <tr key={i}><td>{l.side === 1 ? "Long" : "Short"} {l.instrument.symbol}<small>DDMM {input(l.ddmm)}%</small></td><td>{numberLabel(l.entry)}</td><td>{numberLabel(remaining(l))} / {numberLabel(l.quantity)}</td></tr>)}</tbody></table>
-        {!isClosed(op) && <><h4>Registrar cierre</h4><div className="ro-close-prices">{op.legs.map((l, i) => <label key={i}>Precio cierre {i === 0 ? "A" : "B"}<input aria-label={`Precio cierre ${i === 0 ? "A" : "B"}`} type="number" min="0" step="any" value={closePrices[i]} disabled={!available} onChange={e => { closeDirty.current[i] = true; setClosePrices(p => p.map((v, n) => n === i ? e.target.value : v) as [string, string]); }} /></label>)}</div><div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available} onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div><small>Se registra el porcentaje del remanente con estos precios. Podés reemplazar el último por el precio real de tu cierre.</small></>}
+        {!isClosed(op) && <><h4>Registrar cierre</h4>
+          <div className="ro-close-prices">{op.legs.map((l, i) => <label key={i}>Precio cierre {i === 0 ? "A" : "B"}<input aria-label={`Precio cierre ${i === 0 ? "A" : "B"}`} type="number" min="0" step="any" value={closePrices[i]} disabled={!available} onChange={e => { closeDirty.current[i] = true; setClosePrices(p => p.map((v, n) => n === i ? e.target.value : v) as [string, string]); }} /></label>)}</div>
+          <div className="ro-close-prices ro-close-quantities">{op.legs.map((l, i) => <label key={i}>Cerrar {l.instrument.symbol} · {l.instrument.quantityUnit}<input aria-label={`Cantidad cierre ${i === 0 ? "A" : "B"}`} aria-describedby="ro-close-help" type="number" min={l.step} max={remaining(l)} step={l.step} value={closeDraft?.id === op.id && closeDraft.leg === i ? closeDraft.value : input(closeQuantities?.[i])} className={closeQuantities && closeDraft?.leg !== i ? "ro-calculated" : undefined} disabled={!available || remaining(l) === 0} onChange={e => { setIssue(""); setCloseDraft({ id: op.id, snapshot: JSON.stringify(op), leg: i as 0 | 1, value: e.target.value }); }} /><small>Abiertos: {numberLabel(remaining(l))}{closeQuantities && <> · Luego: {numberLabel(remaining(l) - closeQuantities[i])}</>}</small></label>)}</div>
+          <small id="ro-close-help">Ingresá la cantidad en A o B. La otra conserva la proporción abierta, al lote más cercano.</small>
+          {closeIssue && <p className="ro-close-issue" role="alert">{closeIssue}</p>}
+          <button type="button" className="ro-primary ro-register-close" disabled={!available || !closeQuantities || !closePrices.every(p => numeric(p) > 0 && Number.isFinite(numeric(p)))} onClick={() => void registerClose()}>Registrar cierre</button>
+          <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available} onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div><small>Los accesos de porcentaje cierran esa parte del remanente. Podés ingresar los precios reales del cierre.</small></>}
+
         <div className="ro-ledger">{op.legs.flatMap((l, i) => l.exits.map((e, n) => <div key={`${i}-${n}`}>Cierre {l.instrument.symbol}: {numberLabel(e.quantity)} a {numberLabel(e.price)}<small>{new Date(e.at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hourCycle: "h23" })}</small></div>))}</div>
       </aside>}
     </div>}

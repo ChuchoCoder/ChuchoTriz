@@ -52,6 +52,30 @@ const numberSelect = () => host.querySelectorAll<HTMLSelectElement>("select")[0]
 const dateSelect = () => host.querySelectorAll<HTMLSelectElement>("select")[1];
 const legacyKey = "OptionsOperationsLocale", numberKey = "OptionsOperationsNumberLocale", dateKey = "OptionsOperationsDateLocale";
 
+it.each([true, false])("copies the operation date shown in each table, with grouping %s", async averaged => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { languages:["es-AR"], clipboard:{ writeText } });
+  executions.mockResolvedValue({ ...report(), rows:[
+    formatRow,
+    { ...formatRow, securityId:"put", kind:"put", timestamp:new Date(2026, 10, 17, 12).getTime(), quantity:-3 },
+  ] });
+  await act(async () => root.render(<OptionsOperations embedded />));
+  await changeSelect(dateSelect(), "es-AR");
+  if (!averaged) await act(async () => checkbox().click());
+  const calls = cells().join("\t");
+  const puts = [...host.querySelectorAll('table[aria-label="Puts"] tbody td')].map(cell => cell.textContent).join("\t");
+  expect(calls.split("\t")[0]).toBe("16/11/2026");
+  expect(puts.split("\t")[0]).toBe("17/11/2026");
+  expect(host.querySelector("time")?.textContent).toBe("18/12/2026");
+  await act(async () => copyButton("Copiar Calls").click());
+  expect(writeText).toHaveBeenLastCalledWith(calls);
+  await act(async () => copyButton("Copiar Puts").click());
+  expect(writeText).toHaveBeenLastCalledWith(puts);
+  await act(async () => copyButton("Copiar Calls y Puts").click());
+  const mode = averaged ? "CON PROMEDIOS" : "SIN PROMEDIOS";
+  expect(writeText).toHaveBeenLastCalledWith(`OPERACIONES CALLS (${mode})\n${calls}\n\nOPERACIONES PUTS (${mode})\n${puts}`);
+});
+
 it.each([
   ["es-AR", "es-AR", "16/11/2026", "18/12/2026", "1.234,5", "10,25", "1.234,56"],
   ["es-AR", "en-US", "11/16/2026", "12/18/2026", "1.234,5", "10,25", "1.234,56"],
@@ -75,7 +99,7 @@ it.each([
     .toEqual([operationDate, "-3", strike, putPrice]);
   expect(host.querySelector("time")?.textContent).toBe(expiry);
   expect(host.querySelector("time")?.dateTime).toBe("2026-12-18");
-  const calls = `${expiry}\t2\t${strike}\t${callPrice}`, puts = `${expiry}\t-3\t${strike}\t${putPrice}`;
+  const calls = `${operationDate}\t2\t${strike}\t${callPrice}`, puts = `${operationDate}\t-3\t${strike}\t${putPrice}`;
   await act(async () => copyButton("Copiar Calls").click());
   expect(writeText).toHaveBeenLastCalledWith(calls);
   await act(async () => copyButton("Copiar Puts").click());
@@ -179,7 +203,7 @@ it("uses the formats currently displayed if preferences change while clipboard c
   await act(async () => storage.emit({ [dateKey]:"en-US" }));
   expect(cells()[0]).toBe("11/16/2026");
   await act(async () => finishVerify(true));
-  expect(writeText).toHaveBeenLastCalledWith("12/18/2026\t2\t1.234,5\t10,25");
+  expect(writeText).toHaveBeenLastCalledWith("11/16/2026\t2\t1.234,5\t10,25");
 });
 
 it("handles removed and invalid independent preferences without changing the other format", async () => {
