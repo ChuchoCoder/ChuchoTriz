@@ -139,7 +139,8 @@
 .ct-sim .ct-opt-sigma-overlay { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:1; }
 .ct-sim .ct-opt-sigma-1 { color:var(--sim-sigma-one); }
 .ct-sim .ct-opt-sigma-2 { color:var(--sim-sigma-two); }
-.ct-sim .ct-opt-sigma-key i { font-style:normal; font-weight:700; }
+.ct-sim .ct-opt-sigma-key { display:inline-flex; flex-wrap:wrap; align-items:baseline; gap:2px 7px; font-size:10px; color:var(--sim-muted); }
+.ct-sim .ct-opt-sigma-key strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
 .ct-sim .ct-opt-sigma-line { position:absolute; left:0; right:0; border-top:1px dashed currentColor; }
 .ct-sim .ct-opt-sigma-line.ct-opt-sigma-2 { border-top-style:dotted; }
 .ct-sim .ct-opt-sigma-center { position:absolute; top:0; left:50%; transform:translate(-50%,-50%); display:flex; gap:3px; font-size:10px; line-height:13px; font-weight:700; white-space:nowrap; }
