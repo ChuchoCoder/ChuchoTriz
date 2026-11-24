@@ -82,6 +82,9 @@ La fórmula con C no se grafica como `(A/B)/C`: se mantiene A/B y se compara C,
 según la elección explícita del usuario. Las escalas se inicializan en números;
 el usuario conserva los controles nativos para modificarlas después.
 La cobertura y límites del histórico pertenecen al broker. El lector depende
-de la instancia React de TradingChart y comprueba su contrato por versión;
-la prueba nativa se realizó en reMarkets 4.23.16, sin presumir cobertura de datos
-en otro broker. La entrega es un paquete candidato sin publicación ni instalación.
+de la instancia React de TradingChart y comprueba las capacidades del gráfico,
+sin bloquear por el número de versión de Matriz. La prueba nativa inicial se
+realizó en reMarkets 4.23.16, sin presumir cobertura de datos en otro broker.
+Este informe registra el candidato inicial; la validación posterior instalada
+en Cocos y la eliminación de bloqueos por versión se documentan en
+[capacidades de Matriz](matriz-capabilities-2026-11-24.md).
