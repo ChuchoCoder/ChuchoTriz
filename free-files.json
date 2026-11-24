@@ -192,5 +192,6 @@
   "scripts/ratio-chart-reader.test.mjs",
   "docs/qa/ratio-native-chart-2026-11-23.md",
   "tools/validate-ratio-chart.playwright.js",
-  "docs/qa/matriz-capabilities-2026-11-24.md"
+  "docs/qa/matriz-capabilities-2026-11-24.md",
+  "docs/qa/0.0.29-2026-11-24.md"
 ]
