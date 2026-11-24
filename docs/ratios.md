@@ -29,6 +29,21 @@ manual local. Abrir o cerrar un registro no manda órdenes al broker.
 El lector de este tab admite también Matriz 4.24.5, con las mismas verificaciones
 de cuenta, instrumentos y unidades de cotización.
 
+## Futuros como referencia C
+
+En el Monitor y en el widget podés buscar **DLR/NOV26**, **DLR/DIC26** u otro
+contrato futuro de A3 disponible en Matriz y elegirlo como **Referencia C**.
+Cada vencimiento conserva su identidad exacta; no se sustituye por DLR/SPOT
+ni por otro contrato cuando falta su cotización.
+
+Se usa el último precio nativo del futuro, sin multiplicarlo por el tamaño del
+contrato. Por ejemplo, `(AL30/AL30D) / DLR/DIC26` compara el dólar MEP con ese
+futuro mediante `((A/B)/C − 1) × 100`. Si no tiene último precio, muestra la
+cotización como no disponible; no completa datos con el cierre anterior.
+Los futuros se identifican como **Futuro · sólo monitor**. La elección se guarda
+y el gráfico nativo compara ese contrato en el eje izquierdo numérico, manteniendo
+el indicador A/B y el aviso habitual para C.
+
 ## Dólar oficial y brecha contra MEP
 
 El selector encuentra **DLR/SPOT** al buscar **Dólar oficial**, **Dólar USA** o

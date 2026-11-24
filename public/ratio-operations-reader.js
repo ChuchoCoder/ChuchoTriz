@@ -25,6 +25,11 @@
         cfi: "MRIXXX", quantityUnit: "unidades", monitorOnly: true };
     }
     if (!s || s.isProduct || s.isPortfolio || !text(s.id) || !text(s.symbolStr || s.symbol, 100) || !text(s.marketId) || !text(s.currency)) return;
+    // A3 futures have no settlementType. References use the quoted price, not contract notional.
+    if (s.marketId === "rx" && ["FXXXSX", "FXXXXX"].includes(s.cfiCode)) {
+      return { id: s.id, symbol: s.symbolStr || s.symbol, market: "rx", currency: s.currency, settlement: "Futuro",
+        cfi: s.cfiCode, quantityUnit: "contratos", monitorOnly: true };
+    }
     const rate = s.cfiCode === "RPXXXX";
     if (rate ? s.marketId !== "bm" || s.currency !== "ARS" || !/^bm_MERV_PESOS_[1-9]\d{0,2}D$/.test(s.id) ||
       s.symbolStr !== `PESOS - ${s.id.slice("bm_MERV_PESOS_".length)}` : !text(s.settlementType)) return;

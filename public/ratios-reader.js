@@ -57,6 +57,9 @@
       return { id: sec.id, symbol: "DLR/SPOT", market: "rx", currency: "ARS", settlement: "Referencia", monitorOnly: true };
     }
     if (!sec || sec.isProduct || sec.isPortfolio || !short(sec.id) || !short(sec.symbolStr || sec.symbol, 100)) return;
+    if (sec.marketId === "rx" && ["FXXXSX", "FXXXXX"].includes(sec.cfiCode) && short(sec.currency)) {
+      return { id: sec.id, symbol: clean(sec.symbolStr || sec.symbol), market: "rx", currency: sec.currency, settlement: "Futuro", monitorOnly: true };
+    }
     return { id: sec.id, symbol: clean(sec.symbolStr || sec.symbol), market: clean(sec.marketId), currency: clean(sec.currency), settlement: clean(sec.settlementType) };
   }
   function byId(c, id) {

@@ -21,6 +21,9 @@ function install() {
     ['GD30', 72000, 71000, 'ARS', '2'], ['PESOS - 7D', 40, 39, 'ARS', ''], ['PESOS - 1D', 35, 34, 'ARS', '']
   ].map(([symbolStr, lst, refp, currency, settlementType]) => ({ id: symbolStr + '-' + settlementType, symbol: settlementType === '1' ? symbolStr + ' CI' : symbolStr, symbolStr: settlementType === '1' ? symbolStr + ' CI' : symbolStr, marketId: 'bm', currency, settlementType, md: { lst, refp, seq: 1, lstdStr: new Date().toISOString() } }));
   securities.push({ id: 'rx_DDF_DLR_SPOT', symbol: 'DLR/SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'MRIXXX', md: { lst: 1572.5, refp: 1565, seq: 1, lstdStr: new Date().toISOString(), refdStr: '2026-11-19' } });
+  for (const [month, lst] of [['NOV26', 1600], ['DIC26', 1650]]) securities.push({ id: 'rx_DDF_DLR_' + month,
+    symbol: 'DLR/' + month, symbolStr: 'DLR/' + month, marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'FXXXSX',
+    refData: { totalAmountFactor: 1, contractMultiplier: 1000, roundLot: 1 }, md: { lst, refp: 1590, seq: 1, lstdStr: new Date().toISOString() } });
   let ds;
   function nativeWidget(data, dashboard) {
     return { ...data, dashboard, key: data.component + '-' + (++counter),
