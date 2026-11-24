@@ -1,5 +1,22 @@
 # Smoke y regresión de ChuchoTriz Free
 
+Para el **gráfico nativo de ratios**, ejecutar
+`tools/validate-ratio-chart.playwright.js` sobre `/fixture` del servidor
+`node tools/ratios-fixture.mjs`, con el MCP compartido. Los gráficos del fixture
+comienzan con estudios y dibujos heredados: al abrir desde widget, Monitor u
+Operaciones deben quedar sólo el Ratio con línea blanca y la comparación B/C
+numérica a izquierda. El gráfico mantiene velas de cinco minutos. En una
+comprobación nativa, usar una pestaña propia sin guardar el gráfico; comprobar
+además que al reabrir un gráfico normal se recupera el diseño original.
+
+Para **futuros como referencia C**, ejecutar además
+`tools/validate-ratio-futures.playwright.js` sobre `/fixture` del servidor
+`node tools/ratios-fixture.mjs`, con el MCP compartido. Verifica selección de
+DLR/NOV26 en el widget y DLR/DIC26 en Monitor, cálculo sin multiplicador de
+contrato, persistencia tras recarga, actualización y ausencia de precio,
+restricción a monitor y gráfico de C a izquierda numérica con velas de cinco
+minutos. Usar sólo la página loopback con datos sintéticos, nunca el broker.
+
 Para el tab **Ratios**, ejecutá además
 `tools/validate-ratio-operations.playwright.js` en la URL `/fixture?scenario=regression`
 del preview con el MCP compartido. El script instala únicamente en esa página

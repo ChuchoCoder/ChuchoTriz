@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, closeOperationByQuantity, partialCloseQuantities, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
-import { calculateRatio, pairLabel } from "./model";
+import { calculateRatio, instrumentDetail, pairLabel } from "./model";
+import { isMonitorOnly } from "./trading";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
 const defaultInstrument = (symbol: string): TradingInstrument => symbol === "DLR/SPOT" ? { ...instrument("rx_DDF_DLR_SPOT"), symbol, market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true } : instrument(symbol);
@@ -27,6 +28,15 @@ it("retains the optional comparison reference across storage and excludes spot r
   const op = operation(); op.legs[0].instrument = c;
   expect(() => validateOperation(op)).toThrow(/referencias/);
   op.legs[0].instrument = { ...c, monitorOnly: undefined };
+  expect(() => validateOperation(op)).toThrow(/referencias/);
+});
+it("retains the exact future reference without contract sizing or permission to register an operation", () => {
+  const c: TradingInstrument = { id: "rx_DDF_DLR_DIC26", symbol: "DLR/DIC26", market: "rx", currency: "ARS", settlement: "Futuro", cfi: "FXXXSX", quantityUnit: "contratos", monitorOnly: true };
+  const book = { ...emptyBook(), schema: 2 as const, watch: [{ id: "future", a: instrument("AL30"), b: instrument("AL30D", "USD"), c }] };
+  expect(validateBook(JSON.parse(JSON.stringify(book)))).toEqual(book);
+  expect(isMonitorOnly(c)).toBe(true);
+  expect(instrumentDetail(c)).toContain("Futuro · sólo monitor");
+  const op = operation(); op.legs[0].instrument = c;
   expect(() => validateOperation(op)).toThrow(/referencias/);
 });
 it("resolves ten defaults including both AL30 dollar spreads with the native official reference", async () => {

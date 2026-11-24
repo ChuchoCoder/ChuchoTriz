@@ -33,6 +33,28 @@ test('finds the dollar header spot by aliases with null settlement and subscribe
   f.securities.at(-2).md.lst = 1573;
   assert.equal((await f.quotes(['rx_DDF_DLR_SPOT'])).result.instruments.rx_DDF_DLR_SPOT.last, 1573);
 });
+test('offers A3 futures without settlement as price-only references and never scales quotes by contract size', async () => {
+  const f = fixture(), c = await f.context();
+  const future = { id: 'rx_DDF_DLR_NOV26', symbolStr: 'DLR/NOV26', marketId: 'rx', currency: 'ARS', cfiCode: 'FXXXSX', settlementType: null,
+    refData: { totalAmountFactor: 1, contractMultiplier: 1000, roundLot: 1 }, md: { lst: 1600, refp: 1590, seq: 1 } };
+  f.securities.push(future, { ...future, id: 'rx_DDF_DLR_DIC26', symbolStr: 'DLR/DIC26', cfiCode: 'FXXXXX', settlementType: undefined, md: {} },
+    { ...future, id: 'product', isProduct: true }, { ...future, id: 'portfolio', isPortfolio: true },
+    { ...future, id: 'option', cfiCode: 'OCEFXS' }, { ...future, id: 'bad-currency', currency: '' });
+  const result = (await f.request('ratioSearch', { contextId: c.contextId, query: 'DLR/' })).result;
+  assert.deepEqual(result.map(s => s.id).sort(), ['rx_DDF_DLR_DIC26', 'rx_DDF_DLR_NOV26']);
+  for (const item of result) {
+    assert.equal(item.settlement, 'Futuro'); assert.equal(item.monitorOnly, true);
+    assert.equal(item.amountFactor, undefined); assert.equal(item.quantityStep, undefined);
+  }
+  const quotes = (await f.quotes(result.map(s => s.id))).result.instruments;
+  assert.equal(quotes[future.id].last, 1600); assert.equal(quotes[future.id].reference, 1590);
+  assert.equal(quotes[future.id].amountFactor, undefined);
+  assert.equal(quotes.rx_DDF_DLR_DIC26.last, undefined);
+  assert.deepEqual(f.subscriptions, [['md', result.map(s => 'md.' + s.id)]]);
+  future.md = { lst: 1610, refp: 1590, seq: 2 };
+  assert.equal((await f.quotes([future.id])).result.instruments[future.id].last, 1610);
+});
+
 function fixture(version = '4.24.4') {
   let receive, id = 0;
   const replies = [], subscriptions = [];

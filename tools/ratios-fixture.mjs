@@ -21,6 +21,9 @@ function install() {
     ['GD30', 72000, 71000, 'ARS', '2'], ['PESOS - 7D', 40, 39, 'ARS', ''], ['PESOS - 1D', 35, 34, 'ARS', '']
   ].map(([symbolStr, lst, refp, currency, settlementType]) => ({ id: symbolStr + '-' + settlementType, symbol: settlementType === '1' ? symbolStr + ' CI' : symbolStr, symbolStr: settlementType === '1' ? symbolStr + ' CI' : symbolStr, marketId: 'bm', currency, settlementType, md: { lst, refp, seq: 1, lstdStr: new Date().toISOString() } }));
   securities.push({ id: 'rx_DDF_DLR_SPOT', symbol: 'DLR/SPOT', symbolStr: 'DLR/SPOT', marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'MRIXXX', md: { lst: 1572.5, refp: 1565, seq: 1, lstdStr: new Date().toISOString(), refdStr: '2026-11-19' } });
+  for (const [month, lst] of [['NOV26', 1600], ['DIC26', 1650]]) securities.push({ id: 'rx_DDF_DLR_' + month,
+    symbol: 'DLR/' + month, symbolStr: 'DLR/' + month, marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'FXXXSX',
+    refData: { totalAmountFactor: 1, contractMultiplier: 1000, roundLot: 1 }, md: { lst, refp: 1590, seq: 1, lstdStr: new Date().toISOString() } });
   let ds;
   function nativeWidget(data, dashboard) {
     return { ...data, dashboard, key: data.component + '-' + (++counter),
@@ -70,7 +73,12 @@ function installChart() {
   const id = decodeURIComponent(location.pathname.slice('/security/'.length));
   const instrument = window.mainStore.securityStore.securities.find(s => s.id === id);
   let sequence = 0, resolution = 'D', chartType = 2;
-  const studies = new Map();
+  const studies = new Map([
+    ['default-ratio', { name: 'Ratio', inputs: { source: 'close', symbol2: 'OTHER' } }],
+    ['default-compare', { name: 'Compare', inputs: { symbol: 'OTHER' } }],
+    ['default-volume', { name: 'Volume', inputs: {} }],
+  ]);
+  let drawings = 1;
   const scale = () => { let mode = 2; return { getMode: () => mode, setMode(value) { mode = value; }, setAutoScale() {} }; };
   const mainScale = scale();
   const chart = {
@@ -81,17 +89,18 @@ function installChart() {
     getStudyById(id) { const s = studies.get(id); return {
       getInputValues: () => Object.entries(s.inputs).map(([id, value]) => ({ id, value })),
       priceScale: () => s.scale, changePriceScale(value) { s.options = { priceScale: value }; },
-      setVisible(value) { s.visible = value; },
+      setVisible(value) { s.visible = value; }, applyOverrides(value) { s.overrides = value; },
       paneIndex: () => s.name === 'Overlay' ? 0 : 1,
     }; },
     async createStudy(name, overlay, lock, inputs, overrides, options) {
-      const id = String(++sequence); studies.set(id, { name, inputs, options, scale: scale() }); return id;
+      const id = String(++sequence); studies.set(id, { name, inputs, options, overrides, scale: scale() }); return id;
     },
     removeEntity(id) { studies.delete(id); },
+    removeAllStudies() { studies.clear(); }, removeAllShapes() { drawings = 0; },
   };
   document.getElementById('tv_chart_container').__reactFiberFixture = { stateNode: { props: { security: { id } }, widget: { activeChart: () => chart, getStudiesList: () => ['Ratio', 'Overlay'] } } };
-  window.ratioChartFixture = { chart, snapshot: () => ({ symbol: chart.symbol(), resolution, chartType, mainMode: mainScale.getMode(),
-    studies: [...studies.values()].map(s => ({ name: s.name, inputs: s.inputs, options: s.options, scaleMode: s.scale.getMode() })) }) };
+  window.ratioChartFixture = { chart, snapshot: () => ({ symbol: chart.symbol(), resolution, chartType, mainMode: mainScale.getMode(), drawings,
+    studies: [...studies.values()].map(s => ({ name: s.name, inputs: s.inputs, options: s.options, overrides: s.overrides, scaleMode: s.scale?.getMode() })) }) };
 }
 const server = createServer((request, response) => {
   const path = new URL(request.url, 'http://127.0.0.1').pathname.slice(1);

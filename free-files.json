@@ -193,5 +193,8 @@
   "docs/qa/ratio-native-chart-2026-11-23.md",
   "tools/validate-ratio-chart.playwright.js",
   "docs/qa/matriz-capabilities-2026-11-24.md",
-  "docs/qa/0.0.29-2026-11-24.md"
+  "docs/qa/0.0.29-2026-11-24.md",
+  "tools/validate-ratio-futures.playwright.js",
+  "docs/qa/ratio-futures-reference-2026-11-24.md",
+  "docs/qa/ratio-chart-clean-layout-2026-11-24.md"
 ]

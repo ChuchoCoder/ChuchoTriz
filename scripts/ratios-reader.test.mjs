@@ -61,6 +61,28 @@ test('persists a three-price MEP comparison and subscribes to the official dolla
   const invalid = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [{ ...params.pairs[1], c: null }] });
   assert.match(invalid.error, /inválido/);
 });
+test('persists an exact A3 future reference with null settlement and uses its native quote', async () => {
+  const f = fixture();
+  const future = { id: 'rx_DDF_DLR_DIC26', symbolStr: 'DLR/DIC26', marketId: 'rx', currency: 'ARS', cfiCode: 'FXXXSX', settlementType: null,
+    refData: { contractMultiplier: 1000 }, md: { lst: 1600, refp: 1590, seq: 1 } };
+  f.securities.push(future, { ...future, id: 'rx_DDF_DLR_NOV26', symbolStr: 'DLR/NOV26', cfiCode: 'FXXXXX', settlementType: undefined },
+    { ...future, id: 'future-product', isProduct: true }, { ...future, id: 'future-portfolio', isPortfolio: true });
+  const search = (await f.request('ratiosSearch', { ...await f.args(), query: 'DLR/' })).result;
+  assert.deepEqual(search.map(s => s.id).sort(), ['rx_DDF_DLR_DIC26', 'rx_DDF_DLR_NOV26']);
+  assert.ok(search.every(s => s.settlement === 'Futuro' && s.monitorOnly === true));
+  await f.add(); const cfg = (await f.state()).widgets[0].config;
+  const saved = await f.request('ratiosEdit', { ...await f.args(), widgetId: cfg.id, revision: 0, schema: 2,
+    pairs: [{ id: 'mep-future', a: 'a', b: 'b', c: future.id, format: 'percent' }] });
+  assert.equal(saved.error, undefined);
+  assert.equal(saved.result.widgets[0].config.pairs[0].c.id, future.id);
+  assert.equal(saved.result.quotes[future.id].last, 1600);
+  const persisted = (await f.ds.getDashboard()).layout.find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios;
+  assert.deepEqual(persisted.pairs[0].c, search.find(s => s.id === future.id));
+  future.md = { lst: 1610, refp: 1590, seq: 2 };
+  assert.equal((await f.state()).quotes[future.id].last, 1610);
+  assert.ok(f.calls.some(call => Array.isArray(call) && call[1].includes('md.' + future.id)));
+});
+
 function fixture() {
   let receive, id = 0, persisted, failSave = false, saveTimer;
   const calls = [], replies = [];
