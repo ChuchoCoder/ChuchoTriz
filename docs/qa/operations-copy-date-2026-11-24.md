@@ -1,6 +1,7 @@
 # Copia de la fecha de operación — 2026-11-24
 
-Base: `bbccd84` (main). Datos ficticios; sin operaciones ni reportes reales.
+Base: `bbccd84` (main). Código funcional revisado: `39d18b4`.
+Datos ficticios; sin operaciones ni reportes reales.
 
 La grilla mostraba `format.date(row.timestamp)`, pero la primera columna del
 TSV usaba `format.expiration(row.expiration)`. La prueba de los botones reprodujo
@@ -30,3 +31,10 @@ La suite de navegador se ejecutó desde un envoltorio temporal mediante el MCP
 existente porque el launcher/README de la ruta documentada no estaba disponible
 en este entorno. La conexión al perfil compartido sí funcionó. No se usó otro perfil.
 No se abrió Excel: la comprobación cubre el TSV entregado al portapapeles.
+
+## Revisión posterior del PR #86
+
+La primera ejecución remota de CI falló porque este informe se agregó después
+de las comprobaciones locales y no estaba en `free-files.json`. Se revisó su
+contenido y se autorizó únicamente esta ruta, sin ampliar las guardas.
+Las comprobaciones de paquete se repiten con el informe ya incluido.
