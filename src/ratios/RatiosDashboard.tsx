@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
 import { RatioChartLink } from "./RatioChart";
-import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, tickerKey, tradeLabel, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
+import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, referenceCFormula, referenceCQuote, tickerKey, tradeLabel, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns";
@@ -108,21 +108,29 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const [editing, setEditing] = useState<string | null>(cfg.pairs.length ? null : "new");
   const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>(), [c, setC] = useState<RatioInstrument>();
   const [compare, setCompare] = useState(false);
+  const [divideCBy100, setDivideCBy100] = useState(false);
   const [formatOverride, setFormatOverride] = useState<RatioFormat>(), [editorSession, setEditorSession] = useState(0);
   const format = formatOverride ?? (compare ? "percent" : defaultRatioFormat(a, b));
+  const referenceFormula = referenceCFormula(divideCBy100 ? 100 : undefined);
   const [issue, setIssue] = useState("");
   const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
-  const begin = (pair?: RatioPair) => { setA(pair?.a); setB(pair?.b); setC(pair?.c); setCompare(!!pair?.c); setFormatOverride(pair ? pair.format || "number" : undefined); setEditorSession(n => n + 1); setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue(""); };
+  const begin = (pair?: RatioPair) => {
+    setA(pair?.a); setB(pair?.b); setC(pair?.c); setCompare(!!pair?.c); setDivideCBy100(pair?.cDivisor === 100);
+    setFormatOverride(pair ? pair.format || "number" : undefined); setEditorSession(n => n + 1);
+    setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue("");
+  };
   const run = async (method: Mutation, params: Record<string, unknown>) => {
     setIssue("");
     try { await command(method, { widgetId: cfg.id, revision: cfg.revision, ...params }); return true; }
     catch (error) { setIssue(error instanceof Error ? error.message : "No se pudo guardar el cambio."); return false; }
   };
   const savePairs = (pairs: RatioPair[], expectedRevision = cfg.revision) => run("ratiosEdit", {
-    schema: 2, revision: expectedRevision, pairs: pairs.map(p => ({ id: p.id, a: p.a.id, b: p.b.id, ...(p.c ? { c: p.c.id } : {}), format: p.format || "number" }))
+    schema: 3, revision: expectedRevision, pairs: pairs.map(p => ({
+      id: p.id, a: p.a.id, b: p.b.id, ...(p.c ? { c: p.c.id, cDivisor: p.cDivisor } : {}), format: p.format || "number",
+    })),
   });
   const finishResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!resize.current) return;
@@ -140,7 +148,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         event.preventDefault();
         if (!a || !b || compare && !c) { setIssue("Seleccioná los instrumentos y la referencia de la lista."); return; }
         if (a.id === b.id) { setIssue("Elegí instrumentos diferentes para A y B."); return; }
-        const pair = { id: editing === "new" ? crypto.randomUUID() : editing, a, b, ...(compare && c ? { c } : {}), format };
+        const pair: RatioPair = { id: editing === "new" ? crypto.randomUUID() : editing, a, b, ...(compare && c ? { c, cDivisor: divideCBy100 ? 100 : undefined } : {}), format };
         const pairs = editing === "new" ? [...cfg.pairs, pair] : cfg.pairs.map(p => p.id === editing ? pair : p);
         void savePairs(pairs, revision.current).then(saved => { if (saved) setEditing(null); });
       }}>
@@ -149,10 +157,13 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
-        <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => { setCompare(e.target.checked); setC(undefined); setFormatOverride(undefined); }} />Comparar A/B con una referencia</label>
-        {compare && <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy} />}
+        <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => { setCompare(e.target.checked); setC(undefined); setDivideCBy100(false); setFormatOverride(undefined); }} />Comparar A/B con una referencia</label>
+        {compare && <>
+          <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy} />
+          <label className="ct-ratios-compare"><input type="checkbox" checked={divideCBy100} disabled={busy} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>
+        </>}
         <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormatOverride(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
-          <span>{compare ? format === "percent" ? "((A ÷ B) ÷ C − 1) × 100" : "(A ÷ B) ÷ C" : format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
+          <span>{compare ? format === "percent" ? `((A ÷ B) ÷ ${referenceFormula} − 1) × 100` : `(A ÷ B) ÷ ${referenceFormula}` : format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>
           <button type="submit" disabled={busy || !a || !b || compare && !c}>{busy ? "Guardando…" : editing === "new" ? "Agregar" : "Guardar"}</button>
         </div>
@@ -161,8 +172,8 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
       <div className="ct-ratios-table-wrap"><table>
         <thead><tr><th>Par A/B</th>{columns.lastA && <th>Último A</th>}{columns.lastB && <th>Último B</th>}{showReference && <th>Referencia C</th>}<th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span><ColumnOptions visible={columns} busy={busy} onChange={visible => { void run("ratiosColumns", { columnsRevision: widget.columns?.revision ?? 0, columns: visible }); }} /></th></tr></thead>
         <tbody>{cfg.pairs.map(pair => {
-          const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id], qc = pair.c ? snapshot.quotes[pair.c.id] : undefined;
-          const result = calculateRatio(qa, qb, pair.c ? qc ?? {} : undefined);
+          const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id], qc = referenceCQuote(snapshot.quotes, pair);
+          const result = calculateRatio(qa, qb, qc), reference = referenceCFormula(pair.cDivisor);
           const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt, qc?.tradedAt === undefined ? 0 : Date.now() - qc.tradedAt);
           const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`;
           return <tr key={pair.id}>
@@ -171,8 +182,8 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             </td>
             {columns.lastA && <td title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
             {columns.lastB && <td title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>}
-            {showReference && <td title={pair.c ? `${pair.c.symbol} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{pair.c ? numberLabel(qc?.last) : "—"}</td>}
-            <td className="ct-ratios-value" title={result.issue || (pair.c ? "(A/B)/C; porcentaje = ((A/B)/C − 1) × 100. Entre paréntesis: |A/B − C|, en la unidad de C." : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
+            {showReference && <td title={pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{numberLabel(qc?.last)}</td>}
+            <td className="ct-ratios-value" title={result.issue || (pair.c ? `(A/B) ÷ ${reference}. Porcentaje = ((A/B) ÷ ${reference} − 1) × 100. Diferencia absoluta |A/B − ${reference}| entre paréntesis.` : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
             <td className={result.change === undefined || result.change === 0 ? "" : result.change > 0 ? "ct-ratios-up" : "ct-ratios-down"} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {result.change === undefined ? "—" : result.change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>

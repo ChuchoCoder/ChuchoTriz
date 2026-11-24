@@ -13,7 +13,7 @@
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
   const tickerKey = s => s.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase();
-  const ownConfig = w => w?.component === TYPE && [1, 2].includes(w.settings?.[KEY]?.schema) && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
+  const ownConfig = w => w?.component === TYPE && [1, 2, 3].includes(w.settings?.[KEY]?.schema) && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
   const COLUMN_KEYS = ["lastA", "lastB", "referenceC"];
   function columnsOf(w) {
     const stored = w.settings?.chuchotrizRatiosColumns;
@@ -92,11 +92,13 @@
   function configOf(w) {
     const cfg = ownConfig(w);
     if (!cfg || !Number.isSafeInteger(cfg.revision) || cfg.revision < 0 || cfg.pairs.some(p => !short(p?.id) || !short(p?.a?.id) || !short(p?.b?.id))) throw Error("Configuración de Ratios inválida o de otra versión.");
-    if (cfg.pairs.some(p => p.c !== undefined && (cfg.schema !== 2 || !short(p.c?.id)))) throw Error("Referencia de ratio inválida.");
+    if (cfg.pairs.some(p => p.c !== undefined && (cfg.schema < 2 || !short(p.c?.id)) ||
+      p.cDivisor !== undefined && (cfg.schema !== 3 || !p.c || p.cDivisor !== 100))) throw Error("Referencia de ratio inválida.");
     if (cfg.pairs.some(p => p.format !== undefined && !["number", "percent"].includes(p.format))) throw Error("Formato de ratio no compatible.");
     const descriptor = i => ({ id: i.id, symbol: clean(i.symbol), market: clean(i.market), currency: clean(i.currency), settlement: clean(i.settlement), ...(i.monitorOnly === true ? { monitorOnly: true } : {}) });
     return { schema: cfg.schema, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id, format: p.format || "number",
-      a: descriptor(p.a), b: descriptor(p.b), ...(p.c ? { c: descriptor(p.c) } : {}) })) };
+      a: descriptor(p.a), b: descriptor(p.b), ...(p.c ? { c: descriptor(p.c) } : {}),
+      ...(p.cDivisor === 100 ? { cDivisor: p.cDivisor } : {}) })) };
   }
   function timestamp(raw) {
     const value = raw instanceof Date ? raw.getTime() : typeof raw === "string" ? Date.parse(raw) : NaN;
@@ -222,7 +224,8 @@
         if (!visible || Array.isArray(visible) || Object.keys(visible).length !== COLUMN_KEYS.length || COLUMN_KEYS.some(key => typeof visible[key] !== "boolean") || previous.revision === Number.MAX_SAFE_INTEGER) throw Error("Elegí las columnas visibles de Ratios.");
         widget.settings = { ...widget.settings, chuchotrizRatiosColumns: { revision: previous.revision + 1, visible: Object.fromEntries(COLUMN_KEYS.map(key => [key, visible[key]])) } };
       } else if (method === "ratiosEdit") {
-        if (cfg.schema === 2 && params.schema !== 2) throw Error("Esta comparación requiere la versión actual de Ratios. Recargá Matriz antes de editarla.");
+        if (cfg.schema === 3 && params.schema !== 3 ||
+          cfg.schema === 2 && ![2, 3].includes(params.schema)) throw Error("Esta comparación requiere la versión actual de Ratios. Recargá Matriz antes de editarla.");
         if (!Array.isArray(params.pairs) || params.pairs.length > 50) throw Error("Podés agregar hasta 50 ratios por widget.");
         const ids = new Set(), pairs = params.pairs.map(p => {
           if (!short(p?.id) || ids.has(p.id) || p.a === p.b) throw Error("Elegí instrumentos diferentes y ratios válidos.");
@@ -237,10 +240,13 @@
           };
           const format = p.format ?? previous?.format ?? "number";
           if (!["number", "percent"].includes(format)) throw Error("Elegí formato Número o Porcentaje.");
-          return { id: p.id, a: resolve(p.a), b: resolve(p.b), ...(p.c !== undefined ? { c: resolve(p.c) } : {}), format };
+          if (p.cDivisor !== undefined && (params.schema !== 3 || p.c === undefined || p.cDivisor !== 100)) throw Error("Divisor inválido para la referencia C.");
+          return { id: p.id, a: resolve(p.a), b: resolve(p.b), ...(p.c !== undefined ? { c: resolve(p.c) } : {}),
+            ...(p.cDivisor === 100 ? { cDivisor: p.cDivisor } : {}), format };
         });
-        if (new Set(pairs.map(p => JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null]))).size !== pairs.length) throw Error("Ese par ya está agregado en el widget.");
-        widget.settings = { ...widget.settings, [KEY]: { ...cfg, schema: pairs.some(p => p.c) ? 2 : 1, revision: cfg.revision + 1, pairs }, chuchotrizRatiosInitialMissing: [] };
+        if (new Set(pairs.map(p => JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null, p.cDivisor ?? 1]))).size !== pairs.length) throw Error("Ese par ya está agregado en el widget.");
+        const schema = pairs.some(p => p.cDivisor) ? 3 : pairs.some(p => p.c) ? 2 : 1;
+        widget.settings = { ...widget.settings, [KEY]: { ...cfg, schema, revision: cfg.revision + 1, pairs }, chuchotrizRatiosInitialMissing: [] };
       } else throw Error("Cambio de Ratios no permitido.");
     }
     await verifiedSave(c, op);

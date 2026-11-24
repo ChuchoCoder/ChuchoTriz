@@ -1,4 +1,4 @@
-import { pairKey, ratioLabel, tickerKey, type RatioInstrument } from "./model";
+import { pairKey, ratioLabel, tickerKey, type RatioInstrument, type RatioReference } from "./model";
 
 export interface TradingInstrument extends RatioInstrument {
   cfi: string;
@@ -12,7 +12,7 @@ export interface TradingQuote {
   depth?: { bid?: TradingDepthLevel; ask?: TradingDepthLevel }[];
   tradedAt?: number; amountFactor?: number; issue?: string; reference?: number; referenceDate?: string;
 }
-export interface TradingPair { id: string; a: TradingInstrument; b: TradingInstrument; c?: TradingInstrument }
+export interface TradingPair extends RatioReference { id: string; a: TradingInstrument; b: TradingInstrument; c?: TradingInstrument }
 export interface RatioExit { quantity: number; price: number; at: string }
 export interface TradingLeg {
   instrument: TradingInstrument; side: 1 | -1; quantity: number; entry: number;
@@ -23,7 +23,10 @@ export interface RatioOperation {
   fx: number; // Retained for compatibility with historical records; sizing no longer converts currencies.
   targetRatio: number | null; legs: [TradingLeg, TradingLeg];
 }
-export interface TradingBook { schema: 1 | 2; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
+export interface TradingBook { schema: 1 | 2 | 3; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
+export function tradingBookSchema(watch: readonly TradingPair[]): TradingBook["schema"] {
+  return watch.some(p => p.cDivisor) ? 3 : watch.some(p => p.c) ? 2 : 1;
+}
 export function invertWatchPair(book: TradingBook, id: string): TradingBook {
   const pair = book.watch.find(p => p.id === id);
   if (!pair) throw Error("El par ya no está en el monitor.");
@@ -59,7 +62,7 @@ export function applyDefaultWatch(book: TradingBook, pairs: TradingPair[], resto
   const watch = [...book.watch];
   for (const p of pairs) if (!watch.some(existing => pairKey(existing) === pairKey(p))) watch.push(p);
   if (watch.length > MAX_WATCH) throw Error("El monitor no tiene espacio para los pares predeterminados. Quitá un par y volvé a intentarlo.");
-  return { ...book, schema: watch.some(p => p.c) ? 2 : 1, watch, watchDefaults: 1 };
+  return { ...book, schema: tradingBookSchema(watch), watch, watchDefaults: 1 };
 }
 const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -201,10 +204,12 @@ export function validInstrument(value: unknown): value is TradingInstrument {
 export function validateBook(value: unknown): TradingBook {
   if (!value || typeof value !== "object") throw Error("Registro de ratios inválido; no se reemplazó el guardado.");
   const b = value as TradingBook;
-  if (![1, 2].includes(b.schema) || b.watchDefaults !== undefined && b.watchDefaults !== 1 || typeof b.revision !== "string" || b.revision.length > 80 || !Array.isArray(b.watch) || b.watch.length > MAX_WATCH ||
+  if (![1, 2, 3].includes(b.schema) || b.watchDefaults !== undefined && b.watchDefaults !== 1 || typeof b.revision !== "string" || b.revision.length > 80 || !Array.isArray(b.watch) || b.watch.length > MAX_WATCH ||
     !Array.isArray(b.operations) || b.operations.length > MAX_OPERATIONS || new Set(b.operations.map(o => o?.id)).size !== b.operations.length ||
     new Set(b.watch.map(p => p?.id)).size !== b.watch.length ||
-    b.watch.some(p => !text(p?.id) || !validInstrument(p.a) || !validInstrument(p.b) || p.a.id === p.b.id || p.c !== undefined && (b.schema !== 2 || !validInstrument(p.c))) ||
+    b.watch.some(p => !text(p?.id) || !validInstrument(p.a) || !validInstrument(p.b) || p.a.id === p.b.id ||
+      p.c !== undefined && (b.schema < 2 || !validInstrument(p.c)) ||
+      p.cDivisor !== undefined && (b.schema !== 3 || !p.c || p.cDivisor !== 100)) ||
     new Set(b.watch.map(pairKey)).size !== b.watch.length) throw Error("Registro de ratios inválido; no se reemplazó el guardado.");
   b.operations.forEach(validateOperation); return b;
 }
