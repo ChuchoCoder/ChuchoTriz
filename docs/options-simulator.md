@@ -156,14 +156,17 @@ cero o al vencimiento coinciden con el precio de referencia y se evitan líneas
 superpuestas. Si falta VI en las patas de referencia no se infiere un dato para los
 desvíos; la curva al vencimiento sigue disponible.
 
-La grilla de calls y puts comparte esas referencias con los gráficos: líneas
-horizontales atraviesan ambos lados por la separación entre las filas de strikes
-que contienen cada nivel, con etiqueta y precio calculado. Son capas superpuestas sin filas adicionales;
-no alteran las puntas ni sus clics. Se muestran cuando el subyacente, vencimiento
-y moneda del armado coinciden con la cadena. Los niveles fuera de los strikes
-disponibles no se fijan artificialmente al borde.
+La barra de mercado muestra los cuatro niveles de desvío, incluso fuera del rango
+de strikes. Usa la referencia de Análisis cuando está disponible y coincide el
+subyacente, el vencimiento y la moneda. Si hace falta una referencia de mercado,
+usa el spot de Matriz, los días desde hoy hasta el vencimiento y la VI nativa
+válida de los strikes más cercanos al spot en la moneda del subyacente. El tooltip informa
+qué referencia se usó.
+Si no hay datos suficientes para el cálculo, la barra muestra **Desvíos sin datos**.
+Dentro del rango de strikes, las líneas atraviesan ambos lados por la separación
+entre filas, con etiquetas de precio y sin interferir con los clics de las puntas.
 
-El encabezado Calls/VI/Puts incorpora los rangos de VI y desvíos. La marca
+El encabezado Calls/VI/Puts incorpora los rangos de VI. La marca
 central del subyacente combina precio y variación diaria
 cuando está disponible. Los desvíos llevan etiquetas centrales en negrita.
 La cobertura y antigüedad de la escala quedan

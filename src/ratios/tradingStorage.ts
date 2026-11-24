@@ -1,4 +1,4 @@
-import { emptyBook, validateBook, type TradingBook } from "./trading";
+import { emptyBook, tradingBookSchema, validateBook, type TradingBook } from "./trading";
 
 export const tradingStorageKey = (scope: string) => {
   if (!/^[a-f0-9]{64}$/.test(scope)) throw Error("No se pudo identificar el registro local de la cuenta.");
@@ -14,7 +14,7 @@ export async function saveTradingBook(key: string, base: TradingBook, next: Trad
     await verify();
     const current = await readTradingBook(key);
     if (current.revision !== base.revision) throw Error("Otra pestaña actualizó este registro. Revisá los datos actualizados antes de repetir el cambio.");
-    const updated = validateBook({ ...next, schema: next.watch.some(p => p.c) ? 2 : 1, revision: crypto.randomUUID() });
+    const updated = validateBook({ ...next, schema: tradingBookSchema(next.watch), revision: crypto.randomUUID() });
     await verify();
     await chrome.storage.local.set({ [key]: updated });
     const saved = await readTradingBook(key);

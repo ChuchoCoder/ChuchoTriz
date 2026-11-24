@@ -47,6 +47,15 @@ Los futuros se identifican como **Futuro · sólo monitor**. La elección se gua
 y el gráfico nativo compara ese contrato en el eje izquierdo numérico, manteniendo
 el indicador A/B y el aviso habitual para C.
 
+## Referencias cotizadas por 100 nominales
+
+Si usás un instrumento como **D30N6** en Referencia C, marcá **Dividir
+Referencia C por 100** al agregar la fila en el widget o el Monitor. En el
+widget también podés activar la opción al editar una fila existente. La
+columna Referencia C muestra el precio por nominal y la brecha usa
+`((A/B) / (C/100) − 1) × 100`. La diferencia absoluta y la variación diaria
+usan la misma escala. La opción se guarda por fila y viene desmarcada.
+
 ## Dólar oficial y brecha contra MEP
 
 El selector encuentra **DLR/SPOT** al buscar **Dólar oficial**, **Dólar USA** o
@@ -95,9 +104,9 @@ Las comparaciones con C son de sólo monitor. **Invertir A/B** queda desactivado
 en esas filas para no cambiar inadvertidamente la fórmula completa: editá el
 widget o quitá/agregá la fila del Monitor para elegir otra comparación.
 
-Los guardados con C usan schema 2, que las versiones anteriores no interpretan.
-Al quitar la última referencia C vuelven a schema 1. Después de actualizar la
-extensión, recargá las pestañas de Matriz antes de usar estas comparaciones.
+Los guardados usan esquema 1 para pares simples, esquema 2 para comparaciones
+con C y esquema 3 cuando alguna fila divide C por 100. Después de actualizar
+la extensión, recargá las pestañas de Matriz antes de usar estas comparaciones.
 
 ## Pares del monitor
 

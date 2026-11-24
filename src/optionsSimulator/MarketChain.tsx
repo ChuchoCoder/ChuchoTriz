@@ -1,7 +1,7 @@
 import { Dispatch, Fragment, SetStateAction, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Catalog, Contract, lastTradedPremium, optionTicketRestriction, Quote, useOptionMarket } from "./market";
-import { deriveOptionMetrics } from "./marketMetrics";
+import { deriveOptionMetrics, marketDeviationLevels } from "./marketMetrics";
 import { caucionReferenceLabel, type CaucionReference } from "./caucionRate";
 import { extraMetricLabels, OptionMetricCell, type OptionMetricField } from "./OptionsMetrics";
 import { OptionQuoteValue } from "./OptionQuoteValue";
@@ -19,6 +19,7 @@ import RollPicker from "./RollPicker";
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 const marketKey = (contract: Contract) => `${contract.currency}|${contract.settlement}`;
 const expiryDate = (value: string) => value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+const sigmaLabel = (sigma: number) => `${sigma > 0 ? "+" : ""}${sigma}σ`;
 const quantityPresets = [1, 10, 25, 50, 100];
 const loadTicketText = "Cargar Op.";
 const legKey = (leg: Leg) => `${leg.id}:${leg.securityId}:${leg.side}`;
@@ -386,8 +387,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   }, [strikeDrag, draggedLeg]);
   const rolling = active && editingPosition && !loadingPosition && rollSource && positionLegs.includes(rollSource) ? rollSource : undefined;
   useEffect(() => { if (!rolling) setRollSource(undefined); }, [rolling]);
-  const deviations = sameContext ? deviationReference : undefined;
-  const gridLevels = deviations && deviations.move > 0 && strikes.length > 1 && strikeRows.length === strikes.length && strikeRows.every((row, index) => row.strike === strikes[index])
+  const chainDays = daysToExpiry(expiryDate(expiration));
+  const simulationDeviations = sameContext ? deviationReference : undefined;
+  const deviations = simulationDeviations ?? marketDeviationLevels(selected, strategyQuotes, spot, chainDays, underlyingCurrency);
+  const deviationCurrency = underlyingCurrency ?? input.currency;
+  const gridLevels = comparable && deviations && deviations.move > 0 && strikes.length > 1 && strikeRows.length === strikes.length && strikeRows.every((row, index) => row.strike === strikes[index])
     ? deviations.levels.flatMap(level => {
       const index = strikes.findIndex(strike => strike >= level.price);
       if (index < 0 || level.price < strikes[0]) return [];
@@ -680,8 +684,10 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     return <span className="ct-sim-vi-scale" title={`${fullRange} · ${scale.included}/${scale.total} VI ${viEnabled ? `de operaciones de los últimos ${viMinutes} min` : "con dato"}. Gris: fuera de la escala.`}>
       <i aria-hidden="true" /><strong>{range}</strong></span>;
   };
-  const sigmaKey = deviations && deviations.move > 0 && <span className="ct-opt-sigma-key" title={`Desvíos de la simulación · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${daysToExpiry(input.expiry, input.scenarioDate)} días restantes. Solo se dibujan los niveles dentro de los strikes de la cadena.`}>
-    <i className="ct-opt-sigma-1">±1σ</i> <i className="ct-opt-sigma-2">±2σ</i></span>;
+  const deviationDays = simulationDeviations ? daysToExpiry(input.expiry, input.scenarioDate) : chainDays;
+  const deviationTitle = deviations
+    ? `${simulationDeviations ? "Desvíos de la simulación" : "Desvíos de mercado con la VI disponible más cercana al subyacente"} · VI ${formatOptionVolatility(deviations.volatility * 100)} % · ${deviationDays} días restantes`
+    : "Sin datos para calcular los desvíos del vencimiento seleccionado.";
   const spotOutsideGrid = spot !== undefined && (itmSpot === undefined || spot < (strikes[0] ?? Infinity) || spot > (strikes.at(-1) ?? -Infinity));
   const chainConfigContents = <>
       <strong>Filtro de VI</strong>
@@ -746,7 +752,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
     {toolbar && active && createPortal(<div className="ct-sim-market-toolbar" role="group" aria-label="Mercado de opciones">
     <label>Subyacente<select aria-label="Subyacente de opciones" disabled={!!input.position || loadingPosition} value={underlyingId} onChange={event => change("underlying", event.target.value)}><option value="">Seleccionar</option>{underlyings.map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}</select></label>
     <label>Vencimiento<select aria-label="Vencimiento de opciones" disabled={!!input.position || loadingPosition} value={expiration} onChange={event => change("expiration", event.target.value)}><option value="">Seleccionar</option>{expirations.map(value => <option key={value} value={value} title={expiryDate(value)}>{formatOptionExpiry(expiryDate(value), "short")}</option>)}</select>
-      <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(daysToExpiry(expiryDate(expiration)))}</span></label>
+      <span className="ct-sim-expiry-days" aria-label="Días al vencimiento de la cadena" title={`Días calendario desde hoy · Vencimiento ${expiryDate(expiration)}`}>{formatExpiryDays(chainDays)}</span></label>
     <div className="ct-sim-strategy-slot" inert={editingPosition}>
       <StrategyPicker active={!editingPosition} contracts={selected} quotes={strategyQuotes} spot={spot} currency={underlying?.currency}
         costs={numeric(input.position ? input.adjustmentCosts ?? "0" : input.costs)}
@@ -767,6 +773,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
       {!!catalog?.excluded && <span title="Contratos del catálogo con metadatos incompletos, excluidos de la cadena">⚠ {catalog.excluded} incompletos</span>}
     </span>
     {spotOutsideGrid && <span className="ct-sim-spot-outside">{money(spot)} {spotChange}</span>}
+    <span className="ct-opt-sigma-key" role="group" aria-label="Desvíos estándar" title={deviationTitle}>
+      <span>Desvíos{deviations ? ` (${deviationCurrency})` : ""}</span>
+      {deviations ? deviations.levels.map(level => <strong key={level.sigma} className={`ct-opt-sigma-${Math.abs(level.sigma)}`}>
+        {sigmaLabel(level.sigma)} · {formatOptionAmount(level.price, deviationCurrency)}
+      </strong>) : <span>sin datos</span>}
+    </span>
   </div>, toolbar)}
     {reading.issue && <p role="status" className="ct-sim-error ct-sim-chain-notice">{reading.issue}</p>}
     {editingPosition && <fieldset className="ct-sim-position-toolbar" aria-label="Controles de posición" disabled={loadingPosition}>
@@ -794,7 +806,7 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
           <th className="ct-opt-vi-heading">{viLegend("call")}</th>
           <th className="ct-opt-strike">{active && chainConfig}</th>
           <th className="ct-opt-vi-heading">{viLegend("put")}</th>
-          <th colSpan={columnsPerSide}><div className="ct-sim-chain-group">PUTS {sigmaKey}</div></th>
+          <th colSpan={columnsPerSide} className="ct-opt-puts-heading">PUTS</th>
         </tr><tr>{columnHeadings(callColumns, "Calls")}<th scope="col" className="ct-opt-strike">Strike</th>{columnHeadings(putColumns, "Puts")}</tr></thead></>}
         <tbody>{strikes.map(strike => {
           const call = editingPosition ? undefined : unique("call", strike), put = editingPosition ? undefined : unique("put", strike);
@@ -835,11 +847,11 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
         })}</tbody>
       </table><div className="ct-opt-sigma-overlay" role="group" aria-label="Desvíos estándar en la cadena">{gridLevels.map(level =>
         <div key={level.sigma} className={`ct-opt-sigma-line ct-opt-sigma-${Math.abs(level.sigma)}`} style={{ top: level.y }}
-          aria-label={`${level.sigma > 0 ? "+" : ""}${level.sigma}σ en cadena: ${formatOptionAmount(level.price, input.currency)} ${input.currency}`}>
+          aria-label={`${sigmaLabel(level.sigma)} en cadena: ${formatOptionAmount(level.price, deviationCurrency)} ${deviationCurrency}`}>
           {gridLevels.find(item => item.y === level.y) === level && <strong className="ct-opt-sigma-center">
             {level.afterStrike === spotBoundary && itmSpot !== undefined && <span className="ct-opt-sigma-spot">$ {fmt(itmSpot)} {spotChange}</span>}
             {gridLevels.filter(item => item.y === level.y).map(item => <span key={item.sigma} className={`ct-opt-sigma-${Math.abs(item.sigma)}`}>
-              {item.sigma > 0 ? "+" : ""}{item.sigma}σ · {formatOptionAmount(item.price, input.currency)}
+              {sigmaLabel(item.sigma)} · {formatOptionAmount(item.price, deviationCurrency)}
             </span>)}
           </strong>}
         </div>)}</div></div>{!strikes.length && <p role="status" className="ct-opt-empty">

@@ -3,7 +3,7 @@ import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
 import { RatioChartLink } from "./RatioChart";
 import { GridActionIcon, GridColumnPicker, GridRowHandle, GridSortHeader, monitorColumns, operationColumns, useGridColumns, nextGridSort, reorderGridRows, sortGridRows, type GridSort, type GridValue } from "./RatioGrid";
-import { calculateRatio, currencyLabel, numberLabel, pairKey, pairLabel, ratioLabel, ratioTimeLabel, ratioUpdatedAt, tradeLabel } from "./model";
+import { calculateRatio, currencyLabel, numberLabel, pairKey, pairLabel, ratioLabel, ratioTimeLabel, ratioUpdatedAt, referenceCFormula, referenceCQuote, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
 import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
 import { numeric } from "../optionsSimulator/model";
@@ -11,7 +11,7 @@ import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
 import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, partialCloseQuantities, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, remaining, sameCurrency,
-  validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg } from "./trading";
+  validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair } from "./trading";
 import "./RatioOperations.css";
 
 type View = "monitor" | "opening" | "operations";
@@ -36,6 +36,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [view, setView] = useState<View>("monitor"), [draft, setDraft] = useState<Draft>(emptyDraft);
   const [watchA, setWatchA] = useState<TradingInstrument>(), [watchB, setWatchB] = useState<TradingInstrument>(), [watchC, setWatchC] = useState<TradingInstrument>();
   const [compare, setCompare] = useState(false);
+  const [divideCBy100, setDivideCBy100] = useState(false);
   const [selected, setSelected] = useState<string>(), [all, setAll] = useState(false), [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState(""), [notice, setNotice] = useState("");
   const [edit, setEdit] = useState<{ id: string; snapshot: string }>();
@@ -74,7 +75,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   useEffect(() => {
     gridSortVersion.current.watch++; gridSortVersion.current.operations++;
     setMonitorSort(undefined); setOperationsSort(undefined); setPnlCurrency("ARS"); clearGridDrag();
-    setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined); setWatchC(undefined); setCompare(false);
+    setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined); setWatchC(undefined); setCompare(false); setDivideCBy100(false);
     defaultsGeneration.current++; defaultsAttempt.current = undefined; setLoadingDefaults(false);
     setView("monitor"); setIssue(""); setNotice(""); setPickerSession(n => n + 1);
     if (!active || !scope) return;
@@ -285,12 +286,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const shownRatio = (raw: number | undefined, percent: boolean) => raw === undefined ? undefined : percent ? (raw - 1) * 100 : raw;
   const monitorRows = projectGrid(book.watch, "watch", monitorSort, (pair, column) => {
     if (column === "pair") return pairLabel(pair);
-    const a = quotes[pair.a.id], b = quotes[pair.b.id], c = pair.c ? quotes[pair.c.id] : undefined;
-    if (column === "updated") return ratioUpdatedAt(a, b, pair.c ? c ?? {} : undefined);
+    const a = quotes[pair.a.id], b = quotes[pair.b.id], c = referenceCQuote(quotes, pair);
+    if (column === "updated") return ratioUpdatedAt(a, b, c);
     if (column === "a") return a?.issue ? undefined : a?.last;
     if (column === "b") return b?.issue ? undefined : b?.last;
     if (column === "c") return c?.issue ? undefined : c?.last;
-    const result = calculateRatio(a, b, pair.c ? c ?? {} : undefined);
+    const result = calculateRatio(a, b, c);
     return column === "daily" ? result.change : shownRatio(result.ratio, !!pair.c || sameCurrency(pair.a, pair.b));
   });
   const pnlCurrencies = [...new Set(book.operations.flatMap(o => o.legs.map(l => l.instrument.currency)))].sort();
@@ -350,28 +351,32 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {notice && <div className="ro-notice" role="status">{notice}{deleted?.scope === scope && <button type="button" disabled={!available} onClick={() => void undo()}>Deshacer eliminación</button>}</div>}
     {view === "monitor" && <div>
       <div className="ro-monitor-controls"><div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
-        <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => { setCompare(e.target.checked); setWatchC(undefined); }} />Agregar referencia C</label>
-        {compare && <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />}
+        <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => { setCompare(e.target.checked); setWatchC(undefined); setDivideCBy100(false); }} />Agregar referencia C</label>
+        {compare && <>
+          <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
+          <label className="ro-compare"><input type="checkbox" checked={divideCBy100} disabled={!available} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>
+        </>}
         <button type="button" disabled={!available || !watchA || !watchB || compare && !watchC} onClick={() => void commit(base => {
           if (!watchA || !watchB || watchA.id === watchB.id) throw Error("Elegí instrumentos diferentes.");
           if (base.watch.length >= MAX_WATCH) throw Error(`Podés observar hasta ${MAX_WATCH} pares.`);
-          const pair = { id: crypto.randomUUID(), a: watchA, b: watchB, ...(compare && watchC ? { c: watchC } : {}) };
+          const pair: TradingPair = { id: crypto.randomUUID(), a: watchA, b: watchB, ...(compare && watchC ? { c: watchC, cDivisor: divideCBy100 ? 100 : undefined } : {}) };
           if (compare && !watchC) throw Error("Seleccioná la referencia C.");
           if (base.watch.some(p => pairKey(p) === pairKey(pair))) throw Error("El par ya está en el monitor.");
           return { ...base, watch: [...base.watch, pair] };
-        })}>Agregar par</button></div><button type="button" className="ro-defaults" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button></div>
+        }).then(saved => { if (saved) setDivideCBy100(false); })}>Agregar par</button></div><button type="button" className="ro-defaults" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button></div>
       <div className="ro-grid-tools"><GridColumnPicker label="Monitor" columns={monitorColumns} preferences={monitorPreferences} /><small>Arrastrá ⠿ para mover · con foco, usá ↑/↓</small><button type="button" className="ro-manual-order" disabled={!monitorSort} onClick={() => changeGridSort("watch")}>Orden manual</button></div>
       <div className="ro-table-wrap ro-grid-wrap ro-monitor-wrap"><table className="ro-monitor-table"><thead><tr>{monitorHeader("Par A/B", "pair")}{monitorColumns.map(([column, label]) => showMonitor(column) && (column !== "c" || hasReference) && <GridSortHeader key={column} label={label} column={column} sort={monitorSort} disabled={!ready} onSort={key => changeGridSort("watch", key)} />)}<th scope="col">Acciones</th></tr></thead><tbody>{ready && monitorRows.map(p => {
         const rate = isRateInstrument(p.a) || isRateInstrument(p.b);
         const monitorOnly = !!p.c || isMonitorOnly(p.a) || isMonitorOnly(p.b);
-        const a = quotes[p.a.id], b = quotes[p.b.id], c = p.c ? quotes[p.c.id] : undefined, result = calculateRatio(a, b, p.c ? c ?? {} : undefined);
-        return <tr key={p.id} data-row-id={p.id} {...rowDrop("watch", p.id)} className={dropTarget === `watch:${p.id}` ? "ro-drop-target" : gridDrag?.from === p.id ? "ro-dragging" : undefined}><td><div className="ro-pair-cell">{rowHandle("watch", p.id, `par ${pairLabel(p)}`, monitorRowIds)}<div><strong>{pairLabel(p)}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{p.c ? " · brecha (A/B ÷ C − 1) × 100" : rate ? " · tasas TNA" : ""}</small></div></div></td>
+        const a = quotes[p.a.id], b = quotes[p.b.id], c = referenceCQuote(quotes, p);
+        const result = calculateRatio(a, b, c), reference = referenceCFormula(p.cDivisor), updatedAt = ratioUpdatedAt(a, b, c);
+        return <tr key={p.id} data-row-id={p.id} {...rowDrop("watch", p.id)} className={dropTarget === `watch:${p.id}` ? "ro-drop-target" : gridDrag?.from === p.id ? "ro-dragging" : undefined}><td><div className="ro-pair-cell">{rowHandle("watch", p.id, `par ${pairLabel(p)}`, monitorRowIds)}<div><strong>{pairLabel(p)}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{p.c ? ` · brecha (A/B ÷ ${reference} − 1) × 100` : rate ? " · tasas TNA" : ""}</small></div></div></td>
           {showMonitor("a") && <td title={`Última operación A: ${tradeLabel(a?.tradedAt)}`}><OptionQuoteValue key={p.a.id} value={a?.issue ? undefined : a?.last} formatValue={n => numberLabel(n) + (isRateInstrument(p.a) ? "% TNA" : "")} /></td>}
           {showMonitor("b") && <td title={`Última operación B: ${tradeLabel(b?.tradedAt)}`}><OptionQuoteValue key={p.b.id} value={b?.issue ? undefined : b?.last} formatValue={n => numberLabel(n) + (isRateInstrument(p.b) ? "% TNA" : "")} /></td>}
-          {showMonitor("c") && hasReference && <td title={p.c ? `${p.c.symbol} · ${tradeLabel(c?.tradedAt)}` : undefined}>{p.c ? <OptionQuoteValue key={p.c.id} value={c?.issue ? undefined : c?.last} formatValue={numberLabel} /> : "—"}</td>}
-          {showMonitor("ratio") && <td className="ro-ratio" title={result.issue || (p.c ? "((Último A / último B) / C − 1) × 100. Entre paréntesis: |A/B − C|, en la unidad de C." : undefined)}><OptionQuoteValue key={pairKey(p)} value={result.ratio} formatValue={n => p.c ? ratioLabel(n, "percent", result.absoluteDifference) : pairRatioLabel(n, p.a, p.b)} /></td>}
+          {showMonitor("c") && hasReference && <td title={p.c ? `${p.c.symbol}${p.cDivisor ? ` ÷ ${p.cDivisor}` : ""} · ${tradeLabel(c?.tradedAt)}` : undefined}>{p.c ? <OptionQuoteValue key={p.c.id} value={c?.issue ? undefined : c?.last} formatValue={numberLabel} /> : "—"}</td>}
+          {showMonitor("ratio") && <td className="ro-ratio" title={result.issue || (p.c ? `((A/B) ÷ ${reference} − 1) × 100. Diferencia absoluta |A/B − ${reference}| entre paréntesis.` : undefined)}><OptionQuoteValue key={pairKey(p)} value={result.ratio} formatValue={n => p.c ? ratioLabel(n, "percent", result.absoluteDifference) : pairRatioLabel(n, p.a, p.b)} /></td>}
           {showMonitor("daily") && <td className={`ro-daily ${signed(result.change)}`} title={result.referenceIssue || result.issue || "(Ratio actual / ratio de referencia diaria − 1) × 100"}>{result.change === undefined ? "—" : dailyLabel(result.change)}</td>}
-          {showMonitor("updated") && <td className="ro-updated" title={`Hora de mercado del último precio de A/B${p.c ? "/C" : ""}: ${tradeLabel(ratioUpdatedAt(a, b, p.c ? c ?? {} : undefined))}`}>{ratioTimeLabel(ratioUpdatedAt(a, b, p.c ? c ?? {} : undefined))}</td>}
+          {showMonitor("updated") && <td className="ro-updated" title={`Hora de mercado del último precio de A/B${p.c ? "/C" : ""}: ${tradeLabel(updatedAt)}`}>{ratioTimeLabel(updatedAt)}</td>}
           <td><div className="ro-actions">
             <RatioChartLink pair={p} />
             <button type="button" className="ro-monitor-operation" disabled={!available || monitorOnly} title={monitorOnly ? "Las referencias, tasas y comparaciones de tres cotizaciones sólo se monitorean." : undefined} onClick={() => begin(p.a, p.b)}>{monitorOnly ? "Sólo monitor" : "Abrir operación"}</button>

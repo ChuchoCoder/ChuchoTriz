@@ -20,6 +20,16 @@ it("versions composite books so old clients reject them and reads existing two-p
   const cleared = await saveTradingBook(key, saved, { ...saved, watch: [] }, async () => {});
   expect(cleared.schema).toBe(1);
 });
+it("persists scaled and unscaled references independently and rejects a divisor without C", async () => {
+  const instrument = (id: string): TradingInstrument => ({ id, symbol: id, market: "bm", currency: "ARS", settlement: "2", cfi: "DBXXXX", quantityUnit: "nominales" });
+  const base = emptyBook(), raw = { id: "raw", a: instrument("AL30"), b: instrument("AL30D"), c: instrument("D30N6") };
+  const scaled = { ...raw, id: "scaled", cDivisor: 100 as const };
+  const saved = await saveTradingBook(key, base, { ...base, watch: [raw, scaled] }, async () => {});
+  expect(saved.schema).toBe(3);
+  expect((await readTradingBook(key)).watch).toEqual([raw, scaled]);
+  await expect(saveTradingBook(key, saved, { ...saved, watch: [{ ...scaled, c: undefined }] }, async () => {})).rejects.toThrow(/Registro de ratios inválido/);
+  expect(await readTradingBook(key)).toEqual(saved);
+});
 it("persists revisions and isolates local books by opaque account scope", async () => {
   const b = await readTradingBook(key), saved = await saveTradingBook(key, b, b, async () => {});
   expect(saved.revision).not.toBe(""); expect(await readTradingBook(key)).toEqual(saved);

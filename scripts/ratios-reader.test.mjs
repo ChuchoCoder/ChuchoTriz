@@ -61,6 +61,26 @@ test('persists a three-price MEP comparison and subscribes to the official dolla
   const invalid = await f.request('ratiosEdit', { ...params, revision: 1, pairs: [{ ...params.pairs[1], c: null }] });
   assert.match(invalid.error, /inválido/);
 });
+test('round-trips a divisor by row and protects scaled comparisons from legacy edits', async () => {
+  const f = fixture(); await f.add();
+  const { id: widgetId } = (await f.state()).widgets[0].config;
+  const base = { ...await f.args(), widgetId, schema: 3 };
+  const raw = { id: 'raw', a: 'a', b: 'b', c: 'c', format: 'percent' };
+  const scaled = { ...raw, id: 'scaled', cDivisor: 100 };
+  const saved = await f.request('ratiosEdit', { ...base, revision: 0, pairs: [raw, scaled] });
+  assert.equal(saved.error, undefined);
+  assert.equal(saved.result.widgets[0].config.schema, 3);
+  assert.deepEqual((await f.state()).widgets[0].config.pairs.map(p => p.cDivisor), [undefined, 100]);
+  const native = (await f.ds.getDashboard()).layout.find(w => w.component === 'ChuchoTrizRatiosWidget');
+  assert.equal(native.settings.chuchotrizRatios.pairs[1].cDivisor, 100);
+  assert.match((await f.request('ratiosEdit', { ...base, schema: 2, revision: 1, pairs: [raw] })).error, /versión actual/);
+  for (const invalid of [{ ...scaled, c: undefined }, { ...scaled, cDivisor: '100' }, { ...scaled, cDivisor: 10 }]) {
+    assert.match((await f.request('ratiosEdit', { ...base, revision: 1, pairs: [invalid] })).error, /Divisor inválido/);
+  }
+  assert.match((await f.request('ratiosEdit', { ...base, revision: 1, pairs: [scaled, { ...scaled, id: 'dup' }] })).error, /ya está agregado/);
+  const cleared = await f.request('ratiosEdit', { ...base, revision: 1, pairs: [raw] });
+  assert.equal(cleared.result.widgets[0].config.schema, 2);
+});
 test('persists an exact A3 future reference with null settlement and uses its native quote', async () => {
   const f = fixture();
   const future = { id: 'rx_DDF_DLR_DIC26', symbolStr: 'DLR/DIC26', marketId: 'rx', currency: 'ARS', cfiCode: 'FXXXSX', settlementType: null,
