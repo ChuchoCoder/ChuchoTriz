@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 const source = readFileSync(new URL('../public/ratio-chart-reader.js', import.meta.url), 'utf8');
 function fixture({ c, ready = true, version = '4.23.16', create, comparisons = ['Overlay'], hiddenComparisons = false, widgetReady = true } = {}) {
-  const calls = [], replies = [], listeners = new Set(), studies = new Map();
+  const calls = [], replies = [], listeners = new Set(), studies = new Map(), shapes = new Set(['inherited-drawing']);
   let id = 0, resolution = 'D', chartType = 2, present = ready;
   const params = { a: 'a', b: 'b', ...(c ? { c } : {}) };
   const url = new URL('https://remarkets.matriz.com.ar/security/a?ctRatio=b' + (c ? '&ctRatioC=' + c : ''));
@@ -24,16 +24,17 @@ function fixture({ c, ready = true, version = '4.23.16', create, comparisons = [
     getStudyById(id) { const s = studies.get(id); return {
       getInputValues: () => Object.entries(s.inputs).map(([id, value]) => ({ id, value })),
       priceScale: () => s.scale, changePriceScale(value) { s.options = { priceScale: value }; },
-      setVisible(value) { s.visible = value; },
+      setVisible(value) { s.visible = value; }, applyOverrides(value) { s.overrides = value; },
       paneIndex: () => s.pane ?? (['Overlay', 'Compare'].includes(s.name) ? 0 : 1),
     }; },
     async createStudy(name, forceOverlay, lock, inputs, overrides, options) {
       calls.push({ name, forceOverlay, inputs, options });
       if (name !== 'Ratio' && !comparisons.includes(name)) throw Error('Comparison indicator unavailable: ' + name);
       if (create) await create(name);
-      return add(name, inputs, options);
+      const id = add(name, inputs, options); studies.get(id).overrides = overrides; return id;
     },
     removeEntity(id) { studies.delete(id); },
+    removeAllStudies() { studies.clear(); }, removeAllShapes() { shapes.clear(); },
   };
   const widget = { _ready: widgetReady, activeChart: () => chart, getStudiesList: () => ['Ratio', ...(hiddenComparisons ? [] : comparisons)],
     getStudyInputs(name) { if (comparisons.includes(name)) return [{ id: 'symbol' }]; throw Error('Unknown indicator'); } };
@@ -47,7 +48,7 @@ function fixture({ c, ready = true, version = '4.23.16', create, comparisons = [
   const message = data => Promise.all([...listeners].map(fn => fn({ source: window, origin: location.origin, data: { channel: 'test', ...data } })));
   const request = async () => { const id = 'request-' + (++idCounter); await message({ kind: 'request', method: 'ratioChart', id, params }); return replies.find(r => r.id === id); };
   let idCounter = 0;
-  return { request, message, calls, studies, add, params, replies, securities, url, listeners, mainScale, chart, widget, showChart() { present = true; } };
+  return { request, message, calls, studies, shapes, add, params, replies, securities, url, listeners, mainScale, chart, widget, showChart() { present = true; } };
 }
 
 test('opens A/B with B compared on a new left numeric scale and 5-minute candles', async () => {
@@ -60,6 +61,38 @@ test('opens A/B with B compared on a new left numeric scale and 5-minute candles
   assert.equal(overlay.forceOverlay, true); assert.equal(overlay.options.priceScale, 'new-left');
   assert([...f.studies.values()].every(s => s.scale.getMode() === 0));
   assert([...f.studies.values()].every(s => s.visible));
+});
+
+test('opens with only the requested studies instead of inherited default instruments and ratios', async () => {
+  const f = fixture();
+  f.add('Ratio', { source: 'close', symbol2: 'OTHER' }); f.add('Overlay', { symbol: 'OTHER' }); f.add('Moving Average', { length: 20 });
+  const result = await f.request(); assert.equal(result.error, undefined);
+  assert.equal(f.studies.size, 2, 'Only the requested Ratio and comparison should remain');
+  assert.equal(f.shapes.size, 0, 'Inherited drawings should not remain on the new chart');
+  assert([...f.studies.values()].every(s => s.inputs.symbol2 === 'B' || s.inputs.symbol === 'B'));
+});
+
+test('loads the requested ratio with an explicitly white line', async () => {
+  const f = fixture(); await f.request();
+  const style = [...f.studies.values()].find(s => s.name === 'Ratio').overrides;
+  assert.equal(style?.['plot.color'], '#FFFFFF'); assert.equal(style['plot.plottype'], 0); assert.equal(style['plot.transparency'], 0);
+});
+
+test('cleans the default layout restored during interval initialization without touching another chart', async () => {
+  const f = fixture(), other = fixture(); const saved = other.add('Ratio', { symbol2: 'OTHER' });
+  f.chart.setResolution = async () => { f.add('Ratio', { source: 'close', symbol2: 'DEFAULT' }); f.chart.resolution = () => '5'; };
+  assert.equal((await f.request()).error, undefined);
+  assert.equal(f.studies.size, 2); assert(other.studies.has(saved)); assert.equal(other.shapes.size, 1);
+});
+
+test('does not add requested studies when native layout cleanup is unavailable or fails', async () => {
+  for (const broken of ['missing', 'failed']) {
+    const f = fixture(); f.add('Ratio', { source: 'close', symbol2: 'OTHER' });
+    if (broken === 'missing') f.chart.removeAllShapes = undefined;
+    else f.chart.removeAllStudies = () => {};
+    assert.match((await f.request()).error, /diseño en blanco|limpiar los indicadores/);
+    assert.equal(f.calls.filter(c => c.name).length, 0); assert.equal(f.studies.size, 1);
+  }
 });
 
 test('compares C on the left while the native Ratio remains A/B', async () => {
@@ -102,19 +135,18 @@ test('waits for the native widget to finish initializing before touching the cha
   assert.equal((await pending).result?.comparison, 'B');
 });
 
-test('keeps unrelated studies and reuses the requested studies without duplicates on retry', async () => {
+test('clears unrelated studies and rebuilds only the requested pair without duplicates on retry', async () => {
   const f = fixture(); const existing = f.add('Ratio', { source: 'close', symbol2: 'OTHER' });
   await f.request(); await f.request();
-  assert.equal(f.studies.size, 3); assert.equal(f.calls.filter(c => c.name).length, 2); assert(f.studies.has(existing));
-  assert.equal(f.studies.get(existing).visible, false);
+  assert.equal(f.studies.size, 2); assert.equal(f.calls.filter(c => c.name).length, 4); assert(!f.studies.has(existing));
   assert.equal([...f.studies.values()].find(s => s.name === 'Overlay').options.priceScale, 'new-left');
 });
 
-test('does not reuse an overlay placed in another pane as the main comparison', async () => {
+test('removes an inherited overlay placed in another pane before the main comparison', async () => {
   const f = fixture(); const saved = f.add('Overlay', { symbol: 'B' }); f.studies.get(saved).pane = 2;
   await f.request();
-  assert.equal([...f.studies.values()].filter(s => s.name === 'Overlay').length, 2);
-  assert.equal(f.studies.get(saved).visible, false);
+  assert.equal([...f.studies.values()].filter(s => s.name === 'Overlay').length, 1);
+  assert.equal(f.studies.has(saved), false);
 });
 
 test('waits for the native chart and never creates a study after navigation', async () => {
@@ -149,8 +181,8 @@ test('cleans up a study whose creation completes after the caller detached', asy
   assert.equal(f.studies.size, 0); assert.equal(f.replies.length, 0); assert.equal(f.listeners.size, 0);
 });
 
-test('removes only newly created studies when adding the comparison fails', async () => {
+test('leaves the transient chart clean when adding the comparison fails', async () => {
   const f = fixture({ create: name => { if (name === 'Overlay') throw Error('No overlay'); } });
   const saved = f.add('Volume', {}); assert.match((await f.request()).error, /No overlay/);
-  assert.equal(f.studies.size, 1); assert(f.studies.has(saved));
+  assert.equal(f.studies.size, 0); assert(!f.studies.has(saved));
 });

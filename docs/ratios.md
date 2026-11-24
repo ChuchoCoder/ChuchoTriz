@@ -13,8 +13,11 @@ referencia C, se compara C en ese eje en lugar de B. El indicador Ratio sigue
 mostrando A/B; un aviso aclara que no se divide por C. Tampoco reproduce el
 formato porcentual `(ratio − 1) × 100` de la grilla.
 
-La apertura espera al gráfico nativo, reutiliza estudios coincidentes y conserva
-los demás. Si Matriz no puede distinguir el símbolo exacto de otra liquidación
+La apertura espera al gráfico nativo y limpia los indicadores, comparaciones y
+dibujos heredados del último diseño en esa pestaña. Después agrega únicamente
+el Ratio A/B con **línea blanca** y la comparación B o C solicitada. No guarda ni
+reemplaza el diseño predeterminado de Matriz, ni modifica las otras pestañas.
+Si Matriz no puede distinguir el símbolo exacto de otra liquidación
 o mercado, muestra un error. No agrega el indicador con un símbolo alternativo.
 La disponibilidad del histórico depende del broker; la creación del indicador
 no garantiza datos en cada intervalo. No se guardan estudios ni se envían órdenes

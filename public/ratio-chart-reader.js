@@ -65,39 +65,33 @@
         if (!comparisonName || !studies.includes("Ratio")) throw Error("Matriz no ofrece los indicadores Ratio y comparación necesarios para este gráfico.");
         if (chart.resolution() !== "5") await chart.setResolution("5");
         assertCurrent(task, a, b, c);
+        // Matriz restores its last saved layout before the native chart is ready.
+        // Reset only this chart instance; never save or edit the stored layout.
+        if (typeof chart.removeAllStudies !== "function" || typeof chart.removeAllShapes !== "function") throw Error("Matriz no permite iniciar este gráfico con un diseño en blanco.");
+        chart.removeAllStudies(); chart.removeAllShapes();
+        if (chart.getAllStudies().length) throw Error("Matriz no pudo limpiar los indicadores del diseño anterior.");
         chart.setChartType(1); // Native TradingView enum: candles.
         const series = chart.getSeries();
         series.changePriceScale("new-right");
         series.priceScale().setMode(0); // Normal numeric prices, never percentage/indexed.
-        const existing = chart.getAllStudies().find(study => {
-          if (study.name !== "Ratio") return false;
-          const inputs = chart.getStudyById(study.id).getInputValues();
-          return inputs.some(i => i.id === "source" && i.value === "close") && inputs.some(i => i.id === "symbol2" && i.value === second.symbol);
-        });
+        const ratioStyle = { "plot.color": "#FFFFFF", "plot.plottype": 0, "plot.transparency": 0 };
         const added = [];
         try {
-          const ratioId = existing?.id ?? await chart.createStudy("Ratio", false, false, { source: "close", symbol2: second.symbol });
+          const ratioId = await chart.createStudy("Ratio", false, false, { source: "close", symbol2: second.symbol }, ratioStyle);
           if (ratioId == null) throw Error("Matriz no pudo agregar el indicador Ratio. Revisá el límite de indicadores del gráfico.");
-          if (!existing) added.push(ratioId);
+          added.push(ratioId);
           assertCurrent(task, a, b, c);
           const ratio = chart.getStudyById(ratioId), inputs = ratio.getInputValues();
           if (!inputs.some(i => i.id === "source" && i.value === "close") || !inputs.some(i => i.id === "symbol2" && i.value === second.symbol)) throw Error("Matriz no confirmó los instrumentos del indicador Ratio.");
-          ratio.setVisible(true); ratio.priceScale().setMode(0);
-          const overlay = chart.getAllStudies().find(study => {
-            if (!["Overlay", "Compare"].includes(study.name)) return false;
-            const candidate = chart.getStudyById(study.id), inputs = candidate.getInputValues();
-            return candidate.paneIndex() === 0 && inputs.some(i => i.id === "symbol" && i.value === comparison.symbol) &&
-              (study.name !== "Compare" || inputs.some(i => i.id === "source" && i.value === "close"));
-          });
-          const overlayId = overlay?.id ?? await chart.createStudy(comparisonName, true, false,
+          ratio.applyOverrides(ratioStyle); ratio.setVisible(true); ratio.priceScale().setMode(0);
+          const overlayId = await chart.createStudy(comparisonName, true, false,
             { symbol: comparison.symbol, ...(comparisonName === "Compare" ? { source: "close" } : {}) }, undefined, { priceScale: "new-left" });
           if (overlayId == null) throw Error("Matriz no pudo agregar el instrumento a comparar.");
-          if (!overlay) added.push(overlayId);
+          added.push(overlayId);
           assertCurrent(task, a, b, c);
           if (chartFor(a)?.chart !== chart || chart.symbol() !== first.symbol) throw Error("El instrumento principal cambió mientras se abría el ratio.");
           const study = chart.getStudyById(overlayId);
           study.setVisible(true);
-          if (overlay) study.changePriceScale("new-left");
           const scale = study.priceScale(); scale.setMode(0); scale.setAutoScale(true);
           if (!study.getInputValues().some(i => i.id === "symbol" && i.value === comparison.symbol) || scale.getMode() !== 0 || chart.resolution() !== "5" || chart.chartType() !== 1) throw Error("Matriz no confirmó la comparación en números y velas de 5 minutos.");
           return { a: first.symbolStr || first.symbol, b: second.symbolStr || second.symbol, comparison: comparison.symbolStr || comparison.symbol };

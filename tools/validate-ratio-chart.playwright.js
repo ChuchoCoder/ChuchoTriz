@@ -20,6 +20,8 @@ async page => {
       assert(s.resolution === '5' && s.chartType === 1 && s.mainMode === 0, 'Native chart initializes numeric five-minute candles');
       assert(overlay.inputs.symbol === comparison && overlay.options.priceScale === 'new-left' && overlay.scaleMode === 0, 'Requested B or C is compared on a numeric left scale: ' + comparison);
       assert(s.studies.some(s => s.name === 'Ratio' && s.inputs.source === 'close' && s.scaleMode === 0), 'Native Ratio uses closes and a numeric scale');
+      assert(s.studies.length === 2 && s.drawings === 0, 'The new chart discards inherited instruments, indicators and drawings');
+      assert(s.studies.find(s => s.name === 'Ratio').overrides['plot.color'] === '#FFFFFF' && s.studies.find(s => s.name === 'Ratio').overrides['plot.plottype'] === 0, 'Ratio is an explicit white line instead of the saved style');
       if (hasC) assert(state.notice.includes('A/B sin dividir por C'), 'C comparison explicitly leaves the Ratio as A/B');
       await popup.evaluate(() => history.pushState({}, '', '/principal/favoritos'));
       await popup.locator('.ct-ratio-chart-status').waitFor({ state: 'detached', timeout: 3000 });
