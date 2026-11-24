@@ -226,10 +226,12 @@ export function intrinsic(kind: OptionKind, spot: number, strike: number): numbe
 }
 
 /** Linear expected-move approximation, using the nearest selected strikes and ACT/365. */
-export function standardDeviationLevels(strategy: Strategy) {
-  const open = strategy.legs.filter(leg => leg.openContracts !== 0);
-  const distance = Math.min(...open.map(leg => Math.abs(leg.strike - strategy.spot)));
-  const nearest = open.filter(leg => Math.abs(Math.abs(leg.strike - strategy.spot) - distance) <= Math.max(1, strategy.spot) * Number.EPSILON * 8);
+export function standardDeviationLevels({ legs, spot, years }: Pick<Strategy, "spot" | "years"> & {
+  legs: readonly Pick<ParsedLeg, "kind" | "strike" | "volatility" | "openContracts">[];
+}) {
+  const open = legs.filter(leg => leg.openContracts !== 0);
+  const distance = Math.min(...open.map(leg => Math.abs(leg.strike - spot)));
+  const nearest = open.filter(leg => Math.abs(Math.abs(leg.strike - spot) - distance) <= Math.max(1, spot) * Number.EPSILON * 8);
   if (!nearest.length || nearest.some(leg => !Number.isFinite(leg.volatility))) return undefined;
   // Equal weight per contract identity (kind + strike), independent of side/quantity.
   const groups = new Map<string, number[]>();
@@ -239,9 +241,9 @@ export function standardDeviationLevels(strategy: Strategy) {
   }
   const volatilities = [...groups.values()].map(values => values.reduce((sum, value) => sum + value, 0) / values.length);
   const volatility = volatilities.reduce((sum, value) => sum + value, 0) / volatilities.length;
-  const move = strategy.spot * volatility * Math.sqrt(strategy.years);
+  const move = spot * volatility * Math.sqrt(years);
   return { volatility, move, strikes: [...new Set(nearest.map(leg => leg.strike))],
-    levels: ([-2, -1, 1, 2] as const).map(sigma => ({ sigma, price: strategy.spot + sigma * move })) };
+    levels: ([-2, -1, 1, 2] as const).map(sigma => ({ sigma, price: spot + sigma * move })) };
 }
 // Abramowitz & Stegun 26.2.17; absolute CDF error below 7.5e-8.
 function normalCdf(x: number): number {

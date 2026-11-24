@@ -1572,7 +1572,44 @@ it("colors both sides of the exact deviation boundaries symmetrically at a decim
   expect(["-20%", "-10%", "+10%", "+20%"].map(bandAt)).toEqual(["sigma-two", "sigma-one", "sigma-one", "sigma-two"]);
 });
 
-it("positions chain deviation lines on row boundaries without crossing quotes, adding rows or mixing contexts", async () => {
+it("updates market deviations without a strategy and handles missing quotes or VI", async () => {
+  const quotes = marketState.current.data!.instruments;
+  quotes["call-100"].impliedVolatility = 30;
+  quotes["put-100"].impliedVolatility = 50;
+  for (const key of ["call-100", "put-100"]) quotes[key].lastTradeAt = 0;
+  await mount();
+  const summary = () => byLabel("Desvíos estándar");
+  const values = () => [...summary().querySelectorAll("strong")].map(node => node.textContent?.trim());
+  expect(summary().title).toContain("VI 40,00 % · 30 días");
+  expect(values()).toEqual(["-2σ · 77,06", "-1σ · 88,53", "+1σ · 111,47", "+2σ · 122,94"]);
+  expect(container.querySelector(".ct-sim-chart")).toBeNull();
+
+  quotes.GGAL.last = 110;
+  quotes["call-110"].impliedVolatility = 20;
+  quotes["put-110"].impliedVolatility = undefined;
+  await mount();
+  expect(summary().title).toContain("VI 20,00 %");
+  expect(values()).not.toContain("+1σ · 111,47");
+
+  marketState.current.catalog!.contracts.find(contract => contract.id === "put-110")!.strikeCurrency = "USD";
+  quotes["put-110"].impliedVolatility = 80;
+  await mount();
+  expect(summary().title).toContain("VI 20,00 %");
+
+  marketState.current.issue = "Cotizaciones no disponibles";
+  await mount();
+  expect(summary().textContent).toContain("sin datos");
+  marketState.current.issue = undefined;
+  for (const quote of Object.values(quotes)) quote.impliedVolatility = undefined;
+  await mount();
+  expect(values()).toHaveLength(0);
+  quotes["call-120"].impliedVolatility = 25;
+  await mount();
+  expect(summary().title).toContain("VI 25,00 %");
+  expect(values()).toHaveLength(4);
+});
+
+it("positions chain deviation lines on row boundaries and summarizes levels outside the strikes", async () => {
   const priceScale = 100;
   for (const contract of marketState.current.catalog!.contracts) contract.strike *= priceScale;
   marketState.current.data!.instruments.GGAL.last = 100 * priceScale;
@@ -1583,7 +1620,8 @@ it("positions chain deviation lines on row boundaries without crossing quotes, a
   await mount();
   const markers = () => [...container.querySelectorAll<HTMLElement>('.ct-opt-sigma-line')];
   const rowCount = container.querySelectorAll('.ct-opt-chain tbody tr').length;
-  expect(markers()).toHaveLength(0);
+  expect(markers()).toHaveLength(2);
+  expect(byLabel("Desvíos estándar").querySelectorAll("strong")).toHaveLength(4);
   await act(async () => byLabel<HTMLButtonElement>("Comprar CALL 100 en simulación").click());
   // ±2σ are outside this chain's 80..120 strikes: never pin them to its edges.
   expect(markers()).toHaveLength(2);
@@ -1601,12 +1639,14 @@ it("positions chain deviation lines on row boundaries without crossing quotes, a
   expect(chartLabels.every(label => /σ: [\d.]+ ARS$/.test(label ?? ""))).toBe(true);
   expect(markers().flatMap(node => [...node.querySelectorAll('.ct-opt-sigma-center span')]).every(node => !node.textContent?.includes(','))).toBe(true);
   await fill("Fecha teórica", addDays(expiry, 1));
-  expect(markers()).toHaveLength(0);
+  expect(byLabel("Desvíos estándar").title).toContain("Desvíos de mercado");
+  expect(markers()).toHaveLength(2);
   await fill("Fecha teórica", localDate());
   expect(markers()).toHaveLength(4);
   await showAnalysis();
   await act(async () => byLabel<HTMLButtonElement>("Fecha Vencimiento").click());
   await showBuild(); expect(markers()).toHaveLength(0);
+  expect(byLabel("Desvíos estándar").querySelectorAll("strong")).toHaveLength(4);
 });
 
 it("adjusts all quantities proportionally and shifts the whole strategy to native neighboring strikes", async () => {

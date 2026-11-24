@@ -165,13 +165,11 @@
 .ct-tools-embedded .ct-sim .ct-sim-market { align-self: stretch; }
 .ct-tools-embedded .ct-sim .ct-sim-market .ct-opt-chain-scroll { flex: 1 1 0; max-height: none; }
 .ct-sim .ct-sim-chain-notice { padding: 1px 8px; font-size: 10px; line-height: 1.2; color: var(--sim-muted); margin: 0; }
-.ct-sim-chain-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
-.ct-sim-chain-group > span { color: var(--sim-muted); font-weight: 500; }
-.ct-sim-chain-group strong { color: var(--sim-text); }
 .ct-sim-chain-counts { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; font-size: 10px; color: var(--sim-muted); }
 .ct-sim-chain-counts > span { white-space: nowrap; }
 .ct-sim .ct-opt-chain .ct-sim-chain-legend th.ct-opt-strike { text-align: center; }
 .ct-sim .ct-opt-chain .ct-sim-chain-legend th.ct-opt-calls-heading { text-align: right; }
+.ct-sim .ct-opt-chain .ct-sim-chain-legend th.ct-opt-puts-heading { text-align: left; }
 .ct-sim-spot-outside { font-size: 11px; white-space: nowrap; }
 .ct-sim-vi-scale { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; vertical-align: middle; }
 .ct-sim-vi-scale i { width: 40px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #6fd4a5, #ecda69, #f7a35c, #ef7888); }

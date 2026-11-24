@@ -1,5 +1,5 @@
 import { lastTradedPremium, type Contract as OptionContract, type Quote as OptionMarketMetrics, type Snapshot as OptionsSnapshot } from "./market";
-import { dateDay, theoreticalGreeks } from "./model";
+import { dateDay, standardDeviationLevels, theoreticalGreeks } from "./model";
 
 export const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const positive = (value: unknown): value is number => finiteMetric(value) && value > 0;
@@ -28,6 +28,20 @@ export interface MetricCell extends OptionMarketMetrics {
   viDetails?: NonNullable<ReturnType<typeof theoreticalGreeks>> & { spot: number; days: number; rate: number; dividendYield: number };
 }
 export interface MetricScale { min?: number; max?: number; volumeMax: number; included: number; total: number }
+
+export function marketDeviationLevels(contracts: readonly OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
+  spot: number | undefined, days: number | undefined, currency: string | undefined) {
+  if (!instruments || !positive(spot) || days === undefined || days < 0 || (currency !== "ARS" && currency !== "USD")) return;
+  const legs = contracts.flatMap(contract => {
+    const { id, kind, strike } = contract;
+    const vi = instruments[id]?.impliedVolatility;
+    return contract.currency === currency && contract.strikeCurrency === currency && positive(vi) && vi <= 500
+      ? [{ kind, strike, volatility: vi / 100 }] : [];
+  });
+  const reference = standardDeviationLevels({ spot, years: days / 365, legs });
+  return reference?.levels.every(level => Number.isFinite(level.price)) ? reference : undefined;
+}
+
 export function deriveOptionMetrics(contracts: OptionContract[], instruments: OptionsSnapshot["instruments"] | undefined,
   settings: { now: number; minutes: string; enabled: boolean; available: boolean; spot?: number; currency?: string;
     rate?: number; rateSource?: string; dividendYield?: number }) {
