@@ -87,7 +87,7 @@ export function executionFormatters(preference: ExecutionLocale = "auto", langua
 export function executionClipboard(rows: OptionExecution[], scope: OptionKind | "both", averaged: boolean,
   format = executionFormatters()): string {
   const line = (row: OptionExecution) => [
-    format.expiration(row.expiration), format.quantity(row.quantity), format.number(row.strike), format.number(row.price),
+    format.date(row.timestamp), format.quantity(row.quantity), format.number(row.strike), format.number(row.price),
   ].join("\t");
   if (scope !== "both") return rows.filter(row => row.kind === scope).map(line).join("\n");
 

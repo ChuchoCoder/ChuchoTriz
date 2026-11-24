@@ -54,11 +54,11 @@ izquierda y Puts a la derecha en pantallas anchas. **Agrupar por strike** está
 activado por defecto y calcula
 el precio promedio ponderado por serie y mantiene compras y ventas separadas.
 Cada grupo permite copiar Calls, Puts o ambos con las columnas tabuladas
-Vencimiento, Cantidad, Base y Prima para pegar en una planilla.
+Fecha de la operación, Cantidad, Strike y Precio para pegar en una planilla.
 Elegí **Formato de números** y **Formato de fecha** por separado según tu
 planilla. Por ejemplo, podés combinar números argentinos con fechas mes/día/año.
 La fecha de operación en la grilla y el vencimiento del encabezado siguen el
-formato de fecha; la copia usa el vencimiento con ese mismo formato y los
+formato de fecha; la copia usa la fecha de operación que muestra cada fila y los
 números con su preferencia independiente. Ambos selectores muestran ejemplos
 y se guardan en el perfil de Chrome. La preferencia regional anterior se conserva
 para ambos campos hasta que elijas un formato propio para cada uno.
