@@ -15,14 +15,12 @@
 
   function context() {
     const ms = window.mainStore, profile = ms?.profileStore;
-    const version = document.body?.innerText.match(/Versi[oó]n:\s*([\d.]+)/)?.[1];
     check(typeof profile?.activeAccount === "string" && profile.activeAccount,
       "Iniciá sesión en Matriz para consultar las operaciones.");
-    check(version === "4.24.4", "Versión de Matriz no verificada para leer operaciones.");
     const events = ms.orderEventStore, securities = ms.securityStore;
     check(typeof events?.getOrderEventsForAccountReport === "function" && typeof securities?.getSecurity === "function",
       "El reporte de operaciones de Matriz todavía no está disponible.");
-    const current = [ms, profile, profile.activeAccount, events, securities, version];
+    const current = [ms, profile, profile.activeAccount, events, securities];
     if (!previousContext || current.some((value, index) => value !== previousContext[index])) {
       previousContext = current;
       contextId = crypto.randomUUID();

@@ -62,7 +62,9 @@ formato de fecha; la copia usa la fecha de operación que muestra cada fila y lo
 números con su preferencia independiente. Ambos selectores muestran ejemplos
 y se guardan en el perfil de Chrome. La preferencia regional anterior se conserva
 para ambos campos hasta que elijas un formato propio para cada uno.
-Esta lectura está habilitada para Matriz 4.24.4.
+Las funciones se habilitan según los datos y métodos disponibles en Matriz,
+sin bloqueos por número de versión. Esto también aplica a ratios, gráficos,
+cadena de opciones, caución e importación de posiciones.
 
 Compatible con `https://*.xoms.com.ar/*` y `https://remarkets.matriz.com.ar/*`.
 

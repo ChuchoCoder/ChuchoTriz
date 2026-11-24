@@ -345,11 +345,12 @@ export default function MarketChain({ active, toolbar, input, setInput, onStrike
   const underlying = underlyings.find(item => item.id === underlyingId), spotQuote = data?.instruments[underlyingId];
   const underlyingCurrency = underlying?.currency;
   const marketVersion = catalog?.version;
+  const hasMarketCatalog = !!catalog;
   const ticketCatalog = reading.issue ? undefined : catalog?.contracts;
   useEffect(() => {
-    if (active && marketVersion) onMarketContext({ version: marketVersion, ticketCatalog,
+    if (active && hasMarketCatalog) onMarketContext({ version: marketVersion ?? "", ticketCatalog,
       currency: underlyingCurrency === "ARS" || underlyingCurrency === "USD" ? underlyingCurrency : undefined });
-  }, [active, underlyingCurrency, marketVersion, onMarketContext, ticketCatalog]);
+  }, [active, hasMarketCatalog, underlyingCurrency, marketVersion, onMarketContext, ticketCatalog]);
   const spot = positive(spotQuote?.last) ? spotQuote.last : undefined;
   const changePercent = spotQuote?.changePercent;
   const spotChange = changePercent !== undefined && Number.isFinite(changePercent)

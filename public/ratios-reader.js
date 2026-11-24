@@ -42,8 +42,6 @@
   }
   function context() {
     const ms = window.mainStore, ds = ms?.dashboardStore, ss = ms?.securityStore;
-    const version = document.body?.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1];
-    if (!["4.23.16", "4.24.1", "4.24.4"].includes(version)) throw Error("Esta versión de Matriz todavía no es compatible con Ratios.");
     if (!ds || !ss || !Array.isArray(ss.securities) || typeof ss.getSecurity !== "function" || typeof ds.createDashboard !== "function" || typeof ds.getDashboard !== "function") throw Error("Esperando el catálogo y los dashboards de Matriz.");
     const d = ds.currentDashboard;
     const next = [ms, ds, ss, d, ms.profileStore?.activeAccount, ms.dmaWebSocket, ms.webSocketConnectionStatus];

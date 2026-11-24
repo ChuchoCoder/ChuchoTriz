@@ -9,18 +9,17 @@
   let previousContext, revision = 0, signature, catalogRevision = 0, active;
   const finite = value => typeof value === "number" && Number.isFinite(value) ? value : undefined;
   const positive = value => finite(value) !== undefined && value > 0;
-  const marketVersion = () => document.body.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1];
-  function context(version = marketVersion()) {
+  const marketVersion = () => document.body?.innerText.match(/Versi[oó]n:\s*(\S+)/)?.[1] || "";
+  function context() {
     const ms = window.mainStore;
-    if (!["4.24.1", "4.24.4"].includes(version)) throw Error("Versión de Matriz no verificada para lectura de opciones.");
     if (!ms?.securityStore || typeof ms.securityStore.getSecurity !== "function" || !ms.dmaWebSocket || typeof ms.dmaWebSocket.addSubscription !== "function")
       throw Error("El catálogo de Matriz todavía no está disponible.");
-    const next = [ms, ms.securityStore, ms.dmaWebSocket, ms.profileStore?.activeAccount, ms.webSocketConnectionStatus, version];
+    const next = [ms, ms.securityStore, ms.dmaWebSocket, ms.profileStore?.activeAccount, ms.webSocketConnectionStatus];
     if (!previousContext || next.some((value, i) => value !== previousContext[i])) {
       previousContext = next; revision++; subscribed.clear(); caucionSubscribed.clear(); latestCaucionTrade.clear();
     }
     if (!ms.webSocketConnectionStatus) throw Error("Market data desconectado. Esperando reconexión de Matriz.");
-    return { ms, revision, version };
+    return { ms, revision, version: marketVersion() };
   }
   function sources(ms) {
     const ss = ms.securityStore;
@@ -154,12 +153,12 @@
         const current = context();
         reply({ result: { ...catalogOf(sources(current.ms)), contextRevision: current.revision, version: current.version } });
       } else if (msg.method === "caucion") {
-        const version = marketVersion();
-        const supported = version === "4.24.4";
+        const ms = window.mainStore;
+        const supported = typeof ms?.securityStore?.findSecurityFromId === "function" && typeof ms?.dmaWebSocket?.addSubscription === "function";
         let trades = [];
         try {
-          if (supported) trades = caucionTrades(context(version).ms);
-        } catch { /* The version is known even when market data is unavailable. */ }
+          if (supported) trades = caucionTrades(context().ms);
+        } catch { /* Capability availability is independent of market connectivity. */ }
         reply({ result: { supported, trades } });
       } else if (msg.method === "snapshot") {
         if (active) throw Error("Hay una lectura de mercado pendiente. Esperando a que termine.");

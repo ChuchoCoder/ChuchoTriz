@@ -98,12 +98,29 @@ test('rejects arbitrary methods before native account access',async()=>{
     assert.match((await f.call(method)).error,/Método no permitido/);
   assert.equal(f.calls.length,0);
 });
-test('discards data if account or version changes during refresh',async()=>{
-  for(const change of [f=>{f.store.profileStore.activeAccount='OTHER';},f=>{f.document.body.innerText='Versión: 99.0';}]) {
+test('accepts any release or absent version label for position imports and still checks report capability',async()=>{
+  const f=fixture();
+  for(const footer of ['Versión: 4.24.5','Versión: 99.0-beta','']) {
+    f.document.body.innerText=footer;
+    assert.equal((await f.call()).result?.positions.length,2,footer||'no footer');
+  }
+  f.store.portfolioStore.getDetailedPositionReport=undefined;
+  assert.match((await f.call()).error,/todavía no está disponible/);
+});
+
+test('discards data if account or native report context changes during refresh',async()=>{
+  for(const change of [f=>{f.store.profileStore.activeAccount='OTHER';},f=>{f.store.profileStore.context.riskDetailedCollateralEnabled=false;}]) {
     const f=fixture();
     f.store.portfolioStore.getDetailedPositionReport=async()=>{change(f);return f.report;};
     assert.ok((await f.call()).error);
   }
+});
+
+test('a version footer update during a position read does not change its account context',async()=>{
+  const f=fixture(); const initial=(await f.call()).result;
+  f.store.portfolioStore.getDetailedPositionReport=async()=>{f.document.body.innerText='Versión: 99.0';return f.report;};
+  const result=(await f.call()).result;
+  assert.equal(result.positions.length,2); assert.equal(result.contextId,initial.contextId);
 });
 test('changes the opaque context token when the active account changes between imports',async()=>{
   const f=fixture();

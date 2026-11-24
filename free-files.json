@@ -184,5 +184,13 @@
   "vendor/picomatch/lib/parse.js",
   "vendor/picomatch/lib/picomatch.js",
   "vendor/picomatch/lib/scan.js",
-  "vendor/picomatch/lib/utils.js"
+  "vendor/picomatch/lib/utils.js",
+  "src/ratios/RatioChart.tsx",
+  "src/ratios/RatioChart.css",
+  "src/ratios/RatioChart.test.tsx",
+  "public/ratio-chart-reader.js",
+  "scripts/ratio-chart-reader.test.mjs",
+  "docs/qa/ratio-native-chart-2026-11-23.md",
+  "tools/validate-ratio-chart.playwright.js",
+  "docs/qa/matriz-capabilities-2026-11-24.md"
 ]

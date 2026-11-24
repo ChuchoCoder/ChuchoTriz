@@ -1,5 +1,26 @@
 # Ratios de instrumentos
 
+## Abrir el gráfico nativo
+
+Cada fila del widget Ratios, del Monitor y de Operaciones abiertas ofrece un
+icono de gráfico. Abre una pestaña nueva del mismo broker con A como instrumento
+principal, velas de 5 minutos y el indicador nativo Ratio configurado como
+`cierre de A / cierre de B`. Conserva los IDs, el orden y las liquidaciones del par.
+
+B se agrega como instrumento a comparar en un eje izquierdo independiente,
+con precios numéricos, sin convertir la escala a porcentajes. Si la fila tiene
+referencia C, se compara C en ese eje en lugar de B. El indicador Ratio sigue
+mostrando A/B; un aviso aclara que no se divide por C. Tampoco reproduce el
+formato porcentual `(ratio − 1) × 100` de la grilla.
+
+La apertura espera al gráfico nativo, reutiliza estudios coincidentes y conserva
+los demás. Si Matriz no puede distinguir el símbolo exacto de otra liquidación
+o mercado, muestra un error. No agrega el indicador con un símbolo alternativo.
+La disponibilidad del histórico depende del broker; la creación del indicador
+no garantiza datos en cada intervalo. No se guardan estudios ni se envían órdenes
+desde esta acción. Comprueba las funciones y los datos del gráfico en tiempo de
+ejecución; no bloquea por el número de versión de Matriz ni exige que se muestre.
+
 ## Monitor y registro de operaciones
 
 En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio
@@ -325,8 +346,9 @@ dimensiones de los otros widgets cuando Matriz redondea sus unidades de grilla.
 
 Disponible en los dominios admitidos por ChuchoTriz: `https://*.xoms.com.ar/*`
 y `https://remarkets.matriz.com.ar/*`. La integración comprueba la estructura del
-dashboard y admite las versiones 4.23.16, 4.24.1 y 4.24.4; rechaza otras versiones
-con un aviso. El recorrido instalado se verificó en ReMarkets 4.23.16.
+dashboard, el catálogo y las funciones necesarias, sin lista de versiones
+admitidas. Un cambio del número de versión no desactiva Ratios. Si falta una
+función o dato necesario, sólo se informa el problema concreto de esa operación.
 
 Sin ChuchoTriz, Matriz conserva el registro del panel pero su contenido queda
 vacío. Para retirarlo antes de desinstalar, cerrá el panel desde su título.
