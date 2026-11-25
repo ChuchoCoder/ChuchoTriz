@@ -42,7 +42,7 @@ it("retains the exact future reference without contract sizing or permission to 
 it("resolves ten defaults including both AL30 dollar spreads with the native official reference", async () => {
   const { watch, missing } = await resolveDefaultWatch(async symbol => [defaultInstrument(symbol), { ...instrument(symbol + " CI"), symbol: symbol + " CI" }, { ...instrument("rx-" + symbol), market: "rx", symbol }]);
   expect(missing).toEqual([]);
-  expect(watch.map(pairLabel)).toEqual(["MEP AL30", "CCL AL30", "AL30D/AL30C", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D", "(MEP AL30) / DLR/SPOT", "(CCL AL30) / DLR/SPOT"]);
+  expect(watch.map(pairLabel)).toEqual(["MEP AL30", "CCL AL30", "CANJE AL30", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D", "(MEP AL30) / DLR/SPOT", "(CCL AL30) / DLR/SPOT"]);
   expect(new Set(watch.map(p => p.id)).size).toBe(10);
 });
 it("omits both dollar spreads when the official native spot is absent, then restores them without duplicating MEP or CCL", async () => {

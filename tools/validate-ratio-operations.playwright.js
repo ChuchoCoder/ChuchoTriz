@@ -34,7 +34,7 @@ async page => {
   await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
   await page.waitForFunction(() => { const e = document.querySelector('.ro-add-watch input'); return e && !e.disabled; }, null, { polling: 100 });
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 10);
-  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['MEP AL30', 'CCL AL30', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D', '(MEP AL30) / DLR/SPOT', '(CCL AL30) / DLR/SPOT']), 'Default order');
+  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['MEP AL30', 'CCL AL30', 'CANJE AL30', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D', '(MEP AL30) / DLR/SPOT', '(CCL AL30) / DLR/SPOT']), 'Default order');
   const rates = page.locator('.ro-table-wrap tr').filter({ hasText: 'PESOS - 7D/PESOS - 1D' });
   assert(!await rates.getByRole('button', { name: 'Sólo monitor' }).isEnabled(), 'Rates cannot open price operations');
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('PESOS - 7D/PESOS - 1D'))?.textContent.includes('20,50% TNA'));

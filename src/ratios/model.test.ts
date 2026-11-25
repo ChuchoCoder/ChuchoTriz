@@ -109,7 +109,7 @@ it("matches exact tickers without treating a prefix or CI as the default species
   expect(exactTickerMatches("AL30 CI", [a, ci])).toEqual([ci]);
   expect(exactTickerMatches("AL3", [a, ci])).toEqual([]);
 });
-it("names peso/dollar pairs of the same instrument and settlement, including CI and a reference", () => {
+it("names MEP, CCL and canje pairs of the same instrument and settlement, including CI and a reference", () => {
   const al30 = { id: "al30", symbol: "AL30", market: "bm", currency: "ARS", settlement: "2" };
   const al30d = { ...al30, id: "al30d", symbol: "AL30D", currency: "USD" };
   const al30c = { ...al30, id: "al30c", symbol: "AL30C", currency: "EXT" };
@@ -119,6 +119,9 @@ it("names peso/dollar pairs of the same instrument and settlement, including CI 
 
   expect(pairLabel({ a: al30, b: al30d })).toBe("MEP AL30");
   expect(pairLabel({ a: al30, b: al30c })).toBe("CCL AL30");
+  expect(pairLabel({ a: al30d, b: al30c })).toBe("CANJE AL30");
+  expect(pairLabel({ a: ciUsd, b: { ...al30c, id: "al30c-ci", symbol: "AL30C CI", settlement: "1" } })).toBe("CANJE AL30 CI");
+  expect(pairLabel({ a: { ...al30d, id: "gd30d", symbol: "GD30D" }, b: { ...al30c, id: "gd30c", symbol: "GD30C" } })).toBe("CANJE GD30");
   expect(pairLabel({ a: ci, b: ciUsd })).toBe("MEP AL30 CI");
   expect(pairLabel({ a: ci, b: { ...ciUsd, symbol: "AL30D" } })).toBe("MEP AL30 CI");
   expect(pairLabel({ a: gd30, b: { ...al30c, id: "gd30c", symbol: "GD30C" } })).toBe("CCL GD30");
@@ -127,7 +130,10 @@ it("names peso/dollar pairs of the same instrument and settlement, including CI 
   expect(pairLabel({ a: ci, b: al30d })).toBe("AL30 (CI)/AL30D");
   expect(pairLabel({ a: gd30, b: al30d })).toBe("GD30/AL30D");
   expect(pairLabel({ a: al30d, b: al30 })).toBe("AL30D/AL30");
-  expect(pairLabel({ a: al30d, b: al30c })).toBe("AL30D/AL30C");
+  expect(pairLabel({ a: al30c, b: al30d })).toBe("AL30C/AL30D");
+  expect(pairLabel({ a: ciUsd, b: al30c })).toBe("AL30D (CI)/AL30C");
+  expect(pairLabel({ a: al30d, b: { ...al30c, id: "gd30c", symbol: "GD30C" } })).toBe("AL30D/GD30C");
+  expect(pairLabel({ a: al30d, b: { ...al30c, currency: "USD" } })).toBe("AL30D/AL30C");
   expect(pairLabel({ a: al30, b: { ...al30d, currency: "ARS" } })).toBe("AL30/AL30D");
   expect(pairLabel({ a: al30, b: { ...al30d, market: "rx" } })).toBe("AL30/AL30D");
 });

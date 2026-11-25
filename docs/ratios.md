@@ -110,12 +110,12 @@ la extensión, recargá las pestañas de Matriz antes de usar estas comparacione
 
 ## Pares del monitor
 
-Los pares en pesos y dólares del mismo instrumento y plazo aparecen como
-**MEP AL30** para AL30/AL30D y **CCL AL30** para AL30/AL30C. Para contado
-inmediato se agrega **CI**, por ejemplo **MEP AL30 CI**.
+Los pares del mismo instrumento y plazo aparecen como **MEP AL30** para
+AL30/AL30D, **CCL AL30** para AL30/AL30C y **CANJE AL30** para AL30D/AL30C.
+Para contado inmediato se agrega **CI**, por ejemplo **CANJE AL30 CI**.
 
 El monitor inicial incluye, en este orden: MEP AL30, CCL AL30,
-AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
+CANJE AL30, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
 PESOS - 7D/PESOS - 1D, (MEP AL30) / DLR/SPOT y (CCL AL30) / DLR/SPOT. En registros existentes se agregan sólo los faltantes,
 sin reordenar ni duplicar los pares personalizados ni modificar operaciones.
 La inicialización se guarda una sola vez: si quitás un par, no reaparece al
@@ -297,7 +297,7 @@ con otro clic en el engranaje o al pulsar fuera.
 ## Agregar y editar pares
 
 Cada widget nuevo comienza, en este orden, con MEP AL30, CCL AL30,
-AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, PESOS - 7D/PESOS - 1D, (MEP AL30) / DLR/SPOT y
+CANJE AL30, GD30/AL30, BMA/GGAL, ALUA/TXAR, PESOS - 7D/PESOS - 1D, (MEP AL30) / DLR/SPOT y
 (CCL AL30) / DLR/SPOT.
 Se resuelven las especies BYMA exactas del catálogo y se aplica el formato por
 moneda. Si alguna falta o tiene varias coincidencias, se omite ese par y se

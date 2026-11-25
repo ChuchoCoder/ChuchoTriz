@@ -26,7 +26,7 @@ async (page) => {
   const snapshot = () => page.evaluate(() => window.mainStore.dashboardStore.currentDashboard.layout.map(w => ({ component: w.component, x: w.x, y: w.y, w: w.w, h: w.h, settings: JSON.parse(JSON.stringify(w.settings)) })));
   const before = await snapshot();
   await idle(); await b('RATIOS · CHUCHOTRIZ').click(); await idle();
-  const defaults = ['MEP AL30', 'CCL AL30', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', '(MEP AL30) / DLR/SPOT', '(CCL AL30) / DLR/SPOT'];
+  const defaults = ['MEP AL30', 'CCL AL30', 'CANJE AL30', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', '(MEP AL30) / DLR/SPOT', '(CCL AL30) / DLR/SPOT'];
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
   assert(JSON.stringify(await page.locator('.ct-ratios-value').allTextContents().then(values => values.map(v => v.includes('%')))) === JSON.stringify([false, false, false, true, true, true, true, true, true]), 'Default pair formats follow the native catalogue currencies');

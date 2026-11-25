@@ -56,20 +56,22 @@ export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote): 
   return finite(reference) && reference !== 0 && finite(change) ? { ...current, change } : { ...current, referenceIssue: "Sin referencia diaria válida" };
 }
 function financialDollarLabel(a: RatioInstrument, b: RatioInstrument) {
-  if (a.currency !== "ARS" || !a.market || a.market !== b.market || a.settlement !== b.settlement) return;
+  if (!a.market || a.market !== b.market || a.settlement !== b.settlement) return;
 
   const aTicker = tickerKey(a.symbol), bTicker = tickerKey(b.symbol);
   const isCash = a.settlement === "1" || aTicker.endsWith(" CI");
   if (isCash !== (b.settlement === "1" || bTicker.endsWith(" CI"))) return;
 
-  const base = aTicker.replace(/ CI$/, "");
+  const numerator = aTicker.replace(/ CI$/, "");
   const denominator = bTicker.replace(/ CI$/, "");
+  const base = denominator.slice(0, -1);
   if (!base) return;
 
-  const pairName = b.currency === "USD" && denominator === base + "D" ? "MEP"
-    : b.currency === "EXT" && denominator === base + "C" ? "CCL"
-    : undefined;
-  if (pairName) return `${pairName} ${base}${isCash ? " CI" : ""}`;
+  const instrument = isCash ? `${base} CI` : base;
+  if (b.currency === "USD" && denominator.endsWith("D") && a.currency === "ARS" && numerator === base) return `MEP ${instrument}`;
+  if (b.currency !== "EXT" || !denominator.endsWith("C")) return;
+  if (a.currency === "ARS" && numerator === base) return `CCL ${instrument}`;
+  if (a.currency === "USD" && numerator === base + "D") return `CANJE ${instrument}`;
 }
 export function pairLabel({ a, b, c, cDivisor }: Pick<RatioPair, "a" | "b"> & RatioReference) {
   const label = financialDollarLabel(a, b) ?? `${a.symbol}/${b.symbol}`;
