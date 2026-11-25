@@ -157,11 +157,9 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
+        {compare && <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy} autoFocus={!c} />}
         <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => { setCompare(e.target.checked); setC(undefined); setDivideCBy100(false); setFormatOverride(undefined); }} />Comparar A/B con una referencia</label>
-        {compare && <>
-          <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy} />
-          <label className="ct-ratios-compare"><input type="checkbox" checked={divideCBy100} disabled={busy} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>
-        </>}
+        {compare && <label className="ct-ratios-compare"><input type="checkbox" checked={divideCBy100} disabled={busy} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>}
         <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormatOverride(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
           <span>{compare ? format === "percent" ? `((A ÷ B) ÷ ${referenceFormula} − 1) × 100` : `(A ÷ B) ÷ ${referenceFormula}` : format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>

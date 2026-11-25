@@ -69,7 +69,9 @@ function financialDollarLabel(a: RatioInstrument, b: RatioInstrument) {
 
   const instrument = isCash ? `${base} CI` : base;
   if (b.currency === "USD" && denominator.endsWith("D") && a.currency === "ARS" && numerator === base) return `MEP ${instrument}`;
-  if (b.currency !== "EXT" || !denominator.endsWith("C")) return;
+  // Matriz can report BYMA cable species as USD, like their local-dollar counterparts.
+  const cableCurrency = b.currency === "EXT" || (b.market === "bm" && b.currency === "USD");
+  if (!cableCurrency || !denominator.endsWith("C")) return;
   if (a.currency === "ARS" && numerator === base) return `CCL ${instrument}`;
   if (a.currency === "USD" && numerator === base + "D") return `CANJE ${instrument}`;
 }
