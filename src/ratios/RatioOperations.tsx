@@ -11,7 +11,7 @@ import { numeric } from "../optionsSimulator/model";
 import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
 import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, partialCloseQuantities, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
-  goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, remaining, sameCurrency,
+  goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, quoteUnitChanged, remaining, sameCurrency,
   validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair } from "./trading";
 import "./RatioOperations.css";
 
@@ -19,6 +19,7 @@ type View = "monitor" | "opening" | "operations";
 type GridKind = "watch" | "operations";
 interface GridDrag { kind: GridKind; scope: string; revision: string; ids: string[]; from: string }
 interface CloseDraft { id: string; snapshot: string; leg: 0 | 1; value: string }
+interface ClosePriceDraft { key: string; prices: [string?, string?] }
 type Source = "last" | "bid" | "ask" | "manual" | "saved";
 interface Draft {
   a?: TradingInstrument; b?: TradingInstrument; pa: string; pb: string; qa: string; fa: string; fb: string; sa: string; sb: string;
@@ -43,7 +44,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [issue, setIssue] = useState(""), [notice, setNotice] = useState("");
   const [edit, setEdit] = useState<{ id: string; snapshot: string }>();
   const [deleted, setDeleted] = useState<{ scope: string; op: RatioOperation; index: number }>();
-  const [closePriceOverrides, setClosePriceOverrides] = useState<[string?, string?]>([]);
+  const [closePriceDraft, setClosePriceDraft] = useState<ClosePriceDraft>();
   const [closeDraft, setCloseDraft] = useState<CloseDraft>();
   const [pickerSession, setPickerSession] = useState(0);
   const [loadingDefaults, setLoadingDefaults] = useState(false), defaultsAttempt = useRef<string | undefined>(undefined), defaultsGeneration = useRef(0);
@@ -65,10 +66,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const edited = ready && edit ? book.operations.find(o => o.id === edit.id) : undefined;
   const partiallyClosed = !!edited?.legs.some(l => l.exits.length);
   const quotes = market.quotes;
+  const closePriceKey = op ? JSON.stringify([scope, op.id, op.direction, op.legs.map(leg => [leg.instrument.id, leg.factor])]) : "";
+  const closePriceOverrides = closePriceDraft?.key === closePriceKey ? closePriceDraft.prices : [];
   const closeQuotes = op?.legs.map(leg => {
     const quote = quotes[leg.instrument.id];
     const issue = !market.context?.connected ? "Mercado desconectado." : quote?.issue ||
-      (quote?.amountFactor !== undefined && input(quote.amountFactor) !== input(leg.factor) ? "Cambió la unidad de cotización." : undefined);
+      (quoteUnitChanged(quote, leg.factor) ? "Cambió la unidad de cotización." : undefined);
     return { quote: issue ? undefined : quote, issue };
   });
   const closePrices: [string, string] = [
@@ -110,7 +113,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     }
   }, [ready, scope, book.watchDefaults]);
 
-  useEffect(() => { setClosePriceOverrides([]); setCloseDraft(undefined); }, [selected, scope, op?.legs[0].instrument.id, op?.legs[1].instrument.id]);
+  useEffect(() => { setClosePriceDraft(undefined); setCloseDraft(undefined); }, [closePriceKey]);
   useEffect(() => {
     setDraft(previous => {
       const pa = previous.pa || previous.sourceA !== "last" ? previous.pa : input(quotes[previous.a?.id || ""]?.last);
@@ -278,7 +281,10 @@ export default function RatioOperations({ active }: { active: boolean }) {
     } catch (error) { closeIssue = error instanceof Error ? error.message : "Revisá las cantidades de cierre."; }
   }
   function setClosePrice(leg: number, value: string) {
-    setClosePriceOverrides(previous => leg === 0 ? [value, previous[1]] : [previous[0], value]);
+    setClosePriceDraft(previous => {
+      const prices = previous?.key === closePriceKey ? previous.prices : [];
+      return { key: closePriceKey, prices: leg === 0 ? [value, prices[1]] : [prices[0], value] };
+    });
   }
   async function registerClose(fraction?: number) {
     if (!op) return;

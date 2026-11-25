@@ -686,11 +686,23 @@ async page => {
   await click(button('Abrir operación')); await button('Registrar cierre').waitFor();
   assert((await book()).operations.at(-1).legs[0].factor === 0.3, 'Opening saves the displayed factor precision');
   await wait(() => document.querySelector('[aria-label^="Usar Último para el cierre A:"]')?.disabled === false);
+  const factorPnl = page.locator('.ro-pnl-lines > div').filter({ hasText: 'Neto al desarme' });
+  assert(!(await factorPnl.innerText()).includes('—'), 'P&L uses the quote at the saved factor precision');
   await closeQuote('Compra', 'A').click();
   assert(await label('Precio cierre A').inputValue() === '99.9', 'A harmless decimal roundoff still allows copying the close quote');
+  const editedFactorId = (await book()).operations.at(-1).id;
+  await click(page.locator(`.ro-operations-table tr[data-row-id="${editedFactorId}"]`).getByRole('button', { name: 'Editar', exact: true }));
+  await click(button('Long GGAL / Short ROUNDFACTOR'));
+  await click(button('Guardar cambios')); await button('Registrar cierre').waitFor();
+  assert((await book()).operations.at(-1).direction === -1, 'Editing reverses the same operation');
+  assert(await label('Precio cierre A').inputValue() === '100' &&
+    (await closeQuote('Venta', 'A').getAttribute('class')).includes('ro-close-book-side'), 'Reversing a leg discards the old bid and highlights its new ask');
+  checks.push('Editing the direction of an open operation invalidates the previous close price selection');
+  await closeQuote('Venta', 'A').click();
   await page.evaluate(() => { mainStore.securityStore.securities.find(s => s.id === 'ROUNDFACTOR').refData.contractMultiplier = 4; });
   await wait(() => document.querySelector('[aria-label^="Usar Compra para el cierre A:"]')?.disabled);
-  assert(await label('Precio cierre A').inputValue() === '99.9', 'A changed unit disables market selection and retains the entered price');
-  checks.push('Close accepts rounding at the saved factor precision and rejects quotes with a different unit');
+  assert(await label('Precio cierre A').inputValue() === '100.1', 'A changed unit disables market selection and retains the entered price');
+  assert((await factorPnl.innerText()).includes('—') && (await page.locator('.ro-detail > .ro-issue').innerText()).includes('Cambió la unidad'), 'P&L flags a genuine quote unit change');
+  checks.push('Close quotes and P&L agree on rounding at the saved factor precision and on genuine quote unit changes');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }

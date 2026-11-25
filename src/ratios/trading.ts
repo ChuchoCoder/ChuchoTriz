@@ -1,4 +1,5 @@
 import { pairKey, ratioLabel, tickerKey, type RatioInstrument, type RatioReference } from "./model";
+import { formatOptionInput } from "../optionsSimulator/format";
 
 export interface TradingInstrument extends RatioInstrument {
   cfi: string;
@@ -156,6 +157,11 @@ function recordClose(o: RatioOperation, quantities: [number, number], prices: [n
   const result = { ...o, legs }; validateOperation(result); return result;
 }
 export interface CurrencyPnl { currency: string; realized: number; pending?: number; net?: number; gross?: number; commission?: number; ddmm?: number; issue?: string }
+export function quoteUnitChanged(quote: TradingQuote | undefined, savedFactor: number): boolean {
+  // The form saves the factor at its displayed precision.
+  const factor = quote?.amountFactor;
+  return positive(factor) && factor !== savedFactor && formatOptionInput(factor) !== formatOptionInput(savedFactor);
+}
 export function operationPnl(o: RatioOperation, quotes: Record<string, TradingQuote>): CurrencyPnl[] {
   const currencies = new Map<string, CurrencyPnl>();
   for (const l of o.legs) {
@@ -167,7 +173,7 @@ export function operationPnl(o: RatioOperation, quotes: Record<string, TradingQu
     const realizedDdmm = fee(closed, l.entry, l.ddmm) + l.exits.reduce((n, e) => n + fee(e.quantity, e.price, l.ddmm), 0);
     p.realized += realizedGross - realizedCommission - realizedDdmm;
     const issue = rest ? quote?.issue || (!positive(quote?.last) ? "Sin último precio para valuar el remanente." :
-      positive(quote?.amountFactor) && quote.amountFactor !== l.factor ? "Cambió la unidad de cotización; revisá la operación." : undefined) : undefined;
+      quoteUnitChanged(quote, l.factor) ? "Cambió la unidad de cotización; revisá la operación." : undefined) : undefined;
     if (issue) { p.issue = issue; p.pending = p.net = p.gross = p.commission = p.ddmm = undefined; }
     else if (!p.issue) {
       const current = rest ? quote!.last! : l.entry;
