@@ -321,6 +321,8 @@ async page => {
   }
   checks.push('Numeric ascending/descending sorting, accessible headers, missing values last and manual reset do not mutate saved records');
   await click(button('Ordenar por Par A/B'));
+  await page.setViewportSize({width:1440,height:1400});
+  await page.waitForFunction(()=>document.querySelector('.ro-monitor-table th[aria-sort=ascending] button')?.textContent.includes('Par A/B'));
   const sortedMonitor = await rowIds('.ro-monitor-table'), expectedMonitor = [...sortedMonitor.slice(1), sortedMonitor[0]];
   await page.locator('.ro-monitor-table tbody tr').first().locator('.ro-row-handle').dragTo(page.locator('.ro-monitor-table tbody tr').last().locator('td').first());
   await page.waitForFunction(id => document.querySelector('.ro-monitor-table tbody tr')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', expectedMonitor[0], {polling:100,timeout:10000});
@@ -504,7 +506,7 @@ async page => {
   assert(await label('Cantidad cierre A').getAttribute('step')==='10','Close input respects the stored lot');
   await label('Cantidad cierre A').fill('25');assert(await button('Registrar cierre').isDisabled(),'Source lot violation rejected');
   await label('Cantidad cierre B').fill('1');assert(await button('Registrar cierre').isDisabled(),'A close below one automatic lot is rejected');
-  await label('Cantidad cierre B').fill('60');assert(await label('Cantidad cierre A').inputValue()==='30','Automatic lot rounding from B');
+  await label('Cantidad cierre B').fill('60');await wait(()=>document.querySelector('[aria-label="Cantidad cierre A"]')?.value==='30');assert(await label('Cantidad cierre A').inputValue()==='30','Automatic lot rounding from B');
   await click(button('Registrar cierre'));
   await page.waitForFunction(id=>{const values=JSON.parse(localStorage.getItem('ct-demo-regression')||'{}');const o=Object.values(values).flatMap(b=>b?.operations||[]).find(o=>o.id===id);return JSON.stringify(o?.legs.map(l=>l.exits.map(e=>e.quantity)))==='[[30],[60]]';},lotCloseId,{polling:100,timeout:10000});
   assert(JSON.stringify((await book()).operations.find(o=>o.id===lotCloseId).legs.map(l=>l.exits[0].quantity))==='[30,60]','Lot-aligned nominal quantities are saved');
