@@ -99,26 +99,49 @@ it.each([[4, 6], [-6, -4], [-2, 2]])("uses the visible spread bounds (%s to %s) 
   }
 });
 
-it("selects the latest common historical session and gives the widget a separate percentage axis", async () => {
+it("opens on today without quotes and lets the widget select a historical session", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const today = Date.parse("2026-11-26T03:00:00Z"), yesterday = today - 86400000;
-  const liveAt = today + 12 * 3600000;
   call.mockImplementation((method: string) => Promise.resolve(method === "ratioIntradayQuotes"
-    ? { revision: 1, start: today, connected: true, points: { a: { at: liveAt, value: 87500 }, b: { at: liveAt, value: 50 } } }
+    ? { revision: 1, start: today, connected: true, points: {} }
     : { revision: 1, series: history }));
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<IntradayChart pair={pair} view="dollar-spread" />));
+    await act(async () => root.render(<IntradayChart pair={pair} view="dollar-spread" defaultToToday />));
     const session = host.querySelector<HTMLSelectElement>('[aria-label="Rueda del gráfico"]')!;
-    expect(session.value).toBe(String(yesterday));
+    expect(session.value).toBe(String(today));
+    expect(session.selectedOptions[0].textContent).toContain("hoy");
+    expect(host.querySelector("svg[role=img]")).toBeNull();
+    expect(host.textContent).toContain("Sin cotizaciones coincidentes para esta rueda.");
+    await act(async () => { session.value = String(yesterday); session.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(host.querySelector(".ct-intraday-axis-left")?.textContent).toContain("%");
     expect(host.querySelector(".ct-intraday-axis-right")?.textContent).not.toContain("%");
     expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-spread strong")?.textContent).toMatch(/6,67\s*%/);
     await act(async () => { session.value = String(today); session.dispatchEvent(new Event("change", { bubbles: true })); });
-    expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-ratio strong")?.textContent).toBe("1.750,00");
+    expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-ratio strong")?.textContent).toBe("—");
     expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-spread strong")?.textContent).toBe("—");
     expect(host.querySelector(".ct-intraday-axis-left")).toBeNull();
+  } finally {
+    await act(async () => root.unmount()); host.remove();
+  }
+});
+
+it("keeps today selectable when there are no quotes for any session", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const start = Date.parse("2026-11-26T03:00:00Z");
+  call.mockImplementation((method: string) => Promise.resolve(method === "ratioIntradayQuotes"
+    ? { revision: 1, start, connected: true, points: {} }
+    : { revision: 1, series: { a: { points: [] }, b: { points: [] } } }));
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<IntradayChart pair={{ a, b }} defaultToToday />));
+    const session = host.querySelector<HTMLSelectElement>('[aria-label="Rueda del gráfico"]')!;
+    expect(session.options).toHaveLength(1);
+    expect(session.value).toBe(String(start));
+    expect(session.selectedOptions[0].textContent).toContain("hoy");
+    expect(host.textContent).toContain("Sin cotizaciones coincidentes para esta rueda.");
   } finally {
     await act(async () => root.unmount()); host.remove();
   }

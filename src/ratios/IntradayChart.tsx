@@ -225,12 +225,12 @@ function Plot({ rows, lines, dual, label }: {
   </div>;
 }
 
-export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; view?: View }) {
+export function IntradayChart({ pair, view = "ratio", defaultToToday = false }: { pair: IntradayPair; view?: View; defaultToToday?: boolean }) {
   const [a, b, c] = [pair.a.id, pair.b.id, pair.c?.id];
   const ids = useMemo(() => [...new Set(c ? [a, b, c] : [a, b])], [a, b, c]);
   const market = useIntraday(ids);
   const [chosenDay, setChosenDay] = useState<number>();
-  const past = useMemo(() => intradayPoints(pair, market.history), [a, b, c, pair.cDivisor, market.history]);
+  const past = useMemo(() => defaultToToday ? [] : intradayPoints(pair, market.history), [a, b, c, pair.cDivisor, market.history, defaultToToday]);
   const points = useMemo(() => intradayPoints(pair, market.history, market.live),
     [a, b, c, pair.cDivisor, market.history, market.live]);
   const ratio = pairLabel({ a: pair.a, b: pair.b });
@@ -239,12 +239,14 @@ export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; vi
     : [{ key: "ratio", label: ratio }, ...(view === "comparison" ? [{ key: "reference" as const, label: reference }]
       : view === "dollar-spread" ? [{ key: "spread" as const, label: `Brecha vs ${reference}` }] : [])];
   const available = points.filter(point => point.ratio !== undefined || point.reference !== undefined);
-  const dates = [...new Set([...available.map(point => sessionDay(point.at)), ...(market.start === undefined ? [] : [market.start])])].sort((x, y) => y - x);
+  const today = market.start ?? sessionDay(Date.now());
+  const dates = [...new Set([today, ...available.map(point => sessionDay(point.at))])].sort((x, y) => y - x);
   const aligned = (row: ReturnType<typeof intradayPoints>[number]) => (pair.c ? row.spread : row.ratio) !== undefined;
-  const current = available.filter(point => sessionDay(point.at) === market.start && aligned(point));
-  // Prefer a developed current series or historical overlap to an isolated current quote.
+  const current = available.filter(point => sessionDay(point.at) === today && aligned(point));
+  // Charts opened from a Ratios row still look for a session with comparable history.
   const latest = current.length > 1 ? current.at(-1) : past.findLast(aligned) ?? available.findLast(aligned) ?? available.at(-1);
-  const activeDay = chosenDay !== undefined && dates.includes(chosenDay) ? chosenDay : latest ? sessionDay(latest.at) : market.start;
+  const defaultDay = defaultToToday || !latest ? today : sessionDay(latest.at);
+  const activeDay = chosenDay !== undefined && dates.includes(chosenDay) ? chosenDay : defaultDay;
   const rows = available.filter(point => sessionDay(point.at) === activeDay && lines.some(line => point[line.key] !== undefined));
   const instruments = [pair.a, pair.b, ...(pair.c ? [pair.c] : [])];
   const historyIssues = instruments.flatMap(i => market.history[i.id]?.issue ? [`${i.symbol} · ${market.history[i.id].issue}`] : []);
@@ -260,12 +262,14 @@ export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; vi
           <i aria-hidden="true" />{line.label} <strong>{display(last?.[line.key], line.key === "spread")}</strong>
         </span>;
       })}
-      {dates.length > 1 && <label className="ct-intraday-session"><span>Rueda</span>
-        <select aria-label="Rueda del gráfico" value={activeDay} onChange={event => setChosenDay(Number(event.target.value))}>
-          {dates.map(day => <option key={day} value={day}>{date.format(day)}{day === market.start ? " · hoy" : ""}</option>)}
+      {defaultToToday || dates.length > 1 ? <label className="ct-intraday-session"><span>Rueda</span>
+        <select aria-label="Rueda del gráfico" value={activeDay} onChange={event => {
+          const day = Number(event.target.value);
+          setChosenDay(defaultToToday && day === today ? undefined : day);
+        }}>
+          {dates.map(day => <option key={day} value={day}>{date.format(day)}{day === today ? " · hoy" : ""}</option>)}
         </select>
-      </label>}
-      {dates.length === 1 && <time>{date.format(dates[0])}</time>}
+      </label> : <time>{date.format(activeDay)}</time>}
     </div>
     {rows.length > 0 ? <Plot key={`${view}-${activeDay}`} rows={rows} lines={plotLines} dual={dual} label={description} />
       : <p className="ct-intraday-empty" role="status">{market.loading ? "Cargando histórico…" : "Sin cotizaciones coincidentes para esta rueda."}</p>}

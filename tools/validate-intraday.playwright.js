@@ -105,8 +105,12 @@ async (page, screenshots) => {
     !(await widget.getByText('Plazo', { exact: true }).isVisible()) &&
     !(await widget.getByText('Rueda', { exact: true }).isVisible()),
     'Selectors keep their accessible names while their captions are hidden in the widget');
-  assert(!(await daySelector.locator('option:checked').textContent()).includes('hoy'), 'The widget shows the latest overlapping historical session');
   const spreadValue = widget.locator('.ct-intraday-legend .ct-intraday-line-spread strong');
+  await daySelector.locator('option').nth(1).waitFor({ state: 'attached' });
+  assert((await daySelector.locator('option:checked').textContent()).includes('hoy'), 'The widget opens on today even when only the previous session has a spread');
+  await valueIs(spreadValue, '—', 'The default view does not borrow the previous session spread');
+  await daySelector.selectOption({ index: 1 });
+  assert(!(await daySelector.locator('option:checked').textContent()).includes('hoy'), 'A previous session remains selectable');
   assert((await widget.locator('.ct-intraday-axis-left').first().textContent()).includes('%'), 'The widget uses a separate percentage axis for the spread');
   assert(!(await widget.locator('.ct-intraday-axis-right').first().textContent()).includes('%'), 'The dollar remains on the right numeric axis');
   assert(/12,00\s*%/.test(await spreadValue.textContent()), 'The in-widget spread uses its own persisted C/100');
@@ -133,6 +137,9 @@ async (page, screenshots) => {
   await valueIs(spreadValue, '—', 'The current session does not use an older reference close');
   await page.reload();
   await widget.getByRole('button', { name: 'Configurar Referencia C' }).filter({ hasText: 'C · D30N6 ÷ 100' }).waitFor();
+  await daySelector.locator('option').nth(1).waitFor({ state: 'attached' });
+  assert((await daySelector.locator('option:checked').textContent()).includes('hoy'), 'Reloading opens today again');
+  await daySelector.selectOption({ index: 1 });
   await widget.locator('.ct-intraday-axis-left').first().waitFor();
   checks.push('The widget reference and divisor survive reload');
 

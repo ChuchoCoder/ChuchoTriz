@@ -295,7 +295,7 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
       </div>
     </form>}
     {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
-    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
+    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} defaultToToday /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
   </section>;
 }
 
