@@ -17,8 +17,8 @@ export const defaultRatioColumns: RatioColumns = { lastA: true, lastB: true, ref
 export interface RatioWidgetState { config: RatioConfig; width: number; height: number; columns?: { revision: number; visible: RatioColumns }; issue?: string }
 export interface DollarSelection { kind: "MEP" | "CCL"; bond: "AL30" | "GD30"; term: "24h" | "CI" }
 export interface DollarWidgetState {
-  config: DollarSelection & { id: string; revision: number };
-  pair?: Pick<RatioPair, "a" | "b">;
+  config: DollarSelection & RatioReference & { id: string; revision: number };
+  pair?: Pick<RatioPair, "a" | "b"> & RatioReference;
   issue?: string;
 }
 export interface RatiosState {

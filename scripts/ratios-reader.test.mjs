@@ -80,6 +80,42 @@ test('a stalled native series times out and can be retried without changing acco
   assert.equal(recovered.revision, stuck.revision);
 });
 
+test('finds older native intraday bars when the today endpoint is empty', async () => {
+  const f = fixture();
+  const calendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const today = Date.parse(calendar.format(Date.now()) + 'T00:00:00-03:00');
+  const yesterday = today - 86400000;
+  const at = yesterday + 12 * 3600000;
+  const rangeCalls = [];
+  f.ms.seriesStore = {
+    async getIntradayTodaySeries() { return { series: [] }; },
+    async getIntradaySeries(...args) { rangeCalls.push(args); return { series: [{ date: new Date(at).toISOString(), close: 160000 }] }; },
+  };
+  const result = (await f.request('ratioIntradayHistory', { ids: ['a', 'b', 'c'] })).result;
+  assert.deepEqual(result.series.c, { points: [{ at, value: 160000 }] });
+  assert.deepEqual(rangeCalls.map(([id, from, , resolution]) => [id, from, resolution]), ['a', 'b', 'c'].map(id => [id, today / 1000 - 6 * 86400, '1']));
+});
+
+test('stores an independent reference and divisor on an existing dollar widget', async () => {
+  const f = fixture();
+  const { config } = (await f.request('dollarAdd', await f.args())).result.dollarWidgets[0];
+  const selection = { ...await f.args(), widgetId: config.id, ...config };
+  assert.match((await f.request('dollarEdit', { ...selection, cDivisor: 100 })).error, /Divisor inválido/);
+  assert.match((await f.request('dollarEdit', { ...selection, c: 'unknown' })).error, /catálogo/);
+  const reference = (await f.request('dollarEdit', { ...selection, c: 'c', cDivisor: 100 })).result.dollarWidgets[0];
+  assert.equal(reference.config.schema, 2);
+  assert.equal(reference.pair.c.id, 'c');
+  assert.equal(reference.pair.cDivisor, 100);
+  const saved = (await f.ds.getDashboard()).layout.find(w => w.settings?.chuchotrizIntradayDollar).settings.chuchotrizIntradayDollar;
+  assert.deepEqual(saved, reference.config);
+  f.securities.splice(f.securities.findIndex(s => s.id === 'c'), 1);
+  const changed = (await f.request('dollarEdit', { ...selection, revision: 1, c: 'c', cDivisor: 100 })).result.dollarWidgets[0];
+  assert.equal(changed.config.c.id, 'c', 'a saved reference can survive changes to other settings if it expires');
+  const cleared = (await f.request('dollarEdit', { ...selection, revision: 2 })).result.dollarWidgets[0];
+  assert.equal(cleared.config.schema, 1);
+  assert.equal(cleared.pair.c, undefined);
+});
+
 test('column visibility defaults to visible, persists per widget, and survives pair edits by legacy clients', async () => {
   const f = fixture(); await f.add(); await f.add();
   const initial = (await f.state()).widgets[0];

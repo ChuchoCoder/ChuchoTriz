@@ -12,6 +12,7 @@ async (page, screenshots) => {
   await page.routeWebSocket('**/*', socket => { blocked.push(new URL(socket.url()).origin); socket.close(); });
   await page.evaluate(() => {
     for (const key of ['ct-ratios-fixture-main', 'ct-ratios-fixture-alternate', 'ct-ratios-fixture-settings']) localStorage.removeItem(key);
+    sessionStorage.removeItem('ct-reference-history-lag');
   });
   await page.reload();
   const assert = (value, label) => { if (!value) throw Error(label); checks.push(label); };
@@ -76,6 +77,30 @@ async (page, screenshots) => {
   await dialog.waitFor({ state: 'hidden' });
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Comparar MEP AL30 con D30N6');
   checks.push('Escape closes the dialog and returns focus to the row');
+
+  await page.evaluate(() => window.ratiosFixture.useEarlierReference());
+  await dollar.selectOption('MEP'); await idle();
+  await widget.getByRole('button', { name: 'Configurar Referencia C' }).click();
+  const widgetEditor = widget.getByRole('form', { name: 'Referencia del dólar intradiario' });
+  const widgetReference = widgetEditor.getByRole('combobox', { name: 'Referencia C', exact: true });
+  await widgetReference.fill('D30N6'); await widgetReference.press('Tab');
+  await widgetEditor.locator('small[title="D30N6-2"]').waitFor();
+  await widgetEditor.getByRole('checkbox', { name: 'Dividir C por 100' }).check();
+  await widgetEditor.getByRole('button', { name: 'Guardar', exact: true }).click(); await idle();
+  const daySelector = widget.getByRole('combobox', { name: 'Rueda del gráfico' });
+  await daySelector.waitFor();
+  assert(!(await daySelector.locator('option:checked').textContent()).includes('hoy'), 'The widget shows the latest overlapping historical session');
+  const spreadValue = widget.locator('.ct-intraday-legend .ct-intraday-line-spread strong');
+  assert((await widget.locator('.ct-intraday-axis-left').first().textContent()).includes('%'), 'The widget uses a separate percentage axis for the spread');
+  assert(!(await widget.locator('.ct-intraday-axis-right').first().textContent()).includes('%'), 'The dollar remains on the right numeric axis');
+  assert(/12,00\s*%/.test(await spreadValue.textContent()), 'The in-widget spread uses its own persisted C/100');
+  await screenshot('widget-with-reference', widget);
+  await daySelector.selectOption({ index: 0 });
+  await valueIs(spreadValue, '—', 'The current session does not use an older reference close');
+  await page.reload();
+  await widget.getByRole('button', { name: 'Configurar Referencia C' }).filter({ hasText: 'C · D30N6 ÷ 100' }).waitFor();
+  await widget.locator('.ct-intraday-axis-left').first().waitFor();
+  checks.push('The widget reference and divisor survive reload');
 
   await page.evaluate(() => {
     const nav = document.querySelector('.DirectAccessBar');

@@ -6,14 +6,18 @@ import { calculateRatio, pairKey, pairLabel, ratioLabel, type RatioPair } from "
 import "./IntradayChart.css";
 
 export type IntradayPair = Pick<RatioPair, "a" | "b" | "c" | "cDivisor">;
-type View = "ratio" | "comparison" | "spread";
+type View = "ratio" | "comparison" | "spread" | "dollar-spread";
 interface Point { at: number; value: number; provisional?: true }
 type History = Record<string, { points: Point[]; issue?: string }>;
 type Live = Record<string, Map<number, Point>>;
 interface LiveResponse { revision: number; start: number; connected: boolean; points: Record<string, Point>; issue?: string }
 interface HistoryResponse { revision: number; series: History }
 const MINUTE = 60000;
+const INTERVAL = 5 * MINUTE;
+const DAY = 86400000, ARGENTINA_MIDNIGHT = 3 * 3600000;
 const minute = (at: number) => Math.floor(at / MINUTE) * MINUTE;
+const bucket = (at: number) => Math.floor(at / INTERVAL) * INTERVAL;
+const sessionDay = (at: number) => Math.floor((at - ARGENTINA_MIDNIGHT) / DAY) * DAY + ARGENTINA_MIDNIGHT;
 const time = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const date = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit" });
 
@@ -105,7 +109,12 @@ export function intradayPoints(pair: IntradayPair, history: History, live: Live 
       const historical = native.get(minute(point.at));
       return !historical || historical.provisional;
     });
-    return new Map(mergeMinutes([...native.values()], eligibleLive).map(point => [minute(point.at), point.value]));
+    const closes = new Map<number, Point>();
+    for (const point of mergeMinutes([...native.values()], eligibleLive)) {
+      const key = bucket(point.at), previous = closes.get(key);
+      if (!previous || previous.at < point.at) closes.set(key, point);
+    }
+    return new Map([...closes].map(([at, point]) => [at, point.value]));
   });
   const [a, b, c] = prices;
   const times = [...new Set(prices.flatMap(values => [...values.keys()]))].sort((x, y) => x - y);
@@ -126,8 +135,15 @@ function display(value: number | undefined, percent: boolean) {
   return value === undefined ? "—" : percent ? percentage.format(value / 100) : ratioLabel(value);
 }
 
-function Plot({ rows, lines, percent, label }: {
-  rows: ReturnType<typeof intradayPoints>; lines: Line[]; percent: boolean; label: string;
+function chartScale(values: number[], percent: boolean, top: number, bottom: number) {
+  const low = Math.min(...values, ...(percent ? [0] : [])), high = Math.max(...values, ...(percent ? [0] : []));
+  const padding = (high - low) * 0.08 || Math.max(Math.abs(high) * 0.001, 0.0001);
+  const min = low - padding, max = high + padding;
+  return { percent, min, max, y: (value: number) => bottom - (bottom - top) * (value - min) / (max - min) };
+}
+
+function Plot({ rows, lines, dual, label }: {
+  rows: ReturnType<typeof intradayPoints>; lines: Line[]; dual: boolean; label: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 448, height: 195 });
@@ -140,16 +156,14 @@ function Plot({ rows, lines, percent, label }: {
     observer.observe(container.current);
     return () => observer.disconnect();
   }, []);
-  const values = rows.flatMap(row => lines.flatMap(line => row[line.key] ?? []));
   const active = index === undefined ? undefined : rows[Math.min(index, rows.length - 1)];
-  const low = Math.min(...values, ...(percent ? [0] : [])), high = Math.max(...values, ...(percent ? [0] : []));
-  const padding = (high - low) * 0.08 || Math.max(Math.abs(high) * 0.001, 0.0001);
-  const min = low - padding, max = high + padding;
   const width = size.width, height = size.height;
-  const left = 12, top = 12, bottom = Math.max(top + 8, height - 24), right = Math.max(left + 12, width - 88);
-  const from = rows[0].at, to = Math.max(rows[rows.length - 1].at, from + MINUTE);
+  const left = dual ? 68 : 12, top = 12, bottom = Math.max(top + 8, height - 24), right = Math.max(left + 12, width - 84);
+  const onRight = dual ? lines.filter(line => line.key !== "spread") : lines;
+  const mainScale = chartScale(rows.flatMap(row => onRight.flatMap(line => row[line.key] ?? [])), onRight[0].key === "spread", top, bottom);
+  const spreadScale = dual ? chartScale(rows.flatMap(row => row.spread ?? []), true, top, bottom) : mainScale;
+  const from = rows[0].at, to = Math.max(rows[rows.length - 1].at, from + INTERVAL);
   const x = (at: number) => left + (right - left) * (at - from) / (to - from);
-  const y = (value: number) => bottom - (bottom - top) * (value - min) / (max - min);
   return <div className="ct-intraday-plot" ref={container}>
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} tabIndex={0}
       onBlur={() => setIndex(undefined)} onPointerLeave={() => setIndex(undefined)}
@@ -166,22 +180,27 @@ function Plot({ rows, lines, percent, label }: {
         setIndex(previous => Math.max(0, Math.min(rows.length - 1, (previous ?? rows.length - 1) + step)));
       }}>
       {[0, 1, 2, 3].map(tick => {
-        const value = min + (max - min) * tick / 3, yy = y(value);
-        return <g key={tick}><path className="ct-intraday-grid" d={`M${left},${yy}H${right}`} /><text x={right + 7} y={yy} dominantBaseline="middle">{display(value, percent)}</text></g>;
+        const value = mainScale.min + (mainScale.max - mainScale.min) * tick / 3, yy = mainScale.y(value);
+        const spreadTick = spreadScale.min + (spreadScale.max - spreadScale.min) * tick / 3;
+        return <g key={tick}><path className="ct-intraday-grid" d={`M${left},${yy}H${right}`} />
+          <text className="ct-intraday-axis-right" x={right + 7} y={yy} dominantBaseline="middle">{display(value, mainScale.percent)}</text>
+          {dual && <text className="ct-intraday-axis-left" x={left - 7} y={yy} textAnchor="end" dominantBaseline="middle">{display(spreadTick, true)}</text>}
+        </g>;
       })}
-      {(rows.length === 1 ? [from] : [from, minute((from + to) / 2), to]).filter((at, i, ticks) => ticks.indexOf(at) === i).map(at =>
+      {(rows.length === 1 ? [from] : [from, bucket((from + to) / 2), to]).filter((at, i, ticks) => ticks.indexOf(at) === i).map(at =>
         <g key={at}><path className="ct-intraday-grid" d={`M${x(at)},${top}V${bottom}`} /><text x={x(at)} y={bottom + 17} textAnchor={at === from ? "start" : at === to ? "end" : "middle"}>{time.format(at)}</text></g>)}
-      {percent && <path className="ct-intraday-zero" d={`M${left},${y(0)}H${right}`} />}
+      {spreadScale.percent && <path className="ct-intraday-zero" d={`M${left},${spreadScale.y(0)}H${right}`} />}
       {lines.map(line => {
         const points = rows.filter(row => row[line.key] !== undefined);
+        const { y } = line.key === "spread" ? spreadScale : mainScale;
         const path = points.map((point, i) => {
-          const op = i > 0 && point.at - points[i - 1].at === MINUTE ? "L" : "M";
+          const op = i > 0 && point.at - points[i - 1].at === INTERVAL ? "L" : "M";
           return `${op}${x(point.at)},${y(point[line.key]!)}`;
         }).join("");
         return <g key={line.key} className={`ct-intraday-line-${line.key}`}>
           <path className="ct-intraday-line" d={path} />
           {points.map((point, i) => {
-            const isolated = point.at - (points[i - 1]?.at ?? -Infinity) > MINUTE && (points[i + 1]?.at ?? Infinity) - point.at > MINUTE;
+            const isolated = point.at - (points[i - 1]?.at ?? -Infinity) > INTERVAL && (points[i + 1]?.at ?? Infinity) - point.at > INTERVAL;
             return isolated || i === points.length - 1 ? <circle key={point.at} cx={x(point.at)} cy={y(point[line.key]!)} r={i === points.length - 1 ? 3.5 : 2} /> : null;
           })}
         </g>;
@@ -189,7 +208,7 @@ function Plot({ rows, lines, percent, label }: {
       {active && <path className="ct-intraday-cursor" d={`M${x(active.at)},${top}V${bottom}`} />}
     </svg>
     {active && <div className="ct-intraday-tooltip" role="status">
-      <strong>{time.format(active.at)}</strong>{lines.map(line => <span key={line.key}>{line.label} {display(active[line.key], percent)}</span>)}
+      <strong>{time.format(active.at)}</strong>{lines.map(line => <span key={line.key}>{line.label} {display(active[line.key], line.key === "spread")}</span>)}
     </div>}
   </div>;
 }
@@ -198,30 +217,47 @@ export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; vi
   const [a, b, c] = [pair.a.id, pair.b.id, pair.c?.id];
   const ids = useMemo(() => [...new Set(c ? [a, b, c] : [a, b])], [a, b, c]);
   const market = useIntraday(ids);
+  const [chosenDay, setChosenDay] = useState<number>();
+  const past = useMemo(() => intradayPoints(pair, market.history), [a, b, c, pair.cDivisor, market.history]);
   const points = useMemo(() => intradayPoints(pair, market.history, market.live),
     [a, b, c, pair.cDivisor, market.history, market.live]);
   const ratio = pairLabel({ a: pair.a, b: pair.b });
   const reference = pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""}` : "Referencia C";
   const lines: Line[] = view === "spread" ? [{ key: "spread", label: "Brecha" }]
-    : [{ key: "ratio", label: ratio }, ...(view === "comparison" ? [{ key: "reference" as const, label: reference }] : [])];
-  const rows = points.filter(point => lines.some(line => point[line.key] !== undefined));
+    : [{ key: "ratio", label: ratio }, ...(view === "comparison" ? [{ key: "reference" as const, label: reference }]
+      : view === "dollar-spread" ? [{ key: "spread" as const, label: `Brecha vs ${reference}` }] : [])];
+  const available = points.filter(point => point.ratio !== undefined || point.reference !== undefined);
+  const dates = [...new Set([...available.map(point => sessionDay(point.at)), ...(market.start === undefined ? [] : [market.start])])].sort((x, y) => y - x);
+  const aligned = (row: ReturnType<typeof intradayPoints>[number]) => (pair.c ? row.spread : row.ratio) !== undefined;
+  const current = available.filter(point => sessionDay(point.at) === market.start && aligned(point));
+  // Prefer a developed current series or historical overlap to an isolated current quote.
+  const latest = current.length > 1 ? current.at(-1) : past.findLast(aligned) ?? available.findLast(aligned) ?? available.at(-1);
+  const activeDay = chosenDay !== undefined && dates.includes(chosenDay) ? chosenDay : latest ? sessionDay(latest.at) : market.start;
+  const rows = available.filter(point => sessionDay(point.at) === activeDay && lines.some(line => point[line.key] !== undefined));
   const instruments = [pair.a, pair.b, ...(pair.c ? [pair.c] : [])];
   const historyIssues = instruments.flatMap(i => market.history[i.id]?.issue ? [`${i.symbol} · ${market.history[i.id].issue}`] : []);
-  const hasComparison = rows.some(row => row.ratio !== undefined && row.reference !== undefined);
-  const percent = view === "spread";
+  const hasComparison = rows.some(row => row.spread !== undefined);
+  const dual = view === "dollar-spread" && hasComparison;
+  const plotLines = view === "dollar-spread" && !dual ? lines.filter(line => line.key !== "spread") : lines;
+  const description = view === "spread" ? `Brecha intradiaria de ${ratio} contra ${reference}` : `Gráfico intradiario de ${lines.map(line => line.label).join(" y ")}`;
   return <div className="ct-intraday-body NoDraggable" aria-busy={market.loading}>
     <div className="ct-intraday-legend">
       {lines.map(line => {
         const last = rows.findLast(row => row[line.key] !== undefined);
         return <span key={line.key} className={`ct-intraday-line-${line.key}`} title={last && time.format(last.at)}>
-          <i aria-hidden="true" />{line.label} <strong>{display(last?.[line.key], percent)}</strong>
+          <i aria-hidden="true" />{line.label} <strong>{display(last?.[line.key], line.key === "spread")}</strong>
         </span>;
       })}
-      {market.start !== undefined && <time>{date.format(market.start)}</time>}
+      {dates.length > 1 && <label className="ct-intraday-session">Rueda
+        <select aria-label="Rueda del gráfico" value={activeDay} onChange={event => setChosenDay(Number(event.target.value))}>
+          {dates.map(day => <option key={day} value={day}>{date.format(day)}{day === market.start ? " · hoy" : ""}</option>)}
+        </select>
+      </label>}
+      {dates.length === 1 && <time>{date.format(dates[0])}</time>}
     </div>
-    {rows.length > 0 ? <Plot key={view} rows={rows} lines={lines} percent={percent} label={percent ? `Brecha intradiaria de ${ratio} contra ${reference}` : `Gráfico intradiario de ${lines.map(line => line.label).join(" y ")}`} />
-      : <p className="ct-intraday-empty" role="status">{market.loading ? "Cargando histórico de la rueda…" : "Todavía no hay minutos con cotizaciones coincidentes."}</p>}
-    {view === "comparison" && rows.length > 0 && !hasComparison && <small>Las series disponibles aún no coinciden en un mismo minuto.</small>}
+    {rows.length > 0 ? <Plot key={`${view}-${activeDay}`} rows={rows} lines={plotLines} dual={dual} label={description} />
+      : <p className="ct-intraday-empty" role="status">{market.loading ? "Cargando histórico…" : "Sin cotizaciones coincidentes para esta rueda."}</p>}
+    {(view === "comparison" || view === "dollar-spread") && rows.length > 0 && !hasComparison && <small>El dólar y la referencia aún no coinciden en un intervalo de 5 min en esta rueda.</small>}
     {!market.loading && (market.historyIssue || historyIssues.length > 0) && <p className="ct-intraday-status" role="status">
       <span title={historyIssues.join(" · ")}>{market.historyIssue || historyIssues.join(" · ")}</span>
       <button type="button" onClick={market.retry}>Reintentar histórico</button>

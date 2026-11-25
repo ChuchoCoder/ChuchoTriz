@@ -30,6 +30,9 @@ El widget arranca en MEP AL30 a 24 h y permite elegir MEP o CCL, AL30 o GD30
 y 24 h o CI. Cada widget guarda su selección y posición en el dashboard.
 El par se resuelve por especie BYMA, moneda y liquidación. Si falta una pata
 o hay más de una coincidencia, el widget indica que el par no está disponible.
+Desde **+ Referencia C** se puede elegir una especie y activar **Dividir C por
+100**. El widget guarda esa referencia y dibuja MEP o CCL en el eje derecho y
+la brecha porcentual a la izquierda, con la igualdad marcada en cero.
 
 En una fila con Referencia C del widget Ratios o del Monitor, el botón de
 gráfico marcado **C** abre dos vistas. **Comparación** muestra A/B y la
@@ -38,14 +41,15 @@ referencia en una escala numérica común. **Brecha %** muestra
 usan `C/100` si la fila tiene activado ese divisor. El ícono de gráfico nativo
 continúa abriendo el gráfico de Matriz.
 
-Las vistas usan el histórico de la rueda publicado por Matriz y los últimos
-precios recibidos en vivo con su hora de mercado argentina. A/B requiere
-precios de ambas patas en el mismo minuto y la brecha también requiere C
-en ese minuto. Los cierres históricos de minutos completos prevalecen sobre
-los puntos en vivo ya capturados. Los faltantes quedan como huecos. Si el histórico falla, se
-pueden seguir acumulando puntos de la rueda a partir de las cotizaciones
-recibidas con el gráfico abierto. **Reintentar histórico** vuelve a consultar
-la serie del broker.
+Las vistas leen las series intradiarias de los últimos siete días calendario
+y los últimos precios recibidos en vivo con su hora de mercado argentina.
+El cálculo usa el último dato de cada pata dentro del mismo intervalo de
+cinco minutos. La brecha requiere también C en ese intervalo. El selector
+**Rueda** permite consultar el día actual o días con cobertura. Si hoy sólo
+hay una observación aislada, el gráfico prioriza una rueda con histórico
+coincidente y muestra su fecha. Los cierres históricos completados prevalecen
+sobre los ticks capturados de ese mismo minuto. Los faltantes quedan como
+huecos. **Reintentar histórico** vuelve a consultar las series del broker.
 
 El recorrido con datos simulados usa `tools/ratios-fixture.mjs` y
 `tools/validate-intraday.playwright.js` en el perfil Playwright compartido.

@@ -66,17 +66,26 @@ function install() {
   const marketDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
   const sessionStart = Date.parse(marketDay.format(Date.now()) + 'T00:00:00-03:00');
   const historyEnd = Math.max(sessionStart, Math.floor(Date.now() / 60000) * 60000 - 60000);
+  const refId = 'D30N6-2';
+  let lagged = sessionStorage.getItem('ct-reference-history-lag') === '1';
+  const moveReferenceTick = () => { securities.find(s => s.id === refId).md.lstdStr = new Date(historyEnd - 45 * 60000).toISOString(); };
+  if (lagged) moveReferenceTick();
   const seriesCounts = {}, failedSeries = new Set();
   window.mainStore = { dashboardStore: ds, securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) },
     profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} },
-    seriesStore: { async getIntradayTodaySeries(id) {
+    seriesStore: { async getIntradaySeries(id, from, to) {
       seriesCounts[id] = (seriesCounts[id] || 0) + 1;
       if (failedSeries.has(id)) throw { response: { status: 401 } };
       const price = securities.find(s => s.id === id)?.md.lst;
-      const series = [4, 3, 2, 1, 0].map(offset => ({
-        date: new Date(Math.max(sessionStart, historyEnd - offset * 60000)),
+      const bars = (end, start) => [4, 3, 2, 1, 0].map(offset => ({
+        date: new Date(Math.max(start, end - offset * 300000)),
         close: price * (1 - offset * (id === 'AL30-2' ? 0.014 : 0.003)),
       }));
+      const prior = sessionStart - 86400000;
+      const series = [
+        ...(lagged ? bars(prior + 16 * 3600000, prior) : []),
+        ...(lagged && id === refId ? [] : bars(historyEnd, sessionStart)),
+      ].filter(bar => +bar.date >= from * 1000 && +bar.date <= to * 1000);
       return { series };
     } } };
   window.ratiosFixture = {
@@ -84,6 +93,10 @@ function install() {
     connected(value) { window.mainStore.webSocketConnectionStatus = value; },
     seriesCounts,
     failSeries(id, value) { if (value) failedSeries.add(id); else failedSeries.delete(id); },
+    useEarlierReference() {
+      lagged = true; sessionStorage.setItem('ct-reference-history-lag', '1'); moveReferenceTick();
+      window.mainStore.seriesStore = { ...window.mainStore.seriesStore };
+    },
     switchDashboard() { ds.currentDashboard = ds.currentDashboard === d ? alternate : d; render(); }
   };
   render();

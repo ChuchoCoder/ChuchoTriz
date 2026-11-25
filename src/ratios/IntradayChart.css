@@ -39,11 +39,25 @@
 .ct-intraday-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 .ct-intraday-legend i { width: 11px; height: 3px; border-radius: 3px; background: var(--intraday-line); }
 .ct-intraday-legend time { margin-left: auto; }
+.ct-intraday-session { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
+.ct-intraday-session select, .ct-intraday-controls .ct-intraday-reference {
+  border: 1px solid #8190a5;
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: var(--intraday-bg, var(--ratio-bg, #222c3b));
+  color: inherit;
+  font: inherit;
+}
+.ct-intraday-controls .ct-intraday-reference { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ct-intraday-reference-editor .ct-ratios-editor-actions { justify-content: flex-end; }
+.ct-intraday-reference-editor .ct-ratios-editor-actions label { margin: 0; margin-right: auto; }
 .ct-intraday-line-ratio, .ct-intraday-line-spread { --intraday-line: #1689d0; }
 .ct-intraday-line-reference { --intraday-line: #b77b0b; }
+.ct-intraday-line-spread { --intraday-line: #cf9a33; }
 .ct-intraday-plot { position: relative; flex: 1; min-height: 100px; }
 .ct-intraday-plot svg { display: block; width: 100%; height: 100%; position: absolute; touch-action: pan-y; }
 .ct-intraday-plot text { font-size: 10px; fill: currentColor; }
+.ct-intraday-plot .ct-intraday-axis-left { fill: #cf9a33; }
 .ct-intraday-grid, .ct-intraday-zero, .ct-intraday-cursor { fill: none; stroke: var(--intraday-grid); }
 .ct-intraday-zero, .ct-intraday-cursor { stroke: currentColor; stroke-dasharray: 3 3; opacity: .65; }
 .ct-intraday-line { fill: none; stroke: var(--intraday-line); stroke-width: 2; stroke-linejoin: round; }

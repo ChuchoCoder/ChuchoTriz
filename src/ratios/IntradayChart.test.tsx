@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { intradayPoints, ReferenceChartButton } from "./IntradayChart";
+import { IntradayChart, intradayPoints, ReferenceChartButton } from "./IntradayChart";
 import type { RatioInstrument } from "./model";
 
 const call = vi.fn(), dispose = vi.fn();
@@ -12,7 +12,7 @@ const a: RatioInstrument = { id: "a", symbol: "AL30", market: "bm", settlement: 
 const b: RatioInstrument = { ...a, id: "b", symbol: "AL30D", currency: "USD" };
 const c: RatioInstrument = { ...a, id: "c", symbol: "D30N6" };
 const first = Date.parse("2026-11-25T14:00:00Z");
-const next = first + 60000, third = next + 60000;
+const next = first + 300000, third = next + 300000;
 const pair = { a, b, c, cDivisor: 100 as const };
 const history = {
   a: { points: [{ at: first, value: 78000 }, { at: first + 30000, value: 80000 }, { at: next, value: 82000 }, { at: third, value: 80000 }] },
@@ -22,7 +22,7 @@ const history = {
 
 afterEach(() => { vi.unstubAllGlobals(); call.mockReset(); dispose.mockClear(); });
 
-it("uses the last point in each minute, scales C, and preserves gaps without using older values", () => {
+it("uses the last sample in each five-minute interval, scales C, and preserves gaps", () => {
   const rows = intradayPoints(pair, history, {
     a: new Map([[first, { at: first + 15000, value: 70000 }]]),
     b: new Map([[next, { at: next + 1000, value: 40 }]]),
@@ -35,6 +35,8 @@ it("uses the last point in each minute, scales C, and preserves gaps without usi
   expect(intradayPoints({ a: b, b: a }, history)[0].ratio).toBeCloseTo(0.000625);
   const provisional = { ...history, b: { points: history.b.points.map(point => ({ ...point, provisional: true as const })) } };
   expect(intradayPoints(pair, provisional, { b: new Map([[next, { at: next + 1000, value: 40 }]]) })[1].ratio).toBe(2050);
+  const differentMinute = { ...history, b: { points: [{ at: first + 240000, value: 40 }] } };
+  expect(intradayPoints(pair, differentMinute)[0].spread).toBeCloseTo(33.333333);
 });
 
 it("opens both intraday views from the row with its exact instruments and divisor", async () => {
@@ -69,5 +71,30 @@ it("opens both intraday views from the row with its exact instruments and diviso
     host.remove();
     if (!showModal) Reflect.deleteProperty(prototype, "showModal");
     if (!close) Reflect.deleteProperty(prototype, "close");
+  }
+});
+
+it("selects the latest common historical session and gives the widget a separate percentage axis", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const today = Date.parse("2026-11-26T03:00:00Z"), yesterday = today - 86400000;
+  const liveAt = today + 12 * 3600000;
+  call.mockImplementation((method: string) => Promise.resolve(method === "ratioIntradayQuotes"
+    ? { revision: 1, start: today, connected: true, points: { a: { at: liveAt, value: 87500 }, b: { at: liveAt, value: 50 } } }
+    : { revision: 1, series: history }));
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<IntradayChart pair={pair} view="dollar-spread" />));
+    const session = host.querySelector<HTMLSelectElement>('[aria-label="Rueda del gráfico"]')!;
+    expect(session.value).toBe(String(yesterday));
+    expect(host.querySelector(".ct-intraday-axis-left")?.textContent).toContain("%");
+    expect(host.querySelector(".ct-intraday-axis-right")?.textContent).not.toContain("%");
+    expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-spread strong")?.textContent).toMatch(/6,67\s*%/);
+    await act(async () => { session.value = String(today); session.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-ratio strong")?.textContent).toBe("1.750,00");
+    expect(host.querySelector(".ct-intraday-legend .ct-intraday-line-spread strong")?.textContent).toBe("—");
+    expect(host.querySelector(".ct-intraday-axis-left")).toBeNull();
+  } finally {
+    await act(async () => root.unmount()); host.remove();
   }
 });

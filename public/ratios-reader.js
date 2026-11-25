@@ -5,6 +5,7 @@
   if (window.__chuchotrizRatiosReader) { window.__chuchotrizRatiosReader.attach(channel); return; }
   const TYPE = "ChuchoTrizRatiosWidget", KEY = "chuchotrizRatios";
   const DOLLAR_TYPE = "ChuchoTrizIntradayDollarWidget", DOLLAR_KEY = "chuchotrizIntradayDollar";
+  const DAY = 86400000, HISTORY_DAYS = 7;
   const DEFAULT_PAIRS = [["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
     ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"],
     ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"]];
@@ -16,14 +17,17 @@
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
+  const descriptor = i => ({ id: i.id, symbol: clean(i.symbol), market: clean(i.market), currency: clean(i.currency), settlement: clean(i.settlement), ...(i.monitorOnly === true ? { monitorOnly: true } : {}) });
   const tickerKey = s => s.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase();
   const ownConfig = w => w?.component === TYPE && [1, 2, 3].includes(w.settings?.[KEY]?.schema) && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
   const dollarSelection = cfg => cfg && ["MEP", "CCL"].includes(cfg.kind) && ["AL30", "GD30"].includes(cfg.bond) && ["24h", "CI"].includes(cfg.term);
   function dollarConfig(w) {
     const cfg = w?.settings?.[DOLLAR_KEY];
-    if (w?.component === DOLLAR_TYPE && cfg?.schema === 1 && short(cfg.id) && Number.isSafeInteger(cfg.revision) && cfg.revision >= 0 && dollarSelection(cfg)) {
-      return { schema: 1, id: cfg.id, revision: cfg.revision, kind: cfg.kind, bond: cfg.bond, term: cfg.term };
-    }
+    if (w?.component !== DOLLAR_TYPE || ![1, 2].includes(cfg?.schema) || !short(cfg.id) ||
+      !Number.isSafeInteger(cfg.revision) || cfg.revision < 0 || !dollarSelection(cfg)) return;
+    if (cfg.schema === 2 ? !short(cfg.c?.id) || cfg.cDivisor !== undefined && cfg.cDivisor !== 100 : cfg.c !== undefined || cfg.cDivisor !== undefined) return;
+    return { schema: cfg.schema, id: cfg.id, revision: cfg.revision, kind: cfg.kind, bond: cfg.bond, term: cfg.term,
+      ...(cfg.c ? { c: descriptor(cfg.c) } : {}), ...(cfg.cDivisor === 100 ? { cDivisor: 100 } : {}) };
   }
   const ownsWidget = w => ownConfig(w) || dollarConfig(w);
   const COLUMN_KEYS = ["lastA", "lastB", "referenceC"];
@@ -125,7 +129,6 @@
     if (cfg.pairs.some(p => p.c !== undefined && (cfg.schema < 2 || !short(p.c?.id)) ||
       p.cDivisor !== undefined && (cfg.schema !== 3 || !p.c || p.cDivisor !== 100))) throw Error("Referencia de ratio inválida.");
     if (cfg.pairs.some(p => p.format !== undefined && !["number", "percent"].includes(p.format))) throw Error("Formato de ratio no compatible.");
-    const descriptor = i => ({ id: i.id, symbol: clean(i.symbol), market: clean(i.market), currency: clean(i.currency), settlement: clean(i.settlement), ...(i.monitorOnly === true ? { monitorOnly: true } : {}) });
     return { schema: cfg.schema, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id, format: p.format || "number",
       a: descriptor(p.a), b: descriptor(p.b), ...(p.c ? { c: descriptor(p.c) } : {}),
       ...(p.cDivisor === 100 ? { cDivisor: p.cDivisor } : {}) })) };
@@ -186,19 +189,22 @@
       let timer;
       try {
         const store = market.ms.seriesStore;
-        if (typeof store?.getIntradayTodaySeries !== "function") return { points: [], issue: "Histórico no disponible en Matriz" };
-        const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), 10000); });
-        const data = await Promise.race([store.getIntradayTodaySeries(id), timeout]);
+        const range = typeof store?.getIntradaySeries === "function";
+        if (!range && typeof store?.getIntradayTodaySeries !== "function") return { points: [], issue: "Histórico no disponible en Matriz" };
+        const since = range ? market.start - (HISTORY_DAYS - 1) * DAY : market.start;
+        const request = range ? store.getIntradaySeries(id, since / 1000, Math.ceil(market.now / 1000), "1") : store.getIntradayTodaySeries(id);
+        const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), 17000); });
+        const data = await Promise.race([request, timeout]);
         if (data === null) return { points: [], issue: "Matriz no respondió a tiempo al pedir el histórico" };
         if (!Array.isArray(data?.series)) return { points: [], issue: "Respuesta de histórico inválida" };
         const points = data.series.flatMap(point => {
           const at = timestamp(point?.date), value = point?.close;
-          if (!finite(at) || at < market.start || !finite(value)) return [];
+          if (!finite(at) || at < since || !finite(value)) return [];
           const provisional = Math.floor(at / 60000) === Math.floor(market.now / 60000);
           return [{ at, value, ...(provisional ? { provisional: true } : {}) }];
         });
         if (points.length) entry.until = Date.now() + 60000;
-        return { points, issue: points.length ? undefined : "Sin histórico de la rueda" };
+        return { points, issue: points.length ? undefined : range ? `Sin histórico intradiario en los últimos ${HISTORY_DAYS} días` : "Sin histórico de la rueda actual" };
       } catch (error) {
         const status = error?.response?.status ?? error?.status;
         return { points: [], issue: Number.isInteger(status) ? `Histórico no disponible (HTTP ${status})` : "No se pudo cargar el histórico" };
@@ -235,7 +241,7 @@
     });
     const dollarWidgets = owned.filter(dollarConfig).map(w => {
       const config = dollarConfig(w), pair = dollarPair(c.ss.securities, config);
-      return { config, pair, issue: pair ? undefined : "No se encontró un par BYMA único para esta selección." };
+      return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "No se encontró un par BYMA único para esta selección." };
     });
     const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])])))];
     const active = new Set(ids);
@@ -326,7 +332,12 @@
         d.layout = d.layout.filter(w => w !== widget); d.widgetsDicts.delete(widget.key);
       } else if (method === "dollarEdit") {
         if (!dollarSelection(params) || cfg.revision === Number.MAX_SAFE_INTEGER) throw Error("Selección de dólar intradiario inválida.");
-        widget.settings = { ...widget.settings, [DOLLAR_KEY]: { ...cfg, revision: cfg.revision + 1, kind: params.kind, bond: params.bond, term: params.term } };
+        if (params.cDivisor !== undefined && (params.c === undefined || params.cDivisor !== 100)) throw Error("Divisor inválido para la referencia C.");
+        const reference = params.c === undefined ? undefined : cfg.c?.id === params.c ? cfg.c : instrument(byId(c, params.c));
+        widget.settings = { ...widget.settings, [DOLLAR_KEY]: {
+          schema: reference ? 2 : 1, id: cfg.id, revision: cfg.revision + 1, kind: params.kind, bond: params.bond, term: params.term,
+          ...(reference ? { c: reference } : {}), ...(params.cDivisor === 100 ? { cDivisor: 100 } : {}),
+        } };
       } else if (method === "ratiosResize") {
         if (!finite(params.width) || !finite(params.height)) throw Error("Tamaño inválido.");
         widget.w = Math.round(Math.max(360, Math.min(2200, params.width)));

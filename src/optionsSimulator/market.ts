@@ -68,7 +68,7 @@ export class MarketReader {
       const timer = setTimeout(() => {
         this.pending.delete(id); window.postMessage({ channel: this.channel, kind: "retire", id }, location.origin);
         reject(Error("La lectura de Matriz no respondió a tiempo."));
-      }, this.resource === "options-market-reader.js" ? 5000 : this.resource === "ratio-chart-reader.js" ? 30000 : 15000);
+      }, this.resource === "options-market-reader.js" ? 5000 : this.resource === "ratio-chart-reader.js" ? 30000 : method === "ratioIntradayHistory" ? 22000 : 15000);
       this.pending.set(id, { resolve: value => resolve(value as T), reject, timer });
       window.postMessage({ channel: this.channel, kind: "request", id, method, params }, location.origin);
     });
