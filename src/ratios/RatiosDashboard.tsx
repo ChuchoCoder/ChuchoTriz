@@ -11,9 +11,10 @@ type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
-export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus }: {
+export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, divisor }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
   onAutoFocus?(): void;
+  divisor?: { checked: boolean; onChange(checked: boolean): void; label?: string; disabled?: boolean };
 }) {
   const id = useId(), [query, setQuery] = useState(value?.symbol || ""), [options, setOptions] = useState<RatioInstrument[]>([]);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [issue, setIssue] = useState("");
@@ -54,7 +55,7 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
     } catch (error) { if (request === generation.current) setIssue(error instanceof Error ? error.message : "No se pudo buscar el instrumento."); }
     finally { if (request === generation.current) setResolving(false); }
   };
-  return <div className="ct-ratio-picker">
+  return <div className={divisor ? "ct-ratio-picker ct-ratio-picker-with-divisor" : "ct-ratio-picker"}>
     <label htmlFor={id}>{label}</label>
     <input ref={input} id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-options`} aria-autocomplete="list"
       aria-activedescendant={open && options[active] ? `${id}-option-${active}` : undefined}
@@ -66,6 +67,10 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive(n => Math.max(0, Math.min(options.length - 1, n + (event.key === "ArrowDown" ? 1 : -1)))); }
         if (event.key === "Enter" && open && options[active]) { event.preventDefault(); choose(options[active]); }
       }} />
+    {divisor && <label className="ct-ratio-divisor">
+      <input type="checkbox" checked={divisor.checked} disabled={disabled || divisor.disabled}
+        onChange={event => divisor.onChange(event.target.checked)} />{divisor.label ?? "Dividir Referencia C por 100"}
+    </label>}
     <small title={value?.id} role="status">{value ? instrumentDetail(value) : resolving ? "Buscando ticker…" : issue || "Ingresá el ticker o elegí un instrumento"}</small>
     {open && query.trim() && <ul id={`${id}-options`} role="listbox" aria-label={`Resultados de ${label}`}>
       {options.map((item, index) => <li key={item.id} id={`${id}-option-${index}`} role="option" aria-selected={active === index}
@@ -165,11 +170,11 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
         {compare && <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy}
-          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)} />}
+          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)}
+          divisor={{ checked: divideCBy100, onChange: setDivideCBy100 }} />}
         <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => {
           setCompare(e.target.checked); setFocusReference(e.target.checked); setC(undefined); setDivideCBy100(false); setFormatOverride(undefined);
         }} />Comparar A/B con una referencia</label>
-        {compare && <label className="ct-ratios-compare"><input type="checkbox" checked={divideCBy100} disabled={busy} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>}
         <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormatOverride(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
           <span>{compare ? format === "percent" ? `((A ÷ B) ÷ ${referenceFormula} − 1) × 100` : `(A ÷ B) ÷ ${referenceFormula}` : format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>
@@ -279,10 +284,10 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
         if (reference.c) void run("dollarEdit", { ...config, c: reference.c, cDivisor: reference.cDivisor }).then(saved => { if (saved) setReference(undefined); });
       }}>
       <InstrumentPicker label="Referencia C" value={reference.c} search={search} disabled={busy} autoFocus
-        onChange={c => setReference(previous => ({ c, cDivisor: c && c.id === previous?.c?.id ? previous.cDivisor : undefined }))} />
+        onChange={c => setReference(previous => ({ c, cDivisor: c && c.id === previous?.c?.id ? previous.cDivisor : undefined }))}
+        divisor={{ checked: reference.cDivisor === 100, disabled: !reference.c, label: "Dividir C por 100",
+          onChange: checked => setReference({ ...reference, cDivisor: checked ? 100 : undefined }) }} />
       <div className="ct-ratios-editor-actions">
-        <label className="ct-ratios-compare"><input type="checkbox" checked={reference.cDivisor === 100} disabled={busy || !reference.c}
-          onChange={event => setReference({ ...reference, cDivisor: event.target.checked ? 100 : undefined })} />Dividir C por 100</label>
         {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit", { ...config, c: undefined, cDivisor: undefined })
           .then(saved => { if (saved) setReference(undefined); })}>Quitar C</button>}
         <button type="button" disabled={busy} onClick={() => setReference(undefined)}>Cancelar</button>

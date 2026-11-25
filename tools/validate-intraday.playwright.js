@@ -23,6 +23,11 @@ async (page, screenshots) => {
     await locator.filter({ hasText: value }).waitFor();
     assert((await locator.textContent()).trim() === value, label);
   };
+  const divisorBeside = async (picker, checkbox, label) => {
+    const [input, divisor] = await Promise.all([picker.boundingBox(), checkbox.boundingBox()]);
+    assert(input && divisor && divisor.x >= input.x + input.width &&
+      Math.abs(input.y + input.height / 2 - (divisor.y + divisor.height / 2)) < 2, label);
+  };
 
   const dollarButton = button('DÓLAR INTRADIARIO · CHUCHOTRIZ');
   await dollarButton.waitFor();
@@ -53,7 +58,9 @@ async (page, screenshots) => {
   const reference = editor.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial' });
   await reference.fill('D30N6'); await reference.press('Tab');
   await editor.locator('small[title="D30N6-2"]').waitFor();
-  await editor.getByRole('checkbox', { name: 'Dividir Referencia C por 100' }).check();
+  const ratioDivisor = editor.getByRole('checkbox', { name: 'Dividir Referencia C por 100' });
+  await divisorBeside(reference, ratioDivisor, 'Ratios widget aligns the divisor to the right of C');
+  await ratioDivisor.check();
   await editor.getByRole('button', { name: 'Guardar', exact: true }).click(); await idle();
   await page.evaluate(() => window.ratiosFixture.failSeries('D30N6-2', true));
   await button('Comparar MEP AL30 con D30N6').click();
@@ -86,7 +93,9 @@ async (page, screenshots) => {
   const widgetReference = widgetEditor.getByRole('combobox', { name: 'Referencia C', exact: true });
   await widgetReference.fill('D30N6'); await widgetReference.press('Tab');
   await widgetEditor.locator('small[title="D30N6-2"]').waitFor();
-  await widgetEditor.getByRole('checkbox', { name: 'Dividir C por 100' }).check();
+  const widgetDivisor = widgetEditor.getByRole('checkbox', { name: 'Dividir C por 100' });
+  await divisorBeside(widgetReference, widgetDivisor, 'Dollar widget aligns the divisor to the right of C');
+  await widgetDivisor.check();
   await widgetEditor.getByRole('button', { name: 'Guardar', exact: true }).click(); await idle();
   const daySelector = widget.getByRole('combobox', { name: 'Rueda del gráfico' });
   await daySelector.waitFor();
@@ -127,6 +136,13 @@ async (page, screenshots) => {
   });
   await page.getByRole('link', { name: 'Configuración (ChuchoTriz)', exact: true }).click();
   await button('Ratios').click();
+  const monitor = page.locator('.ro-monitor-controls');
+  await monitor.getByRole('checkbox', { name: 'Agregar referencia C', exact: true }).check();
+  await divisorBeside(
+    monitor.getByRole('combobox', { name: 'Referencia C · ej. DLR/SPOT', exact: true }),
+    monitor.getByRole('checkbox', { name: 'Dividir Referencia C por 100', exact: true }),
+    'Ratios Monitor aligns the divisor to the right of C',
+  );
   await page.locator('.ro-monitor-table').getByRole('button', { name: 'Comparar MEP AL30 con DLR/SPOT', exact: true }).click();
   await page.getByRole('dialog', { name: 'MEP AL30 vs DLR/SPOT' }).getByRole('img').waitFor();
   await page.keyboard.press('Escape');

@@ -56,7 +56,6 @@
 .ct-intraday-widget .ct-intraday-session select { padding: 2px 5px; }
 .ct-intraday-controls .ct-intraday-mode[aria-pressed=true] { background: #1378aa; border-color: #1378aa; color: white; }
 .ct-intraday-reference-editor .ct-ratios-editor-actions { justify-content: flex-end; }
-.ct-intraday-reference-editor .ct-ratios-editor-actions label { margin: 0; margin-right: auto; }
 .ct-intraday-line-ratio, .ct-intraday-line-spread { --intraday-line: #1689d0; }
 .ct-intraday-line-reference { --intraday-line: #b77b0b; }
 .ct-intraday-line-spread { --intraday-line: #cf9a33; }

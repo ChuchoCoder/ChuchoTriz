@@ -354,11 +354,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {view === "monitor" && <div>
       <div className="ro-monitor-controls"><div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
         {compare && <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available}
-          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)} />}
+          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)}
+          divisor={{ checked: divideCBy100, onChange: setDivideCBy100 }} />}
         <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => {
           setCompare(e.target.checked); setFocusReference(e.target.checked); setWatchC(undefined); setDivideCBy100(false);
         }} />Agregar referencia C</label>
-        {compare && <label className="ro-compare"><input type="checkbox" checked={divideCBy100} disabled={!available} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>}
         <button type="button" disabled={!available || !watchA || !watchB || compare && !watchC} onClick={() => void commit(base => {
           if (!watchA || !watchB || watchA.id === watchB.id) throw Error("Elegí instrumentos diferentes.");
           if (base.watch.length >= MAX_WATCH) throw Error(`Podés observar hasta ${MAX_WATCH} pares.`);
