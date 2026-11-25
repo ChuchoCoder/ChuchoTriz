@@ -25,7 +25,7 @@
 }
 
 .ct-intraday-controls { padding: 8px 10px 2px; }
-.ct-intraday-controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.ct-intraday-controls > div { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
 .ct-intraday-controls select, .ct-intraday-status button, .ct-intraday-views button {
   border: 1px solid #8190a5;
   border-radius: 4px;

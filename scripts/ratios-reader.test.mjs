@@ -66,6 +66,20 @@ test('reads the current Argentina session and shares native history while keepin
   }
 });
 
+test('a stalled native series times out and can be retried without changing accounts', async () => {
+  const f = fixture();
+  let calls = 0;
+  f.ms.seriesStore = { getIntradayTodaySeries() {
+    calls++;
+    return calls === 1 ? new Promise(() => {}) : Promise.resolve({ series: [{ date: new Date().toISOString(), close: 120 }] });
+  } };
+  const stuck = (await f.request('ratioIntradayHistory', { ids: ['a'] })).result;
+  assert.match(stuck.series.a.issue, /no respondió a tiempo/);
+  const recovered = (await f.request('ratioIntradayHistory', { ids: ['a'], refresh: true })).result;
+  assert.equal(recovered.series.a.points[0].value, 120);
+  assert.equal(recovered.revision, stuck.revision);
+});
+
 test('column visibility defaults to visible, persists per widget, and survives pair edits by legacy clients', async () => {
   const f = fixture(); await f.add(); await f.add();
   const initial = (await f.state()).widgets[0];

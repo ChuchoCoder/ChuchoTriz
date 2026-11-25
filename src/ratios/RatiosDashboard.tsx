@@ -235,6 +235,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
 
 function DollarWidget({ widget, command, busy }: { widget: DollarWidgetState; command: Command; busy: boolean }) {
   const { config, pair } = widget;
+  const controls = useId();
   const [issue, setIssue] = useState("");
   const run = (method: "dollarEdit" | "ratiosRemove", selection?: DollarSelection) => {
     setIssue("");
@@ -248,15 +249,15 @@ function DollarWidget({ widget, command, busy }: { widget: DollarWidgetState; co
         onClick={() => run("ratiosRemove")}>×</button>
     </div></header>
     <div className="ct-intraday-controls NoDraggable" onMouseDown={event => event.stopPropagation()}>
-      <label>Dólar <select disabled={busy} value={config.kind} onChange={event => run("dollarEdit", { ...config, kind: event.target.value as DollarSelection["kind"] })}>
+      <div><label htmlFor={`${controls}-kind`}>Dólar</label><select id={`${controls}-kind`} disabled={busy} value={config.kind} onChange={event => run("dollarEdit", { ...config, kind: event.target.value as DollarSelection["kind"] })}>
         <option value="MEP">MEP</option><option value="CCL">CCL</option>
-      </select></label>
-      <label>Bono <select disabled={busy} value={config.bond} onChange={event => run("dollarEdit", { ...config, bond: event.target.value as DollarSelection["bond"] })}>
+      </select></div>
+      <div><label htmlFor={`${controls}-bond`}>Bono</label><select id={`${controls}-bond`} disabled={busy} value={config.bond} onChange={event => run("dollarEdit", { ...config, bond: event.target.value as DollarSelection["bond"] })}>
         <option value="AL30">AL30</option><option value="GD30">GD30</option>
-      </select></label>
-      <label>Plazo <select disabled={busy} value={config.term} onChange={event => run("dollarEdit", { ...config, term: event.target.value as DollarSelection["term"] })}>
+      </select></div>
+      <div><label htmlFor={`${controls}-term`}>Plazo</label><select id={`${controls}-term`} disabled={busy} value={config.term} onChange={event => run("dollarEdit", { ...config, term: event.target.value as DollarSelection["term"] })}>
         <option value="24h">24 h</option><option value="CI">CI</option>
-      </select></label>
+      </select></div>
     </div>
     {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
     {pair ? <IntradayChart key={pairKey(pair)} pair={pair} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}

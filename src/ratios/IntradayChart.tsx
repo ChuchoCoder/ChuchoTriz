@@ -2,12 +2,12 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
-import { calculateRatio, pairKey, pairLabel, type RatioPair } from "./model";
+import { calculateRatio, pairKey, pairLabel, ratioLabel, type RatioPair } from "./model";
 import "./IntradayChart.css";
 
 export type IntradayPair = Pick<RatioPair, "a" | "b" | "c" | "cDivisor">;
 type View = "ratio" | "comparison" | "spread";
-interface Point { at: number; value: number }
+interface Point { at: number; value: number; provisional?: true }
 type History = Record<string, { points: Point[]; issue?: string }>;
 type Live = Record<string, Map<number, Point>>;
 interface LiveResponse { revision: number; start: number; connected: boolean; points: Record<string, Point>; issue?: string }
@@ -97,8 +97,16 @@ function mergeMinutes(history: Point[], live: Iterable<Point>) {
 
 export function intradayPoints(pair: IntradayPair, history: History, live: Live = {}) {
   const instruments = [pair.a, pair.b, ...(pair.c ? [pair.c] : [])];
-  const prices = instruments.map(({ id }) => new Map(mergeMinutes(history[id]?.points ?? [], live[id]?.values() ?? [])
-    .map(point => [minute(point.at), point.value])));
+  const prices = instruments.map(({ id }) => {
+    const native = new Map(mergeMinutes([], history[id]?.points ?? []).map(point => [minute(point.at), point]));
+    // The timestamp of a historical close can be the start of its minute.
+    // Once Matriz has returned that completed bar, an earlier live poll cannot replace it.
+    const eligibleLive = [...(live[id]?.values() ?? [])].filter(point => {
+      const historical = native.get(minute(point.at));
+      return !historical || historical.provisional;
+    });
+    return new Map(mergeMinutes([...native.values()], eligibleLive).map(point => [minute(point.at), point.value]));
+  });
   const [a, b, c] = prices;
   const times = [...new Set(prices.flatMap(values => [...values.keys()]))].sort((x, y) => x - y);
   return times.map(at => {
@@ -113,10 +121,9 @@ export function intradayPoints(pair: IntradayPair, history: History, live: Live 
 
 type ChartValue = Exclude<keyof ReturnType<typeof intradayPoints>[number], "at">;
 type Line = { key: ChartValue; label: string };
-const number = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 6 });
 const percentage = new Intl.NumberFormat("es-AR", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function display(value: number | undefined, percent: boolean) {
-  return value === undefined ? "—" : percent ? percentage.format(value / 100) : number.format(value);
+  return value === undefined ? "—" : percent ? percentage.format(value / 100) : ratioLabel(value);
 }
 
 function Plot({ rows, lines, percent, label }: {
@@ -202,7 +209,7 @@ export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; vi
   const historyIssues = instruments.flatMap(i => market.history[i.id]?.issue ? [`${i.symbol} · ${market.history[i.id].issue}`] : []);
   const hasComparison = rows.some(row => row.ratio !== undefined && row.reference !== undefined);
   const percent = view === "spread";
-  return <div className="ct-intraday-body" aria-busy={market.loading}>
+  return <div className="ct-intraday-body NoDraggable" aria-busy={market.loading}>
     <div className="ct-intraday-legend">
       {lines.map(line => {
         const last = rows.findLast(row => row[line.key] !== undefined);

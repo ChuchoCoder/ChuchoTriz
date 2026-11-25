@@ -183,21 +183,26 @@
     if (cached && (cached.pending || !refresh && cached.until > market.now)) return cached.result;
     const entry = { until: market.now + 20000, pending: true };
     entry.result = Promise.resolve().then(async () => {
+      let timer;
       try {
         const store = market.ms.seriesStore;
         if (typeof store?.getIntradayTodaySeries !== "function") return { points: [], issue: "Histórico no disponible en Matriz" };
-        const data = await store.getIntradayTodaySeries(id);
+        const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), 10000); });
+        const data = await Promise.race([store.getIntradayTodaySeries(id), timeout]);
+        if (data === null) return { points: [], issue: "Matriz no respondió a tiempo al pedir el histórico" };
         if (!Array.isArray(data?.series)) return { points: [], issue: "Respuesta de histórico inválida" };
         const points = data.series.flatMap(point => {
           const at = timestamp(point?.date), value = point?.close;
-          return finite(at) && at >= market.start && finite(value) ? [{ at, value }] : [];
+          if (!finite(at) || at < market.start || !finite(value)) return [];
+          const provisional = Math.floor(at / 60000) === Math.floor(market.now / 60000);
+          return [{ at, value, ...(provisional ? { provisional: true } : {}) }];
         });
         if (points.length) entry.until = Date.now() + 60000;
         return { points, issue: points.length ? undefined : "Sin histórico de la rueda" };
       } catch (error) {
         const status = error?.response?.status ?? error?.status;
         return { points: [], issue: Number.isInteger(status) ? `Histórico no disponible (HTTP ${status})` : "No se pudo cargar el histórico" };
-      }
+      } finally { clearTimeout(timer); }
     }).finally(() => { entry.pending = false; });
     if (intradayHistory.size >= 120) intradayHistory.delete(intradayHistory.keys().next().value);
     intradayHistory.set(id, entry);

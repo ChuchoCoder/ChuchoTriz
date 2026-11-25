@@ -29,10 +29,12 @@ it("uses the last point in each minute, scales C, and preserves gaps without usi
   });
   expect(rows[0]).toMatchObject({ at: first, ratio: 1600, reference: 1500 });
   expect(rows[0].spread).toBeCloseTo(6.666667);
-  expect(rows[1]).toEqual({ at: next, ratio: 2050, reference: undefined, spread: undefined });
+  expect(rows[1]).toEqual({ at: next, ratio: 1640, reference: undefined, spread: undefined });
   expect(rows[2]).toEqual({ at: third, ratio: undefined, reference: 1500, spread: undefined });
   expect(intradayPoints({ a, b, c }, history)[0].reference).toBe(150000);
   expect(intradayPoints({ a: b, b: a }, history)[0].ratio).toBeCloseTo(0.000625);
+  const provisional = { ...history, b: { points: history.b.points.map(point => ({ ...point, provisional: true as const })) } };
+  expect(intradayPoints(pair, provisional, { b: new Map([[next, { at: next + 1000, value: 40 }]]) })[1].ratio).toBe(2050);
 });
 
 it("opens both intraday views from the row with its exact instruments and divisor", async () => {
@@ -54,7 +56,7 @@ it("opens both intraday views from the row with its exact instruments and diviso
     const dialog = document.querySelector("dialog[open]")!;
     expect(call).toHaveBeenCalledWith("ratioIntradayHistory", { ids: ["a", "b", "c"], refresh: false });
     expect(dialog.querySelector(".ct-intraday-legend")?.textContent).toContain("D30N6 ÷ 100");
-    expect(dialog.querySelector(".ct-intraday-legend .ct-intraday-line-reference strong")?.textContent).toBe("1.500");
+    expect(dialog.querySelector(".ct-intraday-legend .ct-intraday-line-reference strong")?.textContent).toBe("1.500,00");
     await act(async () => [...dialog.querySelectorAll("button")].find(button => button.textContent === "Brecha %")!.click());
     expect(dialog.querySelector(".ct-intraday-legend strong")?.textContent).toMatch(/6,67\s*%/);
     expect(dialog.querySelector(".ct-intraday-zero")).not.toBeNull();

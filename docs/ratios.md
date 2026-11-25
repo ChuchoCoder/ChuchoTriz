@@ -41,10 +41,14 @@ continúa abriendo el gráfico de Matriz.
 Las vistas usan el histórico de la rueda publicado por Matriz y los últimos
 precios recibidos en vivo con su hora de mercado argentina. A/B requiere
 precios de ambas patas en el mismo minuto y la brecha también requiere C
-en ese minuto. Los faltantes quedan como huecos. Si el histórico falla, se
+en ese minuto. Los cierres históricos de minutos completos prevalecen sobre
+los puntos en vivo ya capturados. Los faltantes quedan como huecos. Si el histórico falla, se
 pueden seguir acumulando puntos de la rueda a partir de las cotizaciones
 recibidas con el gráfico abierto. **Reintentar histórico** vuelve a consultar
 la serie del broker.
+
+El recorrido con datos simulados usa `tools/ratios-fixture.mjs` y
+`tools/validate-intraday.playwright.js` en el perfil Playwright compartido.
 
 ## Monitor y registro de operaciones
 

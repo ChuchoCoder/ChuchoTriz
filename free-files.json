@@ -155,6 +155,7 @@
   "docs/ratios.md",
   "tools/validate-ratios-widget.playwright.js",
   "tools/ratios-fixture.mjs",
+  "tools/validate-intraday.playwright.js",
   "docs/qa/0.0.25-2026-11-16-regional-format.md",
   "docs/qa/0.0.25-2026-11-17-independent-formats.md",
   "public/ratio-operations-reader.js",

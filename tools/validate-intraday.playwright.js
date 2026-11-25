@@ -1,0 +1,89 @@
+// Production bundle and readers, synthetic Matriz stores on loopback only.
+async (page, screenshots) => {
+  if (!/^http:\/\/127\.0\.0\.1:\d+\/fixture$/.test(page.url()) || !await page.evaluate(() => !!window.ratiosFixture)) throw Error('The offline ratios fixture is required.');
+  const origin = new URL(page.url()).origin;
+  const errors = [], blocked = [], checks = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/*', route => {
+    const requestOrigin = new URL(route.request().url()).origin;
+    if (requestOrigin === origin) return route.continue();
+    blocked.push(requestOrigin); return route.abort();
+  });
+  await page.routeWebSocket('**/*', socket => { blocked.push(new URL(socket.url()).origin); socket.close(); });
+  await page.evaluate(() => {
+    for (const key of ['ct-ratios-fixture-main', 'ct-ratios-fixture-alternate', 'ct-ratios-fixture-settings']) localStorage.removeItem(key);
+  });
+  await page.reload();
+  const assert = (value, label) => { if (!value) throw Error(label); checks.push(label); };
+  const button = name => page.getByRole('button', { name, exact: true });
+  const idle = () => page.waitForFunction(() => document.querySelector('.ct-ratios-add')?.disabled === false);
+  const screenshot = (name, locator) => screenshots && locator.screenshot({ path: screenshots + '/' + name + '.png' });
+  const valueIs = async (locator, value, label) => {
+    await locator.filter({ hasText: value }).waitFor();
+    assert((await locator.textContent()).trim() === value, label);
+  };
+
+  await button('DÓLAR INTRADIARIO · CHUCHOTRIZ').click();
+  const widget = page.locator('.ct-intraday-widget'), dollar = widget.getByLabel('Dólar', { exact: true });
+  const legendValue = widget.locator('.ct-intraday-legend strong');
+  await widget.getByRole('img', { name: 'Gráfico intradiario de MEP AL30' }).waitFor();
+  await valueIs(legendValue, '1.400,00', 'MEP AL30 24 h uses AL30 / AL30D');
+  await screenshot('widget', widget);
+  await idle(); await dollar.selectOption('CCL');
+  await widget.getByRole('img', { name: 'Gráfico intradiario de CCL AL30' }).waitFor();
+  await valueIs(legendValue, '1.372,55', 'CCL AL30 24 h uses AL30 / AL30C');
+  await page.evaluate(() => window.ratiosFixture.price('AL30-2', 72420));
+  await valueIs(legendValue, '1.420,00', 'Live price updates the ratio');
+  await idle(); await widget.getByLabel('Plazo', { exact: true }).selectOption('CI');
+  await widget.getByText('No se encontró un par BYMA único para esta selección.').waitFor();
+  assert(!await widget.locator('.ct-intraday-plot').count(), 'Unavailable CI legs do not substitute 24 h quotes');
+  await idle(); await widget.getByLabel('Plazo', { exact: true }).selectOption('24h');
+  await idle(); await page.reload();
+  await widget.getByRole('img', { name: 'Gráfico intradiario de CCL AL30' }).waitFor();
+  assert(await dollar.inputValue() === 'CCL', 'Dollar selection persists across reloads');
+
+  await idle(); await button('RATIOS · CHUCHOTRIZ').click(); await idle();
+  await button('Editar MEP AL30 vs DLR/SPOT').click();
+  const editor = page.locator('.ct-ratios-editor');
+  const reference = editor.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial' });
+  await reference.fill('D30N6'); await reference.press('Tab');
+  await editor.locator('small[title="D30N6-2"]').waitFor();
+  await editor.getByRole('checkbox', { name: 'Dividir Referencia C por 100' }).check();
+  await editor.getByRole('button', { name: 'Guardar', exact: true }).click(); await idle();
+  await page.evaluate(() => window.ratiosFixture.failSeries('D30N6-2', true));
+  await button('Comparar MEP AL30 con D30N6').click();
+  const dialog = page.getByRole('dialog', { name: 'MEP AL30 vs (D30N6 ÷ 100)' });
+  await dialog.getByRole('img', { name: 'Gráfico intradiario de MEP AL30 y D30N6 ÷ 100' }).waitFor();
+  await valueIs(dialog.locator('.ct-intraday-line-reference strong'), '1.250,00', 'Comparison applies the saved C divisor');
+  assert(await dialog.locator('svg g .ct-intraday-line').count() === 2, 'Comparison draws two distinct series');
+  const historyError = dialog.getByText('D30N6 · Histórico no disponible (HTTP 401)');
+  await historyError.waitFor();
+  await page.evaluate(() => window.ratiosFixture.failSeries('D30N6-2', false));
+  await dialog.getByRole('button', { name: 'Reintentar histórico' }).click();
+  await historyError.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => window.ratiosFixture.seriesCounts['D30N6-2'] === 2);
+  checks.push('Live quotes remain visible during a series 401 and historical retry recovers');
+  await screenshot('comparison', dialog);
+  await dialog.getByRole('button', { name: 'Brecha %' }).click();
+  await dialog.locator('.ct-intraday-zero').waitFor({ state: 'attached' });
+  assert(/12,00\s*%/.test(await dialog.locator('.ct-intraday-legend strong').textContent()), 'Spread is (1400 / 1250 - 1) × 100, with an equality line at zero');
+  await screenshot('spread', dialog);
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Comparar MEP AL30 con D30N6');
+  checks.push('Escape closes the dialog and returns focus to the row');
+
+  await page.evaluate(() => {
+    const nav = document.querySelector('.DirectAccessBar');
+    Object.assign(nav.style, { position: 'fixed', left: '0', top: '0', width: '40px', height: '40px' });
+  });
+  await page.getByRole('link', { name: 'Configuración (ChuchoTriz)', exact: true }).click();
+  await button('Ratios').click();
+  await page.locator('.ro-monitor-table').getByRole('button', { name: 'Comparar MEP AL30 con DLR/SPOT', exact: true }).click();
+  await page.getByRole('dialog', { name: 'MEP AL30 vs DLR/SPOT' }).getByRole('img').waitFor();
+  await page.keyboard.press('Escape');
+  checks.push('Monitor opens the chart for its own row reference');
+  assert(errors.length === 0, 'No browser exceptions: ' + errors.join(', '));
+  assert(blocked.length === 0, 'All requests stayed on the loopback fixture');
+  return { passed: checks.length, checks };
+};
