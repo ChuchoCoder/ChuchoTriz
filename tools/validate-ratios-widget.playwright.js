@@ -62,6 +62,30 @@ async (page) => {
   const seeded = await snapshot();
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(JSON.stringify(await snapshot()) === JSON.stringify(seeded), 'Default pairs and their identities persist after reloading');
+  await b('Editar MEP AL30 vs DLR/SPOT').click();
+  const editor = page.locator('.ct-ratios-editor');
+  const numerator = editor.getByRole('combobox', { name: 'A · Numerador', exact: true });
+  const denominator = editor.getByRole('combobox', { name: 'B · Denominador', exact: true });
+  const referenceTicker = editor.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial', exact: true });
+  const hasFocus = control => control.evaluate(element => document.activeElement === element);
+  assert(await hasFocus(numerator), 'Editing a saved comparison starts in A');
+  await numerator.fill('AL30'); await page.keyboard.press('Tab');
+  assert(await hasFocus(denominator), 'Tab moves from A to B while resolving the typed numerator');
+  await denominator.fill('AL30D'); await page.keyboard.press('Tab');
+  await denominator.locator('..').locator('small[title="AL30D-2"]').waitFor();
+  assert(await hasFocus(referenceTicker), 'Tab moves from B to C and resolving B leaves focus in C');
+  await page.keyboard.press('Shift+Tab');
+  assert(await hasFocus(denominator), 'Shift+Tab returns from C to B');
+  await b('Cancelar').click();
+
+  await page.evaluate(() => { window.mainStore.securityStore.securities.find(s => s.id === 'AL30C-2').currency = 'USD'; });
+  for (const [name, generic] of [['CCL AL30', 'AL30/GD30'], ['CANJE AL30', 'AL30D/GD30']]) {
+    await b('Editar ' + name).click(); await select(1, 'GD30', 'GD30'); await save();
+    await b('Editar ' + generic).click(); await select(1, 'AL30C', 'AL30C', 'USD'); await save();
+    await b('Editar ' + name).waitFor();
+  }
+  await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'Edited CCL and CANJE keep their names after reloading with a USD cable descriptor');
   for (const pair of defaults) { await b('Eliminar ' + pair).click(); await idle(); }
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
   assert(await page.locator('.ct-ratios tbody tr').count() === 0, 'Deleted defaults do not reappear in an existing widget after reloading');
@@ -163,6 +187,7 @@ async (page) => {
   await select(0, 'AL30', 'AL30', 'ARS'); await select(1, 'AL30D', 'AL30D', 'USD');
   await page.getByLabel('Comparar A/B con una referencia', { exact: true }).check();
   const reference = page.getByLabel('Referencia C · ej. Dólar oficial', { exact: true });
+  assert(await hasFocus(reference), 'Enabling the comparison focuses the new reference input');
   await reference.fill('Dólar oficial'); await reference.blur();
   await wait(() => [...document.querySelectorAll('.ct-ratio-picker small')].some(e => e.title === 'rx_DDF_DLR_SPOT'));
   assert(await page.getByLabel('Formato del ratio', { exact: true }).inputValue() === 'percent', 'MEP/official comparison defaults to percent');
