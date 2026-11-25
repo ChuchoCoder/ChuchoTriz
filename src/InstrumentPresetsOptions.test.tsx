@@ -332,6 +332,30 @@ describe("Opciones por instrumento", () => {
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it.each(["during save", "after editing", "not delivered"])("can save again when Chrome reorders tickers (notification: %s)", async notification => {
+    let notify: () => void = () => {};
+    set.mockImplementationOnce(async ({ InstrumentPresets: book }: Pick<typeof stored, "InstrumentPresets">) => {
+      const oldValue = stored.InstrumentPresets;
+      const newValue = Object.fromEntries(Object.keys(book).sort().map(ticker => [ticker, book[ticker]]));
+      stored = { ...stored, InstrumentPresets: newValue };
+      notify = () => storageListeners.forEach(listener => listener({ InstrumentPresets: { oldValue, newValue } }, "local"));
+      if (notification === "during save") notify();
+    });
+
+    await act(async () => button("RAW").click());
+    await edit(rawEditor(), "GD30 200000/R4\nAL30 100000/R5 50000/5000\n");
+    await act(async () => button("Guardar cambios").click());
+    expect(Object.keys(stored.InstrumentPresets)).toEqual(["AL30", "GD30"]);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("Cambios guardados");
+
+    await edit(rawEditor(), "GD30 200000/R4\nAL30 110000/R5 50000/5000\n");
+    if (notification === "after editing") await act(async () => notify());
+    await act(async () => button("Guardar cambios").click());
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(stored.InstrumentPresets.AL30.map(preset => preset.cantidad)).toEqual([110000, 50000]);
+  });
+
   it("refreshes a clean persistent editor after preferences are saved from another view", async () => {
     await act(async () => root.render(<InstrumentPresetsOptions embedded />));
     await externalSave(333333);
@@ -349,7 +373,7 @@ describe("Opciones por instrumento", () => {
     await externalSave(333333);
     expect(quantity("Cantidad del preset 1 de AL30").value).toBe("234567");
     expect(button("Guardar cambios").disabled).toBe(true);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("otra vista");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("copialos desde RAW");
     await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     expect(set).not.toHaveBeenCalled();
     expect(stored.InstrumentPresets.AL30[0].cantidad).toBe(333333);
@@ -360,13 +384,17 @@ describe("Opciones por instrumento", () => {
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("checks storage again before saving when an external change notification has not arrived", async () => {
+  it.each([
+    ["a new ticker", { ...savedBook, NEW: [{ cantidad: 100, mostrar: 0 }] }],
+    ["reordered presets within a ticker", { ...savedBook, AL30: [...savedBook.AL30].reverse() }],
+  ] satisfies [string, typeof savedBook][])("detects %s before the external notification arrives", async (_change, book) => {
     await edit(quantity("Cantidad del preset 1 de AL30"), "234567");
-    stored = { ...stored, InstrumentPresets: { ...stored.InstrumentPresets, NEW: [{ cantidad:100, mostrar:0 }] } };
+    stored = { ...stored, InstrumentPresets: book };
     await act(async () => button("Guardar cambios").click());
     expect(set).not.toHaveBeenCalled();
     expect(quantity("Cantidad del preset 1 de AL30").value).toBe("234567");
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("otra vista");
+    expect(stored.InstrumentPresets).toEqual(book);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Los presets guardados cambiaron");
   });
 
   it("preserves an external save that arrives while a clean editor is checking storage", async () => {
@@ -377,7 +405,7 @@ describe("Opciones por instrumento", () => {
     await act(async () => finishRead(structuredClone(stored)));
     expect(set).not.toHaveBeenCalled();
     expect(stored.InstrumentPresets.AL30[0].cantidad).toBe(333333);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("otra vista");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Los presets guardados cambiaron");
     expect(button("Guardar cambios").disabled).toBe(true);
   });
 
