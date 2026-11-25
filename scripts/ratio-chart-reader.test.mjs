@@ -14,7 +14,8 @@ function fixture({ c, ready = true, version = '4.23.16', create, comparisons = [
   const mainScale = scale();
   function add(name, inputs, options) {
     const key = 'study-' + (++id), priceScale = scale();
-    studies.set(key, { name, inputs, options, scale: priceScale, visible: false }); return key;
+    const pane = ['Overlay', 'Compare'].includes(name) ? 0 : 1;
+    studies.set(key, { name, inputs, scale: priceScale, scalePosition: options?.priceScale, visible: false, pane }); return key;
   }
   const chart = {
     symbol: () => 'A', resolution: () => resolution, chartType: () => chartType,
@@ -23,9 +24,15 @@ function fixture({ c, ready = true, version = '4.23.16', create, comparisons = [
     getAllStudies: () => [...studies].map(([id, s]) => ({ id, name: s.name })),
     getStudyById(id) { const s = studies.get(id); return {
       getInputValues: () => Object.entries(s.inputs).map(([id, value]) => ({ id, value })),
-      priceScale: () => s.scale, changePriceScale(value) { s.options = { priceScale: value }; },
+      priceScale: () => s.scale, changePriceScale(value) { s.scalePosition = value; },
       setVisible(value) { s.visible = value; }, applyOverrides(value) { s.overrides = value; },
-      paneIndex: () => s.pane ?? (['Overlay', 'Compare'].includes(s.name) ? 0 : 1),
+      paneIndex: () => s.pane,
+      unmergeDown() {
+        const nextPane = s.pane + 1;
+        for (const other of studies.values()) if (other.pane >= nextPane) other.pane++;
+        s.pane = nextPane;
+        s.scalePosition = undefined;
+      },
     }; },
     async createStudy(name, forceOverlay, lock, inputs, overrides, options) {
       calls.push({ name, forceOverlay, inputs, options });
@@ -59,6 +66,7 @@ test('opens A/B with B compared on a new left numeric scale and 5-minute candles
   assert.equal(f.calls[1].name, 'Ratio'); assert.equal(f.calls[1].inputs.symbol2, 'B');
   const overlay = f.calls[2]; assert.equal(overlay.name, 'Overlay'); assert.equal(overlay.inputs.symbol, 'B');
   assert.equal(overlay.forceOverlay, true); assert.equal(overlay.options.priceScale, 'new-left');
+  assert.deepEqual([...f.studies.values()].map(s => s.pane), [1, 0]);
   assert([...f.studies.values()].every(s => s.scale.getMode() === 0));
   assert([...f.studies.values()].every(s => s.visible));
 });
@@ -95,10 +103,28 @@ test('does not add requested studies when native layout cleanup is unavailable o
   }
 });
 
-test('compares C on the left while the native Ratio remains A/B', async () => {
-  const f = fixture({ c: 'c' }); const r = await f.request();
-  assert.equal(r.result.comparison, 'C');
-  assert.equal(f.calls[1].inputs.symbol2, 'B'); assert.equal(f.calls[2].inputs.symbol, 'C');
+test('opens C on its own numeric pane between the candles and the A/B ratio', async () => {
+  for (const name of ['Overlay', 'Compare']) {
+    const f = fixture({ c: 'c', comparisons: [name] }); const r = await f.request();
+    assert.equal(r.result?.comparison, 'C');
+    const [ratio, comparison] = [...f.studies.values()];
+    assert.equal(ratio.inputs.symbol2, 'B'); assert.equal(ratio.pane, 2);
+    assert.equal(comparison.inputs.symbol, 'C'); assert.equal(comparison.pane, 1);
+    assert.equal(comparison.scalePosition, 'new-right'); assert.equal(comparison.scale.getMode(), 0);
+  }
+});
+
+test('cleans up both studies when Matriz cannot open a separate pane for C', async () => {
+  for (const unmergeDown of [undefined, () => {}]) {
+    const f = fixture({ c: 'c' }), getStudy = f.chart.getStudyById;
+    f.chart.getStudyById = id => {
+      const study = getStudy(id);
+      if (study.paneIndex() === 0) study.unmergeDown = unmergeDown;
+      return study;
+    };
+    assert.match((await f.request()).error, /panel (propio|de Referencia C)/);
+    assert.equal(f.studies.size, 0);
+  }
 });
 
 test('uses the available comparison indicator when Matriz offers Compare instead of Overlay', async () => {
@@ -106,7 +132,7 @@ test('uses the available comparison indicator when Matriz offers Compare instead
   assert.equal((await f.request()).result?.comparison, 'B');
   const comparison = [...f.studies.values()].find(s => s.name === 'Compare');
   assert.equal(comparison.inputs.symbol, 'B'); assert.equal(comparison.inputs.source, 'close');
-  assert.equal(comparison.options.priceScale, 'new-left'); assert.equal(comparison.scale.getMode(), 0);
+  assert.equal(comparison.scalePosition, 'new-left'); assert.equal(comparison.scale.getMode(), 0);
   await f.request(); assert.equal(f.studies.size, 2);
 });
 
@@ -139,7 +165,7 @@ test('clears unrelated studies and rebuilds only the requested pair without dupl
   const f = fixture(); const existing = f.add('Ratio', { source: 'close', symbol2: 'OTHER' });
   await f.request(); await f.request();
   assert.equal(f.studies.size, 2); assert.equal(f.calls.filter(c => c.name).length, 4); assert(!f.studies.has(existing));
-  assert.equal([...f.studies.values()].find(s => s.name === 'Overlay').options.priceScale, 'new-left');
+  assert.equal([...f.studies.values()].find(s => s.name === 'Overlay').scalePosition, 'new-left');
 });
 
 test('removes an inherited overlay placed in another pane before the main comparison', async () => {

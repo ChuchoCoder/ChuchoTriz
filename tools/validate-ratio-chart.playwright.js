@@ -15,14 +15,15 @@ async page => {
     try {
       await popup.waitForFunction(() => document.querySelector('.ct-ratio-chart-status')?.textContent.includes('velas de 5 min'), null, { timeout: 12000 });
       const state = await popup.evaluate(() => ({ snapshot: window.ratioChartFixture.snapshot(), opener: !!window.opener, notice: document.querySelector('.ct-ratio-chart-status').textContent }));
-      const s = state.snapshot, overlay = s.studies.find(s => s.name === 'Overlay');
+      const s = state.snapshot, overlay = s.studies.find(s => s.name === 'Overlay'), ratio = s.studies.find(s => s.name === 'Ratio');
       assert(popup.url() === href && page.url() === original && !state.opener, 'Chart opens in a separate tab without navigating the source or exposing its opener');
       assert(s.resolution === '5' && s.chartType === 1 && s.mainMode === 0, 'Native chart initializes numeric five-minute candles');
-      assert(overlay.inputs.symbol === comparison && overlay.options.priceScale === 'new-left' && overlay.scaleMode === 0, 'Requested B or C is compared on a numeric left scale: ' + comparison);
-      assert(s.studies.some(s => s.name === 'Ratio' && s.inputs.source === 'close' && s.scaleMode === 0), 'Native Ratio uses closes and a numeric scale');
+      assert(overlay.inputs.symbol === comparison && overlay.scalePosition === (hasC ? 'new-right' : 'new-left') && overlay.scaleMode === 0, 'Comparison has the expected symbol and numeric scale: ' + comparison);
+      assert(overlay.pane === (hasC ? 1 : 0) && ratio.pane === (hasC ? 2 : 1), 'C has a separate pane between A and A/B; B is overlaid on A for plain pairs');
+      assert(ratio.inputs.source === 'close' && ratio.scaleMode === 0, 'Native Ratio uses closes and a numeric scale');
       assert(s.studies.length === 2 && s.drawings === 0, 'The new chart discards inherited instruments, indicators and drawings');
-      assert(s.studies.find(s => s.name === 'Ratio').overrides['plot.color'] === '#FFFFFF' && s.studies.find(s => s.name === 'Ratio').overrides['plot.plottype'] === 0, 'Ratio is an explicit white line instead of the saved style');
-      if (hasC) assert(state.notice.includes('A/B sin dividir por C'), 'C comparison explicitly leaves the Ratio as A/B');
+      assert(ratio.overrides['plot.color'] === '#FFFFFF' && ratio.overrides['plot.plottype'] === 0, 'Ratio is an explicit white line instead of the saved style');
+      if (hasC) assert(state.notice.includes('panel propio') && state.notice.includes('ratio de cierres A/B abajo'), 'The status describes the three panes');
       await popup.evaluate(() => history.pushState({}, '', '/principal/favoritos'));
       await popup.locator('.ct-ratio-chart-status').waitFor({ state: 'detached', timeout: 3000 });
       assert(true, 'Native SPA navigation retires the previous ratio notice');

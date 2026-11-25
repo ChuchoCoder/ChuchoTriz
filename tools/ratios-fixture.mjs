@@ -88,19 +88,26 @@ function installChart() {
     getAllStudies: () => [...studies].map(([id, s]) => ({ id, name: s.name })),
     getStudyById(id) { const s = studies.get(id); return {
       getInputValues: () => Object.entries(s.inputs).map(([id, value]) => ({ id, value })),
-      priceScale: () => s.scale, changePriceScale(value) { s.options = { priceScale: value }; },
+      priceScale: () => s.scale, changePriceScale(value) { s.scalePosition = value; },
       setVisible(value) { s.visible = value; }, applyOverrides(value) { s.overrides = value; },
-      paneIndex: () => s.name === 'Overlay' ? 0 : 1,
+      paneIndex: () => s.pane,
+      unmergeDown() {
+        const nextPane = s.pane + 1;
+        for (const other of studies.values()) if (other.pane >= nextPane) other.pane++;
+        s.pane = nextPane;
+        s.scalePosition = undefined;
+      },
     }; },
     async createStudy(name, overlay, lock, inputs, overrides, options) {
-      const id = String(++sequence); studies.set(id, { name, inputs, options, overrides, scale: scale() }); return id;
+      const id = String(++sequence), pane = overlay ? 0 : 1;
+      studies.set(id, { name, inputs, scalePosition: options?.priceScale, overrides, scale: scale(), pane }); return id;
     },
     removeEntity(id) { studies.delete(id); },
     removeAllStudies() { studies.clear(); }, removeAllShapes() { drawings = 0; },
   };
   document.getElementById('tv_chart_container').__reactFiberFixture = { stateNode: { props: { security: { id } }, widget: { activeChart: () => chart, getStudiesList: () => ['Ratio', 'Overlay'] } } };
   window.ratioChartFixture = { chart, snapshot: () => ({ symbol: chart.symbol(), resolution, chartType, mainMode: mainScale.getMode(), drawings,
-    studies: [...studies.values()].map(s => ({ name: s.name, inputs: s.inputs, options: s.options, overrides: s.overrides, scaleMode: s.scale?.getMode() })) }) };
+    studies: [...studies.values()].map(s => ({ name: s.name, inputs: s.inputs, scalePosition: s.scalePosition, overrides: s.overrides, pane: s.pane, scaleMode: s.scale?.getMode() })) }) };
 }
 const server = createServer((request, response) => {
   const path = new URL(request.url, 'http://127.0.0.1').pathname.slice(1);

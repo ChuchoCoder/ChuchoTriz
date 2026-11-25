@@ -18,8 +18,8 @@ export function ratioChartUrl(pair: ChartPair, origin = location.origin) {
 export function RatioChartLink({ pair }: { pair: ChartPair }) {
   const href = ratioChartUrl(pair), label = `${pair.a.symbol}/${pair.b.symbol}`;
   return <a className="ct-ratio-chart-link" href={href} target="_blank" rel="noopener noreferrer"
-    aria-label={`Abrir gráfico de ${label} en una pestaña nueva${pair.c ? " (sin referencia C)" : ""}`}
-    title={`Gráfico de ${label} · velas de 5 minutos · ${pair.c?.symbol || pair.b.symbol} en el eje izquierdo${pair.c ? "; Ratio A/B sin C" : ""}`}
+    aria-label={`Abrir gráfico de ${label}${pair.c ? ` con referencia ${pair.c.symbol}` : ""} en una pestaña nueva`}
+    title={`Gráfico de ${label} · velas de 5 minutos · ${pair.c ? `${pair.c.symbol} en un panel propio` : `${pair.b.symbol} en el eje izquierdo`}`}
     onClick={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()}><ToolbarIcon name="analysis" /></a>;
 }
 
@@ -68,8 +68,8 @@ export default function RatioChart() {
   }, [request, attempt]);
   if (!request || closed) return null;
   return <aside className="ct-ratio-chart-status" role={issue ? "alert" : "status"} aria-label="Histórico de ratio">
-    <span>{issue || (result ? `${result.a}/${result.b} · velas de 5 min · ${result.comparison} en el eje izquierdo · números` : "Abriendo el histórico del ratio…")}
-      {request.c && <small>El indicador Ratio muestra A/B sin dividir por C; C se agrega como comparación en el eje izquierdo.</small>}</span>
+    <span>{issue || (result ? `${result.a}/${result.b} · velas de 5 min · ${result.comparison} ${request.c ? "en un panel propio" : "en el eje izquierdo"} · números` : "Abriendo el histórico del ratio…")}
+      {request.c && result && <small>Velas de A arriba, Referencia C en el medio y ratio de cierres A/B abajo.</small>}</span>
     {issue && <button type="button" onClick={() => setAttempt(n => n + 1)}>Reintentar</button>}
     <button type="button" aria-label="Cerrar aviso del gráfico" onClick={() => setClosed(true)}>×</button>
   </aside>;
