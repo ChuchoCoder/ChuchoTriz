@@ -4,17 +4,18 @@ import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
 import { IntradayChart, ReferenceChartButton } from "./IntradayChart";
 import { RatioChartLink } from "./RatioChart";
-import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairKey, pairLabel, ratioLabel, referenceCFormula, referenceCQuote, tickerKey, tradeLabel, type DollarSelection, type DollarWidgetState, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatioReference, type RatiosState, type RatioWidgetState } from "./model";
+import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairKey, pairLabel, ratioLabel, referenceCFormula, referenceCQuote, tickerKey, tradeLabel, type DollarWidgetState, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatioReference, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit";
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
-export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, divisor }: {
+export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, divisor, describe = instrumentDetail }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
   onAutoFocus?(): void;
   divisor?: { checked: boolean; onChange(checked: boolean): void; label?: string; disabled?: boolean };
+  describe?(instrument: RatioInstrument): string;
 }) {
   const id = useId(), [query, setQuery] = useState(value?.symbol || ""), [options, setOptions] = useState<RatioInstrument[]>([]);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [issue, setIssue] = useState("");
@@ -71,11 +72,11 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
       <input type="checkbox" checked={divisor.checked} disabled={disabled || divisor.disabled}
         onChange={event => divisor.onChange(event.target.checked)} />{divisor.label ?? "Dividir Referencia C por 100"}
     </label>}
-    <small title={value?.id} role="status">{value ? instrumentDetail(value) : resolving ? "Buscando ticker…" : issue || "Ingresá el ticker o elegí un instrumento"}</small>
+    <small title={value?.id} role="status">{value ? describe(value) : resolving ? "Buscando ticker…" : issue || "Ingresá el ticker o elegí un instrumento"}</small>
     {open && query.trim() && <ul id={`${id}-options`} role="listbox" aria-label={`Resultados de ${label}`}>
       {options.map((item, index) => <li key={item.id} id={`${id}-option-${index}`} role="option" aria-selected={active === index}
         onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => choose(item)}>
-        <strong>{item.symbol}</strong><span>{instrumentDetail(item)}</span>
+        <strong>{item.symbol}</strong><span>{describe(item)}</span>
       </li>)}
       {!options.length && <li role="presentation">{issue || "Sin coincidencias en el catálogo de Matriz"}</li>}
     </ul>}
@@ -238,57 +239,82 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   </section>;
 }
 
+function intradayInstrumentDetail(instrument: RatioInstrument) {
+  const term = instrument.settlement === "1" ? "CI" : instrument.settlement === "2" ? "24 h" : "";
+  return instrumentDetail(instrument) + (term ? ` · ${term}` : "");
+}
+
 function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetState; command: Command; search: Search; busy: boolean }) {
   const { config, pair } = widget;
-  const controls = useId();
   const [issue, setIssue] = useState("");
+  const [legs, setLegs] = useState<Partial<Pick<RatioPair, "a" | "b">>>();
   const [reference, setReference] = useState<RatioReference>();
   const [spreadOnly, setSpreadOnly] = useState(false);
-  const run = async (method: "dollarEdit" | "ratiosRemove", selection?: DollarSelection & RatioReference) => {
+  const run = async (method: "dollarEdit" | "ratiosRemove", selection?: Partial<Pick<RatioPair, "a" | "b">> & RatioReference) => {
     setIssue("");
-    const { c, ...fields } = selection ?? {};
     try {
-      await command(method, { ...fields, c: c?.id, widgetId: config.id, revision: config.revision });
+      await command(method, { widgetId: config.id, revision: config.revision,
+        a: selection?.a?.id, b: selection?.b?.id, c: selection?.c?.id, cDivisor: selection?.cDivisor });
       return true;
     } catch (error) {
       setIssue(error instanceof Error ? error.message : "No se pudo guardar el widget.");
       return false;
     }
   };
-  const label = `${config.kind} ${config.bond} · ${config.term === "CI" ? "CI" : "24 h"}`;
-  return <section className="ct-ratios ct-intraday-widget" aria-label={`Dólar intradiario · ${label}`}>
-    <header className="ct-ratios-title"><strong>{label}</strong><div className="ct-ratios-header-actions NoDraggable">
+  const label = pair ? pairLabel({ a: pair.a, b: pair.b }) : undefined;
+  const sameInstrument = !!legs?.a && legs.a.id === legs.b?.id;
+  return <section className="ct-ratios ct-intraday-widget" aria-label={label ? `Dólar intradiario · ${label}` : "Dólar intradiario"}>
+    <header className="ct-ratios-title"><strong>{label ?? "Dólar intradiario"}</strong><div className="ct-ratios-header-actions NoDraggable">
       <button type="button" aria-label="Cerrar widget de dólar intradiario" disabled={busy} onMouseDown={event => event.stopPropagation()}
         onClick={() => void run("ratiosRemove")}>×</button>
     </div></header>
     <div className="ct-intraday-controls NoDraggable" onMouseDown={event => event.stopPropagation()}>
-      <div><label htmlFor={`${controls}-kind`}>Dólar</label><select id={`${controls}-kind`} disabled={busy} value={config.kind} onChange={event => void run("dollarEdit", { ...config, kind: event.target.value as DollarSelection["kind"] })}>
-        <option value="MEP">MEP</option><option value="CCL">CCL</option>
-      </select></div>
-      <select aria-label="Bono" disabled={busy} value={config.bond} onChange={event => void run("dollarEdit", { ...config, bond: event.target.value as DollarSelection["bond"] })}>
-        <option value="AL30">AL30</option><option value="GD30">GD30</option>
-      </select>
-      <select aria-label="Plazo" disabled={busy} value={config.term} onChange={event => void run("dollarEdit", { ...config, term: event.target.value as DollarSelection["term"] })}>
-        <option value="24h">24 h</option><option value="CI">CI</option>
-      </select>
-      <button type="button" className="ct-intraday-reference" aria-expanded={!!reference} aria-label="Configurar Referencia C" disabled={busy}
-        onClick={() => setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor })}>
+      <button type="button" className="ct-intraday-config" aria-expanded={!!legs} aria-label="Configurar instrumentos A y B" disabled={busy}
+        title={pair && `A: ${pair.a.symbol} · ${intradayInstrumentDetail(pair.a)} | B: ${pair.b.symbol} · ${intradayInstrumentDetail(pair.b)}`}
+        onClick={() => {
+          setReference(undefined);
+          setLegs(value => value ? undefined : { a: pair?.a, b: pair?.b });
+        }}>
+        {pair ? `${pair.a.symbol} / ${pair.b.symbol}` : "Seleccionar A y B"}
+      </button>
+      <button type="button" className="ct-intraday-config" aria-expanded={!!reference} aria-label="Configurar Referencia C" disabled={busy}
+        onClick={() => {
+          setLegs(undefined);
+          setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor });
+        }}>
         {config.c ? `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}` : "+ Referencia C"}
       </button>
       {config.c && <button type="button" className="ct-intraday-mode" aria-pressed={spreadOnly}
         onClick={() => setSpreadOnly(value => !value)}>Sólo brecha</button>}
     </div>
-    {reference && <form className="ct-intraday-reference-editor ct-ratios-editor NoDraggable" aria-label="Referencia del dólar intradiario"
+    {legs && <form className="ct-intraday-editor ct-ratios-editor NoDraggable" aria-label="Instrumentos del dólar intradiario"
       onMouseDown={event => event.stopPropagation()} onSubmit={event => {
         event.preventDefault();
-        if (reference.c) void run("dollarEdit", { ...config, c: reference.c, cDivisor: reference.cDivisor }).then(saved => { if (saved) setReference(undefined); });
+        if (legs.a && legs.b && !sameInstrument) void run("dollarEdit", { ...legs, c: config.c, cDivisor: config.cDivisor })
+          .then(saved => { if (saved) setLegs(undefined); });
+      }}>
+      <div className="ct-ratios-pickers">
+        <InstrumentPicker label="Instrumento A" value={legs.a} onChange={a => setLegs(previous => ({ ...previous, a }))} search={search} disabled={busy} describe={intradayInstrumentDetail} autoFocus />
+        <span className="ct-ratios-division" aria-hidden="true">÷</span>
+        <InstrumentPicker label="Instrumento B" value={legs.b} onChange={b => setLegs(previous => ({ ...previous, b }))} search={search} disabled={busy} describe={intradayInstrumentDetail} />
+      </div>
+      <div className="ct-ratios-editor-actions">
+        {sameInstrument && <span role="status">Elegí dos instrumentos diferentes.</span>}
+        <button type="button" disabled={busy} onClick={() => setLegs(undefined)}>Cancelar</button>
+        <button type="submit" disabled={busy || !legs.a || !legs.b || sameInstrument}>Guardar</button>
+      </div>
+    </form>}
+    {reference && <form className="ct-intraday-editor ct-ratios-editor NoDraggable" aria-label="Referencia del dólar intradiario"
+      onMouseDown={event => event.stopPropagation()} onSubmit={event => {
+        event.preventDefault();
+        if (reference.c) void run("dollarEdit", reference).then(saved => { if (saved) setReference(undefined); });
       }}>
       <InstrumentPicker label="Referencia C" value={reference.c} search={search} disabled={busy} autoFocus
         onChange={c => setReference(previous => ({ c, cDivisor: c && c.id === previous?.c?.id ? previous.cDivisor : undefined }))}
         divisor={{ checked: reference.cDivisor === 100, disabled: !reference.c, label: "Dividir C por 100",
           onChange: checked => setReference({ ...reference, cDivisor: checked ? 100 : undefined }) }} />
       <div className="ct-ratios-editor-actions">
-        {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit", { ...config, c: undefined, cDivisor: undefined })
+        {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit")
           .then(saved => { if (saved) setReference(undefined); })}>Quitar C</button>}
         <button type="button" disabled={busy} onClick={() => setReference(undefined)}>Cancelar</button>
         <button type="submit" disabled={busy || !reference.c}>Guardar</button>
@@ -375,7 +401,7 @@ export default function RatiosDashboard() {
       <button type="button" className="ant-btn ant-btn-default WidgetComponentCardContent ct-ratios-add" disabled={busy || !snapshot.canAdd}
         title={snapshot.issue || "Tabla de ratios de instrumentos"} onClick={() => addWidget("ratiosAdd", slot)}>{busy ? "Guardando…" : "RATIOS · CHUCHOTRIZ"}</button>
       <button type="button" className="ant-btn ant-btn-default WidgetComponentCardContent ct-ratios-add" disabled={busy || !snapshot.canAdd}
-        title={snapshot.issue || "Gráfico intradiario de MEP o CCL"} onClick={() => addWidget("dollarAdd", slot)}>DÓLAR INTRADIARIO · CHUCHOTRIZ</button>
+        title={snapshot.issue || "Gráfico intradiario de un par de instrumentos"} onClick={() => addWidget("dollarAdd", slot)}>DÓLAR INTRADIARIO · CHUCHOTRIZ</button>
       {menuIssue && <p className="ct-ratios-menu-error" role="status">{menuIssue}</p>}
     </>, slot, `menu-${index}`))}
     {snapshot.widgets.map(widget => {

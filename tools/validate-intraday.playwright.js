@@ -34,23 +34,36 @@ async (page, screenshots) => {
   const [ratiosBounds, dollarBounds] = await Promise.all([button('RATIOS · CHUCHOTRIZ').boundingBox(), dollarButton.boundingBox()]);
   assert(dollarBounds.y >= ratiosBounds.y + ratiosBounds.height && dollarBounds.width === ratiosBounds.width, 'Both choices get a full row in the native flex menu');
   await dollarButton.click();
-  const widget = page.locator('.ct-intraday-widget'), dollar = widget.getByLabel('Dólar', { exact: true });
+  const widget = page.locator('.ct-intraday-widget');
+  const configurePair = widget.getByRole('button', { name: 'Configurar instrumentos A y B', exact: true });
+  const editPair = async (a, b) => {
+    await idle(); await configurePair.click();
+    const editor = widget.getByRole('form', { name: 'Instrumentos del dólar intradiario', exact: true });
+    for (const [leg, selection] of [['A', a], ['B', b]]) {
+      if (!selection) continue;
+      const [ticker, id] = selection;
+      const input = editor.getByRole('combobox', { name: 'Instrumento ' + leg, exact: true });
+      await input.fill(ticker); await input.press('Tab');
+      await input.locator('..').locator('small[title="' + id + '"]').waitFor();
+    }
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await editor.waitFor({ state: 'hidden' }); await idle();
+  };
   const legendValue = widget.locator('.ct-intraday-legend strong');
   await widget.getByRole('img', { name: 'Gráfico intradiario de MEP AL30' }).waitFor();
   await valueIs(legendValue, '1.400,00', 'MEP AL30 24 h uses AL30 / AL30D');
   await screenshot('widget', widget);
-  await idle(); await dollar.selectOption('CCL');
+  await editPair(undefined, ['AL30C', 'AL30C-2']);
   await widget.getByRole('img', { name: 'Gráfico intradiario de CCL AL30' }).waitFor();
   await valueIs(legendValue, '1.372,55', 'CCL AL30 24 h uses AL30 / AL30C');
   await page.evaluate(() => window.ratiosFixture.price('AL30-2', 72420));
   await valueIs(legendValue, '1.420,00', 'Live price updates the ratio');
-  await idle(); await widget.getByLabel('Plazo', { exact: true }).selectOption('CI');
-  await widget.getByText('No se encontró un par BYMA único para esta selección.').waitFor();
-  assert(!await widget.locator('.ct-intraday-plot').count(), 'Unavailable CI legs do not substitute 24 h quotes');
-  await idle(); await widget.getByLabel('Plazo', { exact: true }).selectOption('24h');
-  await idle(); await page.reload();
-  await widget.getByRole('img', { name: 'Gráfico intradiario de CCL AL30' }).waitFor();
-  assert(await dollar.inputValue() === 'CCL', 'Dollar selection persists across reloads');
+  await editPair(['BMA', 'BMA-2'], ['GGAL', 'GGAL-2']);
+  await widget.getByRole('img', { name: 'Gráfico intradiario de BMA/GGAL' }).waitFor();
+  await valueIs(legendValue, '1,090909', 'Both instruments can be chosen independently from the catalogue');
+  await page.reload();
+  await widget.getByRole('img', { name: 'Gráfico intradiario de BMA/GGAL' }).waitFor();
+  assert((await configurePair.textContent()).trim() === 'BMA / GGAL', 'The custom pair persists across reloads');
 
   await idle(); await button('RATIOS · CHUCHOTRIZ').click(); await idle();
   await button('Editar MEP AL30 vs DLR/SPOT').click();
@@ -87,7 +100,7 @@ async (page, screenshots) => {
   checks.push('Escape closes the dialog and returns focus to the row');
 
   await page.evaluate(() => window.ratiosFixture.useEarlierReference());
-  await dollar.selectOption('MEP'); await idle();
+  await editPair(['AL30', 'AL30-2'], ['AL30D', 'AL30D-2']);
   await widget.getByRole('button', { name: 'Configurar Referencia C' }).click();
   const widgetEditor = widget.getByRole('form', { name: 'Referencia del dólar intradiario' });
   const widgetReference = widgetEditor.getByRole('combobox', { name: 'Referencia C', exact: true });
@@ -99,12 +112,7 @@ async (page, screenshots) => {
   await widgetEditor.getByRole('button', { name: 'Guardar', exact: true }).click(); await idle();
   const daySelector = widget.getByRole('combobox', { name: 'Rueda del gráfico' });
   await daySelector.waitFor();
-  assert(await widget.getByRole('combobox', { name: 'Bono', exact: true }).isVisible() &&
-    await widget.getByRole('combobox', { name: 'Plazo', exact: true }).isVisible() &&
-    !(await widget.getByText('Bono', { exact: true }).isVisible()) &&
-    !(await widget.getByText('Plazo', { exact: true }).isVisible()) &&
-    !(await widget.getByText('Rueda', { exact: true }).isVisible()),
-    'Selectors keep their accessible names while their captions are hidden in the widget');
+  assert(!(await widget.getByText('Rueda', { exact: true }).isVisible()), 'The date selector keeps its accessible name and hidden caption');
   const spreadValue = widget.locator('.ct-intraday-legend .ct-intraday-line-spread strong');
   await daySelector.locator('option').nth(1).waitFor({ state: 'attached' });
   assert((await daySelector.locator('option:checked').textContent()).includes('hoy'), 'The widget opens on today even when only the previous session has a spread');

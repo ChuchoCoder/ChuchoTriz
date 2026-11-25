@@ -26,13 +26,14 @@ ejecución; no bloquea por el número de versión de Matriz ni exige que se mues
 ## Dólar intradiario y gráfico contra Referencia C
 
 En un dashboard de Matriz, elegí **Nuevo widget → DÓLAR INTRADIARIO · CHUCHOTRIZ**.
-El widget arranca en MEP AL30 a 24 h y permite elegir MEP o CCL, AL30 o GD30
-y 24 h o CI. Cada widget guarda su selección y posición en el dashboard.
-El par se resuelve por especie BYMA, moneda y liquidación. Si falta una pata
-o hay más de una coincidencia, el widget indica que el par no está disponible.
+El widget arranca en MEP AL30 a 24 h. Tocá el par para elegir el instrumento A
+y el instrumento B del catálogo de Matriz. El gráfico muestra A dividido B.
+Cada widget guarda los dos instrumentos con su identidad exacta, incluido el
+plazo, y su posición en el dashboard. Los widgets guardados con la configuración
+anterior conservan su par. Si ese par no está disponible, elegí A y B en el editor.
 Desde **+ Referencia C** se puede elegir una especie y activar **Dividir C por
-100**. El widget guarda esa referencia y dibuja MEP o CCL en el eje derecho y
-la brecha porcentual a la izquierda. **Sólo brecha** oculta la línea del dólar
+100**. El widget guarda esa referencia y dibuja A/B en el eje derecho y
+la brecha porcentual a la izquierda. **Sólo brecha** oculta la línea A/B
 en el widget actual y conserva la rueda seleccionada.
 
 En una fila con Referencia C del widget Ratios o del Monitor, el botón de

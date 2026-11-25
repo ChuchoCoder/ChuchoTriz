@@ -273,7 +273,7 @@ export function IntradayChart({ pair, view = "ratio", defaultToToday = false }: 
     </div>
     {rows.length > 0 ? <Plot key={`${view}-${activeDay}`} rows={rows} lines={plotLines} dual={dual} label={description} />
       : <p className="ct-intraday-empty" role="status">{market.loading ? "Cargando histórico…" : "Sin cotizaciones coincidentes para esta rueda."}</p>}
-    {(view === "comparison" || view === "dollar-spread") && rows.length > 0 && !hasComparison && <small>El dólar y la referencia aún no coinciden en un intervalo de 5 min en esta rueda.</small>}
+    {(view === "comparison" || view === "dollar-spread") && rows.length > 0 && !hasComparison && <small>El ratio y la referencia aún no coinciden en un intervalo de 5 min en esta rueda.</small>}
     {!market.loading && (market.historyIssue || historyIssues.length > 0) && <p className="ct-intraday-status" role="status">
       <span title={historyIssues.join(" · ")}>{market.historyIssue || historyIssues.join(" · ")}</span>
       <button type="button" onClick={market.retry}>Reintentar histórico</button>

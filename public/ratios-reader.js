@@ -23,10 +23,14 @@
   const dollarSelection = cfg => cfg && ["MEP", "CCL"].includes(cfg.kind) && ["AL30", "GD30"].includes(cfg.bond) && ["24h", "CI"].includes(cfg.term);
   function dollarConfig(w) {
     const cfg = w?.settings?.[DOLLAR_KEY];
-    if (w?.component !== DOLLAR_TYPE || ![1, 2].includes(cfg?.schema) || !short(cfg.id) ||
-      !Number.isSafeInteger(cfg.revision) || cfg.revision < 0 || !dollarSelection(cfg)) return;
-    if (cfg.schema === 2 ? !short(cfg.c?.id) || cfg.cDivisor !== undefined && cfg.cDivisor !== 100 : cfg.c !== undefined || cfg.cDivisor !== undefined) return;
-    return { schema: cfg.schema, id: cfg.id, revision: cfg.revision, kind: cfg.kind, bond: cfg.bond, term: cfg.term,
+    if (w?.component !== DOLLAR_TYPE || ![1, 2, 3].includes(cfg?.schema) || !short(cfg.id) ||
+      !Number.isSafeInteger(cfg.revision) || cfg.revision < 0) return;
+    const custom = cfg.schema === 3;
+    if (custom ? !short(cfg.a?.id) || !short(cfg.b?.id) || cfg.a.id === cfg.b.id : !dollarSelection(cfg)) return;
+    if (cfg.c === undefined ? cfg.schema === 2 || cfg.cDivisor !== undefined
+      : cfg.schema === 1 || !short(cfg.c?.id) || cfg.cDivisor !== undefined && cfg.cDivisor !== 100) return;
+    return { schema: cfg.schema, id: cfg.id, revision: cfg.revision,
+      ...(custom ? { a: descriptor(cfg.a), b: descriptor(cfg.b) } : { kind: cfg.kind, bond: cfg.bond, term: cfg.term }),
       ...(cfg.c ? { c: descriptor(cfg.c) } : {}), ...(cfg.cDivisor === 100 ? { cDivisor: 100 } : {}) };
   }
   const ownsWidget = w => ownConfig(w) || dollarConfig(w);
@@ -240,8 +244,9 @@
         ? "No se pudieron cargar estos pares iniciales: " + missing.join(", ") + ". Agregalos manualmente cuando estén disponibles." : undefined };
     });
     const dollarWidgets = owned.filter(dollarConfig).map(w => {
-      const config = dollarConfig(w), pair = dollarPair(c.ss.securities, config);
-      return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "No se encontró un par BYMA único para esta selección." };
+      const config = dollarConfig(w);
+      const pair = config.schema === 3 ? { a: config.a, b: config.b } : dollarPair(c.ss.securities, config);
+      return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
     });
     const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])])))];
     const active = new Set(ids);
@@ -331,12 +336,29 @@
         // Remove this exact instance, without touching any other empty widget.
         d.layout = d.layout.filter(w => w !== widget); d.widgetsDicts.delete(widget.key);
       } else if (method === "dollarEdit") {
-        if (!dollarSelection(params) || cfg.revision === Number.MAX_SAFE_INTEGER) throw Error("Selección de dólar intradiario inválida.");
-        if (params.cDivisor !== undefined && (params.c === undefined || params.cDivisor !== 100)) throw Error("Divisor inválido para la referencia C.");
-        const reference = params.c === undefined ? undefined : cfg.c?.id === params.c ? cfg.c : instrument(byId(c, params.c));
+        if (cfg.revision === Number.MAX_SAFE_INTEGER) throw Error("Selección de dólar intradiario inválida.");
+        const changingPair = params.a !== undefined || params.b !== undefined;
+        const keepReference = changingPair && !Object.hasOwn(params, "c") && !Object.hasOwn(params, "cDivisor");
+        const referenceId = keepReference ? cfg.c?.id : params.c, divisor = keepReference ? cfg.cDivisor : params.cDivisor;
+        if (divisor !== undefined && (referenceId === undefined || divisor !== 100)) throw Error("Divisor inválido para la referencia C.");
+        const reference = referenceId === undefined ? undefined : cfg.c?.id === referenceId ? cfg.c : instrument(byId(c, referenceId));
+        let legs;
+        if (changingPair) {
+          if (!short(params.a) || !short(params.b) || params.a === params.b) throw Error("Elegí dos instrumentos diferentes.");
+          const existing = [cfg.a, cfg.b];
+          const resolve = id => instrument(c.ss.securities.find(s => s?.id === id)) || existing.find(i => i?.id === id) || instrument(byId(c, id));
+          legs = { a: resolve(params.a), b: resolve(params.b) };
+        } else if (cfg.schema === 3) {
+          if (["kind", "bond", "term"].some(key => params[key] !== undefined)) throw Error("Recargá Matriz para editar los instrumentos de este widget.");
+          legs = { a: cfg.a, b: cfg.b };
+        } else {
+          const selection = ["kind", "bond", "term"].some(key => params[key] !== undefined) ? params : cfg;
+          if (!dollarSelection(selection)) throw Error("Selección de dólar intradiario inválida.");
+          legs = { kind: selection.kind, bond: selection.bond, term: selection.term };
+        }
         widget.settings = { ...widget.settings, [DOLLAR_KEY]: {
-          schema: reference ? 2 : 1, id: cfg.id, revision: cfg.revision + 1, kind: params.kind, bond: params.bond, term: params.term,
-          ...(reference ? { c: reference } : {}), ...(params.cDivisor === 100 ? { cDivisor: 100 } : {}),
+          schema: legs.a ? 3 : reference ? 2 : 1, id: cfg.id, revision: cfg.revision + 1, ...legs,
+          ...(reference ? { c: reference } : {}), ...(divisor === 100 ? { cDivisor: 100 } : {}),
         } };
       } else if (method === "ratiosResize") {
         if (!finite(params.width) || !finite(params.height)) throw Error("Tamaño inválido.");

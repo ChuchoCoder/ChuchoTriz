@@ -116,6 +116,26 @@ test('stores an independent reference and divisor on an existing dollar widget',
   assert.equal(cleared.pair.c, undefined);
 });
 
+test('allows a custom intraday pair with exact IDs and carries over the saved reference', async () => {
+  const f = fixture();
+  const { config } = (await f.request('dollarAdd', await f.args())).result.dollarWidgets[0];
+  const args = { ...await f.args(), widgetId: config.id, revision: 0 };
+  const reference = (await f.request('dollarEdit', { ...args, c: 'c', cDivisor: 100 })).result.dollarWidgets[0];
+  assert.equal(reference.config.schema, 2);
+  const edit = { ...args, revision: 1, a: 'ci', b: 'a' };
+  assert.match((await f.request('dollarEdit', { ...edit, b: 'ci' })).error, /diferentes/);
+  assert.match((await f.request('dollarEdit', { ...edit, b: 'portfolio' })).error, /catálogo/);
+  const custom = (await f.request('dollarEdit', edit)).result.dollarWidgets[0];
+  assert.deepEqual([custom.pair.a.id, custom.pair.b.id, custom.pair.c.id, custom.pair.cDivisor], ['ci', 'a', 'c', 100]);
+  assert.equal(custom.config.schema, 3);
+  const saved = (await f.ds.getDashboard()).layout.find(w => w.settings?.chuchotrizIntradayDollar).settings.chuchotrizIntradayDollar;
+  assert.deepEqual(saved, custom.config);
+  assert.match((await f.request('dollarEdit', { ...args, revision: 2, kind: 'MEP', bond: 'AL30', term: '24h' })).error, /Recargá Matriz/);
+  const cleared = (await f.request('dollarEdit', { ...args, revision: 2, c: undefined })).result.dollarWidgets[0];
+  assert.deepEqual([cleared.pair.a.id, cleared.pair.b.id], ['ci', 'a']);
+  assert.equal(cleared.pair.c, undefined);
+});
+
 test('column visibility defaults to visible, persists per widget, and survives pair edits by legacy clients', async () => {
   const f = fixture(); await f.add(); await f.add();
   const initial = (await f.state()).widgets[0];
