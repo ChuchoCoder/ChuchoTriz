@@ -43,6 +43,7 @@
 .ct-intraday-legend i { width: 11px; height: 3px; border-radius: 3px; background: var(--intraday-line); }
 .ct-intraday-legend time { margin-left: auto; }
 .ct-intraday-session { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.ct-intraday-widget .ct-intraday-session > span { display: none; }
 .ct-intraday-session select, .ct-intraday-controls .ct-intraday-reference, .ct-intraday-controls .ct-intraday-mode {
   border: 1px solid #8190a5;
   border-radius: 4px;

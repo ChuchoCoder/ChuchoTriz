@@ -260,7 +260,7 @@ export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; vi
           <i aria-hidden="true" />{line.label} <strong>{display(last?.[line.key], line.key === "spread")}</strong>
         </span>;
       })}
-      {dates.length > 1 && <label className="ct-intraday-session">Rueda
+      {dates.length > 1 && <label className="ct-intraday-session"><span>Rueda</span>
         <select aria-label="Rueda del gráfico" value={activeDay} onChange={event => setChosenDay(Number(event.target.value))}>
           {dates.map(day => <option key={day} value={day}>{date.format(day)}{day === market.start ? " · hoy" : ""}</option>)}
         </select>

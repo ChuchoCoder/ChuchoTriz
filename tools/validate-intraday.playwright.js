@@ -99,6 +99,12 @@ async (page, screenshots) => {
   await widgetEditor.getByRole('button', { name: 'Guardar', exact: true }).click(); await idle();
   const daySelector = widget.getByRole('combobox', { name: 'Rueda del gráfico' });
   await daySelector.waitFor();
+  assert(await widget.getByRole('combobox', { name: 'Bono', exact: true }).isVisible() &&
+    await widget.getByRole('combobox', { name: 'Plazo', exact: true }).isVisible() &&
+    !(await widget.getByText('Bono', { exact: true }).isVisible()) &&
+    !(await widget.getByText('Plazo', { exact: true }).isVisible()) &&
+    !(await widget.getByText('Rueda', { exact: true }).isVisible()),
+    'Selectors keep their accessible names while their captions are hidden in the widget');
   assert(!(await daySelector.locator('option:checked').textContent()).includes('hoy'), 'The widget shows the latest overlapping historical session');
   const spreadValue = widget.locator('.ct-intraday-legend .ct-intraday-line-spread strong');
   assert((await widget.locator('.ct-intraday-axis-left').first().textContent()).includes('%'), 'The widget uses a separate percentage axis for the spread');

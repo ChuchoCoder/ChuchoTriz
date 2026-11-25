@@ -265,12 +265,12 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
       <div><label htmlFor={`${controls}-kind`}>Dólar</label><select id={`${controls}-kind`} disabled={busy} value={config.kind} onChange={event => void run("dollarEdit", { ...config, kind: event.target.value as DollarSelection["kind"] })}>
         <option value="MEP">MEP</option><option value="CCL">CCL</option>
       </select></div>
-      <div><label htmlFor={`${controls}-bond`}>Bono</label><select id={`${controls}-bond`} disabled={busy} value={config.bond} onChange={event => void run("dollarEdit", { ...config, bond: event.target.value as DollarSelection["bond"] })}>
+      <select aria-label="Bono" disabled={busy} value={config.bond} onChange={event => void run("dollarEdit", { ...config, bond: event.target.value as DollarSelection["bond"] })}>
         <option value="AL30">AL30</option><option value="GD30">GD30</option>
-      </select></div>
-      <div><label htmlFor={`${controls}-term`}>Plazo</label><select id={`${controls}-term`} disabled={busy} value={config.term} onChange={event => void run("dollarEdit", { ...config, term: event.target.value as DollarSelection["term"] })}>
+      </select>
+      <select aria-label="Plazo" disabled={busy} value={config.term} onChange={event => void run("dollarEdit", { ...config, term: event.target.value as DollarSelection["term"] })}>
         <option value="24h">24 h</option><option value="CI">CI</option>
-      </select></div>
+      </select>
       <button type="button" className="ct-intraday-reference" aria-expanded={!!reference} aria-label="Configurar Referencia C" disabled={busy}
         onClick={() => setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor })}>
         {config.c ? `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}` : "+ Referencia C"}

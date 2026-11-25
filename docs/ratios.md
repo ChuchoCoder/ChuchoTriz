@@ -48,7 +48,7 @@ Las vistas leen las series intradiarias de los últimos siete días calendario
 y los últimos precios recibidos en vivo con su hora de mercado argentina.
 El cálculo usa el último dato de cada pata dentro del mismo intervalo de
 cinco minutos. La brecha requiere también C en ese intervalo. El selector
-**Rueda** permite consultar el día actual o días con cobertura. Si hoy sólo
+de fecha permite consultar el día actual o días con cobertura. Si hoy sólo
 hay una observación aislada, el gráfico prioriza una rueda con histórico
 coincidente y muestra su fecha. Los cierres históricos completados prevalecen
 sobre los ticks capturados de ese mismo minuto. Los faltantes quedan como
