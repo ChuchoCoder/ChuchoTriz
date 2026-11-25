@@ -45,7 +45,9 @@
 .ct-ratios-empty { display:block; margin:20px auto; border:1px solid #039be5; background:transparent; padding:8px 14px; border-radius:3px; }
 .ct-ratios-resize { position:absolute; right:0; bottom:0; border:0; width:22px; height:22px; padding:0; line-height:1!important; font-size:19px!important; cursor:nwse-resize!important; touch-action:none; background:#124d71; color:#fff!important; border-radius:0 0 7px 0; }
 .ct-ratios-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.ct-ratios-menu-slot { flex-direction:column; }
 .ct-ratios-menu-slot .ct-ratios-add { width:100%; text-align:left; }
+.ct-ratios-menu-slot .ct-ratios-add + .ct-ratios-add { border-top:1px solid var(--widget-list-item-border,#8190a566); }
 .ct-ratios-menu-error { padding:4px 12px; color:#d3910c; font-size:11px; }
 .ct-ratios-notice { position:fixed; z-index:105; bottom:150px; left:50px; max-width:min(520px,calc(100vw - 70px)); display:flex; gap:12px; align-items:center; padding:10px 14px; border:1px solid #d3910c; border-radius:5px; background:#222c3b; color:#fff; font:13px/1.4 Arial,sans-serif; }
 .ct-ratios-notice button { flex-shrink:0; border:0; background:transparent; color:inherit; cursor:pointer; font-size:22px; }

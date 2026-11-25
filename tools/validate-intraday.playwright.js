@@ -23,7 +23,11 @@ async (page, screenshots) => {
     assert((await locator.textContent()).trim() === value, label);
   };
 
-  await button('DÓLAR INTRADIARIO · CHUCHOTRIZ').click();
+  const dollarButton = button('DÓLAR INTRADIARIO · CHUCHOTRIZ');
+  await dollarButton.waitFor();
+  const [ratiosBounds, dollarBounds] = await Promise.all([button('RATIOS · CHUCHOTRIZ').boundingBox(), dollarButton.boundingBox()]);
+  assert(dollarBounds.y >= ratiosBounds.y + ratiosBounds.height && dollarBounds.width === ratiosBounds.width, 'Both choices get a full row in the native flex menu');
+  await dollarButton.click();
   const widget = page.locator('.ct-intraday-widget'), dollar = widget.getByLabel('Dólar', { exact: true });
   const legendValue = widget.locator('.ct-intraday-legend strong');
   await widget.getByRole('img', { name: 'Gráfico intradiario de MEP AL30' }).waitFor();
