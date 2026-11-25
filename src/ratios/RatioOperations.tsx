@@ -36,6 +36,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [view, setView] = useState<View>("monitor"), [draft, setDraft] = useState<Draft>(emptyDraft);
   const [watchA, setWatchA] = useState<TradingInstrument>(), [watchB, setWatchB] = useState<TradingInstrument>(), [watchC, setWatchC] = useState<TradingInstrument>();
   const [compare, setCompare] = useState(false);
+  const [focusReference, setFocusReference] = useState(false);
   const [divideCBy100, setDivideCBy100] = useState(false);
   const [selected, setSelected] = useState<string>(), [all, setAll] = useState(false), [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState(""), [notice, setNotice] = useState("");
@@ -75,7 +76,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   useEffect(() => {
     gridSortVersion.current.watch++; gridSortVersion.current.operations++;
     setMonitorSort(undefined); setOperationsSort(undefined); setPnlCurrency("ARS"); clearGridDrag();
-    setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined); setWatchC(undefined); setCompare(false); setDivideCBy100(false);
+    setSession(undefined); setSelected(undefined); setEdit(undefined); setDeleted(undefined); setDraft(emptyDraft()); setWatchA(undefined); setWatchB(undefined); setWatchC(undefined); setCompare(false); setFocusReference(false); setDivideCBy100(false);
     defaultsGeneration.current++; defaultsAttempt.current = undefined; setLoadingDefaults(false);
     setView("monitor"); setIssue(""); setNotice(""); setPickerSession(n => n + 1);
     if (!active || !scope) return;
@@ -351,11 +352,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {notice && <div className="ro-notice" role="status">{notice}{deleted?.scope === scope && <button type="button" disabled={!available} onClick={() => void undo()}>Deshacer eliminación</button>}</div>}
     {view === "monitor" && <div>
       <div className="ro-monitor-controls"><div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
-        <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => { setCompare(e.target.checked); setWatchC(undefined); setDivideCBy100(false); }} />Agregar referencia C</label>
-        {compare && <>
-          <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
-          <label className="ro-compare"><input type="checkbox" checked={divideCBy100} disabled={!available} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>
-        </>}
+        {compare && <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available}
+          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)} />}
+        <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => {
+          setCompare(e.target.checked); setFocusReference(e.target.checked); setWatchC(undefined); setDivideCBy100(false);
+        }} />Agregar referencia C</label>
+        {compare && <label className="ro-compare"><input type="checkbox" checked={divideCBy100} disabled={!available} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>}
         <button type="button" disabled={!available || !watchA || !watchB || compare && !watchC} onClick={() => void commit(base => {
           if (!watchA || !watchB || watchA.id === watchB.id) throw Error("Elegí instrumentos diferentes.");
           if (base.watch.length >= MAX_WATCH) throw Error(`Podés observar hasta ${MAX_WATCH} pares.`);

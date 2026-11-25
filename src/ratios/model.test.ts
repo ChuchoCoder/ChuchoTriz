@@ -136,9 +136,25 @@ it("names MEP, CCL and canje pairs of the same instrument and settlement, includ
   expect(pairLabel({ a: al30c, b: al30d })).toBe("AL30C/AL30D");
   expect(pairLabel({ a: ciUsd, b: al30c })).toBe("AL30D (CI)/AL30C");
   expect(pairLabel({ a: al30d, b: { ...al30c, id: "gd30c", symbol: "GD30C" } })).toBe("AL30D/GD30C");
-  expect(pairLabel({ a: al30d, b: { ...al30c, currency: "USD" } })).toBe("AL30D/AL30C");
+  expect(pairLabel({ a: al30d, b: { ...al30c, currency: "ARS" } })).toBe("AL30D/AL30C");
   expect(pairLabel({ a: al30, b: { ...al30d, currency: "ARS" } })).toBe("AL30/AL30D");
   expect(pairLabel({ a: al30, b: { ...al30d, market: "rx" } })).toBe("AL30/AL30D");
+});
+it("names BYMA cable pairs when Matriz reports both AL30D and AL30C as USD", () => {
+  const al30 = { id: "bm_MERV_AL30_24hs", symbol: "AL30", market: "bm", currency: "ARS", settlement: "2" };
+  const al30d = { ...al30, id: "bm_MERV_AL30D_24hs", symbol: "AL30D", currency: "USD" };
+  const al30c = { ...al30d, id: "bm_MERV_AL30C_24hs", symbol: "AL30C" };
+  const al30dCash = { ...al30d, id: "bm_MERV_AL30D_CI", symbol: "AL30D (CI)", settlement: "1" };
+  const al30cCash = { ...al30c, id: "bm_MERV_AL30C_CI", symbol: "AL30C (CI)", settlement: "1" };
+  const spot = { id: "rx_DDF_DLR_SPOT", symbol: "DLR/SPOT", market: "rx", currency: "ARS", settlement: "Referencia" };
+
+  expect(pairLabel({ a: al30, b: al30d })).toBe("MEP AL30");
+  expect(pairLabel({ a: al30, b: al30c })).toBe("CCL AL30");
+  expect(pairLabel({ a: al30d, b: al30c })).toBe("CANJE AL30");
+  expect(pairLabel({ a: al30, b: al30c, c: spot })).toBe("CCL AL30 vs DLR/SPOT");
+  expect(pairLabel({ a: al30dCash, b: al30cCash })).toBe("CANJE AL30 CI");
+  expect(pairLabel({ a: al30dCash, b: al30c })).toBe("AL30D (CI)/AL30C");
+  expect(pairLabel({ a: { ...al30d, market: "other" }, b: { ...al30c, market: "other" } })).toBe("AL30D/AL30C");
 });
 it("dates a valid ratio from the latest market trade including C, without inventing missing times", () => {
   const at = Date.parse("2026-11-20T17:42:05Z");
