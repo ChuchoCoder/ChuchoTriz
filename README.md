@@ -213,7 +213,8 @@ Por ejemplo, la primera línea configura tres botones para AL30: `100k/R5`,
 
 </details>
 
-El orden de los presets y de las líneas se conserva al guardar. Los errores
+El orden de los presets de cada instrumento se conserva al guardar. Chrome puede
+reordenar las líneas de instrumentos. Los errores
 indican su número de línea y deben corregirse antes de guardar o volver al
 modo visual. **Guardar cambios**, **Restablecer valores** y **Descartar cambios**
 funcionan también en RAW.

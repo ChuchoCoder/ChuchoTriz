@@ -33,8 +33,13 @@ function displaySummary(preset: DraftPreset): { title: string; detail: string } 
 }
 type EditorSettings = { presets: DraftPresets };
 const toEditorSettings = (settings: StoredSettings): EditorSettings => ({ presets: toDraft(settings.book) });
-const sameSettings = (a: EditorSettings, b: EditorSettings) => JSON.stringify(a) === JSON.stringify(b);
-const conflictMessage = "Las preferencias cambiaron en otra vista. Tu borrador se conserva. Descartá los cambios para cargar lo guardado antes de volver a guardar.";
+function sameSettings(a: EditorSettings, b: EditorSettings): boolean {
+  const entries = Object.entries(a.presets);
+  // Chrome can reorder object keys when saving. The order within each preset list still matters.
+  return entries.length === Object.keys(b.presets).length && entries.every(([ticker, values]) =>
+    Object.hasOwn(b.presets, ticker) && JSON.stringify(values) === JSON.stringify(b.presets[ticker]));
+}
+const conflictMessage = "Los presets guardados cambiaron. Si tenés cambios sin guardar, copialos desde RAW antes de descartar el borrador.";
 
 function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) {
   const [presets, setPresets] = useState<DraftPresets>({});
