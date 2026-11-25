@@ -85,7 +85,7 @@
           if (!inputs.some(i => i.id === "source" && i.value === "close") || !inputs.some(i => i.id === "symbol2" && i.value === second.symbol)) throw Error("Matriz no confirmó los instrumentos del indicador Ratio.");
           ratio.applyOverrides(ratioStyle); ratio.setVisible(true); ratio.priceScale().setMode(0);
           const overlayId = await chart.createStudy(comparisonName, true, false,
-            { symbol: comparison.symbol, ...(comparisonName === "Compare" ? { source: "close" } : {}) }, undefined, { priceScale: c ? "new-right" : "new-left" });
+            { symbol: comparison.symbol, ...(comparisonName === "Compare" ? { source: "close" } : {}) }, undefined, c ? undefined : { priceScale: "new-left" });
           if (overlayId == null) throw Error("Matriz no pudo agregar el instrumento a comparar.");
           added.push(overlayId);
           assertCurrent(task, a, b, c);
@@ -93,10 +93,12 @@
           const study = chart.getStudyById(overlayId);
           study.setVisible(true);
           if (c) {
-            if (typeof study.unmergeDown !== "function" || typeof study.paneIndex !== "function" || typeof ratio.paneIndex !== "function") throw Error("Matriz no permite abrir la Referencia C en un panel propio.");
+            if (typeof study.unmergeDown !== "function" || typeof study.changePriceScale !== "function" ||
+                typeof study.paneIndex !== "function" || typeof ratio.paneIndex !== "function") throw Error("Matriz no permite abrir la Referencia C en un panel propio.");
             // The comparison starts with A. Inserting a pane directly below A pushes A/B down.
             study.unmergeDown();
             if (study.paneIndex() !== 1 || ratio.paneIndex() !== 2) throw Error("Matriz no confirmó el panel de Referencia C entre A y el ratio A/B.");
+            study.changePriceScale("new-right");
           }
           const scale = study.priceScale(); scale.setMode(0); scale.setAutoScale(true);
           if (!study.getInputValues().some(i => i.id === "symbol" && i.value === comparison.symbol) || scale.getMode() !== 0 || chart.resolution() !== "5" || chart.chartType() !== 1) throw Error("Matriz no confirmó la comparación en números y velas de 5 minutos.");

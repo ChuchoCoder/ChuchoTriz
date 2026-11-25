@@ -18,7 +18,7 @@ async page => {
       const s = state.snapshot, overlay = s.studies.find(s => s.name === 'Overlay'), ratio = s.studies.find(s => s.name === 'Ratio');
       assert(popup.url() === href && page.url() === original && !state.opener, 'Chart opens in a separate tab without navigating the source or exposing its opener');
       assert(s.resolution === '5' && s.chartType === 1 && s.mainMode === 0, 'Native chart initializes numeric five-minute candles');
-      assert(overlay.inputs.symbol === comparison && overlay.options.priceScale === (hasC ? 'new-right' : 'new-left') && overlay.scaleMode === 0, 'Comparison has the expected symbol and numeric scale: ' + comparison);
+      assert(overlay.inputs.symbol === comparison && overlay.scalePosition === (hasC ? 'new-right' : 'new-left') && overlay.scaleMode === 0, 'Comparison has the expected symbol and numeric scale: ' + comparison);
       assert(overlay.pane === (hasC ? 1 : 0) && ratio.pane === (hasC ? 2 : 1), 'C has a separate pane between A and A/B; B is overlaid on A for plain pairs');
       assert(ratio.inputs.source === 'close' && ratio.scaleMode === 0, 'Native Ratio uses closes and a numeric scale');
       assert(s.studies.length === 2 && s.drawings === 0, 'The new chart discards inherited instruments, indicators and drawings');

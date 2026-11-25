@@ -4,18 +4,21 @@ Para el **gráfico nativo de ratios**, ejecutar
 `tools/validate-ratio-chart.playwright.js` sobre `/fixture` del servidor
 `node tools/ratios-fixture.mjs`, con el MCP compartido. Los gráficos del fixture
 comienzan con estudios y dibujos heredados: al abrir desde widget, Monitor u
-Operaciones deben quedar sólo el Ratio con línea blanca y la comparación B/C
-numérica a izquierda. El gráfico mantiene velas de cinco minutos. En una
-comprobación nativa, usar una pestaña propia sin guardar el gráfico; comprobar
-además que al reabrir un gráfico normal se recupera el diseño original.
+Operaciones deben quedar sólo el Ratio con línea blanca y la comparación
+solicitada. Para un par A/B, B se muestra en el eje izquierdo del panel de A.
+Con Referencia C, C tiene escala numérica propia en el panel intermedio,
+entre las velas de A y el Ratio A/B. El gráfico mantiene velas de cinco minutos.
+En una comprobación nativa, usar una pestaña propia sin guardar el gráfico y
+comprobar que al reabrir un gráfico normal se recupera el diseño original.
 
 Para **futuros como referencia C**, ejecutar además
 `tools/validate-ratio-futures.playwright.js` sobre `/fixture` del servidor
 `node tools/ratios-fixture.mjs`, con el MCP compartido. Verifica selección de
 DLR/NOV26 en el widget y DLR/DIC26 en Monitor, cálculo sin multiplicador de
 contrato, persistencia tras recarga, actualización y ausencia de precio,
-restricción a monitor y gráfico de C a izquierda numérica con velas de cinco
-minutos. Usar sólo la página loopback con datos sintéticos, nunca el broker.
+restricción a monitor y gráfico de C en su panel numérico propio, con las velas
+de cinco minutos arriba y A/B abajo. Usar sólo la página loopback con datos
+sintéticos, nunca el broker.
 
 Para el tab **Ratios**, ejecutá además
 `tools/validate-ratio-operations.playwright.js` en la URL `/fixture?scenario=regression`
