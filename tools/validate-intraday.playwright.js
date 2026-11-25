@@ -70,8 +70,9 @@ async (page, screenshots) => {
   checks.push('Live quotes remain visible during a series 401 and historical retry recovers');
   await screenshot('comparison', dialog);
   await dialog.getByRole('button', { name: 'Brecha %' }).click();
-  await dialog.locator('.ct-intraday-zero').waitFor({ state: 'attached' });
-  assert(/12,00\s*%/.test(await dialog.locator('.ct-intraday-legend strong').textContent()), 'Spread is (1400 / 1250 - 1) × 100, with an equality line at zero');
+  await dialog.locator('.ct-intraday-axis-left').first().waitFor();
+  assert(/12,00\s*%/.test(await dialog.locator('.ct-intraday-legend strong').textContent()), 'Spread is (1400 / 1250 - 1) × 100');
+  assert(!await dialog.locator('.ct-intraday-zero').count(), 'A positive-only spread is not forced to include zero');
   await screenshot('spread', dialog);
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'hidden' });
@@ -95,6 +96,24 @@ async (page, screenshots) => {
   assert(!(await widget.locator('.ct-intraday-axis-right').first().textContent()).includes('%'), 'The dollar remains on the right numeric axis');
   assert(/12,00\s*%/.test(await spreadValue.textContent()), 'The in-widget spread uses its own persisted C/100');
   await screenshot('widget-with-reference', widget);
+  const spreadOnly = widget.getByRole('button', { name: 'Sólo brecha', exact: true });
+  const chosenDay = await daySelector.inputValue();
+  const bothTicks = await widget.locator('.ct-intraday-axis-left').allTextContents();
+  const plotCoverage = () => widget.locator('svg[role="img"]').evaluate(svg =>
+    svg.querySelector('.ct-intraday-grid').getBBox().width / svg.viewBox.baseVal.width);
+  assert(await plotCoverage() > 0.75, 'Both axes leave most of the widget width for the data');
+  await spreadOnly.click();
+  assert(await spreadOnly.getAttribute('aria-pressed') === 'true' &&
+    !await widget.locator('.ct-intraday-axis-right, svg .ct-intraday-line-ratio, .ct-intraday-legend .ct-intraday-line-ratio').count(),
+  'Sólo brecha hides the dollar line, legend and right axis');
+  assert(await daySelector.inputValue() === chosenDay && JSON.stringify(await widget.locator('.ct-intraday-axis-left').allTextContents()) === JSON.stringify(bothTicks),
+    'Sólo brecha keeps the selected session and spread scale');
+  const controls = await widget.locator('.ct-intraday-controls').boundingBox();
+  assert(controls.height <= 32, 'Controls fit on one compact row at the default width');
+  assert(await plotCoverage() > 0.85, 'Sólo brecha reclaims the right axis margin');
+  await screenshot('widget-spread-only', widget);
+  await spreadOnly.click();
+  assert(await widget.locator('svg .ct-intraday-line-ratio').count() === 1, 'Toggling again restores the dollar line');
   await daySelector.selectOption({ index: 0 });
   await valueIs(spreadValue, '—', 'The current session does not use an older reference close');
   await page.reload();

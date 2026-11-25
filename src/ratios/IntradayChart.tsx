@@ -135,12 +135,17 @@ function display(value: number | undefined, percent: boolean) {
   return value === undefined ? "—" : percent ? percentage.format(value / 100) : ratioLabel(value);
 }
 
-function chartScale(values: number[], percent: boolean, top: number, bottom: number) {
-  const low = Math.min(...values, ...(percent ? [0] : [])), high = Math.max(...values, ...(percent ? [0] : []));
-  const padding = (high - low) * 0.08 || Math.max(Math.abs(high) * 0.001, 0.0001);
+function chartScale(values: number[], top: number, bottom: number) {
+  const low = Math.min(...values), high = Math.max(...values);
+  const span = high - low, magnitude = Math.max(Math.abs(low), Math.abs(high));
+  const padding = span > Number.EPSILON * Math.max(1, magnitude) * 8
+    ? span * 0.08 : Math.max(magnitude * 0.001, 0.0001);
   const min = low - padding, max = high + padding;
-  return { percent, min, max, y: (value: number) => bottom - (bottom - top) * (value - min) / (max - min) };
+  return { min, max, y: (value: number) => bottom - (bottom - top) * (value - min) / (max - min) };
 }
+
+// The SVG axis text uses 10px type. Allow six pixels per character plus the label gap.
+const axisWidth = (labels: string[]) => labels.length ? Math.max(...labels.map(label => label.length)) * 6 + 10 : 6;
 
 function Plot({ rows, lines, dual, label }: {
   rows: ReturnType<typeof intradayPoints>; lines: Line[]; dual: boolean; label: string;
@@ -158,10 +163,21 @@ function Plot({ rows, lines, dual, label }: {
   }, []);
   const active = index === undefined ? undefined : rows[Math.min(index, rows.length - 1)];
   const width = size.width, height = size.height;
-  const left = dual ? 68 : 12, top = 12, bottom = Math.max(top + 8, height - 24), right = Math.max(left + 12, width - 84);
+  const spreadOnly = lines.length === 1 && lines[0].key === "spread";
+  const hasSpread = dual || spreadOnly;
+  const top = 9, bottom = Math.max(top + 8, height - 22);
   const onRight = dual ? lines.filter(line => line.key !== "spread") : lines;
-  const mainScale = chartScale(rows.flatMap(row => onRight.flatMap(line => row[line.key] ?? [])), onRight[0].key === "spread", top, bottom);
-  const spreadScale = dual ? chartScale(rows.flatMap(row => row.spread ?? []), true, top, bottom) : mainScale;
+  const mainScale = chartScale(rows.flatMap(row => onRight.flatMap(line => row[line.key] ?? [])), top, bottom);
+  const spreadScale = dual ? chartScale(rows.flatMap(row => row.spread ?? []), top, bottom) : mainScale;
+  const precision = Math.min(6, Math.max(2, Math.ceil(-Math.log10((spreadScale.max - spreadScale.min) / 3))));
+  const percentAxis = precision === 2 ? percentage : new Intl.NumberFormat("es-AR", { style: "percent", minimumFractionDigits: precision, maximumFractionDigits: precision });
+  const ticks = [0, 1, 2, 3].map(tick => {
+    const value = mainScale.min + (mainScale.max - mainScale.min) * tick / 3;
+    const spread = spreadScale.min + (spreadScale.max - spreadScale.min) * tick / 3;
+    return { y: mainScale.y(value), numeric: ratioLabel(value), percent: percentAxis.format(spread / 100) };
+  });
+  const left = axisWidth(hasSpread ? ticks.map(tick => tick.percent) : []);
+  const right = Math.max(left + 12, width - axisWidth(spreadOnly ? [] : ticks.map(tick => tick.numeric)));
   const from = rows[0].at, to = Math.max(rows[rows.length - 1].at, from + INTERVAL);
   const x = (at: number) => left + (right - left) * (at - from) / (to - from);
   return <div className="ct-intraday-plot" ref={container}>
@@ -179,17 +195,13 @@ function Plot({ rows, lines, dual, label }: {
         const step = event.key === "ArrowLeft" ? -1 : 1;
         setIndex(previous => Math.max(0, Math.min(rows.length - 1, (previous ?? rows.length - 1) + step)));
       }}>
-      {[0, 1, 2, 3].map(tick => {
-        const value = mainScale.min + (mainScale.max - mainScale.min) * tick / 3, yy = mainScale.y(value);
-        const spreadTick = spreadScale.min + (spreadScale.max - spreadScale.min) * tick / 3;
-        return <g key={tick}><path className="ct-intraday-grid" d={`M${left},${yy}H${right}`} />
-          <text className="ct-intraday-axis-right" x={right + 7} y={yy} dominantBaseline="middle">{display(value, mainScale.percent)}</text>
-          {dual && <text className="ct-intraday-axis-left" x={left - 7} y={yy} textAnchor="end" dominantBaseline="middle">{display(spreadTick, true)}</text>}
-        </g>;
-      })}
+      {ticks.map(({ y, numeric, percent }, index) => <g key={index}><path className="ct-intraday-grid" d={`M${left},${y}H${right}`} />
+        {!spreadOnly && <text className="ct-intraday-axis-right" x={right + 4} y={y} dominantBaseline="middle">{numeric}</text>}
+        {hasSpread && <text className="ct-intraday-axis-left" x={left - 4} y={y} textAnchor="end" dominantBaseline="middle">{percent}</text>}
+      </g>)}
       {(rows.length === 1 ? [from] : [from, bucket((from + to) / 2), to]).filter((at, i, ticks) => ticks.indexOf(at) === i).map(at =>
         <g key={at}><path className="ct-intraday-grid" d={`M${x(at)},${top}V${bottom}`} /><text x={x(at)} y={bottom + 17} textAnchor={at === from ? "start" : at === to ? "end" : "middle"}>{time.format(at)}</text></g>)}
-      {spreadScale.percent && <path className="ct-intraday-zero" d={`M${left},${spreadScale.y(0)}H${right}`} />}
+      {hasSpread && spreadScale.min <= 0 && spreadScale.max >= 0 && <path className="ct-intraday-zero" d={`M${left},${spreadScale.y(0)}H${right}`} />}
       {lines.map(line => {
         const points = rows.filter(row => row[line.key] !== undefined);
         const { y } = line.key === "spread" ? spreadScale : mainScale;
@@ -223,7 +235,7 @@ export function IntradayChart({ pair, view = "ratio" }: { pair: IntradayPair; vi
     [a, b, c, pair.cDivisor, market.history, market.live]);
   const ratio = pairLabel({ a: pair.a, b: pair.b });
   const reference = pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""}` : "Referencia C";
-  const lines: Line[] = view === "spread" ? [{ key: "spread", label: "Brecha" }]
+  const lines: Line[] = view === "spread" ? [{ key: "spread", label: `Brecha vs ${reference}` }]
     : [{ key: "ratio", label: ratio }, ...(view === "comparison" ? [{ key: "reference" as const, label: reference }]
       : view === "dollar-spread" ? [{ key: "spread" as const, label: `Brecha vs ${reference}` }] : [])];
   const available = points.filter(point => point.ratio !== undefined || point.reference !== undefined);

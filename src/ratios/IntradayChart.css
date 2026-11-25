@@ -24,8 +24,9 @@
   gap: 6px 12px;
 }
 
-.ct-intraday-controls { padding: 8px 10px 2px; }
-.ct-intraday-controls > div { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.ct-intraday-widget .ct-ratios-title { height: 30px; padding-inline: 8px; }
+.ct-intraday-controls { padding: 5px 7px 1px; gap: 4px 8px; font-size: 11px; }
+.ct-intraday-controls > div { display: inline-flex; align-items: center; gap: 3px; }
 .ct-intraday-controls select, .ct-intraday-status button, .ct-intraday-views button {
   border: 1px solid #8190a5;
   border-radius: 4px;
@@ -36,11 +37,13 @@
 }
 
 .ct-intraday-legend { padding: 1px 5px; }
+.ct-intraday-widget .ct-intraday-body { padding: 4px 5px 5px; gap: 2px; }
+.ct-intraday-widget .ct-intraday-legend { padding: 0 2px; gap: 3px 8px; font-size: 11px; }
 .ct-intraday-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 .ct-intraday-legend i { width: 11px; height: 3px; border-radius: 3px; background: var(--intraday-line); }
 .ct-intraday-legend time { margin-left: auto; }
-.ct-intraday-session { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
-.ct-intraday-session select, .ct-intraday-controls .ct-intraday-reference {
+.ct-intraday-session { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.ct-intraday-session select, .ct-intraday-controls .ct-intraday-reference, .ct-intraday-controls .ct-intraday-mode {
   border: 1px solid #8190a5;
   border-radius: 4px;
   padding: 3px 6px;
@@ -49,6 +52,9 @@
   font: inherit;
 }
 .ct-intraday-controls .ct-intraday-reference { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ct-intraday-controls select, .ct-intraday-controls .ct-intraday-reference, .ct-intraday-controls .ct-intraday-mode,
+.ct-intraday-widget .ct-intraday-session select { padding: 2px 5px; }
+.ct-intraday-controls .ct-intraday-mode[aria-pressed=true] { background: #1378aa; border-color: #1378aa; color: white; }
 .ct-intraday-reference-editor .ct-ratios-editor-actions { justify-content: flex-end; }
 .ct-intraday-reference-editor .ct-ratios-editor-actions label { margin: 0; margin-right: auto; }
 .ct-intraday-line-ratio, .ct-intraday-line-spread { --intraday-line: #1689d0; }

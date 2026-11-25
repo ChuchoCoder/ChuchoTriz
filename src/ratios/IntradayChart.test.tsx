@@ -61,7 +61,7 @@ it("opens both intraday views from the row with its exact instruments and diviso
     expect(dialog.querySelector(".ct-intraday-legend .ct-intraday-line-reference strong")?.textContent).toBe("1.500,00");
     await act(async () => [...dialog.querySelectorAll("button")].find(button => button.textContent === "Brecha %")!.click());
     expect(dialog.querySelector(".ct-intraday-legend strong")?.textContent).toMatch(/6,67\s*%/);
-    expect(dialog.querySelector(".ct-intraday-zero")).not.toBeNull();
+    expect(dialog.querySelector(".ct-intraday-zero")).toBeNull();
     expect(call.mock.calls.filter(([method]) => method === "ratioIntradayHistory")).toHaveLength(1);
     await act(async () => dialog.dispatchEvent(new Event("cancel", { cancelable: true, bubbles: true })));
     expect(document.querySelector("dialog")).toBeNull();
@@ -71,6 +71,31 @@ it("opens both intraday views from the row with its exact instruments and diviso
     host.remove();
     if (!showModal) Reflect.deleteProperty(prototype, "showModal");
     if (!close) Reflect.deleteProperty(prototype, "close");
+  }
+});
+
+it.each([[4, 6], [-6, -4], [-2, 2]])("uses the visible spread bounds (%s to %s) with a margin", async (low, high) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const start = Date.parse("2026-11-25T03:00:00Z");
+  call.mockImplementation((method: string) => Promise.resolve(method === "ratioIntradayQuotes"
+    ? { revision: 1, start, connected: true, points: {} }
+    : { revision: 1, series: { ...history, c: { points: [
+      { at: first, value: 160000 / (1 + low / 100) },
+      { at: next, value: 164000 / (1 + high / 100) },
+    ] } } }));
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<IntradayChart pair={pair} view="spread" />));
+    const ticks = [...host.querySelectorAll(".ct-intraday-axis-left")].map(node => Number(node.textContent?.replace(",", ".").replace("%", "").trim()));
+    const margin = (high - low) * 0.08;
+    expect(ticks[0]).toBeCloseTo(low - margin);
+    expect(ticks.at(-1)).toBeCloseTo(high + margin);
+    expect(!!host.querySelector(".ct-intraday-zero")).toBe(low < 0 && high > 0);
+    expect(host.querySelector(".ct-intraday-axis-right")).toBeNull();
+    expect(host.querySelector("svg .ct-intraday-line-ratio")).toBeNull();
+  } finally {
+    await act(async () => root.unmount()); host.remove();
   }
 });
 

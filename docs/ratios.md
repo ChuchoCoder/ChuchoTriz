@@ -32,12 +32,15 @@ El par se resuelve por especie BYMA, moneda y liquidación. Si falta una pata
 o hay más de una coincidencia, el widget indica que el par no está disponible.
 Desde **+ Referencia C** se puede elegir una especie y activar **Dividir C por
 100**. El widget guarda esa referencia y dibuja MEP o CCL en el eje derecho y
-la brecha porcentual a la izquierda, con la igualdad marcada en cero.
+la brecha porcentual a la izquierda. **Sólo brecha** oculta la línea del dólar
+en el widget actual y conserva la rueda seleccionada.
 
 En una fila con Referencia C del widget Ratios o del Monitor, el botón de
 gráfico marcado **C** abre dos vistas. **Comparación** muestra A/B y la
 referencia en una escala numérica común. **Brecha %** muestra
-`((A/B) / C − 1) × 100` y marca el nivel de igualdad en cero. Ambas vistas
+`((A/B) / C − 1) × 100`. El eje porcentual usa el mínimo y máximo de la brecha
+visible más un margen. La línea de igualdad se muestra si el cero queda
+dentro del eje. Ambas vistas
 usan `C/100` si la fila tiene activado ese divisor. El ícono de gráfico nativo
 continúa abriendo el gráfico de Matriz.
 

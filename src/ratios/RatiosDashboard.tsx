@@ -238,6 +238,7 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
   const controls = useId();
   const [issue, setIssue] = useState("");
   const [reference, setReference] = useState<RatioReference>();
+  const [spreadOnly, setSpreadOnly] = useState(false);
   const run = async (method: "dollarEdit" | "ratiosRemove", selection?: DollarSelection & RatioReference) => {
     setIssue("");
     const { c, ...fields } = selection ?? {};
@@ -269,6 +270,8 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
         onClick={() => setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor })}>
         {config.c ? `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}` : "+ Referencia C"}
       </button>
+      {config.c && <button type="button" className="ct-intraday-mode" aria-pressed={spreadOnly}
+        onClick={() => setSpreadOnly(value => !value)}>Sólo brecha</button>}
     </div>
     {reference && <form className="ct-intraday-reference-editor ct-ratios-editor NoDraggable" aria-label="Referencia del dólar intradiario"
       onMouseDown={event => event.stopPropagation()} onSubmit={event => {
@@ -287,7 +290,7 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
       </div>
     </form>}
     {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
-    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? "dollar-spread" : "ratio"} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
+    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
   </section>;
 }
 
