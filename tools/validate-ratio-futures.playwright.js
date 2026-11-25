@@ -47,7 +47,7 @@ async page => {
   try {
     await popup.waitForFunction(() => document.querySelector('.ct-ratio-chart-status')?.textContent.includes('velas de 5 min'), null, { timeout: 12000 });
     const snapshot = await popup.evaluate(() => window.ratioChartFixture.snapshot());
-    assert(snapshot.resolution === '5' && snapshot.chartType === 1 && snapshot.studies.some(s => s.name === 'Overlay' && s.inputs.symbol === 'DLR/DIC26' && s.options.priceScale === 'new-left' && s.scaleMode === 0), 'Chart compares the exact future C on a numeric left scale with five-minute candles');
+    assert(snapshot.resolution === '5' && snapshot.chartType === 1 && snapshot.studies.some(s => s.name === 'Overlay' && s.inputs.symbol === 'DLR/DIC26' && s.pane === 1 && s.options.priceScale === 'new-right' && s.scaleMode === 0), 'Chart gives the exact future C its own numeric pane with five-minute candles above');
   } finally { await popup.close(); }
   await page.reload({ waitUntil: 'domcontentloaded' }); await settings(); await monitorRow.waitFor();
   assert(await monitorRow.count() === 1, 'Monitor future reference survives a real page reload');

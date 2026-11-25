@@ -32,13 +32,13 @@ it("ignores ordinary chart pages and malformed requests", () => {
   }
 });
 
-it("renders an accessible chart icon with a safe new-tab link and the C limitation", async () => {
+it("renders an accessible chart icon with the exact reference and a safe new-tab link", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const host = document.createElement("div"), root = createRoot(host);
   await act(async () => root.render(<RatioChartLink pair={{ a, b, c }} />));
   const link = host.querySelector("a")!;
   expect(link.target).toBe("_blank"); expect(link.rel).toBe("noopener noreferrer");
-  expect(link.getAttribute("aria-label")).toContain("sin referencia C"); expect(link.title).toContain("DLR/SPOT en el eje izquierdo");
+  expect(link.getAttribute("aria-label")).toContain("con referencia DLR/SPOT"); expect(link.title).toContain("DLR/SPOT en un panel propio");
   expect(link.querySelector("svg")).not.toBeNull();
   await act(async () => root.unmount());
 });
@@ -46,17 +46,18 @@ it("renders an accessible chart icon with a safe new-tab link and the C limitati
 it("passes both legs and C to the native reader and shows a persistent explanation", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   window.history.replaceState({}, "", `/security/${a.id}?interval=5&ctRatio=${b.id}&ctRatioC=${c.id}`);
-  call.mockResolvedValue({ a: a.symbol, b: b.symbol, comparison: c.symbol });
+  call.mockResolvedValueOnce({ a: a.symbol, b: b.symbol, comparison: c.symbol })
+    .mockResolvedValueOnce({ a: b.symbol, b: a.symbol, comparison: a.symbol });
   const host = document.createElement("div"), root = createRoot(host);
   await act(async () => root.render(<RatioChart />));
   expect(call).toHaveBeenCalledWith("ratioChart", { a: a.id, b: b.id, c: c.id });
-  expect(host.textContent).toContain("velas de 5 min"); expect(host.textContent).toContain("DLR/SPOT en el eje izquierdo");
-  expect(host.textContent).toContain("A/B sin dividir por C");
+  expect(host.textContent).toContain("velas de 5 min"); expect(host.textContent).toContain("DLR/SPOT en un panel propio");
+  expect(host.textContent).toContain("Referencia C en el medio y ratio de cierres A/B abajo");
   await act(async () => {
     window.history.replaceState({}, "", `/security/${a.id}?interval=5`);
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
-  expect(host.textContent).toContain("DLR/SPOT en el eje izquierdo");
+  expect(host.textContent).toContain("DLR/SPOT en un panel propio");
   expect(dispose).not.toHaveBeenCalled();
   await act(async () => {
     window.history.pushState({}, "", "/principal/favoritos");
@@ -69,6 +70,7 @@ it("passes both legs and C to the native reader and shows a persistent explanati
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
   expect(call).toHaveBeenLastCalledWith("ratioChart", { a: b.id, b: a.id });
-  expect(host.textContent).not.toContain("A/B sin dividir por C");
+  expect(host.textContent).toContain("AL30 en el eje izquierdo");
+  expect(host.textContent).not.toContain("panel propio");
   await act(async () => root.unmount()); expect(dispose).toHaveBeenCalled();
 });

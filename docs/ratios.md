@@ -7,11 +7,10 @@ icono de gráfico. Abre una pestaña nueva del mismo broker con A como instrumen
 principal, velas de 5 minutos y el indicador nativo Ratio configurado como
 `cierre de A / cierre de B`. Conserva los IDs, el orden y las liquidaciones del par.
 
-B se agrega como instrumento a comparar en un eje izquierdo independiente,
-con precios numéricos, sin convertir la escala a porcentajes. Si la fila tiene
-referencia C, se compara C en ese eje en lugar de B. El indicador Ratio sigue
-mostrando A/B; un aviso aclara que no se divide por C. Tampoco reproduce el
-formato porcentual `(ratio − 1) × 100` de la grilla.
+En un par A/B, B se compara en el eje izquierdo del panel de velas de A.
+Con Referencia C, el gráfico muestra las velas de A arriba, el precio de C
+en su propio panel intermedio y el ratio de cierres A/B en el panel inferior.
+Los tres paneles comparten el eje temporal y usan escalas verticales numéricas.
 
 La apertura espera al gráfico nativo y limpia los indicadores, comparaciones y
 dibujos heredados del último diseño en esa pestaña. Después agrega únicamente
@@ -44,8 +43,8 @@ contrato. Por ejemplo, `(AL30/AL30D) / DLR/DIC26` compara el dólar MEP con ese
 futuro mediante `((A/B)/C − 1) × 100`. Si no tiene último precio, muestra la
 cotización como no disponible; no completa datos con el cierre anterior.
 Los futuros se identifican como **Futuro · sólo monitor**. La elección se guarda
-y el gráfico nativo compara ese contrato en el eje izquierdo numérico, manteniendo
-el indicador A/B y el aviso habitual para C.
+y el gráfico nativo muestra ese contrato en el panel de Referencia C, entre
+las velas de A y el indicador A/B.
 
 ## Referencias cotizadas por 100 nominales
 
