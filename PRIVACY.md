@@ -53,6 +53,12 @@ quedan en el servidor de Matriz asociado a ese dashboard. No consulta reportes
 de cuenta ni envía operaciones. Esos registros del dashboard no se eliminan al
 desinstalar ChuchoTriz; cerrá el panel desde su título si querés retirarlos.
 
+El widget **Dólar intradiario** también guarda en ese dashboard los instrumentos
+A, B y la Referencia C opcional, con su divisor. El widget y los gráficos
+intradiarios de las filas de Ratios consultan precios recientes y series
+históricas de esos instrumentos en Matriz. ChuchoTriz mantiene las series
+en memoria en la pestaña abierta.
+
 La extensión no incorpora analítica, servidores propios, cuentas de usuario,
 pagos ni transmisión de esos datos a terceros. No lee contraseñas, cookies ni
 tokens de autenticación. Las comunicaciones de Matriz con su broker son
