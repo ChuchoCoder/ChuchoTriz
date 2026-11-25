@@ -20,7 +20,7 @@ async page => {
       const make = (id, cfiCode, currency, last, factor = 1) => ({ id, symbolStr: id, marketId: 'bm', currency, settlementType: '2', cfiCode,
         refData: { totalAmountFactor: factor, contractMultiplier: 1, roundLot: 1 }, md: { lst: last, refp: last, refdStr: new Date(Date.now() - 86400000).toISOString().slice(0, 10), seq: 10, bid: last - .1, bsz: 120, ask: last + .1, asz: 150, lstdStr: new Date().toISOString() },
         book: Object.fromEntries(Array.from({ length: 4 }, (_, i) => i + 1).flatMap(i => [[`bidBook${i}`, last - (i + 1) / 10], [`bszBook${i}`, 1000 + i], [`askBook${i}`, last + (i + 1) / 10], [`aszBook${i}`, 2000 + i]])) });
-      const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('AL30C', 'DBXXXX', 'USD', 48, .01), make('GD30', 'DBXXXX', 'ARS', 90000, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100),
+      const instruments = [make('BMA', 'ESXXXX', 'ARS', 100), make('GGAL', 'ESXXXX', 'ARS', 50), make('AL30', 'DBXXXX', 'ARS', 80000, .01), make('AL30D', 'DBXXXX', 'USD', 50, .01), make('AL30C', 'DBXXXX', 'EXT', 48, .01), make('GD30', 'DBXXXX', 'ARS', 90000, .01), make('SPY', 'EMXXXX', 'ARS', 100), make('LETRA', 'DYXTXR', 'ARS', 100), make('ON', 'DBXXFR', 'ARS', 100),
         ...['ALUA', 'TXAR', 'TGSU2', 'TGNO4'].map(id => make(id, 'ESXXXX', 'ARS', 100)),
         ...[1, 7].map(days => ({ ...make(`bm_MERV_PESOS_${days}D`, 'RPXXXX', 'ARS', days === 1 ? 18.8 : 20.5), symbolStr: `PESOS - ${days}D`, settlementType: null }))];
       instruments.push({ ...make('rx_DDF_DLR_SPOT', 'MRIXXX', 'ARS', 1572.5), marketId: 'rx', settlementType: null });
@@ -34,7 +34,7 @@ async page => {
   await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
   await page.waitForFunction(() => { const e = document.querySelector('.ro-add-watch input'); return e && !e.disabled; }, null, { polling: 100 });
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 10);
-  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['AL30/AL30D', 'AL30/AL30C', 'AL30D/AL30C', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D', '(AL30/AL30D) / DLR/SPOT', '(AL30/AL30C) / DLR/SPOT']), 'Default order');
+  assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['MEP AL30', 'CCL AL30', 'CANJE AL30', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D', 'MEP AL30 vs DLR/SPOT', 'CCL AL30 vs DLR/SPOT']), 'Default order');
   const rates = page.locator('.ro-table-wrap tr').filter({ hasText: 'PESOS - 7D/PESOS - 1D' });
   assert(!await rates.getByRole('button', { name: 'Sólo monitor' }).isEnabled(), 'Rates cannot open price operations');
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('PESOS - 7D/PESOS - 1D'))?.textContent.includes('20,50% TNA'));
@@ -95,7 +95,7 @@ async page => {
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'BMA'); s.md.refdStr = mainStore.securityStore.securities.find(s => s.id === 'GGAL').md.refdStr; });
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].find(r => r.textContent.includes('BMA/GGAL'))?.querySelector('.ro-daily').textContent === '0,00%');
   checks.push('Missing or mismatched daily references show a dash while retaining the current ratio');
-  await click(button('Quitar par AL30/AL30D'));
+  await click(button('Quitar par MEP AL30'));
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
   await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
@@ -189,7 +189,7 @@ async page => {
   assert(await page.locator('.ro-table-wrap tr').filter({ hasText: 'SPY/GGAL' }).count() === 0, 'Account isolation');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'DEMO-NO-BROKER'; });
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 11); checks.push('Account switch clears old account, seeds defaults separately and restores original local book');
-  const bond = page.locator('tr').filter({ hasText: 'AL30/AL30D' }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
+  const bond = page.locator('tr').filter({ hasText: 'MEP AL30' }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
   assert(await label('DDMM A %').inputValue() === '0.01', 'Bond DDMM');
   assert(await label('Conversión para cantidades').count() === 0, 'Mixed currencies require no FX input');
   await wait(() => document.querySelector('[aria-label="Cantidad B"]').value === '100');
@@ -260,41 +260,41 @@ async page => {
   assert(chipAlignment.length && chipAlignment.every(Boolean), 'State has its own column and chips align vertically with row actions');
   checks.push('Operation pairs use green Long and red Short chips in both directions without changing A/B order; state is separate and chips centered');
   await click(button('1 · Monitor'));
-  await click(button('Quitar par (AL30/AL30D) / DLR/SPOT'));
+  await click(button('Quitar par MEP AL30 vs DLR/SPOT'));
   await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
   await page.getByLabel('Agregar referencia C', { exact: true }).check();
   await choose('Referencia C · ej. DLR/SPOT', 'Dólar oficial');
   await click(button('Agregar par'));
-  const comparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30D) / DLR/SPOT' });
+  const comparison = page.locator('.ro-monitor-table tr').filter({ hasText: 'MEP AL30 vs DLR/SPOT' });
   await comparison.waitFor();
   await wait(() => [...document.querySelectorAll('.ro-ratio')].some(e => e.textContent === '+1,75% (27,50)'));
   assert((await comparison.innerText()).includes('1.572,50'), 'The comparison shows native official spot alongside MEP bond prices');
   assert(await comparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Three-price comparisons cannot become two-leg operations');
   assert((await book()).schema === 2, 'Three-price monitor books reject legacy readers');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 1600; s.md.seq++; });
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30D) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '0,00% (0,00)'));
-  const cclComparison = page.locator('.ro-monitor-table tr').filter({ hasText: '(AL30/AL30C) / DLR/SPOT' });
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30C) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '+4,17% (66,67)'));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('MEP AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '0,00% (0,00)'));
+  const cclComparison = page.locator('.ro-monitor-table tr').filter({ hasText: 'CCL AL30 vs DLR/SPOT' });
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('CCL AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '+4,17% (66,67)'));
   assert(await cclComparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'The default CCL comparison also remains monitor-only');
   checks.push('MEP and CCL spreads refresh independently from the same official spot');
   await page.evaluate(() => mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md.refp = undefined);
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-daily').textContent === '—'));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(' vs DLR/SPOT')).every(e => e.querySelector('.ro-daily').textContent === '—'));
   assert(await cclComparison.locator('.ro-ratio').innerText() === '+4,17% (66,67)', 'Missing C reference retains the CCL ratio');
   await page.evaluate(() => Object.assign(mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md, { refp: 1565, refdStr: '2020-01-01' }));
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-daily').title.includes('distintas')));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(' vs DLR/SPOT')).every(e => e.querySelector('.ro-daily').title.includes('distintas')));
   checks.push('Missing or mismatched official daily references hide only the daily variation of both spreads');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 0; s.md.seq++; });
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(') / DLR/SPOT')).every(e => e.querySelector('.ro-ratio').textContent === '—'));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(' vs DLR/SPOT')).every(e => e.querySelector('.ro-ratio').textContent === '—'));
   checks.push('A zero official quote never falls back to unnormalized MEP or CCL');
   await page.evaluate(() => mainStore.webSocketConnectionStatus = false);
   await wait(() => !!document.querySelector('.ro-issue')?.textContent.includes('desconectado'));
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); Object.assign(s.md, { lst: 1600, seq: 0, refdStr: mainStore.securityStore.securities.find(s => s.id === 'AL30').md.refdStr }); mainStore.webSocketConnectionStatus = true; });
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30C) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '+4,17% (66,67)'));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('CCL AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '+4,17% (66,67)'));
   assert(await comparison.locator('.ro-ratio').innerText() === '0,00% (0,00)', 'MEP comparison restored after official reconnect');
   checks.push('Disconnect/reconnect preserves both saved comparisons and accepts a reset official quote sequence');
   checks.push('MEP/official spread, native spot updates, monitor-only restrictions and schema compatibility');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'AL30'); s.md.lst = 70000; s.md.seq++; });
-  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('(AL30/AL30D) / DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '-12,50% (200,00)'));
+  await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('MEP AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '-12,50% (200,00)'));
   assert(await comparison.locator('.ro-ratio').innerText() === '-12,50% (200,00)', 'Negative spread keeps its sign only in the percentage');
   checks.push('Reference C comparisons include unsigned absolute quote differences for positive, negative and zero spreads');
   await page.evaluate(() => { const ss = mainStore.securityStore.securities; Object.assign(ss.find(s => s.id === 'AL30').md, { lst: 80000 }); ss.find(s => s.id === 'AL30').md.seq++; ss.find(s => s.id === 'rx_DDF_DLR_SPOT').md.lst = 1000; ss.find(s => s.id === 'rx_DDF_DLR_SPOT').md.seq++; });
@@ -537,7 +537,7 @@ async page => {
     await new Promise(held=>{void navigator.locks.request(key,()=>new Promise(release=>{window.__qaReleaseNominalLock=release;held();}));});
   },id);
   const reviewReleaseLock=async()=>page.evaluate(()=>{window.__qaReleaseNominalLock?.();delete window.__qaReleaseNominalLock;});
-  const currencyCloseId=await reviewOpen('AL30/AL30D','80000','50');
+  const currencyCloseId=await reviewOpen('MEP AL30','80000','50');
   await label('Precio cierre A').fill('81000');await label('Precio cierre B').fill('49');await label('Cantidad cierre B').fill('40');
   assert(await label('Cantidad cierre A').inputValue()==='40','Mixed currency nominal close copies equal open quantities without FX');
   await click(button('Registrar cierre'));await reviewWaitHistory(currencyCloseId,[[40],[40]]);
