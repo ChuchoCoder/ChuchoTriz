@@ -15,9 +15,15 @@ export interface RatioQuote {
 export interface RatioColumns { lastA: boolean; lastB: boolean; referenceC: boolean }
 export const defaultRatioColumns: RatioColumns = { lastA: true, lastB: true, referenceC: true };
 export interface RatioWidgetState { config: RatioConfig; width: number; height: number; columns?: { revision: number; visible: RatioColumns }; issue?: string }
+export interface DollarSelection { kind: "MEP" | "CCL"; bond: "AL30" | "GD30"; term: "24h" | "CI" }
+export interface DollarWidgetState {
+  config: DollarSelection & { id: string; revision: number };
+  pair?: Pick<RatioPair, "a" | "b">;
+  issue?: string;
+}
 export interface RatiosState {
   context: number; dashboardId?: string; canAdd: boolean; connected: boolean;
-  widgets: RatioWidgetState[]; quotes: Record<string, RatioQuote>; issue?: string;
+  widgets: RatioWidgetState[]; dollarWidgets?: DollarWidgetState[]; quotes: Record<string, RatioQuote>; issue?: string;
 }
 export const emptyState: RatiosState = { context: 0, canAdd: false, connected: false, widgets: [], quotes: {} };
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);

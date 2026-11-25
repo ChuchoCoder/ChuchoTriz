@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
 import { RatioChartLink } from "./RatioChart";
+import { ReferenceChartButton } from "./IntradayChart";
 import { GridActionIcon, GridColumnPicker, GridRowHandle, GridSortHeader, monitorColumns, operationColumns, useGridColumns, nextGridSort, reorderGridRows, sortGridRows, type GridSort, type GridValue } from "./RatioGrid";
 import { calculateRatio, currencyLabel, numberLabel, pairKey, pairLabel, ratioLabel, ratioTimeLabel, ratioUpdatedAt, referenceCFormula, referenceCQuote, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
@@ -382,6 +383,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
           {showMonitor("updated") && <td className="ro-updated" title={`Hora de mercado del último precio de A/B${p.c ? "/C" : ""}: ${tradeLabel(updatedAt)}`}>{ratioTimeLabel(updatedAt)}</td>}
           <td><div className="ro-actions">
             <RatioChartLink pair={p} />
+            <ReferenceChartButton pair={p} />
             <button type="button" className="ro-monitor-operation" disabled={!available || monitorOnly} title={monitorOnly ? "Las referencias, tasas y comparaciones de tres cotizaciones sólo se monitorean." : undefined} onClick={() => begin(p.a, p.b)}>{monitorOnly ? "Sólo monitor" : "Abrir operación"}</button>
             <button type="button" disabled={!available || !!p.c} aria-label={`Invertir ${label}`} title={p.c ? "Comparación (A/B)/C; agregá otra fórmula para cambiar el sentido" : "Invertir A/B"} onClick={() => void commit(base => invertWatchPair(base, p.id))}>⇄</button>
             <button type="button" disabled={!available} aria-label={`Quitar par ${label}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button>

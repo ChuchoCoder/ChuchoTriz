@@ -4,6 +4,68 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 const source = readFileSync(new URL('../public/ratios-reader.js', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
+
+test('saves dollar widgets independently, resolves exact species, and preserves other widgets on close', async () => {
+  const f = fixture();
+  const add = await f.request('dollarAdd', await f.args());
+  const initial = add.result.dollarWidgets[0];
+  assert.deepEqual([initial.config.kind, initial.config.bond, initial.config.term], ['MEP', 'AL30', '24h']);
+  assert.deepEqual([initial.pair.a.id, initial.pair.b.id], ['a', 'b']);
+  await f.add();
+  const editArgs = { ...await f.args(), widgetId: initial.config.id, revision: 0, kind: 'CCL', bond: 'AL30', term: 'CI' };
+  assert.match((await f.request('dollarEdit', { ...editArgs, kind: 'CANJE' })).error, /inválida/);
+  assert.equal((await f.request('dollarEdit', editArgs)).result.dollarWidgets[0].pair, undefined, 'no substitution from 24h');
+  f.securities.push({ ...f.securities.find(s => s.id === 'c'), id: 'ci-c', symbolStr: 'AL30C (CI)', settlementType: '1' });
+  const snapshot = await f.state();
+  const saved = snapshot.dollarWidgets[0];
+  assert.deepEqual([saved.pair.a.id, saved.pair.b.id], ['ci', 'ci-c']);
+  assert.deepEqual((await f.ds.getDashboard()).layout.find(w => w.settings?.chuchotrizIntradayDollar).settings.chuchotrizIntradayDollar, saved.config);
+  assert.match((await f.request('dollarEdit', editArgs)).error, /cambió/);
+  const closed = (await f.request('ratiosRemove', { ...await f.args(), widgetId: saved.config.id, revision: 1 })).result;
+  assert.equal(closed.dollarWidgets.length, 0);
+  assert.equal(closed.widgets.length, 1);
+  assert.ok(f.controls.every(control => f.d.layout.includes(control)));
+});
+
+test('reads the current Argentina session and shares native history while keeping live quotes and errors independent', async () => {
+  const f = fixture();
+  const calendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const start = Date.parse(calendar.format(Date.now()) + 'T00:00:00-03:00');
+  const stamp = new Date(start).toISOString();
+  const older = new Date(start - 60000).toISOString();
+  const seen = [];
+  f.ms.seriesStore = { async getIntradayTodaySeries(id) {
+    seen.push(id);
+    if (id === 'b' && seen.filter(s => s === 'b').length === 1) throw { response: { status: 401 } };
+    return { series: [{ date: older, close: 99 }, { date: stamp, close: 120 }, { date: stamp, close: null }] };
+  } };
+  f.securities[0].md.lstdStr = stamp;
+  f.securities[1].md.lstdStr = older;
+  const ids = ['a', 'b'];
+  const live = (await f.request('ratioIntradayQuotes', { ids })).result;
+  assert.deepEqual(live.points, { a: { at: start, value: 120 } });
+  assert.deepEqual(live.start, start);
+  await f.request('ratioIntradayQuotes', { ids });
+  assert.deepEqual(f.calls.filter(Array.isArray), [['md', ['md.a', 'md.b']]]);
+  const read = (await f.request('ratioIntradayHistory', { ids })).result;
+  assert.equal(read.revision, live.revision);
+  assert.deepEqual(read.series.a, { points: [{ at: start, value: 120 }] });
+  assert.equal(read.series.b.issue, 'Histórico no disponible (HTTP 401)');
+  await f.request('ratioIntradayHistory', { ids: ['a', 'b', 'unknown'] });
+  assert.deepEqual(seen, ['a', 'b']);
+  const recovered = (await f.request('ratioIntradayHistory', { ids, refresh: true })).result;
+  assert.deepEqual(recovered.series.b, { points: [{ at: start, value: 120 }] });
+  f.ms.webSocketConnectionStatus = false;
+  assert.deepEqual((await f.request('ratioIntradayQuotes', { ids })).result.points, {});
+  f.ms.profileStore.activeAccount = 'other';
+  const switched = (await f.request('ratioIntradayHistory', { ids })).result;
+  assert.notEqual(switched.revision, live.revision);
+  assert.deepEqual(seen, ['a', 'b', 'a', 'b', 'a', 'b']);
+  for (const invalid of [[], ['a', 'a'], ['a', 'b', 'c', 'd'], ['a', '']]) {
+    assert.match((await f.request('ratioIntradayHistory', { ids: invalid })).error, /inválidos/);
+  }
+});
+
 test('column visibility defaults to visible, persists per widget, and survives pair edits by legacy clients', async () => {
   const f = fixture(); await f.add(); await f.add();
   const initial = (await f.state()).widgets[0];

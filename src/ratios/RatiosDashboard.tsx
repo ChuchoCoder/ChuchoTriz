@@ -2,11 +2,12 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
+import { IntradayChart, ReferenceChartButton } from "./IntradayChart";
 import { RatioChartLink } from "./RatioChart";
-import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairLabel, ratioLabel, referenceCFormula, referenceCQuote, tickerKey, tradeLabel, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
+import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairKey, pairLabel, ratioLabel, referenceCFormula, referenceCQuote, tickerKey, tradeLabel, type DollarSelection, type DollarWidgetState, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatiosState, type RatioWidgetState } from "./model";
 import "./RatiosDashboard.css";
 
-type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns";
+type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit";
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
@@ -199,6 +200,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             </td>
             <td className="ct-ratios-actions">
               <RatioChartLink pair={pair} />
+              <ReferenceChartButton pair={pair} />
               <button type="button" aria-label={`Editar ${label}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
               <button type="button" aria-label={`Invertir ${label}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
               <button type="button" aria-label={`Eliminar ${label}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
@@ -228,6 +230,36 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         event.preventDefault(); event.stopPropagation();
         void run("ratiosResize", { width: widget.width + step[event.key][0], height: widget.height + step[event.key][1] });
       }}>◢</button>
+  </section>;
+}
+
+function DollarWidget({ widget, command, busy }: { widget: DollarWidgetState; command: Command; busy: boolean }) {
+  const { config, pair } = widget;
+  const [issue, setIssue] = useState("");
+  const run = (method: "dollarEdit" | "ratiosRemove", selection?: DollarSelection) => {
+    setIssue("");
+    void command(method, { ...selection, widgetId: config.id, revision: config.revision })
+      .catch(error => setIssue(error instanceof Error ? error.message : "No se pudo guardar el widget."));
+  };
+  const label = `${config.kind} ${config.bond} · ${config.term === "CI" ? "CI" : "24 h"}`;
+  return <section className="ct-ratios ct-intraday-widget" aria-label={`Dólar intradiario · ${label}`}>
+    <header className="ct-ratios-title"><strong>{label}</strong><div className="ct-ratios-header-actions NoDraggable">
+      <button type="button" aria-label="Cerrar widget de dólar intradiario" disabled={busy} onMouseDown={event => event.stopPropagation()}
+        onClick={() => run("ratiosRemove")}>×</button>
+    </div></header>
+    <div className="ct-intraday-controls NoDraggable" onMouseDown={event => event.stopPropagation()}>
+      <label>Dólar <select disabled={busy} value={config.kind} onChange={event => run("dollarEdit", { ...config, kind: event.target.value as DollarSelection["kind"] })}>
+        <option value="MEP">MEP</option><option value="CCL">CCL</option>
+      </select></label>
+      <label>Bono <select disabled={busy} value={config.bond} onChange={event => run("dollarEdit", { ...config, bond: event.target.value as DollarSelection["bond"] })}>
+        <option value="AL30">AL30</option><option value="GD30">GD30</option>
+      </select></label>
+      <label>Plazo <select disabled={busy} value={config.term} onChange={event => run("dollarEdit", { ...config, term: event.target.value as DollarSelection["term"] })}>
+        <option value="24h">24 h</option><option value="CI">CI</option>
+      </select></label>
+    </div>
+    {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
+    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
   </section>;
 }
 
@@ -291,25 +323,32 @@ export default function RatiosDashboard() {
     const source = current.current;
     return reader.current ? reader.current.call<RatioInstrument[]>("ratiosSearch", { context: source.context, dashboardId: source.dashboardId, query }) : Promise.resolve([]);
   }, []);
+  function addWidget(method: "ratiosAdd" | "dollarAdd", slot: HTMLElement) {
+    setMenuIssue("");
+    void command(method).then(() => {
+      // Native popovers can overlap the new panel. Close the add menu once the saved panel is ready.
+      const trigger = slot.closest<HTMLButtonElement>(".CustomDashboardButton") || document.querySelector<HTMLButtonElement>(".CustomDashboardButton");
+      if (trigger?.textContent?.trim().startsWith("Cerrar")) trigger.click();
+      const drawer = slot.closest("#ToolPanel .ToolContent");
+      if (drawer?.querySelector(".ToolContentHeaderText")?.textContent?.trim() === "Nuevo widget") drawer.querySelector<HTMLElement>(".ToolContentHeader .fa-arrow-right[role=button]")?.click();
+    }).catch(error => setMenuIssue(error.message));
+  }
   return <>
     {notice && <div className="ct-ratios-notice" role="alert"><span>{notice}</span><button type="button" aria-label="Cerrar aviso de Ratios" onClick={() => setNotice("")}>×</button></div>}
     {locations.menus.map((slot, index) => createPortal(<>
       <button type="button" className="ant-btn ant-btn-default WidgetComponentCardContent ct-ratios-add" disabled={busy || !snapshot.canAdd}
-        title={snapshot.issue || "Tabla de ratios de instrumentos"} onClick={() => {
-          setMenuIssue(""); void command("ratiosAdd").then(() => {
-            // Native popovers can overlap the new panel. Close the add menu just
-            // as a native widget selection does, after the saved panel is ready.
-            const trigger = slot.closest<HTMLButtonElement>(".CustomDashboardButton") || document.querySelector<HTMLButtonElement>(".CustomDashboardButton");
-            if (trigger?.textContent?.trim().startsWith("Cerrar")) trigger.click();
-            const drawer = slot.closest("#ToolPanel .ToolContent");
-            if (drawer?.querySelector(".ToolContentHeaderText")?.textContent?.trim() === "Nuevo widget") drawer.querySelector<HTMLElement>(".ToolContentHeader .fa-arrow-right[role=button]")?.click();
-          }).catch(error => setMenuIssue(error.message));
-        }}>{busy ? "Guardando…" : "RATIOS · CHUCHOTRIZ"}</button>
+        title={snapshot.issue || "Tabla de ratios de instrumentos"} onClick={() => addWidget("ratiosAdd", slot)}>{busy ? "Guardando…" : "RATIOS · CHUCHOTRIZ"}</button>
+      <button type="button" className="ant-btn ant-btn-default WidgetComponentCardContent ct-ratios-add" disabled={busy || !snapshot.canAdd}
+        title={snapshot.issue || "Gráfico intradiario de MEP o CCL"} onClick={() => addWidget("dollarAdd", slot)}>DÓLAR INTRADIARIO · CHUCHOTRIZ</button>
       {menuIssue && <p className="ct-ratios-menu-error" role="status">{menuIssue}</p>}
     </>, slot, `menu-${index}`))}
     {snapshot.widgets.map(widget => {
       const slot = locations.widgets.get(widget.config.id);
       return slot ? createPortal(<RatiosWidget widget={widget} snapshot={snapshot} command={command} search={search} busy={busy} />, slot, widget.config.id) : null;
+    })}
+    {snapshot.dollarWidgets?.map(widget => {
+      const slot = locations.widgets.get(widget.config.id);
+      return slot ? createPortal(<DollarWidget widget={widget} command={command} busy={busy} />, slot, widget.config.id) : null;
     })}
   </>;
 }

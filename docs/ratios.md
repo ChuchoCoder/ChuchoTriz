@@ -23,6 +23,29 @@ no garantiza datos en cada intervalo. No se guardan estudios ni se envían órde
 desde esta acción. Comprueba las funciones y los datos del gráfico en tiempo de
 ejecución; no bloquea por el número de versión de Matriz ni exige que se muestre.
 
+## Dólar intradiario y gráfico contra Referencia C
+
+En un dashboard de Matriz, elegí **Nuevo widget → DÓLAR INTRADIARIO · CHUCHOTRIZ**.
+El widget arranca en MEP AL30 a 24 h y permite elegir MEP o CCL, AL30 o GD30
+y 24 h o CI. Cada widget guarda su selección y posición en el dashboard.
+El par se resuelve por especie BYMA, moneda y liquidación. Si falta una pata
+o hay más de una coincidencia, el widget indica que el par no está disponible.
+
+En una fila con Referencia C del widget Ratios o del Monitor, el botón de
+gráfico marcado **C** abre dos vistas. **Comparación** muestra A/B y la
+referencia en una escala numérica común. **Brecha %** muestra
+`((A/B) / C − 1) × 100` y marca el nivel de igualdad en cero. Ambas vistas
+usan `C/100` si la fila tiene activado ese divisor. El ícono de gráfico nativo
+continúa abriendo el gráfico de Matriz.
+
+Las vistas usan el histórico de la rueda publicado por Matriz y los últimos
+precios recibidos en vivo con su hora de mercado argentina. A/B requiere
+precios de ambas patas en el mismo minuto y la brecha también requiere C
+en ese minuto. Los faltantes quedan como huecos. Si el histórico falla, se
+pueden seguir acumulando puntos de la rueda a partir de las cotizaciones
+recibidas con el gráfico abierto. **Reintentar histórico** vuelve a consultar
+la serie del broker.
+
 ## Monitor y registro de operaciones
 
 En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio

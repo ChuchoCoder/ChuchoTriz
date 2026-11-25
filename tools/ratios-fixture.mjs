@@ -24,6 +24,10 @@ function install() {
   for (const [month, lst] of [['NOV26', 1600], ['DIC26', 1650]]) securities.push({ id: 'rx_DDF_DLR_' + month,
     symbol: 'DLR/' + month, symbolStr: 'DLR/' + month, marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'FXXXSX',
     refData: { totalAmountFactor: 1, contractMultiplier: 1000, roundLot: 1 }, md: { lst, refp: 1590, seq: 1, lstdStr: new Date().toISOString() } });
+  securities.push({
+    id: 'D30N6-2', symbol: 'D30N6', symbolStr: 'D30N6', marketId: 'bm', currency: 'ARS', settlementType: '2',
+    md: { lst: 125000, refp: 120000, seq: 1, lstdStr: new Date().toISOString() },
+  });
   let ds;
   function nativeWidget(data, dashboard) {
     return { ...data, dashboard, key: data.component + '-' + (++counter),
@@ -59,11 +63,27 @@ function install() {
     createDashboard: hydrate,
     async getDashboard(id) { return hydrate(JSON.parse(localStorage.getItem('ct-ratios-fixture-' + id))); }
   };
+  const marketDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const sessionStart = Date.parse(marketDay.format(Date.now()) + 'T00:00:00-03:00');
+  const historyEnd = Math.max(sessionStart, Math.floor(Date.now() / 60000) * 60000 - 60000);
+  const seriesCounts = {}, failedSeries = new Set();
   window.mainStore = { dashboardStore: ds, securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) },
-    profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} } };
+    profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} },
+    seriesStore: { async getIntradayTodaySeries(id) {
+      seriesCounts[id] = (seriesCounts[id] || 0) + 1;
+      if (failedSeries.has(id)) throw { response: { status: 401 } };
+      const price = securities.find(s => s.id === id)?.md.lst;
+      const series = [4, 3, 2, 1, 0].map(offset => ({
+        date: new Date(Math.max(sessionStart, historyEnd - offset * 60000)),
+        close: price * (1 - offset * (id === 'AL30-2' ? 0.014 : 0.003)),
+      }));
+      return { series };
+    } } };
   window.ratiosFixture = {
     price(id, value) { const s = securities.find(s => s.id === id); s.md.lst = value; s.md.seq++; },
     connected(value) { window.mainStore.webSocketConnectionStatus = value; },
+    seriesCounts,
+    failSeries(id, value) { if (value) failedSeries.add(id); else failedSeries.delete(id); },
     switchDashboard() { ds.currentDashboard = ds.currentDashboard === d ? alternate : d; render(); }
   };
   render();
