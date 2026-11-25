@@ -192,9 +192,52 @@ async page => {
   await click(button('Abrir operación')); await button('Editar').waitFor();
   let saved = await book(); assert(saved.operations.length === 1 && saved.watch.length === 11, 'Record and watched pairs'); const id = saved.operations[0].id;
   assert(saved.operations[0].targetRatio === 2.05, 'Canonical goal');
-  await label('Precio cierre A').fill('110'); await label('Precio cierre B').fill('45'); await click(button('Cerrar 25%'));
+  for (const width of [1920, 1440, 1024, 420]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const layout = await page.locator('.ro-detail').evaluate(detail => {
+      const rect = element => element.getBoundingClientRect();
+      const [a, b] = detail.querySelectorAll('.ro-close-leg');
+      const summary = detail.querySelector('.ro-pnl-lines'), position = detail.querySelector('.ro-detail-summary table');
+      const fits = [...detail.querySelectorAll('.ro-close-leg :is(input,button)')].every(control => rect(control).right <= rect(detail).right && control.scrollWidth <= control.clientWidth);
+      const quotesInRows = [a, b].every(leg => {
+        const [last, bid, ask] = leg.querySelectorAll('.ro-close-quotes button');
+        return rect(last).top === rect(bid).top && rect(bid).top === rect(ask).top && rect(last).right < rect(bid).left && rect(bid).right < rect(ask).left;
+      });
+      return { fits, quotesInRows, legsSideBySide: rect(a).right < rect(b).left, summarySideBySide: rect(summary).right < rect(position).left };
+    });
+    assert(layout.fits && layout.quotesInRows, 'Close fields fit and quotes run horizontally at ' + width);
+    if (width === 1920) assert(layout.legsSideBySide && layout.summarySideBySide, 'Wide detail lays out both legs and both summary sections side by side');
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  checks.push('Close uses horizontal quote rows on narrow and wide displays and lays out both legs and summaries side by side when space allows');
+  const closeQuote = (source, leg) => page.getByRole('button', { name: new RegExp(`^Usar ${source} para el cierre ${leg}:`) });
+  assert(await page.locator('.ro-close-book-side').count() === 2 &&
+    (await closeQuote('Compra', 'A').getAttribute('class')).includes('ro-close-book-side') &&
+    (await closeQuote('Venta', 'B').getAttribute('class')).includes('ro-close-book-side'), 'Close highlights Bid for long and Ask for short');
+  await closeQuote('Compra', 'A').click(); await closeQuote('Último', 'B').click();
+  assert(await label('Precio cierre A').inputValue() === '99.9' && await label('Precio cierre B').inputValue() === '50', 'Click copies each live quote into its own field');
+  await page.evaluate(() => {
+    const [a, b] = ['BMA', 'GGAL'].map(id => mainStore.securityStore.securities.find(i => i.id === id));
+    a.md.bid = 98.75; a.md.seq++;
+    b.md.ask = undefined; b.md.lst = 51; b.md.seq++;
+  });
+  await wait(() => document.querySelector('[aria-label^="Usar Compra para el cierre A:"]')?.textContent.includes('98,75') &&
+    document.querySelector('[aria-label^="Usar Último para el cierre B:"]')?.textContent.includes('51,00') &&
+    document.querySelector('[aria-label^="Usar Venta para el cierre B:"]')?.disabled);
+  assert(await label('Precio cierre A').inputValue() === '99.9' && await label('Precio cierre B').inputValue() === '50', 'New quotes do not overwrite copied prices');
+  assert(JSON.stringify((await book()).operations) === JSON.stringify(saved.operations), 'Quote buttons leave the ledger untouched');
+  await page.evaluate(() => {
+    const s = mainStore.securityStore.securities.find(i => i.id === 'GGAL');
+    s.md.ask = 50.1; s.md.lst = 50; s.md.seq++;
+  });
+  await wait(() => document.querySelector('[aria-label^="Usar Venta para el cierre B:"]')?.disabled === false);
+  await closeQuote('Venta', 'B').click(); await label('Precio cierre A').fill('110');
+  checks.push('Close shows both live quotes and corresponding book sides, holds copied prices and disables missing quotes');
+  await click(button('Cerrar 25%'));
   await wait(() => document.querySelector('.ro-operations-table')?.textContent.includes('Parcial'));
-  saved = await book(); assert(saved.operations[0].legs[0].exits[0].quantity === 25, 'Partial close');
+  saved = await book();
+  assert(saved.operations[0].legs[0].exits[0].quantity === 25 && saved.operations[0].legs[0].exits[0].price === 110 &&
+    saved.operations[0].legs[1].exits[0].price === 50.1, 'Partial close saves both manual and copied prices');
   await click(button('Editar')); await label('Comisión %').fill('0.5'); await click(button('Guardar cambios'));
   await button('Editar').waitFor();
   saved = await book(); assert(saved.operations.length === 1 && saved.operations[0].id === id && saved.operations[0].legs[0].exits.length === 1 && saved.operations[0].commission === .5, 'Edit keeps identity and close');
@@ -630,5 +673,36 @@ async page => {
   assert(!versionContext.error&&typeof versionContext.result?.contextId==='string'&&/^[a-f0-9]{64}$/.test(versionContext.result.storageScope),'A fresh reader request accepts verified 4.24.5');
   assert(JSON.stringify((await book()).operations.find(o=>o.id===lotCloseId).legs.map(l=>l.exits[0].quantity))==='[30,60]','Verified 4.24.5 context retains the same local journal');
   checks.push('Verified Matriz 4.24.5 catalog context retains the journal and existing read-only guards');
+
+  await click(button('1 · Monitor'));
+  await click(page.locator('.ro-monitor-table tr').filter({ has: button('Invertir BMA/GGAL') }).getByRole('button', { name: 'Abrir operación', exact: true }));
+  await page.evaluate(() => {
+    const catalog = mainStore.securityStore.securities;
+    const source = catalog.find(s => s.id === 'BMA');
+    catalog.push({ ...source, id: 'ROUNDFACTOR', symbolStr: 'ROUNDFACTOR', refData: { ...source.refData, totalAmountFactor: 0.1, contractMultiplier: 3 } });
+  });
+  await choose('Instrumento A', 'ROUNDFACTOR');
+  await label('Precio de entrada A').fill('100'); await label('Precio de entrada B').fill('50');
+  await click(button('Abrir operación')); await button('Registrar cierre').waitFor();
+  assert((await book()).operations.at(-1).legs[0].factor === 0.3, 'Opening saves the displayed factor precision');
+  await wait(() => document.querySelector('[aria-label^="Usar Último para el cierre A:"]')?.disabled === false);
+  const factorPnl = page.locator('.ro-pnl-lines > div').filter({ hasText: 'Neto al desarme' });
+  assert(!(await factorPnl.innerText()).includes('—'), 'P&L uses the quote at the saved factor precision');
+  await closeQuote('Compra', 'A').click();
+  assert(await label('Precio cierre A').inputValue() === '99.9', 'A harmless decimal roundoff still allows copying the close quote');
+  const editedFactorId = (await book()).operations.at(-1).id;
+  await click(page.locator(`.ro-operations-table tr[data-row-id="${editedFactorId}"]`).getByRole('button', { name: 'Editar', exact: true }));
+  await click(button('Long GGAL / Short ROUNDFACTOR'));
+  await click(button('Guardar cambios')); await button('Registrar cierre').waitFor();
+  assert((await book()).operations.at(-1).direction === -1, 'Editing reverses the same operation');
+  assert(await label('Precio cierre A').inputValue() === '100' &&
+    (await closeQuote('Venta', 'A').getAttribute('class')).includes('ro-close-book-side'), 'Reversing a leg discards the old bid and highlights its new ask');
+  checks.push('Editing the direction of an open operation invalidates the previous close price selection');
+  await closeQuote('Venta', 'A').click();
+  await page.evaluate(() => { mainStore.securityStore.securities.find(s => s.id === 'ROUNDFACTOR').refData.contractMultiplier = 4; });
+  await wait(() => document.querySelector('[aria-label^="Usar Compra para el cierre A:"]')?.disabled);
+  assert(await label('Precio cierre A').inputValue() === '100.1', 'A changed unit disables market selection and retains the entered price');
+  assert((await factorPnl.innerText()).includes('—') && (await page.locator('.ro-detail > .ro-issue').innerText()).includes('Cambió la unidad'), 'P&L flags a genuine quote unit change');
+  checks.push('Close quotes and P&L agree on rounding at the saved factor precision and on genuine quote unit changes');
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
