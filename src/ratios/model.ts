@@ -77,7 +77,7 @@ export function pairLabel({ a, b, c, cDivisor }: Pick<RatioPair, "a" | "b"> & Ra
   const label = financialDollarLabel(a, b) ?? `${a.symbol}/${b.symbol}`;
   if (!c) return label;
   const reference = cDivisor ? `(${c.symbol} ÷ ${cDivisor})` : c.symbol;
-  return `(${label}) / ${reference}`;
+  return `${label} vs ${reference}`;
 }
 export function pairKey(p: { a: { id: string }; b: { id: string }; c?: { id: string }; cDivisor?: 100 }) {
   return JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null, p.cDivisor ?? 1]);

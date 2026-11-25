@@ -125,7 +125,10 @@ it("names MEP, CCL and canje pairs of the same instrument and settlement, includ
   expect(pairLabel({ a: ci, b: ciUsd })).toBe("MEP AL30 CI");
   expect(pairLabel({ a: ci, b: { ...ciUsd, symbol: "AL30D" } })).toBe("MEP AL30 CI");
   expect(pairLabel({ a: gd30, b: { ...al30c, id: "gd30c", symbol: "GD30C" } })).toBe("CCL GD30");
-  expect(pairLabel({ a: al30, b: al30d, c: { ...al30, id: "future", symbol: "DLR/DIC26" }, cDivisor: 100 })).toBe("(MEP AL30) / (DLR/DIC26 ÷ 100)");
+  const spot = { ...al30, id: "spot", symbol: "DLR/SPOT" };
+  expect(pairLabel({ a: al30, b: al30d, c: spot })).toBe("MEP AL30 vs DLR/SPOT");
+  expect(pairLabel({ a: gd30, b: al30, c: spot })).toBe("GD30/AL30 vs DLR/SPOT");
+  expect(pairLabel({ a: al30, b: al30d, c: { ...spot, id: "future", symbol: "DLR/DIC26" }, cDivisor: 100 })).toBe("MEP AL30 vs (DLR/DIC26 ÷ 100)");
 
   expect(pairLabel({ a: ci, b: al30d })).toBe("AL30 (CI)/AL30D");
   expect(pairLabel({ a: gd30, b: al30d })).toBe("GD30/AL30D");
