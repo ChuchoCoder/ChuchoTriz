@@ -201,11 +201,12 @@ movimiento reducido se usa una marca estática breve.
   variación usa `(último / referencia diaria − 1) × 100`; sin referencia muestra —.
   El precio manual sigue disponible.
 - La apertura empieza con las dos direcciones identificadas por ticker
-  (por ejemplo, Long BMA / Short GGAL y Long GGAL / Short BMA), con el ratio
-  de apertura entre ambas. Se omite el bloque repetido de título y par.
+  (por ejemplo, Long BMA / Short GGAL y Long GGAL / Short BMA). Entre ambas
+  se muestra el ratio de mercado A/B con los últimos precios, igual que en el
+  Monitor. Al editar una operación, se muestra el ratio de sus precios de entrada.
   Pulsar una dirección carga y resalta la mejor Ask para la pata long y la
   mejor Bid para la short, incluso al pulsar otra vez la dirección activa.
-  Actualiza el ratio y el dimensionamiento B con esos precios, conservando A.
+  Esos precios actualizan el dimensionamiento B y conservan la cantidad A.
   Los precios quedan fijos hasta otra selección. Si falta una punta, deja ese
   precio vacío y avisa; admite ingreso manual o reintento, sin sustituirlo por
   último ni niveles más profundos. Elegir la dirección no registra la apertura.

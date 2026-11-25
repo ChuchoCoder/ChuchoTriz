@@ -205,12 +205,22 @@ export default function RatioOperations({ active }: { active: boolean }) {
         [first ? "ddmma" : "ddmmb"]: input(defaultMarketRights(instrument)), [first ? "sourceA" : "sourceB"]: "last", target: changed ? "" : previous.target };
     });
   }
+  function entryPrices(direction: Draft["direction"], a?: TradingInstrument, b?: TradingInstrument) {
+    const sourceA = direction === 1 ? "ask" : "bid", sourceB = direction === 1 ? "bid" : "ask";
+    const priceA = bestBookPrice(quotes[a?.id || ""], sourceA), priceB = bestBookPrice(quotes[b?.id || ""], sourceB);
+    const missing = [priceA === undefined ? `${sourceA === "ask" ? "Ask" : "Bid"} de ${a?.symbol || "A"}` : "", priceB === undefined ? `${sourceB === "ask" ? "Ask" : "Bid"} de ${b?.symbol || "B"}` : ""].filter(Boolean);
+    return {
+      prices: { direction, pa: input(priceA), pb: input(priceB), sourceA, sourceB } satisfies Pick<Draft, "direction" | "pa" | "pb" | "sourceA" | "sourceB">,
+      issue: missing.length ? `Sin mejor punta publicada: ${missing.join(" y ")}. Ingresá el precio manualmente o volvé a pulsar la dirección cuando esté disponible.` : "",
+    };
+  }
   function begin(a: TradingInstrument, b: TradingInstrument) {
     if (isMonitorOnly(a) || isMonitorOnly(b)) { setIssue("Las cauciones y referencias sólo se monitorean."); return; }
-    const step = a.quantityStep ?? 1;
-    setEdit(undefined); setDraft({ ...emptyDraft(), a, b, pa: input(quotes[a.id]?.last), pb: input(quotes[b.id]?.last), qa: String(Math.ceil(100 / step) * step),
+    const initial = emptyDraft(), step = a.quantityStep ?? 1;
+    const { prices, issue } = entryPrices(initial.direction, a, b);
+    setEdit(undefined); setDraft({ ...initial, ...prices, a, b, qa: String(Math.ceil(100 / step) * step),
       fa: input(a.amountFactor), fb: input(b.amountFactor), sa: input(a.quantityStep), sb: input(b.quantityStep), ddmma: input(defaultMarketRights(a)), ddmmb: input(defaultMarketRights(b)) });
-    setPickerSession(n => n + 1); setView("opening"); setIssue(""); setNotice("");
+    setPickerSession(n => n + 1); setView("opening"); setIssue(issue); setNotice("");
   }
   function beginEdit(o: RatioOperation) {
     setEdit({ id: o.id, snapshot: JSON.stringify(o) }); setSelected(o.id);
@@ -223,14 +233,15 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const pa = numeric(draft.pa), pb = numeric(draft.pb), qa = numeric(draft.qa), fa = numeric(draft.fa), fb = numeric(draft.fb), sa = numeric(draft.sa), sb = numeric(draft.sb);
   const mixed = draft.a && draft.b && !sameCurrency(draft.a, draft.b);
   const qb = mixed && draft.preservedB !== undefined ? draft.preservedB : draft.a && draft.b ? counterpart(qa, pa, pb, fa, fb, sb, draft.a, draft.b) : NaN;
+  const marketRatio = !edit && draft.a && draft.b ? calculateRatio(quotes[draft.a.id], quotes[draft.b.id]) : undefined;
+  const formRatio = edit && pa > 0 && pb > 0 ? pa / pb : marketRatio?.ratio;
+  const formRatioLabel = edit ? "Ratio de apertura" : "Ratio de mercado A/B";
 
   function selectDirection(direction: 1 | -1) {
     if (!available || partiallyClosed) return;
-    const sourceA = direction === 1 ? "ask" : "bid", sourceB = direction === 1 ? "bid" : "ask";
-    const priceA = bestBookPrice(quotes[draft.a?.id || ""], sourceA), priceB = bestBookPrice(quotes[draft.b?.id || ""], sourceB);
-    setDraft(previous => ({ ...previous, direction, pa: input(priceA), pb: input(priceB), sourceA, sourceB }));
-    const missing = [priceA === undefined ? `${sourceA === "ask" ? "Ask" : "Bid"} de ${draft.a?.symbol || "A"}` : "", priceB === undefined ? `${sourceB === "ask" ? "Ask" : "Bid"} de ${draft.b?.symbol || "B"}` : ""].filter(Boolean);
-    setIssue(missing.length ? `Sin mejor punta publicada: ${missing.join(" y ")}. Ingresá el precio manualmente o volvé a pulsar la dirección cuando esté disponible.` : "");
+    const { prices, issue } = entryPrices(direction, draft.a, draft.b);
+    setDraft(previous => ({ ...previous, ...prices }));
+    setIssue(issue);
   }
 
   async function saveEntry() {
@@ -370,7 +381,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {!ready && !market.issue && !session?.error && <p role="status">Cargando el registro de la cuenta activa…</p>}
     {notice && <div className="ro-notice" role="status">{notice}{deleted?.scope === scope && <button type="button" disabled={!available} onClick={() => void undo()}>Deshacer eliminación</button>}</div>}
     {view === "monitor" && <div>
-      <div className="ro-monitor-controls"><div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
+      <div className="ro-monitor-controls">
+        <InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} acceptSuggestionOnTab />
+        <InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} acceptSuggestionOnTab />
         {compare && <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available}
           autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)}
           divisor={{ checked: divideCBy100, onChange: setDivideCBy100 }} />}
@@ -384,7 +397,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
           if (compare && !watchC) throw Error("Seleccioná la referencia C.");
           if (base.watch.some(p => pairKey(p) === pairKey(pair))) throw Error("El par ya está en el monitor.");
           return { ...base, watch: [...base.watch, pair] };
-        }).then(saved => { if (saved) setDivideCBy100(false); })}>Agregar par</button></div><button type="button" className="ro-defaults" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button></div>
+        }).then(saved => { if (saved) setDivideCBy100(false); })}>Agregar par</button>
+        <button type="button" className="ro-defaults" disabled={!available} onClick={() => void loadDefaults(true)}>{loadingDefaults ? "Cargando pares…" : "Agregar pares predeterminados"}</button>
+      </div>
       <div className="ro-grid-tools"><GridColumnPicker label="Monitor" columns={monitorColumns} preferences={monitorPreferences} /><small>Arrastrá ⠿ para mover · con foco, usá ↑/↓</small><button type="button" className="ro-manual-order" disabled={!monitorSort} onClick={() => changeGridSort("watch")}>Orden manual</button></div>
       <div className="ro-table-wrap ro-grid-wrap ro-monitor-wrap"><table className="ro-monitor-table"><thead><tr>{monitorHeader("Par A/B", "pair")}{monitorColumns.map(([column, label]) => showMonitor(column) && (column !== "c" || hasReference) && <GridSortHeader key={column} label={label} column={column} sort={monitorSort} disabled={!ready} onSort={key => changeGridSort("watch", key)} />)}<th scope="col">Acciones</th></tr></thead><tbody>{ready && monitorRows.map(p => {
         const label = pairLabel(p);
@@ -412,7 +427,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {view === "opening" && <form aria-label={edit ? "Editar operación de ratio" : "Abrir operación de ratio"} onSubmit={e => { e.preventDefault(); void saveEntry(); }}>
       {edit && <p className="ro-notice">Las cantidades son totales de apertura. Los cierres registrados se conservan; corregir precios o gastos recalcula el resultado.</p>}
       <div className="ro-entry-grid"><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => selectDirection(1)}>Long {draft.a?.symbol || "A"} / Short {draft.b?.symbol || "B"}</button>
-        <div className="ro-opening-ratio"><small>Ratio de apertura</small><output aria-label="Ratio de apertura">{draft.a && draft.b && pa > 0 && pb > 0 ? pairRatioLabel(pa / pb, draft.a, draft.b) : "—"}</output></div>
+        <div className="ro-opening-ratio" title={edit ? undefined : marketRatio?.issue || "Calculado con el último precio de A y de B, igual que en el Monitor."}>
+          <small>{formRatioLabel}</small><output aria-label={formRatioLabel}>{draft.a && draft.b ? pairRatioLabel(formRatio, draft.a, draft.b) : "—"}</output>
+        </div>
         <button type="button" aria-pressed={draft.direction === -1} disabled={!available || partiallyClosed} onClick={() => selectDirection(-1)}>Long {draft.b?.symbol || "B"} / Short {draft.a?.symbol || "A"}</button></div>
         {leg("a")}{leg("b")}
         <aside className="ro-entry-costs"><label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>

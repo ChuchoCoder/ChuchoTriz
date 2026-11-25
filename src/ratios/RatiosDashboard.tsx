@@ -11,9 +11,10 @@ type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
-export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, divisor, describe = instrumentDetail }: {
+export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, acceptSuggestionOnTab = false, divisor, describe = instrumentDetail }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
   onAutoFocus?(): void;
+  acceptSuggestionOnTab?: boolean;
   divisor?: { checked: boolean; onChange(checked: boolean): void; label?: string; disabled?: boolean };
   describe?(instrument: RatioInstrument): string;
 }) {
@@ -21,7 +22,7 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [issue, setIssue] = useState("");
   const [resolving, setResolving] = useState(false);
   const generation = useRef(0), latestQuery = useRef(query);
-  const input = useRef<HTMLInputElement>(null), focused = useRef(false);
+  const input = useRef<HTMLInputElement>(null), focused = useRef(false), tabbingForward = useRef(false);
   useEffect(() => {
     if (autoFocus && !disabled && !focused.current) {
       input.current?.focus();
@@ -43,15 +44,21 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
   }, [query, open, search]);
   const choose = (item: RatioInstrument) => { generation.current++; setResolving(false); onChange(item); setQuery(item.symbol); setOpen(false); setOptions([]); setIssue(""); };
   const resolveOnBlur = async () => {
+    const acceptSuggestion = tabbingForward.current && open;
+    tabbingForward.current = false;
     setOpen(false);
+    const highlighted = acceptSuggestion ? options[active] : undefined;
+    if (highlighted) { choose(highlighted); return; }
     const text = latestQuery.current.trim();
     if (!text || (value && tickerKey(value.symbol) === tickerKey(text))) return;
     const request = ++generation.current;
     setResolving(true); setIssue("");
     try {
-      const matches = exactTickerMatches(text, await search(text));
+      const results = await search(text);
       if (request !== generation.current) return;
-      if (matches.length === 1) choose(matches[0]);
+      const matches = exactTickerMatches(text, results);
+      const match = matches.length === 1 ? matches[0] : acceptSuggestion ? results[0] : undefined;
+      if (match) choose(match);
       else setIssue(matches.length > 1 ? "Más de un instrumento coincide; elegí uno de la lista." : "No se encontró ese ticker exacto.");
     } catch (error) { if (request === generation.current) setIssue(error instanceof Error ? error.message : "No se pudo buscar el instrumento."); }
     finally { if (request === generation.current) setResolving(false); }
@@ -64,6 +71,7 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
       onChange={event => { generation.current++; setResolving(false); latestQuery.current = event.target.value; setOptions([]); setActive(0); setIssue(""); setQuery(event.target.value); onChange(undefined); setOpen(true); }}
       onFocus={() => { generation.current++; setResolving(false); setOpen(!value || tickerKey(value.symbol) !== tickerKey(query)); }} onBlur={() => void resolveOnBlur()}
       onKeyDown={event => {
+        tabbingForward.current = acceptSuggestionOnTab && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.nativeEvent.isComposing;
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive(n => Math.max(0, Math.min(options.length - 1, n + (event.key === "ArrowDown" ? 1 : -1)))); }
         if (event.key === "Enter" && open && options[active]) { event.preventDefault(); choose(options[active]); }
