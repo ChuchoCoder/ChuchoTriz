@@ -23,7 +23,7 @@ async page => {
   await select('Referencia C · ej. Dólar oficial', 'DLR/NOV26');
   assert((await page.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial', exact: true }).locator('..').innerText()).includes('Futuro · sólo monitor'), 'Future is identified as a monitor-only A3 contract in the picker');
   await button('Agregar').click();
-  const widgetRow = page.locator('.ct-ratios tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/NOV26' });
+  const widgetRow = page.locator('.ct-ratios tbody tr').filter({ hasText: '(MEP AL30) / DLR/NOV26' });
   await widgetRow.waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.ct-ratios tbody tr')].some(r => r.textContent.includes('/ DLR/NOV26') && r.textContent.includes('-12,50% (200,00)')));
   assert(true, 'Widget saves the exact November contract and uses its price without multiplying by 1000');
@@ -39,7 +39,7 @@ async page => {
   await select('Instrumento A', 'AL30'); await select('Instrumento B', 'AL30D');
   await page.getByRole('checkbox', { name: 'Agregar referencia C', exact: true }).check();
   await select('Referencia C · ej. DLR/SPOT', 'DLR/DIC26'); await button('Agregar par').click();
-  const monitorRow = page.locator('.ro-monitor-table tbody tr').filter({ hasText: '(AL30/AL30D) / DLR/DIC26' });
+  const monitorRow = page.locator('.ro-monitor-table tbody tr').filter({ hasText: '(MEP AL30) / DLR/DIC26' });
   await monitorRow.waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.ro-monitor-table tbody tr')].some(r => r.textContent.includes('/ DLR/DIC26') && r.textContent.includes('-15,15% (250,00)')));
   assert(await monitorRow.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Monitor saves December independently and excludes reference rows from operations');

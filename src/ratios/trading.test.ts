@@ -4,7 +4,7 @@ import { calculateRatio, instrumentDetail, pairLabel } from "./model";
 import { isMonitorOnly } from "./trading";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
-const defaultInstrument = (symbol: string): TradingInstrument => symbol === "DLR/SPOT" ? { ...instrument("rx_DDF_DLR_SPOT"), symbol, market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true } : instrument(symbol);
+const defaultInstrument = (symbol: string): TradingInstrument => symbol === "DLR/SPOT" ? { ...instrument("rx_DDF_DLR_SPOT"), symbol, market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true } : instrument(symbol, symbol === "AL30D" ? "USD" : symbol === "AL30C" ? "EXT" : "ARS");
 const at = "2026-01-01T13:00:00.000Z", exitAt = "2026-01-02T13:00:00.000Z";
 it("uses the complete best published level without substituting last, deeper levels or stale top fields", () => {
   const bid = { price: 99, size: 10 }, ask = { price: 101, size: 20 };
@@ -42,7 +42,7 @@ it("retains the exact future reference without contract sizing or permission to 
 it("resolves ten defaults including both AL30 dollar spreads with the native official reference", async () => {
   const { watch, missing } = await resolveDefaultWatch(async symbol => [defaultInstrument(symbol), { ...instrument(symbol + " CI"), symbol: symbol + " CI" }, { ...instrument("rx-" + symbol), market: "rx", symbol }]);
   expect(missing).toEqual([]);
-  expect(watch.map(pairLabel)).toEqual(["AL30/AL30D", "AL30/AL30C", "AL30D/AL30C", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D", "(AL30/AL30D) / DLR/SPOT", "(AL30/AL30C) / DLR/SPOT"]);
+  expect(watch.map(pairLabel)).toEqual(["MEP AL30", "CCL AL30", "AL30D/AL30C", "GD30/AL30", "BMA/GGAL", "ALUA/TXAR", "TGSU2/TGNO4", "PESOS - 7D/PESOS - 1D", "(MEP AL30) / DLR/SPOT", "(CCL AL30) / DLR/SPOT"]);
   expect(new Set(watch.map(p => p.id)).size).toBe(10);
 });
 it("omits both dollar spreads when the official native spot is absent, then restores them without duplicating MEP or CCL", async () => {

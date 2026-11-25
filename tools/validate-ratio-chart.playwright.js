@@ -30,9 +30,8 @@ async page => {
   };
   const rows = page.locator('.ct-ratios tbody tr');
   assert(await rows.count() === await page.locator('.ct-ratios .ct-ratio-chart-link').count(), 'Every dashboard row has a chart icon');
-  const plain = rows.filter({ hasNotText: '/ DLR/SPOT' }).first();
-  const plainLabel = (await plain.locator('strong').innerText()).split('/');
-  await open(plain.locator('.ct-ratio-chart-link'), plainLabel[1]);
+  const plain = rows.filter({ has: page.getByText('MEP AL30', { exact: true }) });
+  await open(plain.locator('.ct-ratio-chart-link'), 'AL30D');
   const composite = rows.filter({ hasText: ') / DLR/SPOT' }).first();
   await open(composite.locator('.ct-ratio-chart-link'), 'DLR/SPOT', true);
   assert(await config() === before, 'Opening charts preserves saved dashboard settings');
@@ -42,7 +41,7 @@ async page => {
   await page.locator('.ro-monitor-table tbody tr').first().waitFor();
   const monitorRows = page.locator('.ro-monitor-table tbody tr');
   assert(await monitorRows.count() === await page.locator('.ro-monitor-table .ct-ratio-chart-link').count(), 'Every Monitor row has a chart icon');
-  const monitorC = monitorRows.filter({ hasText: '(AL30/AL30D) / DLR/SPOT' }).first();
+  const monitorC = monitorRows.filter({ hasText: '(MEP AL30) / DLR/SPOT' }).first();
   await open(monitorC.locator('.ct-ratio-chart-link'), 'DLR/SPOT', true);
   await page.evaluate(async () => {
     const all = await chrome.storage.local.get(null), entry = Object.entries(all).find(([k]) => k.startsWith('RatioOperationsV1:'));

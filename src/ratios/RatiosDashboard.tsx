@@ -172,6 +172,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
       <div className="ct-ratios-table-wrap"><table>
         <thead><tr><th>Par A/B</th>{columns.lastA && <th>Último A</th>}{columns.lastB && <th>Último B</th>}{showReference && <th>Referencia C</th>}<th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span><ColumnOptions visible={columns} busy={busy} onChange={visible => { void run("ratiosColumns", { columnsRevision: widget.columns?.revision ?? 0, columns: visible }); }} /></th></tr></thead>
         <tbody>{cfg.pairs.map(pair => {
+          const label = pairLabel(pair);
           const qa = snapshot.quotes[pair.a.id], qb = snapshot.quotes[pair.b.id], qc = referenceCQuote(snapshot.quotes, pair);
           const result = calculateRatio(qa, qb, qc), reference = referenceCFormula(pair.cDivisor);
           const { change } = result;
@@ -179,7 +180,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt, qc?.tradedAt === undefined ? 0 : Date.now() - qc.tradedAt);
           const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`;
           return <tr key={pair.id}>
-            <td className="ct-ratios-pair" title={`A: ${instrumentDetail(pair.a)} · B: ${instrumentDetail(pair.b)}\n${clock}`}><strong>{pairLabel(pair)}</strong>
+            <td className="ct-ratios-pair" title={`A: ${pair.a.symbol} · ${instrumentDetail(pair.a)} · B: ${pair.b.symbol} · ${instrumentDetail(pair.b)}\n${clock}`}><strong>{label}</strong>
               {age > 15 * 60 * 1000 && <span className="ct-ratios-old" role="img" aria-label="Última operación antigua" title={clock}>◷</span>}
             </td>
             {columns.lastA && <td className={qa?.last === undefined ? undefined : "ct-ratios-quote"} title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
@@ -191,9 +192,9 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             </td>
             <td className="ct-ratios-actions">
               <RatioChartLink pair={pair} />
-              <button type="button" aria-label={`Editar ${pairLabel(pair)}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
-              <button type="button" aria-label={`Invertir ${pairLabel(pair)}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
-              <button type="button" aria-label={`Eliminar ${pairLabel(pair)}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
+              <button type="button" aria-label={`Editar ${label}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
+              <button type="button" aria-label={`Invertir ${label}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
+              <button type="button" aria-label={`Eliminar ${label}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>
             </td>
           </tr>;
         })}</tbody>

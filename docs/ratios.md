@@ -78,7 +78,7 @@ Para agregar manualmente la brecha MEP/oficial, tanto en el Monitor como en el w
 4. Agregá el par. El widget propone **Porcentaje (%)**; el Monitor muestra la
    brecha porcentual. También podés conservar el AL30/AL30D simple en otra fila.
 
-La fila se identifica como **(AL30/AL30D) / DLR/SPOT** y muestra por separado los
+La fila se identifica como **(MEP AL30) / DLR/SPOT** y muestra por separado los
 últimos A, B y C. La brecha es `((A / B) / C − 1) × 100`. Por ejemplo, con datos
 ficticios, MEP de 1.600 y oficial de 1.572,50 da **1,75%**; si ambos son 1.600,
 da **0,00%**. En el widget, **Número** muestra `(A / B) / C`.
@@ -110,9 +110,13 @@ la extensión, recargá las pestañas de Matriz antes de usar estas comparacione
 
 ## Pares del monitor
 
-El monitor inicial incluye, en este orden: AL30/AL30D, AL30/AL30C,
+Los pares en pesos y dólares del mismo instrumento y plazo aparecen como
+**MEP AL30** para AL30/AL30D y **CCL AL30** para AL30/AL30C. Para contado
+inmediato se agrega **CI**, por ejemplo **MEP AL30 CI**.
+
+El monitor inicial incluye, en este orden: MEP AL30, CCL AL30,
 AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, TGSU2/TGNO4 y
-PESOS - 7D/PESOS - 1D, (AL30/AL30D) / DLR/SPOT y (AL30/AL30C) / DLR/SPOT. En registros existentes se agregan sólo los faltantes,
+PESOS - 7D/PESOS - 1D, (MEP AL30) / DLR/SPOT y (CCL AL30) / DLR/SPOT. En registros existentes se agregan sólo los faltantes,
 sin reordenar ni duplicar los pares personalizados ni modificar operaciones.
 La inicialización se guarda una sola vez: si quitás un par, no reaparece al
 recargar. **Agregar pares predeterminados** permite recuperar los faltantes.
@@ -292,9 +296,9 @@ con otro clic en el engranaje o al pulsar fuera.
 
 ## Agregar y editar pares
 
-Cada widget nuevo comienza, en este orden, con AL30/AL30D, AL30/AL30C,
-AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, PESOS - 7D/PESOS - 1D, (AL30/AL30D) / DLR/SPOT y
-(AL30/AL30C) / DLR/SPOT.
+Cada widget nuevo comienza, en este orden, con MEP AL30, CCL AL30,
+AL30D/AL30C, GD30/AL30, BMA/GGAL, ALUA/TXAR, PESOS - 7D/PESOS - 1D, (MEP AL30) / DLR/SPOT y
+(CCL AL30) / DLR/SPOT.
 Se resuelven las especies BYMA exactas del catálogo y se aplica el formato por
 moneda. Si alguna falta o tiene varias coincidencias, se omite ese par y se
 informa en el widget, sin inventar instrumentos. Las filas se pueden editar o

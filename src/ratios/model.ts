@@ -55,10 +55,27 @@ export function calculateRatio(a?: RatioQuote, b?: RatioQuote, c?: RatioQuote): 
   const change = (ratio / reference - 1) * 100;
   return finite(reference) && reference !== 0 && finite(change) ? { ...current, change } : { ...current, referenceIssue: "Sin referencia diaria válida" };
 }
-export function pairLabel(p: Pick<RatioPair, "a" | "b"> & RatioReference) {
-  if (!p.c) return `${p.a.symbol}/${p.b.symbol}`;
-  const reference = p.cDivisor ? `(${p.c.symbol} ÷ ${p.cDivisor})` : p.c.symbol;
-  return `(${p.a.symbol}/${p.b.symbol}) / ${reference}`;
+function financialDollarLabel(a: RatioInstrument, b: RatioInstrument) {
+  if (a.currency !== "ARS" || !a.market || a.market !== b.market || a.settlement !== b.settlement) return;
+
+  const aTicker = tickerKey(a.symbol), bTicker = tickerKey(b.symbol);
+  const isCash = a.settlement === "1" || aTicker.endsWith(" CI");
+  if (isCash !== (b.settlement === "1" || bTicker.endsWith(" CI"))) return;
+
+  const base = aTicker.replace(/ CI$/, "");
+  const denominator = bTicker.replace(/ CI$/, "");
+  if (!base) return;
+
+  const pairName = b.currency === "USD" && denominator === base + "D" ? "MEP"
+    : b.currency === "EXT" && denominator === base + "C" ? "CCL"
+    : undefined;
+  if (pairName) return `${pairName} ${base}${isCash ? " CI" : ""}`;
+}
+export function pairLabel({ a, b, c, cDivisor }: Pick<RatioPair, "a" | "b"> & RatioReference) {
+  const label = financialDollarLabel(a, b) ?? `${a.symbol}/${b.symbol}`;
+  if (!c) return label;
+  const reference = cDivisor ? `(${c.symbol} ÷ ${cDivisor})` : c.symbol;
+  return `(${label}) / ${reference}`;
 }
 export function pairKey(p: { a: { id: string }; b: { id: string }; c?: { id: string }; cDivisor?: 100 }) {
   return JSON.stringify([p.a.id, p.b.id, p.c?.id ?? null, p.cDivisor ?? 1]);
