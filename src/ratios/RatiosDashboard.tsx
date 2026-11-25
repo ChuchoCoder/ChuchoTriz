@@ -10,8 +10,9 @@ type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
 
-export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false }: {
+export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
+  onAutoFocus?(): void;
 }) {
   const id = useId(), [query, setQuery] = useState(value?.symbol || ""), [options, setOptions] = useState<RatioInstrument[]>([]);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [issue, setIssue] = useState("");
@@ -19,8 +20,12 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
   const generation = useRef(0), latestQuery = useRef(query);
   const input = useRef<HTMLInputElement>(null), focused = useRef(false);
   useEffect(() => {
-    if (autoFocus && !disabled && !focused.current) { input.current?.focus(); focused.current = true; }
-  }, [autoFocus, disabled]);
+    if (autoFocus && !disabled && !focused.current) {
+      input.current?.focus();
+      focused.current = true;
+      onAutoFocus?.();
+    }
+  }, [autoFocus, disabled, onAutoFocus]);
   latestQuery.current = query;
   useEffect(() => () => { generation.current++; }, []);
   useEffect(() => { if (value) setQuery(value.symbol); }, [value?.id, value?.symbol]);
@@ -108,6 +113,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const [editing, setEditing] = useState<string | null>(cfg.pairs.length ? null : "new");
   const [a, setA] = useState<RatioInstrument>(), [b, setB] = useState<RatioInstrument>(), [c, setC] = useState<RatioInstrument>();
   const [compare, setCompare] = useState(false);
+  const [focusReference, setFocusReference] = useState(false);
   const [divideCBy100, setDivideCBy100] = useState(false);
   const [formatOverride, setFormatOverride] = useState<RatioFormat>(), [editorSession, setEditorSession] = useState(0);
   const format = formatOverride ?? (compare ? "percent" : defaultRatioFormat(a, b));
@@ -118,7 +124,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
   const begin = (pair?: RatioPair) => {
-    setA(pair?.a); setB(pair?.b); setC(pair?.c); setCompare(!!pair?.c); setDivideCBy100(pair?.cDivisor === 100);
+    setA(pair?.a); setB(pair?.b); setC(pair?.c); setCompare(!!pair?.c); setFocusReference(false); setDivideCBy100(pair?.cDivisor === 100);
     setFormatOverride(pair ? pair.format || "number" : undefined); setEditorSession(n => n + 1);
     setEditing(pair?.id || "new"); revision.current = cfg.revision; setIssue("");
   };
@@ -157,11 +163,12 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           <span className="ct-ratios-division" aria-hidden="true">÷</span>
           <InstrumentPicker key={`${editorSession}-b`} label="B · Denominador" value={b} onChange={setB} search={search} disabled={busy} />
         </div>
-        <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => { setCompare(e.target.checked); setC(undefined); setDivideCBy100(false); setFormatOverride(undefined); }} />Comparar A/B con una referencia</label>
-        {compare && <>
-          <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy} />
-          <label className="ct-ratios-compare"><input type="checkbox" checked={divideCBy100} disabled={busy} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>
-        </>}
+        {compare && <InstrumentPicker key={`${editorSession}-c`} label="Referencia C · ej. Dólar oficial" value={c} onChange={setC} search={search} disabled={busy}
+          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)} />}
+        <label className="ct-ratios-compare"><input type="checkbox" checked={compare} disabled={busy} onChange={e => {
+          setCompare(e.target.checked); setFocusReference(e.target.checked); setC(undefined); setDivideCBy100(false); setFormatOverride(undefined);
+        }} />Comparar A/B con una referencia</label>
+        {compare && <label className="ct-ratios-compare"><input type="checkbox" checked={divideCBy100} disabled={busy} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>}
         <div className="ct-ratios-editor-actions"><label className="ct-ratios-format">Mostrar <select aria-label="Formato del ratio" value={format} disabled={busy} onChange={event => setFormatOverride(event.target.value as RatioFormat)}><option value="number">Número</option><option value="percent">Porcentaje (%)</option></select></label>
           <span>{compare ? format === "percent" ? `((A ÷ B) ÷ ${referenceFormula} − 1) × 100` : `(A ÷ B) ÷ ${referenceFormula}` : format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B · sin conversiones"}</span>
           <button type="button" disabled={busy} onClick={() => { setEditing(null); setIssue(""); }}>Cancelar</button>
