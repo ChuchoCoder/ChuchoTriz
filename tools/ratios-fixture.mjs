@@ -24,6 +24,10 @@ function install() {
   for (const [month, lst] of [['NOV26', 1600], ['DIC26', 1650]]) securities.push({ id: 'rx_DDF_DLR_' + month,
     symbol: 'DLR/' + month, symbolStr: 'DLR/' + month, marketId: 'rx', currency: 'ARS', settlementType: null, cfiCode: 'FXXXSX',
     refData: { totalAmountFactor: 1, contractMultiplier: 1000, roundLot: 1 }, md: { lst, refp: 1590, seq: 1, lstdStr: new Date().toISOString() } });
+  securities.push({
+    id: 'D30N6-2', symbol: 'D30N6', symbolStr: 'D30N6', marketId: 'bm', currency: 'ARS', settlementType: '2',
+    md: { lst: 125000, refp: 120000, seq: 1, lstdStr: new Date().toISOString() },
+  });
   let ds;
   function nativeWidget(data, dashboard) {
     return { ...data, dashboard, key: data.component + '-' + (++counter),
@@ -59,11 +63,40 @@ function install() {
     createDashboard: hydrate,
     async getDashboard(id) { return hydrate(JSON.parse(localStorage.getItem('ct-ratios-fixture-' + id))); }
   };
+  const marketDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const sessionStart = Date.parse(marketDay.format(Date.now()) + 'T00:00:00-03:00');
+  const historyEnd = Math.max(sessionStart, Math.floor(Date.now() / 60000) * 60000 - 60000);
+  const refId = 'D30N6-2';
+  let lagged = sessionStorage.getItem('ct-reference-history-lag') === '1';
+  const moveReferenceTick = () => { securities.find(s => s.id === refId).md.lstdStr = new Date(historyEnd - 45 * 60000).toISOString(); };
+  if (lagged) moveReferenceTick();
+  const seriesCounts = {}, failedSeries = new Set();
   window.mainStore = { dashboardStore: ds, securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) },
-    profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} } };
+    profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} },
+    seriesStore: { async getIntradaySeries(id, from, to) {
+      seriesCounts[id] = (seriesCounts[id] || 0) + 1;
+      if (failedSeries.has(id)) throw { response: { status: 401 } };
+      const price = securities.find(s => s.id === id)?.md.lst;
+      const bars = (end, start) => [4, 3, 2, 1, 0].map(offset => ({
+        date: new Date(Math.max(start, end - offset * 300000)),
+        close: price * (1 - offset * (id === 'AL30-2' ? 0.014 : 0.003)),
+      }));
+      const prior = sessionStart - 86400000;
+      const series = [
+        ...(lagged ? bars(prior + 16 * 3600000, prior) : []),
+        ...(lagged && id === refId ? [] : bars(historyEnd, sessionStart)),
+      ].filter(bar => +bar.date >= from * 1000 && +bar.date <= to * 1000);
+      return { series };
+    } } };
   window.ratiosFixture = {
     price(id, value) { const s = securities.find(s => s.id === id); s.md.lst = value; s.md.seq++; },
     connected(value) { window.mainStore.webSocketConnectionStatus = value; },
+    seriesCounts,
+    failSeries(id, value) { if (value) failedSeries.add(id); else failedSeries.delete(id); },
+    useEarlierReference() {
+      lagged = true; sessionStorage.setItem('ct-reference-history-lag', '1'); moveReferenceTick();
+      window.mainStore.seriesStore = { ...window.mainStore.seriesStore };
+    },
     switchDashboard() { ds.currentDashboard = ds.currentDashboard === d ? alternate : d; render(); }
   };
   render();
@@ -113,7 +146,7 @@ const server = createServer((request, response) => {
   const path = new URL(request.url, 'http://127.0.0.1').pathname.slice(1);
   if (path === 'fixture' || path.startsWith('security/')) {
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
-    response.end(`<!doctype html><html lang="es"><meta charset="utf-8"><title>Ratios · DATOS SIMULADOS</title>${styles}<body style="background:#222c3b;color:white;font:14px Arial"><h1>Ratios · DATOS SIMULADOS · Sin conexión a broker</h1><p>Versión: 4.24.4</p><nav class="DirectAccessBar"></nav><div id="tv_chart_container"></div><div class="CustomDashboard"><div class="WidgetsComponentsPopoverList"></div><div class="GridLayout" style="position:relative;height:1200px"></div></div><script>(${install.toString()})();${path.startsWith('security/') ? `(${installChart.toString()})();` : ''}</script><script type="module" src="/${main}"></script></body></html>`); return;
+    response.end(`<!doctype html><html lang="es"><meta charset="utf-8"><title>Ratios · DATOS SIMULADOS</title>${styles}<style>.WidgetsComponentsPopoverList{width:280px}.WidgetsComponentsPopoverList .WidgetComponentCard{display:flex}</style><body style="background:#222c3b;color:white;font:14px Arial"><h1>Ratios · DATOS SIMULADOS · Sin conexión a broker</h1><p>Versión: 4.24.4</p><nav class="DirectAccessBar"></nav><div id="tv_chart_container"></div><div class="CustomDashboard"><div class="WidgetsComponentsPopoverList"></div><div class="GridLayout" style="position:relative;height:1200px"></div></div><script>(${install.toString()})();${path.startsWith('security/') ? `(${installChart.toString()})();` : ''}</script><script type="module" src="/${main}"></script></body></html>`); return;
   }
   if (!files.includes(path)) { response.writeHead(404); response.end(); return; }
   response.setHeader('Content-Type', path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'application/octet-stream');

@@ -12,7 +12,7 @@ async (page) => {
   const b = name => page.getByRole('button', { name, exact: true });
   const select = async (index, query, symbol, detail = 'ARS') => {
     const picker = page.locator('.ct-ratio-picker').nth(index);
-    await picker.locator('input').fill(query, { force: true });
+    await picker.getByRole('combobox').fill(query, { force: true });
     await page.waitForFunction(i => !!document.querySelectorAll('.ct-ratio-picker')[i]?.querySelector('[role=option]'), index, { polling: 100, timeout: 6000 });
     const options = picker.getByRole('option').filter({ hasText: detail });
     const chosen = options.filter({ has: page.locator('strong', { hasText: new RegExp('^' + symbol + '$') }) });

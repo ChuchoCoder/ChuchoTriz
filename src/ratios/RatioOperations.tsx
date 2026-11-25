@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
 import { RatioChartLink } from "./RatioChart";
+import { ReferenceChartButton } from "./IntradayChart";
 import { GridActionIcon, GridColumnPicker, GridRowHandle, GridSortHeader, monitorColumns, operationColumns, useGridColumns, nextGridSort, reorderGridRows, sortGridRows, type GridSort, type GridValue } from "./RatioGrid";
 import { calculateRatio, currencyLabel, numberLabel, pairKey, pairLabel, ratioLabel, ratioTimeLabel, ratioUpdatedAt, referenceCFormula, referenceCQuote, tradeLabel } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
@@ -365,11 +366,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
     {view === "monitor" && <div>
       <div className="ro-monitor-controls"><div className="ro-add-watch"><InstrumentPicker label="Instrumento A" key={`watch-a-${pickerSession}`} value={watchA} onChange={i => setWatchA(i as TradingInstrument | undefined)} search={market.search} disabled={!available} /><InstrumentPicker label="Instrumento B" key={`watch-b-${pickerSession}`} value={watchB} onChange={i => setWatchB(i as TradingInstrument | undefined)} search={market.search} disabled={!available} />
         {compare && <InstrumentPicker label="Referencia C · ej. DLR/SPOT" key={`watch-c-${pickerSession}`} value={watchC} onChange={i => setWatchC(i as TradingInstrument | undefined)} search={market.search} disabled={!available}
-          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)} />}
+          autoFocus={focusReference} onAutoFocus={() => setFocusReference(false)}
+          divisor={{ checked: divideCBy100, onChange: setDivideCBy100 }} />}
         <label className="ro-compare"><input type="checkbox" checked={compare} disabled={!available} onChange={e => {
           setCompare(e.target.checked); setFocusReference(e.target.checked); setWatchC(undefined); setDivideCBy100(false);
         }} />Agregar referencia C</label>
-        {compare && <label className="ro-compare"><input type="checkbox" checked={divideCBy100} disabled={!available} onChange={e => setDivideCBy100(e.target.checked)} />Dividir Referencia C por 100</label>}
         <button type="button" disabled={!available || !watchA || !watchB || compare && !watchC} onClick={() => void commit(base => {
           if (!watchA || !watchB || watchA.id === watchB.id) throw Error("Elegí instrumentos diferentes.");
           if (base.watch.length >= MAX_WATCH) throw Error(`Podés observar hasta ${MAX_WATCH} pares.`);
@@ -394,6 +395,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
           {showMonitor("updated") && <td className="ro-updated" title={`Hora de mercado del último precio de A/B${p.c ? "/C" : ""}: ${tradeLabel(updatedAt)}`}>{ratioTimeLabel(updatedAt)}</td>}
           <td><div className="ro-actions">
             <RatioChartLink pair={p} />
+            <ReferenceChartButton pair={p} />
             <button type="button" className="ro-monitor-operation" disabled={!available || monitorOnly} title={monitorOnly ? "Las referencias, tasas y comparaciones de tres cotizaciones sólo se monitorean." : undefined} onClick={() => begin(p.a, p.b)}>{monitorOnly ? "Sólo monitor" : "Abrir operación"}</button>
             <button type="button" disabled={!available || !!p.c} aria-label={`Invertir ${label}`} title={p.c ? "Comparación (A/B)/C; agregá otra fórmula para cambiar el sentido" : "Invertir A/B"} onClick={() => void commit(base => invertWatchPair(base, p.id))}>⇄</button>
             <button type="button" disabled={!available} aria-label={`Quitar par ${label}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button>

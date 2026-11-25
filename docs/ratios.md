@@ -23,6 +23,42 @@ no garantiza datos en cada intervalo. No se guardan estudios ni se envían órde
 desde esta acción. Comprueba las funciones y los datos del gráfico en tiempo de
 ejecución; no bloquea por el número de versión de Matriz ni exige que se muestre.
 
+## Dólar intradiario y gráfico contra Referencia C
+
+En un dashboard de Matriz, elegí **Nuevo widget → DÓLAR INTRADIARIO · CHUCHOTRIZ**.
+El widget arranca en MEP AL30 a 24 h. Tocá el par para elegir el instrumento A
+y el instrumento B del catálogo de Matriz. El gráfico muestra A dividido B.
+Cada widget guarda los dos instrumentos con su identidad exacta, incluido el
+plazo, y su posición en el dashboard. Los widgets guardados con la configuración
+anterior conservan su par. Si ese par no está disponible, elegí A y B en el editor.
+Desde **+ Referencia C** se puede elegir una especie y activar **Dividir C por
+100**. El widget guarda esa referencia y dibuja A/B en el eje derecho y
+la brecha porcentual a la izquierda. **Sólo brecha** oculta la línea A/B
+en el widget actual y conserva la rueda seleccionada.
+
+En una fila con Referencia C del widget Ratios o del Monitor, el botón de
+gráfico marcado **C** abre dos vistas. **Comparación** muestra A/B y la
+referencia en una escala numérica común. **Brecha %** muestra
+`((A/B) / C − 1) × 100`. El eje porcentual usa el mínimo y máximo de la brecha
+visible más un margen. La línea de igualdad se muestra si el cero queda
+dentro del eje. Ambas vistas
+usan `C/100` si la fila tiene activado ese divisor. El ícono de gráfico nativo
+continúa abriendo el gráfico de Matriz.
+
+Las vistas leen las series intradiarias de los últimos siete días calendario
+y los últimos precios recibidos en vivo con su hora de mercado argentina.
+El cálculo usa el último dato de cada pata dentro del mismo intervalo de
+cinco minutos. La brecha requiere también C en ese intervalo. El selector
+de fecha permite consultar el día actual o días con cobertura. El widget
+abre en la rueda de hoy, incluso cuando está vacía. Los gráficos abiertos
+desde una fila de Ratios pueden priorizar una rueda anterior con histórico
+coincidente. Los cierres históricos completados prevalecen
+sobre los ticks capturados de ese mismo minuto. Los faltantes quedan como
+huecos. **Reintentar histórico** vuelve a consultar las series del broker.
+
+El recorrido con datos simulados usa `tools/ratios-fixture.mjs` y
+`tools/validate-intraday.playwright.js` en el perfil Playwright compartido.
+
 ## Monitor y registro de operaciones
 
 En **Configuración → Ratios** hay tres pasos: Monitor, Abrir operación de ratio

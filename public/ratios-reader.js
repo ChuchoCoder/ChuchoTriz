@@ -4,16 +4,36 @@
   if (!channel) return;
   if (window.__chuchotrizRatiosReader) { window.__chuchotrizRatiosReader.attach(channel); return; }
   const TYPE = "ChuchoTrizRatiosWidget", KEY = "chuchotrizRatios";
+  const DOLLAR_TYPE = "ChuchoTrizIntradayDollarWidget", DOLLAR_KEY = "chuchotrizIntradayDollar";
+  const DAY = 86400000, HISTORY_DAYS = 7;
   const DEFAULT_PAIRS = [["AL30", "AL30D"], ["AL30", "AL30C"], ["AL30D", "AL30C"], ["GD30", "AL30"],
     ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"],
     ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"]];
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
   let identity, revision = 0, writing = false;
+  const intradayDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" });
+  const intradayHistory = new Map(), intradaySubscriptions = new Set(), intradaySequences = new Map();
+  let intradayScope, intradayConnection, intradayRevision = 0;
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
+  const descriptor = i => ({ id: i.id, symbol: clean(i.symbol), market: clean(i.market), currency: clean(i.currency), settlement: clean(i.settlement), ...(i.monitorOnly === true ? { monitorOnly: true } : {}) });
   const tickerKey = s => s.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase();
   const ownConfig = w => w?.component === TYPE && [1, 2, 3].includes(w.settings?.[KEY]?.schema) && short(w.settings[KEY].id) && Array.isArray(w.settings[KEY].pairs) && w.settings[KEY].pairs.length <= 50 ? w.settings[KEY] : undefined;
+  const dollarSelection = cfg => cfg && ["MEP", "CCL"].includes(cfg.kind) && ["AL30", "GD30"].includes(cfg.bond) && ["24h", "CI"].includes(cfg.term);
+  function dollarConfig(w) {
+    const cfg = w?.settings?.[DOLLAR_KEY];
+    if (w?.component !== DOLLAR_TYPE || ![1, 2, 3].includes(cfg?.schema) || !short(cfg.id) ||
+      !Number.isSafeInteger(cfg.revision) || cfg.revision < 0) return;
+    const custom = cfg.schema === 3;
+    if (custom ? !short(cfg.a?.id) || !short(cfg.b?.id) || cfg.a.id === cfg.b.id : !dollarSelection(cfg)) return;
+    if (cfg.c === undefined ? cfg.schema === 2 || cfg.cDivisor !== undefined
+      : cfg.schema === 1 || !short(cfg.c?.id) || cfg.cDivisor !== undefined && cfg.cDivisor !== 100) return;
+    return { schema: cfg.schema, id: cfg.id, revision: cfg.revision,
+      ...(custom ? { a: descriptor(cfg.a), b: descriptor(cfg.b) } : { kind: cfg.kind, bond: cfg.bond, term: cfg.term }),
+      ...(cfg.c ? { c: descriptor(cfg.c) } : {}), ...(cfg.cDivisor === 100 ? { cDivisor: 100 } : {}) };
+  }
+  const ownsWidget = w => ownConfig(w) || dollarConfig(w);
   const COLUMN_KEYS = ["lastA", "lastB", "referenceC"];
   function columnsOf(w) {
     const stored = w.settings?.chuchotrizRatiosColumns;
@@ -68,6 +88,24 @@
     if (!instrument(sec)) throw Error("El instrumento ya no está disponible en el catálogo de Matriz.");
     return sec;
   }
+  function dollarPair(securities, { kind, bond, term }) {
+    const suffix = term === "CI" ? " CI" : "";
+    const settlement = term === "CI" ? "1" : "2";
+    const bSymbol = bond + (kind === "MEP" ? "D" : "C") + suffix;
+    const aMatches = new Map(), bMatches = new Map();
+    for (const security of securities) {
+      if (security?.marketId !== "bm" || String(security.settlementType) !== settlement) continue;
+      const rawSymbol = security.symbolStr || security.symbol;
+      if (!short(rawSymbol, 100)) continue;
+      const symbol = tickerKey(rawSymbol);
+      if (symbol !== bond + suffix && symbol !== bSymbol) continue;
+      const item = instrument(security);
+      if (!item) continue;
+      if (symbol === bond + suffix && item.currency === "ARS") aMatches.set(item.id, item);
+      if (symbol === bSymbol && (item.currency === "USD" || kind === "CCL" && item.currency === "EXT")) bMatches.set(item.id, item);
+    }
+    if (aMatches.size === 1 && bMatches.size === 1) return { a: aMatches.values().next().value, b: bMatches.values().next().value };
+  }
   function initialPairs(c) {
     const wanted = new Set(DEFAULT_PAIRS.flat()), matches = new Map(), missing = [];
     for (const sec of c.ss.securities) {
@@ -95,7 +133,6 @@
     if (cfg.pairs.some(p => p.c !== undefined && (cfg.schema < 2 || !short(p.c?.id)) ||
       p.cDivisor !== undefined && (cfg.schema !== 3 || !p.c || p.cDivisor !== 100))) throw Error("Referencia de ratio inválida.");
     if (cfg.pairs.some(p => p.format !== undefined && !["number", "percent"].includes(p.format))) throw Error("Formato de ratio no compatible.");
-    const descriptor = i => ({ id: i.id, symbol: clean(i.symbol), market: clean(i.market), currency: clean(i.currency), settlement: clean(i.settlement), ...(i.monitorOnly === true ? { monitorOnly: true } : {}) });
     return { schema: cfg.schema, id: cfg.id, revision: cfg.revision, pairs: cfg.pairs.map(p => ({ id: p.id, format: p.format || "number",
       a: descriptor(p.a), b: descriptor(p.b), ...(p.c ? { c: descriptor(p.c) } : {}),
       ...(p.cDivisor === 100 ? { cDivisor: p.cDivisor } : {}) })) };
@@ -104,20 +141,95 @@
     const value = raw instanceof Date ? raw.getTime() : typeof raw === "string" ? Date.parse(raw) : NaN;
     return finite(value) && value <= Date.now() ? value : undefined;
   }
+  function currentMarketData(sec, lastSequence) {
+    const md = sec.md || {}, seq = md.seq;
+    if (finite(seq) && seq < (lastSequence.get(sec.id) ?? -Infinity)) return;
+    if (finite(seq)) lastSequence.set(sec.id, seq);
+    return md;
+  }
   function quote(c, id) {
     const sec = c.ss.securities.find(s => s?.id === id);
     if (!sec) return { issue: "Instrumento no disponible" };
-    const md = sec.md || {}, seq = md.seq;
-    if (finite(seq) && seq < (sequences.get(id) ?? -Infinity)) return { issue: "Esperando datos de mercado actuales" };
-    if (finite(seq)) sequences.set(id, seq);
+    const md = currentMarketData(sec, sequences);
+    if (!md) return { issue: "Esperando datos de mercado actuales" };
     const refAt = timestamp(md.refdStr || md.refd);
     return { last: finite(md.lst) ? md.lst : undefined, reference: finite(md.refp) ? md.refp : undefined,
       tradedAt: timestamp(md.lstdStr || md.lstd), referenceDate: refAt === undefined ? undefined : new Date(refAt).toISOString().slice(0, 10) };
   }
+  function intradayMarket(ids) {
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 3 || !ids.every(id => short(id)) || new Set(ids).size !== ids.length) throw Error("Instrumentos intradiarios inválidos.");
+    const ms = window.mainStore, ss = ms?.securityStore;
+    if (!Array.isArray(ss?.securities)) throw Error("Esperando el catálogo de Matriz.");
+    const now = Date.now(), start = Date.parse(intradayDate.format(now) + "T00:00:00-03:00");
+    const scope = [ms, ss, ms.profileStore?.activeAccount, ms.seriesStore, start];
+    if (!intradayScope || scope.some((value, i) => value !== intradayScope[i])) {
+      intradayScope = scope; intradayRevision++; intradayHistory.clear(); intradaySubscriptions.clear(); intradaySequences.clear();
+    }
+    const connected = !!ms.webSocketConnectionStatus;
+    const connection = [ms.dmaWebSocket, connected];
+    if (!intradayConnection || connection.some((value, i) => value !== intradayConnection[i])) {
+      intradayConnection = connection; intradaySubscriptions.clear(); intradaySequences.clear();
+    }
+    const securities = ids.map(id => ss.securities.find(s => s?.id === id && instrument(s)));
+    return { ms, now, start, connected, securities, revision: intradayRevision };
+  }
+  function intradayQuotes(ids) {
+    const { ms, connected, securities, revision, start } = intradayMarket(ids);
+    const available = securities.filter(Boolean);
+    const market = { revision, start, connected, available: available.map(sec => sec.id) };
+    if (!connected) return { ...market, points: {} };
+    const fresh = available.filter(s => !intradaySubscriptions.has(s.id));
+    if (fresh.length) {
+      try {
+        ms.dmaWebSocket.addSubscription("md", fresh.map(s => "md." + s.id));
+      } catch {
+        return { ...market, points: {}, issue: "Suscripciones de mercado no disponibles." };
+      }
+      fresh.forEach(s => intradaySubscriptions.add(s.id));
+    }
+    const points = available.flatMap(s => {
+      const md = currentMarketData(s, intradaySequences), at = timestamp(md?.lstdStr || md?.lstd);
+      return finite(at) && at >= start && finite(md?.lst) ? [[s.id, { at, value: md.lst }]] : [];
+    });
+    return { ...market, points: Object.fromEntries(points) };
+  }
+  function readIntradaySeries(market, id, refresh) {
+    const cached = intradayHistory.get(id);
+    if (cached && (cached.pending || !refresh && cached.until > market.now)) return cached.result;
+    const entry = { until: market.now + 20000, pending: true };
+    entry.result = Promise.resolve().then(async () => {
+      let timer;
+      try {
+        const store = market.ms.seriesStore;
+        const range = typeof store?.getIntradaySeries === "function";
+        if (!range && typeof store?.getIntradayTodaySeries !== "function") return { points: [], issue: "Histórico no disponible en Matriz" };
+        const since = range ? market.start - (HISTORY_DAYS - 1) * DAY : market.start;
+        const request = range ? store.getIntradaySeries(id, since / 1000, Math.ceil(market.now / 1000), "1") : store.getIntradayTodaySeries(id);
+        const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), 17000); });
+        const data = await Promise.race([request, timeout]);
+        if (data === null) return { points: [], issue: "Matriz no respondió a tiempo al pedir el histórico" };
+        if (!Array.isArray(data?.series)) return { points: [], issue: "Respuesta de histórico inválida" };
+        const points = data.series.flatMap(point => {
+          const at = timestamp(point?.date), value = point?.close;
+          if (!finite(at) || at < since || !finite(value)) return [];
+          const provisional = Math.floor(at / 60000) === Math.floor(market.now / 60000);
+          return [{ at, value, ...(provisional ? { provisional: true } : {}) }];
+        });
+        if (points.length) entry.until = Date.now() + 60000;
+        return { points, issue: points.length ? undefined : range ? `Sin histórico intradiario en los últimos ${HISTORY_DAYS} días` : "Sin histórico de la rueda actual" };
+      } catch (error) {
+        const status = error?.response?.status ?? error?.status;
+        return { points: [], issue: Number.isInteger(status) ? `Histórico no disponible (HTTP ${status})` : "No se pudo cargar el histórico" };
+      } finally { clearTimeout(timer); }
+    }).finally(() => { entry.pending = false; });
+    if (intradayHistory.size >= 120) intradayHistory.delete(intradayHistory.keys().next().value);
+    intradayHistory.set(id, entry);
+    return entry.result;
+  }
   function state() {
     const c = context(), connected = !!c.ms.webSocketConnectionStatus;
     if (!c.d) return { context: c.revision, canAdd: false, connected, widgets: [], quotes: {}, issue: "Abrí o creá un dashboard de Matriz para agregar Ratios." };
-    const owned = c.d.layout.filter(ownConfig);
+    const owned = c.d.layout.filter(ownsWidget);
     if (owned.length) preserveSizes(c.d); else restore(c.d);
     let corrected = false;
     for (const w of owned) {
@@ -129,12 +241,20 @@
       }
     }
     if (corrected) c.d.layout = [...c.d.layout];
-    const widgets = owned.map(w => {
-      const config = configOf(w), slot = document.querySelector(".DashboardGridItem-" + CSS.escape(w.key));
-      if (slot) slot.dataset.ctRatiosSlot = config.id;
+    for (const w of owned) {
+      const slot = document.querySelector(".DashboardGridItem-" + CSS.escape(w.key));
+      if (slot) slot.dataset.ctRatiosSlot = ownsWidget(w).id;
+    }
+    const widgets = owned.filter(ownConfig).map(w => {
+      const config = configOf(w);
       const missing = w.settings.chuchotrizRatiosInitialMissing;
       return { config, width: w.w, height: w.h, columns: columnsOf(w), issue: Array.isArray(missing) && missing.length && missing.length <= DEFAULT_PAIRS.length && missing.every(p => short(p))
         ? "No se pudieron cargar estos pares iniciales: " + missing.join(", ") + ". Agregalos manualmente cuando estén disponibles." : undefined };
+    });
+    const dollarWidgets = owned.filter(dollarConfig).map(w => {
+      const config = dollarConfig(w);
+      const pair = config.schema === 3 ? { a: config.a, b: config.b } : dollarPair(c.ss.securities, config);
+      return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
     });
     const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])])))];
     const active = new Set(ids);
@@ -154,7 +274,7 @@
       }
     }
     return { context: c.revision, dashboardId: c.d.id, canAdd: !finite(c.ds.widgetsLimit) || c.d.layout.length < c.ds.widgetsLimit,
-      connected, widgets, quotes: connected ? Object.fromEntries(ids.map(id => [id, quote(c, id)])) : {}, issue: connected ? undefined : "Mercado desconectado. Esperando reconexión de Matriz." };
+      connected, widgets, dollarWidgets, quotes: connected ? Object.fromEntries(ids.map(id => [id, quote(c, id)])) : {}, issue: connected ? undefined : "Mercado desconectado. Esperando reconexión de Matriz." };
   }
   function assertCurrent(op) {
     if (!channels.has(op.channel) || retired.has(op.id) || Date.now() > op.deadline || context().revision !== op.context) throw Error("Cambió el dashboard o la lectura fue retirada. Volvé a intentarlo.");
@@ -164,7 +284,10 @@
     return c.d;
   }
   const delay = ms => new Promise(resolve => setTimeout(() => resolve(), ms));
-  const savedSignature = d => JSON.stringify(d.layout.filter(ownConfig).map(w => ({ config: configOf(w), columns: columnsOf(w), x: w.x, y: w.y, width: w.w, height: w.h })).sort((a, b) => a.config.id.localeCompare(b.config.id)));
+  const savedSignature = d => JSON.stringify(d.layout.filter(ownsWidget).map(w => {
+    const dollar = dollarConfig(w);
+    return { config: dollar || configOf(w), columns: dollar ? undefined : columnsOf(w), x: w.x, y: w.y, width: w.w, height: w.h };
+  }).sort((a, b) => a.config.id.localeCompare(b.config.id)));
   async function verifiedSave(c, op) {
     const expected = savedSignature(c.d);
     c.d.onSave(true);
@@ -195,23 +318,56 @@
   async function mutate(method, params, op) {
     const c = context(), d = selected(c, params);
     assertCurrent(op);
-    if (method === "ratiosAdd") {
+    if (method === "ratiosAdd" || method === "dollarAdd") {
       if (finite(c.ds.widgetsLimit) && d.layout.length >= c.ds.widgetsLimit) throw Error("Se alcanzó el límite de widgets de este dashboard.");
       if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) throw Error("Esperando las dimensiones del dashboard.");
-      const width = Math.min(560, Math.max(360, d.width - 20)), height = 300;
-      const defaults = initialPairs(c);
-      const config = { schema: defaults.pairs.some(p => p.c) ? 2 : 1, id: crypto.randomUUID(), revision: 0, pairs: defaults.pairs };
-      const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{ component: TYPE, ...position(c, width, height), w: width, h: height, settings: { [KEY]: config, chuchotrizRatiosSize: { width, height }, chuchotrizRatiosInitialMissing: defaults.missing }, selectionCriteria: { securities: [] } }] }).layout[0];
+      const isDollar = method === "dollarAdd";
+      const width = Math.min(isDollar ? 480 : 560, Math.max(360, d.width - 20)), height = isDollar ? 350 : 300;
+      const defaults = isDollar ? undefined : initialPairs(c);
+      const identity = { id: crypto.randomUUID(), revision: 0 };
+      const settings = defaults
+        ? { [KEY]: { ...identity, schema: defaults.pairs.some(p => p.c) ? 2 : 1, pairs: defaults.pairs }, chuchotrizRatiosInitialMissing: defaults.missing }
+        : { [DOLLAR_KEY]: { ...identity, schema: 1, kind: "MEP", bond: "AL30", term: "24h" } };
+      const widget = c.ds.createDashboard({ id: d.id, name: d.name, layout: [{
+        component: isDollar ? DOLLAR_TYPE : TYPE, ...position(c, width, height), w: width, h: height,
+        settings: { ...settings, chuchotrizRatiosSize: { width, height } }, selectionCriteria: { securities: [] },
+      }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);
     } else {
-      const widget = d.layout.find(w => ownConfig(w)?.id === params.widgetId);
+      const configFor = method === "dollarEdit" ? dollarConfig : method === "ratiosRemove" ? ownsWidget : ownConfig;
+      const widget = d.layout.find(w => configFor(w)?.id === params.widgetId);
       if (!widget) throw Error("El widget ya no está en este dashboard.");
-      const cfg = configOf(widget);
+      const cfg = dollarConfig(widget) || configOf(widget);
       if (params.revision !== cfg.revision) throw Error("El widget cambió mientras lo editabas. Revisá los datos y volvé a intentar.");
       if (method === "ratiosRemove") {
         // Native removeWidget groups by security: empty widgets share that value.
         // Remove this exact instance, without touching any other empty widget.
         d.layout = d.layout.filter(w => w !== widget); d.widgetsDicts.delete(widget.key);
+      } else if (method === "dollarEdit") {
+        if (cfg.revision === Number.MAX_SAFE_INTEGER) throw Error("Selección de dólar intradiario inválida.");
+        const changingPair = params.a !== undefined || params.b !== undefined;
+        const keepReference = changingPair && !Object.hasOwn(params, "c") && !Object.hasOwn(params, "cDivisor");
+        const referenceId = keepReference ? cfg.c?.id : params.c, divisor = keepReference ? cfg.cDivisor : params.cDivisor;
+        if (divisor !== undefined && (referenceId === undefined || divisor !== 100)) throw Error("Divisor inválido para la referencia C.");
+        const reference = referenceId === undefined ? undefined : cfg.c?.id === referenceId ? cfg.c : instrument(byId(c, referenceId));
+        let legs;
+        if (changingPair) {
+          if (!short(params.a) || !short(params.b) || params.a === params.b) throw Error("Elegí dos instrumentos diferentes.");
+          const existing = [cfg.a, cfg.b];
+          const resolve = id => instrument(c.ss.securities.find(s => s?.id === id)) || existing.find(i => i?.id === id) || instrument(byId(c, id));
+          legs = { a: resolve(params.a), b: resolve(params.b) };
+        } else if (cfg.schema === 3) {
+          if (["kind", "bond", "term"].some(key => params[key] !== undefined)) throw Error("Recargá Matriz para editar los instrumentos de este widget.");
+          legs = { a: cfg.a, b: cfg.b };
+        } else {
+          const selection = ["kind", "bond", "term"].some(key => params[key] !== undefined) ? params : cfg;
+          if (!dollarSelection(selection)) throw Error("Selección de dólar intradiario inválida.");
+          legs = { kind: selection.kind, bond: selection.bond, term: selection.term };
+        }
+        widget.settings = { ...widget.settings, [DOLLAR_KEY]: {
+          schema: legs.a ? 3 : reference ? 2 : 1, id: cfg.id, revision: cfg.revision + 1, ...legs,
+          ...(reference ? { c: reference } : {}), ...(divisor === 100 ? { cDivisor: 100 } : {}),
+        } };
       } else if (method === "ratiosResize") {
         if (!finite(params.width) || !finite(params.height)) throw Error("Tamaño inválido.");
         widget.w = Math.round(Math.max(360, Math.min(2200, params.width)));
@@ -267,6 +423,16 @@
     try {
       const params = msg.params || {};
       if (msg.method === "ratiosState") { reply({ result: state() }); return; }
+      if (msg.method === "ratioIntradayQuotes") { reply({ result: intradayQuotes(params.ids) }); return; }
+      if (msg.method === "ratioIntradayHistory") {
+        const market = intradayMarket(params.ids);
+        const entries = await Promise.all(market.securities.map((s, i) => s
+          ? readIntradaySeries(market, s.id, params.refresh === true)
+          : { points: [], issue: "Instrumento no disponible en el catálogo" }));
+        if (intradayMarket(params.ids).revision !== market.revision) throw Error("Cambió el contexto de mercado. Volvé a cargar el histórico.");
+        reply({ result: { revision: market.revision, series: Object.fromEntries(params.ids.map((id, i) => [id, entries[i]])) } });
+        return;
+      }
       const c = context();
       if (msg.method === "ratiosSearch") {
         selected(c, params);
@@ -276,7 +442,7 @@
         const result = c.ss.securities.map(instrument).filter(s => s && (tickerKey(s.symbol).normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(query) || s.id === "rx_DDF_DLR_SPOT" && "DOLAR OFICIAL DOLAR USA DLR/SPOT".includes(query))).sort((a, b) => Number(tickerKey(b.symbol) === query) - Number(tickerKey(a.symbol) === query) || a.symbol.localeCompare(b.symbol) || a.id.localeCompare(b.id)).slice(0, 40);
         reply({ result }); return;
       }
-      if (!["ratiosAdd", "ratiosEdit", "ratiosRemove", "ratiosResize", "ratiosColumns"].includes(msg.method)) throw Error("Método no permitido por Ratios.");
+      if (!["ratiosAdd", "ratiosEdit", "ratiosRemove", "ratiosResize", "ratiosColumns", "dollarAdd", "dollarEdit"].includes(msg.method)) throw Error("Método no permitido por Ratios.");
       if (writing) throw Error("Hay un cambio guardándose. Esperá a que termine.");
       writing = true; ownsWrite = true;
       const result = await mutate(msg.method, params, { id: msg.id, channel: msg.channel, context: c.revision, deadline: Date.now() + 12000 });
