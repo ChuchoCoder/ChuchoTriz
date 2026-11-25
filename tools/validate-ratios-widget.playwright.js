@@ -69,9 +69,10 @@ async (page) => {
   const referenceTicker = editor.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial', exact: true });
   const hasFocus = control => control.evaluate(element => document.activeElement === element);
   assert(await hasFocus(numerator), 'Editing a saved comparison starts in A');
-  await numerator.fill('AL30'); await page.keyboard.press('Tab');
-  assert(await hasFocus(denominator), 'Tab moves from A to B while resolving the typed numerator');
-  await denominator.fill('AL30D'); await page.keyboard.press('Tab');
+  await numerator.fill('al30'); await page.keyboard.press('Tab');
+  await numerator.locator('..').locator('small[title="AL30-2"]').waitFor();
+  assert(await hasFocus(denominator), 'Tab moves from A to B and resolving A leaves focus in B');
+  await denominator.fill('al30d'); await page.keyboard.press('Tab');
   await denominator.locator('..').locator('small[title="AL30D-2"]').waitFor();
   assert(await hasFocus(referenceTicker), 'Tab moves from B to C and resolving B leaves focus in C');
   await page.keyboard.press('Shift+Tab');
@@ -85,6 +86,9 @@ async (page) => {
     await b('Editar ' + name).waitFor();
   }
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
+  const savedCablePairs = (await snapshot()).find(w => w.component === 'ChuchoTrizRatiosWidget').settings.chuchotrizRatios.pairs
+    .filter(pair => pair.b.id === 'AL30C-2' && !pair.c);
+  assert(savedCablePairs.length === 2 && savedCablePairs.every(pair => pair.b.currency === 'USD'), 'Edited rows persisted the USD cable descriptor');
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'Edited CCL and CANJE keep their names after reloading with a USD cable descriptor');
   for (const pair of defaults) { await b('Eliminar ' + pair).click(); await idle(); }
   await page.reload({ waitUntil: 'domcontentloaded' }); await idle();
