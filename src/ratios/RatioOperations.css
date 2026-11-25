@@ -159,6 +159,13 @@
 .ro-close-actions>.ro-actions{flex-wrap:wrap}
 .ro-close-issue{font-size:10px;color:var(--ro-muted);padding:5px 0}
 
+@container ratio-detail (max-width:260px){
+  .ro-detail-summary table{table-layout:fixed}
+  .ct-ratio-ops .ro-detail-summary :is(th,td){white-space:normal;overflow-wrap:anywhere}
+  .ct-ratio-ops .ro-close-quotes button{min-width:0;padding-inline:2px}
+  .ro-close-quotes button>span:first-child{white-space:normal;overflow-wrap:anywhere}
+  .ro-close-actions>.ro-actions{justify-content:flex-start}
+}
 @container ratio-detail (min-width:420px){
   .ro-close-legs{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ro-pnl-lines{grid-template-columns:repeat(3,minmax(0,1fr))}
