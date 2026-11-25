@@ -136,9 +136,28 @@ async page => {
   checks.push('Removed defaults stay removed after reload; explicit restoration adds only missing pairs');
   await choose('Instrumento A', 'SPY'); await choose('Instrumento B', 'GGAL');
   await page.waitForFunction(() => [...document.querySelectorAll('.ro-monitor-controls button')].some(b => b.textContent === 'Agregar par' && !b.disabled), null, { polling: 100 });
+  await page.evaluate(() => {
+    const store = mainStore.securityStore;
+    const original = store.getSecurity;
+    const pending = new Promise(resolve => {
+      window.releaseSpyQuote = () => { store.getSecurity = original; resolve(); };
+    });
+    store.getSecurity = async id => {
+      if (id === 'SPY') await pending;
+      return original.call(store, id);
+    };
+  });
   await click(button('Agregar par')); await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 11);
+  const spy = page.locator('.ro-monitor-table tr').filter({ has: button('Invertir SPY/GGAL') });
+  await click(spy.getByRole('button', { name: 'Abrir operación', exact: true }));
+  assert(await label('Precio de entrada A').inputValue() === '', 'New pair waits for its first snapshot');
+  await label('Precio de entrada B').fill('49');
+  await page.evaluate(() => window.releaseSpyQuote());
+  await wait(() => document.querySelector('[aria-label="Usar Venta nivel 1 de A"]')?.getAttribute('aria-pressed') === 'true');
+  assert(await label('Precio de entrada A').inputValue() === '100.1' && await label('Precio de entrada B').inputValue() === '49', 'The first snapshot fills the pending Ask and preserves manual input');
+  await click(button('Volver al monitor'));
   await wait(() => [...document.querySelectorAll('.ro-table-wrap tr')].find(r => r.textContent.includes('BMA/GGAL'))?.textContent.includes('100,00'));
-  checks.push('Exact ticker blur, monitor live prices and percent ratio');
+  checks.push('Exact ticker blur, monitor live ratio and first snapshot prefill for a newly added pair');
   const openBmaGgal = bma.getByRole('button', { name: 'Abrir operación' });
   await click(openBmaGgal); await label('Precio de entrada A').waitFor();
   assert(await page.locator('.ro-entry-heading').count() === 0, 'No redundant opening title');

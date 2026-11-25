@@ -57,7 +57,7 @@ export function InstrumentPicker({ label, value, onChange, search, disabled, aut
       const results = await search(text);
       if (request !== generation.current) return;
       const matches = exactTickerMatches(text, results);
-      const match = matches.length === 1 ? matches[0] : acceptSuggestion ? results[0] : undefined;
+      const match = matches.length === 1 ? matches[0] : acceptSuggestion && matches.length === 0 ? results[0] : undefined;
       if (match) choose(match);
       else setIssue(matches.length > 1 ? "Más de un instrumento coincide; elegí uno de la lista." : "No se encontró ese ticker exacto.");
     } catch (error) { if (request === generation.current) setIssue(error instanceof Error ? error.message : "No se pudo buscar el instrumento."); }

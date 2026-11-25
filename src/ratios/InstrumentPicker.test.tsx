@@ -7,9 +7,9 @@ import type { RatioInstrument } from "./model";
 const al30: RatioInstrument = { id: "al30", symbol: "AL30", market: "bm", currency: "ARS", settlement: "2" };
 const ggal: RatioInstrument = { ...al30, id: "ggal", symbol: "GGAL" };
 let container: HTMLDivElement, root: Root, search: ReturnType<typeof vi.fn<(query: string) => Promise<RatioInstrument[]>>>;
-function Probe({ autoFocus = false, disabled = false }: { autoFocus?: boolean; disabled?: boolean }) {
+function Probe({ autoFocus = false, disabled = false, acceptSuggestionOnTab = false }: { autoFocus?: boolean; disabled?: boolean; acceptSuggestionOnTab?: boolean }) {
   const [value, setValue] = useState<RatioInstrument>();
-  return <><InstrumentPicker label="Instrumento" value={value} onChange={setValue} search={search} disabled={disabled} autoFocus={autoFocus} /><output>{value?.id}</output></>;
+  return <><InstrumentPicker label="Instrumento" value={value} onChange={setValue} search={search} disabled={disabled} autoFocus={autoFocus} acceptSuggestionOnTab={acceptSuggestionOnTab} /><output>{value?.id}</output></>;
 }
 beforeEach(async () => {
   vi.useFakeTimers(); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -64,6 +64,18 @@ it("does not pick an arbitrary instrument for prefixes or ambiguous exact matche
   await type("AL3"); await blur(); expect(container.querySelector("output")!.textContent).toBe("");
   search.mockResolvedValue([al30, { ...al30, id: "another-market", market: "other" }]);
   await type("AL30"); await blur();
+  expect(container.querySelector("output")!.textContent).toBe("");
+  expect(container.querySelector("small")!.textContent).toContain("Más de un instrumento");
+});
+it("does not pick from ambiguous exact matches when Tab precedes the suggestions", async () => {
+  search.mockResolvedValue([al30, { ...al30, id: "another-market", market: "other" }]);
+  await act(async () => root.render(<Probe acceptSuggestionOnTab />));
+  await type("AL30");
+  const input = container.querySelector("input")!;
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    input.blur();
+  });
   expect(container.querySelector("output")!.textContent).toBe("");
   expect(container.querySelector("small")!.textContent).toContain("Más de un instrumento");
 });
