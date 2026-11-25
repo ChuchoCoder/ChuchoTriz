@@ -28,6 +28,13 @@ async (page, screenshots) => {
     assert(input && divisor && divisor.x >= input.x + input.width &&
       Math.abs(input.y + input.height / 2 - (divisor.y + divisor.height / 2)) < 2, label);
   };
+  const changeSavedWidget = update => page.evaluate(update => {
+    const dashboard = window.mainStore.dashboardStore.currentDashboard;
+    const widget = dashboard.layout.find(item => item.component === 'ChuchoTrizIntradayDollarWidget');
+    const config = widget.settings.chuchotrizIntradayDollar;
+    widget.settings = { ...widget.settings, chuchotrizIntradayDollar: { ...config, ...update, revision: config.revision + 1 } };
+    dashboard.onSave();
+  }, update);
 
   const dollarButton = button('DÓLAR INTRADIARIO · CHUCHOTRIZ');
   await dollarButton.waitFor();
@@ -64,6 +71,16 @@ async (page, screenshots) => {
   await page.reload();
   await widget.getByRole('img', { name: 'Gráfico intradiario de BMA/GGAL' }).waitFor();
   assert((await configurePair.textContent()).trim() === 'BMA / GGAL', 'The custom pair persists across reloads');
+  await idle(); await configurePair.click();
+  const stalePair = widget.getByRole('form', { name: 'Instrumentos del dólar intradiario', exact: true });
+  await changeSavedWidget({ b: { id: 'ALUA-2', symbol: 'ALUA', market: 'bm', currency: 'ARS', settlement: '2' } });
+  await configurePair.filter({ hasText: 'BMA / ALUA' }).waitFor();
+  assert(await stalePair.getByRole('combobox', { name: 'Instrumento B', exact: true }).inputValue() === 'GGAL',
+    'A previously opened edit still has its original draft');
+  await stalePair.getByRole('button', { name: 'Guardar', exact: true }).click();
+  await widget.getByRole('alert').filter({ hasText: /El widget cambió mientras lo editabas/ }).waitFor();
+  assert((await configurePair.textContent()).includes('BMA / ALUA'), 'A stale pair edit leaves a newer dashboard change intact');
+  await stalePair.getByRole('button', { name: 'Cancelar', exact: true }).click();
 
   await idle(); await button('RATIOS · CHUCHOTRIZ').click(); await idle();
   await button('Editar MEP AL30 vs DLR/SPOT').click();
@@ -150,6 +167,15 @@ async (page, screenshots) => {
   await daySelector.selectOption({ index: 1 });
   await widget.locator('.ct-intraday-axis-left').first().waitFor();
   checks.push('The widget reference and divisor survive reload');
+  await idle();
+  const configureC = widget.getByRole('button', { name: 'Configurar Referencia C', exact: true });
+  await configureC.click();
+  await changeSavedWidget({ cDivisor: undefined });
+  await configureC.filter({ hasText: /^C · D30N6$/ }).waitFor();
+  await widgetEditor.getByRole('button', { name: 'Quitar C', exact: true }).click();
+  await widget.getByRole('alert').filter({ hasText: /El widget cambió mientras lo editabas/ }).waitFor();
+  assert((await configureC.textContent()).trim() === 'C · D30N6', 'A stale reference removal leaves a newer dashboard change intact');
+  await widgetEditor.getByRole('button', { name: 'Cancelar', exact: true }).click();
 
   await page.evaluate(() => {
     const nav = document.querySelector('.DirectAccessBar');

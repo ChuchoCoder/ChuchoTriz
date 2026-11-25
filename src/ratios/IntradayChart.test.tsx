@@ -146,3 +146,28 @@ it("keeps today selectable when there are no quotes for any session", async () =
     await act(async () => root.unmount()); host.remove();
   }
 });
+
+it("reloads history as late instruments enter the same market catalogue", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  let catalogReady = false;
+  const start = Date.parse("2026-11-25T03:00:00Z");
+  call.mockImplementation((method: string) => Promise.resolve(method === "ratioIntradayQuotes"
+    ? { revision: 1, start, connected: true, available: catalogReady ? ["a", "b"] : ["a"], points: {} }
+    : { revision: 1, series: { a: history.a, b: catalogReady ? history.b : { points: [], issue: "Instrumento no disponible en el catálogo" } } }));
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<IntradayChart pair={{ a, b }} defaultToToday />));
+    expect(host.textContent).toContain("Instrumento no disponible en el catálogo");
+    catalogReady = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(host.querySelector('[aria-label="Gráfico intradiario de MEP AL30"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("Instrumento no disponible en el catálogo");
+    expect(call.mock.calls.filter(([method]) => method === "ratioIntradayHistory")).toHaveLength(2);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.useRealTimers();
+  }
+});

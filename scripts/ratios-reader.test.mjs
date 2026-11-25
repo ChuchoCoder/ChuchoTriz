@@ -80,6 +80,35 @@ test('a stalled native series times out and can be retried without changing acco
   assert.equal(recovered.revision, stuck.revision);
 });
 
+test('keeps the history scope when subscribing fails and discards regressing quote sequences', async () => {
+  const f = fixture();
+  const stamp = new Date().toISOString();
+  const instrument = f.securities.find(s => s.id === 'a');
+  instrument.md.lstdStr = stamp;
+  f.ms.seriesStore = { async getIntradayTodaySeries() {
+    return { series: [{ date: stamp, close: 120 }] };
+  } };
+  const ids = ['a'];
+  const subscribe = f.ms.dmaWebSocket.addSubscription;
+  f.ms.dmaWebSocket.addSubscription = () => { throw Error('native feed error'); };
+  const unavailable = (await f.request('ratioIntradayQuotes', { ids })).result;
+  assert.deepEqual(unavailable.available, ids);
+  assert.match(unavailable.issue, /Suscripciones de mercado no disponibles/);
+  assert.deepEqual(unavailable.points, {});
+  const history = (await f.request('ratioIntradayHistory', { ids })).result;
+  assert.equal(history.revision, unavailable.revision);
+  assert.equal(history.series.a.points[0].value, 120);
+  f.ms.dmaWebSocket.addSubscription = subscribe;
+  assert.equal((await f.request('ratioIntradayQuotes', { ids })).result.points.a.value, 120);
+  Object.assign(instrument.md, { seq: instrument.md.seq - 1, lst: 999 });
+  assert.deepEqual((await f.request('ratioIntradayQuotes', { ids })).result.points, {});
+  f.ms.webSocketConnectionStatus = false;
+  await f.request('ratioIntradayQuotes', { ids });
+  f.ms.webSocketConnectionStatus = true;
+  assert.equal((await f.request('ratioIntradayQuotes', { ids })).result.points.a.value, 999);
+  assert.deepEqual(f.calls.filter(Array.isArray), [['md', ['md.a']], ['md', ['md.a']]]);
+});
+
 test('finds older native intraday bars when the today endpoint is empty', async () => {
   const f = fixture();
   const calendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });

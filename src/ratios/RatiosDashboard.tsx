@@ -247,13 +247,13 @@ function intradayInstrumentDetail(instrument: RatioInstrument) {
 function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetState; command: Command; search: Search; busy: boolean }) {
   const { config, pair } = widget;
   const [issue, setIssue] = useState("");
-  const [legs, setLegs] = useState<Partial<Pick<RatioPair, "a" | "b">>>();
-  const [reference, setReference] = useState<RatioReference>();
+  const [legs, setLegs] = useState<Partial<Pick<RatioPair, "a" | "b">> & { revision: number }>();
+  const [reference, setReference] = useState<RatioReference & { revision: number }>();
   const [spreadOnly, setSpreadOnly] = useState(false);
-  const run = async (method: "dollarEdit" | "ratiosRemove", selection?: Partial<Pick<RatioPair, "a" | "b">> & RatioReference) => {
+  const run = async (method: "dollarEdit" | "ratiosRemove", selection?: Partial<Pick<RatioPair, "a" | "b">> & RatioReference, expectedRevision = config.revision) => {
     setIssue("");
     try {
-      await command(method, { widgetId: config.id, revision: config.revision,
+      await command(method, { widgetId: config.id, revision: expectedRevision,
         a: selection?.a?.id, b: selection?.b?.id, c: selection?.c?.id, cDivisor: selection?.cDivisor });
       return true;
     } catch (error) {
@@ -273,14 +273,14 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
         title={pair && `A: ${pair.a.symbol} · ${intradayInstrumentDetail(pair.a)} | B: ${pair.b.symbol} · ${intradayInstrumentDetail(pair.b)}`}
         onClick={() => {
           setReference(undefined);
-          setLegs(value => value ? undefined : { a: pair?.a, b: pair?.b });
+          setLegs(value => value ? undefined : { a: pair?.a, b: pair?.b, revision: config.revision });
         }}>
         {pair ? `${pair.a.symbol} / ${pair.b.symbol}` : "Seleccionar A y B"}
       </button>
       <button type="button" className="ct-intraday-config" aria-expanded={!!reference} aria-label="Configurar Referencia C" disabled={busy}
         onClick={() => {
           setLegs(undefined);
-          setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor });
+          setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor, revision: config.revision });
         }}>
         {config.c ? `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}` : "+ Referencia C"}
       </button>
@@ -290,13 +290,13 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
     {legs && <form className="ct-intraday-editor ct-ratios-editor NoDraggable" aria-label="Instrumentos del dólar intradiario"
       onMouseDown={event => event.stopPropagation()} onSubmit={event => {
         event.preventDefault();
-        if (legs.a && legs.b && !sameInstrument) void run("dollarEdit", { ...legs, c: config.c, cDivisor: config.cDivisor })
+        if (legs.a && legs.b && !sameInstrument) void run("dollarEdit", { ...legs, c: config.c, cDivisor: config.cDivisor }, legs.revision)
           .then(saved => { if (saved) setLegs(undefined); });
       }}>
       <div className="ct-ratios-pickers">
-        <InstrumentPicker label="Instrumento A" value={legs.a} onChange={a => setLegs(previous => ({ ...previous, a }))} search={search} disabled={busy} describe={intradayInstrumentDetail} autoFocus />
+        <InstrumentPicker label="Instrumento A" value={legs.a} onChange={a => setLegs(previous => previous && { ...previous, a })} search={search} disabled={busy} describe={intradayInstrumentDetail} autoFocus />
         <span className="ct-ratios-division" aria-hidden="true">÷</span>
-        <InstrumentPicker label="Instrumento B" value={legs.b} onChange={b => setLegs(previous => ({ ...previous, b }))} search={search} disabled={busy} describe={intradayInstrumentDetail} />
+        <InstrumentPicker label="Instrumento B" value={legs.b} onChange={b => setLegs(previous => previous && { ...previous, b })} search={search} disabled={busy} describe={intradayInstrumentDetail} />
       </div>
       <div className="ct-ratios-editor-actions">
         {sameInstrument && <span role="status">Elegí dos instrumentos diferentes.</span>}
@@ -307,14 +307,14 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
     {reference && <form className="ct-intraday-editor ct-ratios-editor NoDraggable" aria-label="Referencia del dólar intradiario"
       onMouseDown={event => event.stopPropagation()} onSubmit={event => {
         event.preventDefault();
-        if (reference.c) void run("dollarEdit", reference).then(saved => { if (saved) setReference(undefined); });
+        if (reference.c) void run("dollarEdit", reference, reference.revision).then(saved => { if (saved) setReference(undefined); });
       }}>
       <InstrumentPicker label="Referencia C" value={reference.c} search={search} disabled={busy} autoFocus
-        onChange={c => setReference(previous => ({ c, cDivisor: c && c.id === previous?.c?.id ? previous.cDivisor : undefined }))}
+        onChange={c => setReference(previous => previous && { ...previous, c, cDivisor: c && c.id === previous.c?.id ? previous.cDivisor : undefined })}
         divisor={{ checked: reference.cDivisor === 100, disabled: !reference.c, label: "Dividir C por 100",
           onChange: checked => setReference({ ...reference, cDivisor: checked ? 100 : undefined }) }} />
       <div className="ct-ratios-editor-actions">
-        {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit")
+        {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit", undefined, reference.revision)
           .then(saved => { if (saved) setReference(undefined); })}>Quitar C</button>}
         <button type="button" disabled={busy} onClick={() => setReference(undefined)}>Cancelar</button>
         <button type="submit" disabled={busy || !reference.c}>Guardar</button>

@@ -10,7 +10,7 @@ type View = "ratio" | "comparison" | "spread" | "dollar-spread";
 interface Point { at: number; value: number; provisional?: true }
 type History = Record<string, { points: Point[]; issue?: string }>;
 type Live = Record<string, Map<number, Point>>;
-interface LiveResponse { revision: number; start: number; connected: boolean; points: Record<string, Point>; issue?: string }
+interface LiveResponse { revision: number; start: number; connected: boolean; available?: string[]; points: Record<string, Point>; issue?: string }
 interface HistoryResponse { revision: number; series: History }
 const MINUTE = 60000;
 const INTERVAL = 5 * MINUTE;
@@ -37,6 +37,7 @@ function useIntraday(ids: readonly string[]) {
   useEffect(() => {
     const { client, release } = acquireReader();
     let disposed = false, revision: number | undefined, previousConnection: boolean | undefined;
+    let previousAvailability: string | undefined;
     let timer: ReturnType<typeof setTimeout>, historyRequest = 0;
     const loadHistory = (refresh = false) => {
       const request = ++historyRequest;
@@ -59,6 +60,7 @@ function useIntraday(ids: readonly string[]) {
         const result = await client.call<LiveResponse>("ratioIntradayQuotes", { ids });
         if (disposed) return;
         const switched = result.revision !== revision;
+        const availability = result.available?.join("\u0000");
         if (switched) {
           revision = result.revision;
           setStart(result.start); setHistory({});
@@ -75,8 +77,10 @@ function useIntraday(ids: readonly string[]) {
           }
           return next;
         });
-        if (switched || previousConnection === false && result.connected) void loadHistory(!switched);
+        const reconnected = previousConnection === false && result.connected;
+        if (switched || reconnected || availability !== previousAvailability) void loadHistory(!switched && reconnected);
         previousConnection = result.connected;
+        previousAvailability = availability;
       } catch (error) {
         if (!disposed) { setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false); }
       } finally {

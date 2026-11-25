@@ -12,7 +12,7 @@
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
   let identity, revision = 0, writing = false;
   const intradayDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" });
-  const intradayHistory = new Map(), intradaySubscriptions = new Set();
+  const intradayHistory = new Map(), intradaySubscriptions = new Set(), intradaySequences = new Map();
   let intradayScope, intradayConnection, intradayRevision = 0;
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
@@ -141,12 +141,17 @@
     const value = raw instanceof Date ? raw.getTime() : typeof raw === "string" ? Date.parse(raw) : NaN;
     return finite(value) && value <= Date.now() ? value : undefined;
   }
+  function currentMarketData(sec, lastSequence) {
+    const md = sec.md || {}, seq = md.seq;
+    if (finite(seq) && seq < (lastSequence.get(sec.id) ?? -Infinity)) return;
+    if (finite(seq)) lastSequence.set(sec.id, seq);
+    return md;
+  }
   function quote(c, id) {
     const sec = c.ss.securities.find(s => s?.id === id);
     if (!sec) return { issue: "Instrumento no disponible" };
-    const md = sec.md || {}, seq = md.seq;
-    if (finite(seq) && seq < (sequences.get(id) ?? -Infinity)) return { issue: "Esperando datos de mercado actuales" };
-    if (finite(seq)) sequences.set(id, seq);
+    const md = currentMarketData(sec, sequences);
+    if (!md) return { issue: "Esperando datos de mercado actuales" };
     const refAt = timestamp(md.refdStr || md.refd);
     return { last: finite(md.lst) ? md.lst : undefined, reference: finite(md.refp) ? md.refp : undefined,
       tradedAt: timestamp(md.lstdStr || md.lstd), referenceDate: refAt === undefined ? undefined : new Date(refAt).toISOString().slice(0, 10) };
@@ -158,32 +163,35 @@
     const now = Date.now(), start = Date.parse(intradayDate.format(now) + "T00:00:00-03:00");
     const scope = [ms, ss, ms.profileStore?.activeAccount, ms.seriesStore, start];
     if (!intradayScope || scope.some((value, i) => value !== intradayScope[i])) {
-      intradayScope = scope; intradayRevision++; intradayHistory.clear(); intradaySubscriptions.clear();
+      intradayScope = scope; intradayRevision++; intradayHistory.clear(); intradaySubscriptions.clear(); intradaySequences.clear();
     }
     const connected = !!ms.webSocketConnectionStatus;
     const connection = [ms.dmaWebSocket, connected];
     if (!intradayConnection || connection.some((value, i) => value !== intradayConnection[i])) {
-      intradayConnection = connection; intradaySubscriptions.clear();
+      intradayConnection = connection; intradaySubscriptions.clear(); intradaySequences.clear();
     }
     const securities = ids.map(id => ss.securities.find(s => s?.id === id && instrument(s)));
     return { ms, now, start, connected, securities, revision: intradayRevision };
   }
   function intradayQuotes(ids) {
-    const market = intradayMarket(ids), { ms, connected, securities, revision, start } = market;
-    if (!connected) return { revision, start, connected, points: {} };
-    const fresh = securities.filter(s => s && !intradaySubscriptions.has(s.id));
+    const { ms, connected, securities, revision, start } = intradayMarket(ids);
+    const available = securities.filter(Boolean);
+    const market = { revision, start, connected, available: available.map(sec => sec.id) };
+    if (!connected) return { ...market, points: {} };
+    const fresh = available.filter(s => !intradaySubscriptions.has(s.id));
     if (fresh.length) {
-      if (typeof ms.dmaWebSocket?.addSubscription !== "function") {
-        return { revision, start, connected, points: {}, issue: "Suscripciones de mercado no disponibles." };
+      try {
+        ms.dmaWebSocket.addSubscription("md", fresh.map(s => "md." + s.id));
+      } catch {
+        return { ...market, points: {}, issue: "Suscripciones de mercado no disponibles." };
       }
-      ms.dmaWebSocket.addSubscription("md", fresh.map(s => "md." + s.id));
+      fresh.forEach(s => intradaySubscriptions.add(s.id));
     }
-    fresh.forEach(s => intradaySubscriptions.add(s.id));
-    const points = securities.flatMap(s => {
-      const md = s?.md, at = timestamp(md?.lstdStr || md?.lstd);
-      return finite(at) && at >= start && finite(md.lst) ? [[s.id, { at, value: md.lst }]] : [];
+    const points = available.flatMap(s => {
+      const md = currentMarketData(s, intradaySequences), at = timestamp(md?.lstdStr || md?.lstd);
+      return finite(at) && at >= start && finite(md?.lst) ? [[s.id, { at, value: md.lst }]] : [];
     });
-    return { revision, start, connected, points: Object.fromEntries(points) };
+    return { ...market, points: Object.fromEntries(points) };
   }
   function readIntradaySeries(market, id, refresh) {
     const cached = intradayHistory.get(id);
