@@ -57,11 +57,17 @@ async page => {
       assert(await statusContrast(status) >= 4.5, 'Loading text meets the 4.5:1 contrast minimum');
       await page.keyboard.press('Tab');
       assert(await tab('Operaciones de opciones').evaluate(button => button.matches(':focus-visible')), 'Keyboard focus moves to the next tool while loading');
+      await tab('Cantidades rápidas').click();
+      await panel.locator('input[role="searchbox"]:enabled').waitFor();
     } finally {
       release();
       await page.unroute(simulator, hold);
     }
 
+    await page.waitForFunction(start => document.adoptedStyleSheets.length === start + 1, initialSheets);
+    assert(await panel.locator('.ct-sim').count() === 0 && !seen.includes('/options-market-reader.js'),
+      'Leaving during download keeps the simulator unmounted without starting its data reader');
+    await tab('Simulador de opciones').click();
     await panel.locator('.ct-sim').waitFor();
     assert(await page.evaluate(start => document.adoptedStyleSheets.length === start + 1, initialSheets), 'The simulator styles arrive with its module');
     await page.evaluate(() => { window.originalSimulatorPane = document.querySelector('.ct-sim'); });

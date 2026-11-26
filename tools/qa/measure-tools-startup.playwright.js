@@ -49,8 +49,9 @@ async (sharedPage, { before, after }) => {
     page.setDefaultTimeout(8000);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.bringToFront();
-    await page.addInitScript(({ startup, tools }) => {
-      if (location.hostname !== '127.0.0.1') return;
+    await page.addInitScript(({ origins, startup, tools }) => {
+      if (!origins.includes(location.origin)) return;
+      localStorage.removeItem('ct-demo-regression');
       const mark = name => performance.mark('ct-' + name);
       const marked = name => performance.getEntriesByName('ct-' + name, 'mark').length > 0;
       const pending = new Map(Object.entries(startup));
@@ -80,7 +81,7 @@ async (sharedPage, { before, after }) => {
         pending.set(name + '-ready', activePanel + ' ' + target.ready);
         startObserving();
       }, true);
-    }, { startup, tools });
+    }, { origins: Object.values(urls).map(url => url.origin), startup, tools });
 
     for (const variant of ['before', 'after', 'after', 'before', 'before', 'after', 'after', 'before', 'before', 'after', 'after', 'before']) {
       await navigate(variant);
