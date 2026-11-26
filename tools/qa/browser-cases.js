@@ -699,10 +699,17 @@ async (page, group) => {
     await page.getByRole('checkbox', { name: 'Mid', exact: true }).check();
     await b('Mover Mid hacia el borde').click(); await b('Listo').click();
     const columns = () => page.locator('select[aria-label^="Cambiar columna"]').evaluateAll(es => es.map(e => e.value));
+    const reloadColumns = async expected => {
+      await page.reload(); await open();
+      await page.waitForFunction(expected => {
+        const values = [...document.querySelectorAll('select[aria-label^="Cambiar columna"]')].map(element => element.value);
+        return JSON.stringify(values) === JSON.stringify(expected);
+      }, expected);
+    };
     const expected = await columns();
     assert(expected.includes('mid') && !expected.includes('volume'), 'Columns changed');
     equal(expected.slice(0, expected.length / 2), expected.slice(expected.length / 2).reverse(), 'Mirrored call/put columns');
-    await page.reload(); await open(); equal(await columns(), expected, 'Order and visibility persist');
+    await reloadColumns(expected);
     await label('Cambiar columna Mid de Calls').selectOption('volume');
     equal(await label('Cambiar columna Volumen nominal de Puts').inputValue(), 'volume', 'Header change mirrored');
     for (const fixed of ['BID · Vender', 'ASK · Comprar', 'VI', 'Strike']) assert(await page.getByRole('columnheader', { name: fixed, exact: true }).count() > 0, `Fixed ${fixed}`);
@@ -717,8 +724,7 @@ async (page, group) => {
     await b('Mover Extrínseco Bid hacia el borde').click(); await b('Listo').click();
     const extrinsicColumns = await columns();
     equal(extrinsicColumns, [...movedCalls, ...movedCalls.toReversed()], 'Bid actually moves and both sides mirror the new order');
-    await page.reload(); await open();
-    equal(await columns(), extrinsicColumns, 'Extrinsic visibility and order persist');
+    await reloadColumns(extrinsicColumns);
     await label('Cambiar columna Extrínseco Bid de Calls').selectOption('extrinsicAsk');
     const swapped = await columns();
     const swappedCalls = movedCalls.map(column => column === 'extrinsicBid' ? 'extrinsicAsk' : column === 'extrinsicAsk' ? 'extrinsicBid' : column);

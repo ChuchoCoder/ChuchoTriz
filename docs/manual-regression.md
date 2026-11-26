@@ -143,6 +143,8 @@ Para reproducir el costo en reposo de Ratios y del ticket, levantá `tools/previ
 
 Para medir la carga inicial de las herramientas, usá el mismo envoltorio con `tools/qa/measure-tools-startup.playwright.js`. El script mide cuándo están disponibles el ticket y Configuración, cuenta los bytes de los recursos de la extensión y registra qué se pide al usar por primera vez cada pestaña.
 
+El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a Cantidades rápidas quedan disponibles antes de pedir las herramientas. También cubre la primera visita, la reapertura del simulador y el uso del ticket después de un fallo de descarga.
+
 ## Cobertura automática y comprobaciones humanas
 
 | Casos de la guía | Grupo de navegador | Cobertura reproducible |
