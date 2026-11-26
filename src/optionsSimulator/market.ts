@@ -60,7 +60,7 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit" | "ratioIntradayHistory" | "ratioIntradayQuotes" | "ratioContext" | "ratioSearch" | "ratioQuotes" | "ratioChart" | "verifyExecutionContext", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit" | "bookIntraday" | "ratioIntradayHistory" | "ratioIntradayQuotes" | "ratioContext" | "ratioSearch" | "ratioQuotes" | "ratioChart" | "verifyExecutionContext", params = {}): Promise<T> {
     await this.ready;
     if (this.disposed) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
@@ -68,7 +68,8 @@ export class MarketReader {
       const timer = setTimeout(() => {
         this.pending.delete(id); window.postMessage({ channel: this.channel, kind: "retire", id }, location.origin);
         reject(Error("La lectura de Matriz no respondió a tiempo."));
-      }, this.resource === "options-market-reader.js" ? 5000 : this.resource === "ratio-chart-reader.js" ? 30000 : method === "ratioIntradayHistory" ? 22000 : 15000);
+      }, this.resource === "options-market-reader.js" ? 5000 : this.resource === "ratio-chart-reader.js" ? 30000 :
+        method === "ratioIntradayHistory" || method === "bookIntraday" ? 22000 : 15000);
       this.pending.set(id, { resolve: value => resolve(value as T), reject, timer });
       window.postMessage({ channel: this.channel, kind: "request", id, method, params }, location.origin);
     });

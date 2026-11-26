@@ -80,6 +80,52 @@ test('a stalled native series times out and can be retried without changing acco
   assert.equal(recovered.revision, stuck.revision);
 });
 
+test('book previews use the native today series for the exact instrument and reuse it while updating the latest trade', async () => {
+  const f = fixture();
+  const calendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const start = Date.parse(`${calendar.format(Date.now())}T00:00:00-03:00`);
+  const date = at => new Date(at).toISOString();
+  const calls = [];
+  f.ms.seriesStore = {
+    getIntradaySeries() { throw Error('The book must not request previous sessions'); },
+    async getIntradayTodaySeries(id) {
+      calls.push(id);
+      return { series: id === 'ci' ? [
+        { date: date(start - 60000), close: 88 }, { date: date(start + 10), close: 49 },
+        { date: date(start), close: 48 }, { date: date(start + 10), close: 49.1 },
+      ] : [] };
+    },
+  };
+  const ci = f.securities.find(s => s.id === 'ci');
+  ci.settlementOrClose = 47.5;
+  const timestamp = date(start + 20);
+  Object.assign(ci.md, { lstdStr: timestamp, lst: 49.4 });
+  const first = (await f.request('bookIntraday', { id: 'ci' })).result;
+  assert.deepEqual(first, { points: [{ at: start, value: 48 }, { at: start + 10, value: 49.1 }, { at: start + 20, value: 49.4 }], reference: 47.5 });
+  ci.md.lst = 49.5;
+  assert.equal((await f.request('bookIntraday', { id: 'ci' })).result.points.at(-1).value, 49.5);
+  assert.deepEqual((await f.request('bookIntraday', { id: 'a' })).result.points, []);
+  assert.match((await f.request('bookIntraday', { id: 'absent' })).error, /instrumento/);
+  assert.deepEqual(calls, ['ci', 'a']);
+  assert.deepEqual(f.calls.filter(Array.isArray), []);
+});
+
+test('updates a provisional book bar at the same timestamp and preserves a completed bar', async () => {
+  const minute = Date.parse('2026-11-26T16:10:00Z');
+  const f = fixture(class extends Date { static now() { return minute + 20000; } });
+  const previous = new Date(minute - 60000).toISOString(), current = new Date(minute).toISOString();
+  f.ms.seriesStore = { async getIntradayTodaySeries(id) {
+    return { series: [{ date: previous, close: 48 }, ...(id === 'ci' ? [{ date: current, close: 49 }] : [])] };
+  } };
+  const ci = f.securities.find(s => s.id === 'ci'), other = f.securities.find(s => s.id === 'a');
+  Object.assign(ci.md, { lstdStr: current, lst: 49 });
+  assert.equal((await f.request('bookIntraday', { id: 'ci' })).result.points.at(-1).value, 49);
+  ci.md.lst = 50;
+  assert.deepEqual((await f.request('bookIntraday', { id: 'ci' })).result.points, [{ at: minute - 60000, value: 48 }, { at: minute, value: 50 }]);
+  Object.assign(other.md, { lstdStr: previous, lst: 47 });
+  assert.deepEqual((await f.request('bookIntraday', { id: 'a' })).result.points, [{ at: minute - 60000, value: 48 }]);
+});
+
 test('keeps the history scope when subscribing fails and discards regressing quote sequences', async () => {
   const f = fixture();
   const stamp = new Date().toISOString();
@@ -264,7 +310,7 @@ test('persists an exact A3 future reference with null settlement and uses its na
   assert.ok(f.calls.some(call => Array.isArray(call) && call[1].includes('md.' + future.id)));
 });
 
-function fixture() {
+function fixture(clock = Date) {
   let receive, id = 0, persisted, failSave = false, saveTimer;
   const calls = [], replies = [];
   const sec = (id, symbol, currency = 'ARS', settlementType = '2') => ({ id, symbolStr: symbol, marketId: 'bm', currency, settlementType, md: { lst: 120, refp: 100, seq: 10, lstdStr: '2026-11-13T15:00:00Z' } });
@@ -292,7 +338,7 @@ function fixture() {
   for (const name of ['orderStore', 'positionStore', 'balanceStore']) Object.defineProperty(ms, name, { get() { throw Error('Forbidden capability: ' + name); } });
   const window = { mainStore: ms, addEventListener: (_, fn) => { receive = fn; }, postMessage: msg => replies.push(clone(msg)) };
   const document = { currentScript: { dataset: { channel: 'test' } }, body: { innerText: 'Versión: 4.23.16' }, querySelector: selector => selector === '.CustomDashboard' ? {} : null };
-  runInNewContext(source, { window, document, location: { origin: 'https://remarkets.matriz.com.ar' }, CSS: { escape: x => x }, crypto: { randomUUID: () => 'uuid-' + (++id) }, setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 1)), clearTimeout });
+  runInNewContext(source, { window, document, Date: clock, location: { origin: 'https://remarkets.matriz.com.ar' }, CSS: { escape: x => x }, crypto: { randomUUID: () => 'uuid-' + (++id) }, setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 1)), clearTimeout });
   const message = data => receive({ source: window, data });
   async function request(method, params = {}) { const key = 'request-' + (++id); await message({ channel: 'test', kind: 'request', id: key, method, params }); return replies.find(r => r.id === key); }
   const state = async () => (await request('ratiosState')).result;
