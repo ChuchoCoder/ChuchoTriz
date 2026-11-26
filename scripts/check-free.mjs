@@ -7,6 +7,7 @@ import { assertVendoredPicomatch } from './security/vendored-picomatch.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const hosts = ['https://*.xoms.com.ar/*', 'https://remarkets.matriz.com.ar/*'];
+const matrizResources = ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js', 'ticket-position.js'];
 const same = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -47,7 +48,7 @@ export function assertManifest(manifest, built = false) {
   if (!built) {
     assert(same(script.js, ['src/main.tsx']), 'Unexpected content-script entry');
     if (manifest.web_accessible_resources !== undefined) {
-      assert([['options-market-reader.js'], ['options-market-reader.js', 'options-position-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js'], ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js']].some(resources =>
+      assert([1, 2, 3, 5, 6, 7].map(count => matrizResources.slice(0, count)).some(resources =>
         same(manifest.web_accessible_resources, [{ resources, matches: hosts }])),
         'Only the reviewed Matriz readers may be exposed by the source manifest');
     }
@@ -57,7 +58,7 @@ export function assertManifest(manifest, built = false) {
       assert(!('extension_ids' in resource), 'Resource exposure to other extensions is not allowed');
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
-        assert(['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js'].includes(path) || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
+        assert(matrizResources.includes(path) || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
       }
     }
   }

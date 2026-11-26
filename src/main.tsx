@@ -14,6 +14,39 @@ import BookIntraday from "./BookIntraday";
 
 focusCantidadAfterQuoteClick();
 
+if (typeof chrome.runtime?.getURL === "function") {
+  const key = "TicketPositionVisible";
+  const root = document.documentElement;
+  let revision = 0;
+  const publish = (value: unknown) => {
+    revision++;
+    root.dataset.ctTicketPositionVisible = String(value !== false);
+  };
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[key]) publish(changes[key].newValue);
+  });
+  const initial = revision;
+  void chrome.storage.local.get(key).then(
+    values => { if (revision === initial) publish(values[key]); },
+    () => { if (revision === initial) publish(true); },
+  ).then(() => {
+    const position = document.createElement("script");
+    position.src = chrome.runtime.getURL("ticket-position.js");
+    position.onload = position.onerror = () => position.remove();
+    root.append(position);
+  });
+
+  document.addEventListener("click", event => {
+    if (!event.isTrusted || !(event.target instanceof Element)) return;
+    const control = event.target.closest<HTMLButtonElement>("button.ct-ticket-position-close, button.ct-ticket-position-show");
+    if (!control || control.hidden || !control.closest("#MiniOrderForm")) return;
+    const visible = control.classList.contains("ct-ticket-position-show");
+    const before = revision;
+    const apply = () => { if (revision === before) publish(visible); };
+    void chrome.storage.local.set({ [key]: visible }).then(apply, apply);
+  }, true);
+}
+
 // Settings remain accessible independently of the order form.
 const settingsContainer = document.createElement("div");
 settingsContainer.id = "root-chuchotriz-settings";

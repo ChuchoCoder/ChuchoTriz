@@ -124,6 +124,28 @@ Esta representación evita que borrar un parcial termine en `displayQty:null`,
 rechazado por Matriz/ReMarkets. La validación en ReMarkets aceptó 100/100 como una
 orden sin iceberg; cero fue rechazado. Ver [diagnóstico y límites de validación](docs/diagnostico-displayqty.md).
 
+## Posición en el ticket
+
+Al seleccionar un instrumento de BYMA en CI o 24 h, la franja sobre el ticket
+muestra la tenencia de la cuenta elegida en ambos plazos. Al editar **Cantidad**,
+proyecta los saldos si se ejecutara la compra o la venta. Una orden en CI afecta
+ambos saldos y una orden a 24 h afecta el saldo de 24 h. Las especies en pesos,
+dólar MEP y cable se suman cuando el catálogo permite asociarlas, como AL30,
+AL30D y AL30C.
+
+**Usar** muestra cuántos nominales cargaría en **Cantidad**, actualiza la consulta
+y completa el campo según el último cálculo de Matriz para ese plazo.
+En CI usa el saldo liquidado y descuenta el saldo
+negativo pendiente a 24 h. En 24 h suma ambos plazos. La orden se confirma desde
+los controles habituales de Matriz. El botón requiere información de garantía
+verificada y un cálculo de Matriz de hasta cinco minutos. Si el último cálculo
+del día es anterior, la franja muestra su hora junto a los saldos. Los plazos se
+interpretan con la fecha de Buenos Aires.
+
+La **×** de la esquina superior derecha oculta la franja y pausa las consultas.
+El ojo junto a **Cantidad** vuelve a mostrarla y consulta el saldo del ticket.
+ChuchoTriz recuerda la elección en el perfil de Chrome.
+
 ## Configurar presets
 
 Abrí **Configuración** desde el icono de ChuchoTriz en la barra izquierda de
