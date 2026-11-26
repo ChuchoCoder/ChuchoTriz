@@ -1,0 +1,45 @@
+.SingleWidgetHeaderButtons > .ct-book-intraday-button {
+  order: -1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  width: 22px;
+  min-width: 22px;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.SingleWidgetHeaderButtons > .ct-book-intraday-button:hover,
+.SingleWidgetHeaderButtons > .ct-book-intraday-button:focus-visible {
+  background: rgb(0 153 255 / 20%);
+  outline: 1px solid currentColor;
+  outline-offset: -2px;
+}
+
+.ct-book-intraday {
+  position: fixed;
+  z-index: 1100;
+  width: min(354px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 9px 10px 10px;
+  border: 1px solid #008fd5;
+  border-radius: 5px;
+  background: #191e27;
+  color: #f0f3f9;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 38%);
+  font-size: 13px;
+}
+
+.ct-book-intraday > p { margin: 12px 0 4px; }
+.ct-book-intraday-plot { display: block; width: 100%; margin-top: 7px; }
+.ct-book-intraday-plot text { fill: currentColor; font-size: 11px; font-variant-numeric: tabular-nums; }
+.ct-book-intraday-line { fill: none; stroke: #09f; stroke-width: 1.6; stroke-linejoin: round; }
+.ct-book-intraday-reference { fill: none; stroke: #ffff33; stroke-width: 1.5; stroke-dasharray: 9 8; }
+.ct-book-intraday-cursor { fill: none; stroke: #b4bfcd; stroke-width: 1; }
+.ct-book-intraday-point { fill: #09f; }
+.ct-book-intraday-value { paint-order: stroke; stroke: #191e27; stroke-width: 4; stroke-linejoin: round; }

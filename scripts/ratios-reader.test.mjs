@@ -80,6 +80,36 @@ test('a stalled native series times out and can be retried without changing acco
   assert.equal(recovered.revision, stuck.revision);
 });
 
+test('book previews use the native today series for the exact instrument and reuse it while updating the latest trade', async () => {
+  const f = fixture();
+  const calendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const start = Date.parse(`${calendar.format(Date.now())}T00:00:00-03:00`);
+  const date = at => new Date(at).toISOString();
+  const calls = [];
+  f.ms.seriesStore = {
+    getIntradaySeries() { throw Error('The book must not request previous sessions'); },
+    async getIntradayTodaySeries(id) {
+      calls.push(id);
+      return { series: id === 'ci' ? [
+        { date: date(start - 60000), close: 88 }, { date: date(start + 10), close: 49 },
+        { date: date(start), close: 48 }, { date: date(start + 10), close: 49.1 },
+      ] : [] };
+    },
+  };
+  const ci = f.securities.find(s => s.id === 'ci');
+  ci.settlementOrClose = 47.5;
+  const timestamp = date(start + 20);
+  Object.assign(ci.md, { lstdStr: timestamp, lst: 49.4 });
+  const first = (await f.request('bookIntraday', { id: 'ci' })).result;
+  assert.deepEqual(first, { points: [{ at: start, value: 48 }, { at: start + 10, value: 49.1 }, { at: start + 20, value: 49.4 }], reference: 47.5 });
+  ci.md.lst = 49.5;
+  assert.equal((await f.request('bookIntraday', { id: 'ci' })).result.points.at(-1).value, 49.5);
+  assert.deepEqual((await f.request('bookIntraday', { id: 'a' })).result.points, []);
+  assert.match((await f.request('bookIntraday', { id: 'absent' })).error, /instrumento/);
+  assert.deepEqual(calls, ['ci', 'a']);
+  assert.deepEqual(f.calls.filter(Array.isArray), []);
+});
+
 test('keeps the history scope when subscribing fails and discards regressing quote sequences', async () => {
   const f = fixture();
   const stamp = new Date().toISOString();
