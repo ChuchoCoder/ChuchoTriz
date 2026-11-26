@@ -3,7 +3,9 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkFree, filesIn } from '../scripts/check-free.mjs';
+import { fixtureTheme } from './qa/themes.mjs';
 checkFree({ built: true });
+const theme = fixtureTheme();
 const dist = new URL('../dist/', import.meta.url), files = filesIn(fileURLToPath(dist));
 const main = files.find(p => /^assets\/src-main\.tsx-[\w-]+\.js$/.test(p));
 const styles = JSON.parse(readFileSync(new URL('manifest.json', dist), 'utf8')).content_scripts[0].css.map(p => `<link rel="stylesheet" href="/${p}">`).join('');
@@ -73,7 +75,8 @@ function install() {
   const seriesCounts = {}, failedSeries = new Set();
   window.mainStore = { dashboardStore: ds, securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) },
     profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} },
-    seriesStore: { async getIntradaySeries(id, from, to) {
+    seriesStore: { getIntradayTodaySeries(id) { return this.getIntradaySeries(id, sessionStart / 1000, Date.now() / 1000); },
+      async getIntradaySeries(id, from, to) {
       seriesCounts[id] = (seriesCounts[id] || 0) + 1;
       if (failedSeries.has(id)) throw { response: { status: 401 } };
       const price = securities.find(s => s.id === id)?.md.lst;
@@ -145,8 +148,9 @@ function installChart() {
 const server = createServer((request, response) => {
   const path = new URL(request.url, 'http://127.0.0.1').pathname.slice(1);
   if (path === 'fixture' || path.startsWith('security/')) {
+    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:");
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
-    response.end(`<!doctype html><html lang="es"><meta charset="utf-8"><title>Ratios · DATOS SIMULADOS</title>${styles}<style>.WidgetsComponentsPopoverList{width:280px}.WidgetsComponentsPopoverList .WidgetComponentCard{display:flex}</style><body style="background:#222c3b;color:white;font:14px Arial"><h1>Ratios · DATOS SIMULADOS · Sin conexión a broker</h1><p>Versión: 4.24.4</p><nav class="DirectAccessBar"></nav><div id="tv_chart_container"></div><div class="CustomDashboard"><div class="WidgetsComponentsPopoverList"></div><div class="GridLayout" style="position:relative;height:1200px"></div></div><script>(${install.toString()})();${path.startsWith('security/') ? `(${installChart.toString()})();` : ''}</script><script type="module" src="/${main}"></script></body></html>`); return;
+    response.end(`<!doctype html><html lang="es" data-theme="${theme.attribute}"><meta charset="utf-8"><title>Ratios · DATOS SIMULADOS</title>${styles}${theme.style}<style>.WidgetsComponentsPopoverList{width:280px}.WidgetsComponentsPopoverList .WidgetComponentCard{display:flex}</style><body style="font:14px Arial"><h1>Ratios · DATOS SIMULADOS · Sin conexión a broker</h1><p>Versión: 4.24.4</p><nav class="DirectAccessBar"></nav><div id="tv_chart_container"></div><div class="DashboardGridItem"><div class="SecurityCardWidget"><header class="NewWidgetHeader"><a href="/security/AL30-2">AL30</a><div class="SingleWidgetHeaderButtons"></div></header></div></div><div class="CustomDashboard"><div class="WidgetsComponentsPopoverList"></div><div class="GridLayout" style="position:relative;height:1200px"></div></div><script>(${install.toString()})();${path.startsWith('security/') ? `(${installChart.toString()})();` : ''}</script><script type="module" src="/${main}"></script></body></html>`); return;
   }
   if (!files.includes(path)) { response.writeHead(404); response.end(); return; }
   response.setHeader('Content-Type', path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'application/octet-stream');

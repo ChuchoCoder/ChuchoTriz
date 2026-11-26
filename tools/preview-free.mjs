@@ -3,8 +3,10 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkFree, filesIn } from '../scripts/check-free.mjs';
+import { fixtureTheme } from './qa/themes.mjs';
 
 checkFree({ built: true });
+const theme = fixtureTheme();
 const dist = new URL('../dist/', import.meta.url);
 const number = (field, id, label, value) => `<div class="ant-form-item ${field}"><label for="${id}">${label}</label><div class="ant-input-number-input-wrap"><input id="${id}" value="${value}"></div></div>`;
 function renderFixture(regression) {
@@ -12,11 +14,11 @@ function renderFixture(regression) {
   const main = files.find(path => /^assets\/src-main\.tsx-[\w-]+\.js$/.test(path));
   const styles = JSON.parse(readFileSync(new URL('manifest.json', dist), 'utf8')).content_scripts[0].css
     .map(path => `<link rel="stylesheet" href="/${path}">`).join('');
-  return `<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChuchoTriz · SIMULACIÓN</title>
-${styles}<style>@media(max-width:600px){#ToolPanel{display:none}#MiniOrderForm{right:0!important}}</style><body style="background:#202122;color:white;font:16px sans-serif">
+  return `<!doctype html><html lang="es" data-theme="${theme.attribute}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChuchoTriz · SIMULACIÓN</title>
+${styles}${theme.style}<style>@media(max-width:600px){#ToolPanel{display:none}#MiniOrderForm{right:0!important}}</style><body style="font:16px sans-serif">
 <header class="HeaderDMA" style="position:fixed;left:0;top:0;right:0;height:40px">ChuchoTriz · DATOS SIMULADOS · Sin conexión a broker</header>
-<nav class="DirectAccessBar" style="position:fixed;left:0;top:40px;bottom:0;width:40px;background:#303843"><a class="Item" href="#favoritos" style="color:white">F</a></nav>
-<aside id="ToolPanel" style="position:fixed;right:0;top:40px;bottom:0;width:180px;background:#303843">Herramientas simuladas</aside>
+<nav class="DirectAccessBar" style="position:fixed;left:0;top:40px;bottom:0;width:40px"><a class="Item" href="#favoritos">F</a></nav>
+<aside id="ToolPanel" style="position:fixed;right:0;top:40px;bottom:0;width:180px">Herramientas simuladas</aside>
 <main style="margin:50px 190px 150px 50px"><h1>Mini Order Form · DATOS SIMULADOS</h1><p>Esta página no se conecta a ningún broker.</p><p>Versión: 4.24.4</p></main>
 <div id="MiniOrderForm" class="ExpandedForm" style="position:fixed;bottom:0;left:40px;right:180px;height:130px">
 <form style="display:flex;flex-wrap:wrap;gap:6px 12px">

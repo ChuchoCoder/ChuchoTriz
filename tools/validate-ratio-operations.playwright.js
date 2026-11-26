@@ -470,16 +470,15 @@ async page => {
   checks.push('Operation ordering separates currencies, supports drag and keyboard, and preserves hidden records and accounting');
   await page.locator('.ro-operations-table tbody tr').first().locator('.ro-pair-chips').click({force:true});
   assert(await page.locator('.ro-operations-table tr.ro-selected').count() === 1 && await page.locator('.ro-detail').count() === 1, 'Clicking a row selects it and opens its detail');
-  for (const theme of ['dark','light']) {
-    await page.locator('.ct-free-settings-panel').evaluate((e,t)=>e.dataset.colorScheme=t,theme);
-    const styles = await page.evaluate(()=>{const table=document.querySelector('.ro-operations-table'),header=getComputedStyle(table.querySelector('th')),even=getComputedStyle(table.querySelector('tbody tr:nth-child(2)')),selected=getComputedStyle(table.querySelector('tr.ro-selected'));return{head:header.backgroundColor,weight:header.fontWeight,sticky:header.position,even:even.backgroundColor,selected:selected.backgroundColor};});
-    assert(styles.head !== 'rgba(0, 0, 0, 0)' && styles.weight === '700' && styles.sticky === 'sticky' && styles.even !== styles.head && styles.selected !== styles.head, 'Styled headers, stripes and selected row remain distinct in '+theme);
-  }
+  const theme = await page.evaluate(() => document.documentElement.dataset.theme === 'dma_day' ? 'light' : 'dark');
+  await page.locator(`.ct-free-settings-panel[data-color-scheme="${theme}"]`).waitFor();
+  const styles = await page.evaluate(()=>{const table=document.querySelector('.ro-operations-table'),header=getComputedStyle(table.querySelector('th')),even=getComputedStyle(table.querySelector('tbody tr:nth-child(2)')),selected=getComputedStyle(table.querySelector('tr.ro-selected'));return{head:header.backgroundColor,weight:header.fontWeight,sticky:header.position,even:even.backgroundColor,selected:selected.backgroundColor};});
+  assert(styles.head !== 'rgba(0, 0, 0, 0)' && styles.weight === '700' && styles.sticky === 'sticky' && styles.even !== styles.head && styles.selected !== styles.head, 'Styled headers, stripes and selected row remain distinct in '+theme);
   await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'})); await click(button('Ratios'));
   await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false');
   await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/})); await click(button('Todas'));
   assert(JSON.stringify(await rowIds('.ro-operations-table')) === JSON.stringify((await book()).operations.map(o=>o.id)), 'Manual operation order survives reload');
-  checks.push('Distinct dark/light headers and selected rows retain operation detail and manual order after reload');
+  checks.push('Distinct headers and selected rows retain operation detail and manual order after reload in ' + theme);
   await page.evaluate(()=>{
     const original=chrome.storage.local.set; window.__gridOriginalSet=original;
     chrome.storage.local.set=async values=>{if(Object.keys(values).some(k=>k.startsWith('RatioOperationsV1:')))await new Promise(resolve=>window.__gridReleaseSave=resolve);return original.call(chrome.storage.local,values);};

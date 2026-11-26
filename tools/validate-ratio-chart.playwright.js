@@ -7,13 +7,17 @@ async page => {
   await page.locator('.ct-ratios tbody tr').first().waitFor();
   const checks = [], assert = (ok, message) => { if (!ok) throw Error(message); checks.push(message); };
   const original = page.url();
+  const theme = await page.locator('html').getAttribute('data-theme');
   const config = () => page.evaluate(() => JSON.stringify(window.mainStore.dashboardStore.currentDashboard.layout.map(w => w.settings)));
   const before = await config();
   const open = async (link, comparison, hasC = false) => {
     const href = await link.getAttribute('href');
+    const target = new URL(href, original);
+    assert(target.origin === new URL(original).origin && target.pathname.startsWith('/security/'), 'Chart link stays on the loopback security fixture');
     const [popup] = await Promise.all([page.waitForEvent('popup'), link.click()]);
     try {
       await popup.waitForFunction(() => document.querySelector('.ct-ratio-chart-status')?.textContent.includes('velas de 5 min'), null, { timeout: 12000 });
+      assert(await popup.locator('html').getAttribute('data-theme') === theme, 'Native chart fixture preserves the origin theme');
       const state = await popup.evaluate(() => ({ snapshot: window.ratioChartFixture.snapshot(), opener: !!window.opener, notice: document.querySelector('.ct-ratio-chart-status').textContent }));
       const s = state.snapshot, overlay = s.studies.find(s => s.name === 'Overlay'), ratio = s.studies.find(s => s.name === 'Ratio');
       assert(popup.url() === href && page.url() === original && !state.opener, 'Chart opens in a separate tab without navigating the source or exposing its opener');

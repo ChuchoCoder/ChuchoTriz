@@ -1,6 +1,6 @@
 // Run with the shared Playwright MCP on the local preview-free.mjs /fixture tab.
 async (page) => {
-  if (!/^http:\/\/127\.0\.0\.1:\d+\/fixture$/.test(page.url())) throw Error('Select the local fixture tab first.');
+  if (!/^http:\/\/127\.0\.0\.1:\d+\/fixture(?:\?scenario=regression)?$/.test(page.url())) throw Error('Select the local fixture tab first.');
   await page.reload({ waitUntil: 'domcontentloaded' });
   let releaseCatalog;
   const catalogGate = new Promise(resolve => { releaseCatalog = resolve; });
@@ -47,7 +47,7 @@ async (page) => {
     }
     await chain.evaluate(grid => { grid.scrollTop = grid.scrollHeight; });
     if (!(await chain.evaluate(grid => grid.scrollTop > 0))) throw Error('The chain must still scroll.');
-    return { rows: await rows.count(), initial, pending, loaded };
+    return { checks: ['The chain keeps its geometry while quotes load and remains scrollable'], rows: await rows.count(), initial, pending, loaded };
   } finally {
     releaseCatalog();
     await page.evaluate(() => window.releaseGridQuotes?.());

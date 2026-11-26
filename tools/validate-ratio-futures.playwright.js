@@ -43,7 +43,10 @@ async page => {
   await monitorRow.waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.ro-monitor-table tbody tr')].some(r => r.textContent.includes(' vs DLR/DIC26') && r.textContent.includes('-15,15% (250,00)')));
   assert(await monitorRow.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Monitor saves December independently and excludes reference rows from operations');
-  const [popup] = await Promise.all([page.waitForEvent('popup'), monitorRow.locator('.ct-ratio-chart-link').click()]);
+  const chartLink = monitorRow.locator('.ct-ratio-chart-link');
+  const target = new URL(await chartLink.getAttribute('href'), page.url());
+  assert(target.origin === new URL(page.url()).origin && target.pathname.startsWith('/security/'), 'Chart link stays on the loopback security fixture');
+  const [popup] = await Promise.all([page.waitForEvent('popup'), chartLink.click()]);
   try {
     await popup.waitForFunction(() => document.querySelector('.ct-ratio-chart-status')?.textContent.includes('velas de 5 min'), null, { timeout: 12000 });
     const snapshot = await popup.evaluate(() => window.ratioChartFixture.snapshot());
