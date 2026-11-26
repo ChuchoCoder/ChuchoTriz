@@ -123,10 +123,30 @@ async (page, group) => {
     await label('Instrumento').fill('TICKER-NUEVO (CI)');
     await label('Precio').fill('');
     await ticket.getByRole('button', { name: 'Configurar cantidades rápidas de TICKER-NUEVO' }).click();
-    await instrument('TICKER-NUEVO todavía no tiene configuración').waitFor();
+    await instrument('Cantidades predeterminadas para TICKER-NUEVO').waitFor();
     equal(await label('Nuevo instrumento').inputValue(), 'TICKER-NUEVO', 'Prefills new ticker even without a price');
     equal((await page.evaluate(() => chrome.storage.local.get('InstrumentPresets'))).InstrumentPresets['TICKER-NUEVO'], undefined, 'Opening never saves a new ticker');
-    pass('SM-02-shortcut', 'Ticket shortcut selects the current ticker, preserves drafts, restores focus and prefills unconfigured tickers');
+    await b('Descartar cambios').click();
+    await b('Volver a Matriz').click();
+
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: {
+      A: [{ cantidad: 50, mostrar: 0 }], AL: [{ cantidad: 500000, mostrar: 'R6' }],
+    } }));
+    await label('Instrumento').fill('AL30 (CI)');
+    await label('Precio').fill('70000');
+    await label('Cantidad').focus();
+    await ticket.getByRole('button', { name: '500k/R6', exact: true }).waitFor();
+    const al30Shortcut = ticket.getByRole('button', { name: 'Configurar cantidades rápidas de AL30' });
+    await al30Shortcut.click();
+    await instrument('AL').waitFor();
+    equal(await page.locator('.preset-preview .preset-chip').allTextContents(), ['500k/R6'], 'Editor uses the same prefix configuration as the ticket');
+    await b('RAW').click();
+    await label('Presets RAW').fill('A 50\nAL 500000/R6\nAL30 999');
+    await b('Volver a Matriz').click();
+    await al30Shortcut.click();
+    await instrument('AL').waitFor();
+    equal(await page.locator('.preset-preview .preset-chip').allTextContents(), ['500k/R6'], 'An unsaved exact match does not replace the active configuration');
+    pass('SM-02-shortcut', 'Shortcut opens the effective configuration, preserves drafts, restores focus and previews defaults');
   } else if (group === 'autocomplete') {
     await page.evaluate(() => chrome.storage.local.set({ Autocomplete: true,
       'AutocompleteInstrument:KEEP': true, 'AutocompleteInstrument:OFF': false }));

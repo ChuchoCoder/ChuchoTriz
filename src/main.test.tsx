@@ -230,6 +230,38 @@ it("opens quick quantities for the current ticker and returns focus to the short
   expect(shortcut()).toBeNull();
 });
 
+it.each(["AL", "AL30D"])("opens the configuration %s actually used by an AL30 ticket", async sourceTicker => {
+  autocompleteStorage({ InstrumentPresets: { [sourceTicker]: [{ cantidad: 500000, mostrar: "R6" }] } });
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  presetButton(current.form, "500k/R6");
+  const shortcut = current.form.querySelector<HTMLButtonElement>('[aria-label="Configurar cantidades rápidas de AL30"]')!;
+  await act(async () => { shortcut.click(); });
+  const panel = document.querySelector<HTMLElement>("#ct-free-settings-panel")!;
+  expect(panel.querySelector("#selected-instrument")?.textContent).toBe(sourceTicker);
+  expect(panel.querySelector(".preset-chip")?.textContent).toBe("500k/R6");
+  expect(panel.querySelector<HTMLInputElement>("#new-instrument")?.value).toBe("");
+});
+
+it("shows the default quantities used by a ticket without a matching configuration", async () => {
+  autocompleteStorage({ InstrumentPresets: { GD30: [{ cantidad: 400, mostrar: 0 }] } });
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  const ticketPresets = [...current.form.querySelectorAll(".ButtonPreset")].map(button => button.textContent);
+  expect(ticketPresets).toContain("10k/2.5k");
+  const shortcut = current.form.querySelector<HTMLButtonElement>('[aria-label="Configurar cantidades rápidas de AL30"]')!;
+  await act(async () => { shortcut.click(); });
+  const panel = document.querySelector<HTMLElement>("#ct-free-settings-panel")!;
+  expect(panel.querySelector("#selected-instrument")?.textContent).toBe("Cantidades predeterminadas para AL30");
+  expect([...panel.querySelectorAll(".preset-chip")].map(chip => chip.textContent)).toEqual(ticketPresets);
+  await act(async () => { panel.querySelector<HTMLButtonElement>('[aria-label="Agregar instrumento"]')!.click(); });
+  expect(panel.querySelector("#selected-instrument")?.textContent).toBe("AL30");
+  expect([...panel.querySelectorAll(".preset-chip")].map(chip => chip.textContent)).toEqual(ticketPresets);
+  expect(chrome.storage.local.set).not.toHaveBeenCalled();
+});
+
 it("refreshes the current ticket's buttons after saving from the shortcut without filling the ticket", async () => {
   autocompleteStorage({ InstrumentPresets: { GD30: [{ cantidad: 400, mostrar: 0 }] },
     "AutocompleteInstrument:GD30": true });
