@@ -82,8 +82,8 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
       setSlot(bar ? item : null);
     };
     attach();
-    const stop = observePageStructure(records => {
-      if (bar && (!bar.isConnected || item.parentElement !== bar) || containsChangedElements(records, barSelector)) attach();
+    const stop = observePageStructure(({ elements }) => {
+      if (bar && (!bar.isConnected || item.parentElement !== bar) || containsChangedElements(elements, barSelector)) attach();
     });
     return () => { stop(); item.remove(); };
   }, []);
@@ -115,8 +115,9 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
       update();
     };
     bind(); update();
-    const stop = observePageStructure(records => {
-      if (observed.some(node => !node.isConnected) || containsChangedElements(records, boundarySelectors.join(", "))) bind();
+    const structureSelector = boundarySelectors.join(", ");
+    const stop = observePageStructure(({ elements }) => {
+      if (observed.some(node => !node.isConnected) || containsChangedElements(elements, structureSelector)) bind();
     });
     const navigate = (event: MouseEvent) => {
       if (event.target instanceof Element) {

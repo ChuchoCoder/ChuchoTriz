@@ -480,10 +480,13 @@ export default function RatiosDashboard() {
       if (inScope) requestRefresh(); else schedule();
     };
     const drawerObserver = new MutationObserver(discover);
-    const stop = observePageStructure(records => {
-      if (containsChangedElements(records, nativeStructure)) discover();
-      else if (records.some(({ type }) => type === "attributes") || containsChangedElements(records, widgetSelector) ||
-        [...menus.entries(), ...widgets.entries()].some(([parent, slot]) => slot.parentElement !== parent)) {
+    const displaced = (entries: Iterable<[Element, HTMLElement]>) => {
+      for (const [parent, slot] of entries) if (slot.parentElement !== parent) return true;
+      return false;
+    };
+    const stop = observePageStructure(({ elements, ratioSlotChanged }) => {
+      if (containsChangedElements(elements, nativeStructure)) discover();
+      else if (ratioSlotChanged || containsChangedElements(elements, widgetSelector) || displaced(menus) || displaced(widgets)) {
         reconcileMenus(); reconcileWidgets(); showLocations(); schedule();
       }
     });

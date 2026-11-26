@@ -24,10 +24,11 @@ export function observeMiniOrderForm(update: (form: HTMLElement | null, buttons:
         update(form, form?.querySelector<HTMLElement>(`:scope > ${buttonsSelector}`) ?? null);
     };
     const body = document.body;
-    observePageStructure(records => {
-        const insideTicket = records.some(({ type, target }) => type === "childList" && form?.contains(target) &&
+    observePageStructure(({ targets, elements }) => {
+        const ticket = form;
+        const insideTicket = ticket && targets.some(target => ticket.contains(target) &&
             target instanceof Element && !target.closest("#root-chuchotriz"));
-        if (insideTicket || containsChangedElements(records, "#MiniOrderForm")) reconcile();
+        if (insideTicket || containsChangedElements(elements, "#MiniOrderForm")) reconcile();
     });
     // Matriz puede enfocar el formulario nuevo antes de que se ejecute el observador.
     body.addEventListener("focusin", ({ target }) => {
