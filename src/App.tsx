@@ -4,6 +4,7 @@ import "./App.css";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { label } from "./PresetBook";
 import { PresetSession } from "./PresetSession";
+import ToolbarIcon from "./ToolbarIcon";
 
 export interface InstrumentAutocompleteSettings {
   enabled(ticker: string): boolean | undefined;
@@ -33,12 +34,22 @@ function AutocompleteCheckbox({ ticker, settings }: { ticker: string; settings: 
   </div>;
 }
 
-function App({ session, autocomplete }: { session: PresetSession; autocomplete: InstrumentAutocompleteSettings }) {
+function App({ session, autocomplete, openPresets }: {
+  session: PresetSession; autocomplete: InstrumentAutocompleteSettings;
+  openPresets: (ticker: string, trigger: HTMLButtonElement) => void;
+}) {
   const presets = useSyncExternalStore(session.subscribe, session.presets);
   const ticker = useSyncExternalStore(session.subscribe, session.ticker);
+  const settingsLabel = `Configurar cantidades rápidas de ${ticker}`;
 
   return <div className="preset-panel">
-    {ticker && <AutocompleteCheckbox key={ticker} ticker={ticker} settings={autocomplete} />}
+    {ticker && <div className="preset-panel-actions">
+      <AutocompleteCheckbox key={ticker} ticker={ticker} settings={autocomplete} />
+      <button type="button" className="preset-settings-button" aria-label={settingsLabel} title={settingsLabel}
+        aria-controls="ct-free-settings-panel" onClick={event => openPresets(ticker, event.currentTarget)}>
+        <ToolbarIcon name="settings" />
+      </button>
+    </div>}
     {presets.length > 0 && (
     <div className="DefaultSizeShowButtons">
       {presets.map((item, index) => (

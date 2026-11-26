@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ChuchoTrizTools from "./ChuchoTrizTools";
+import type { PresetEditorRequest } from "./InstrumentPresetsOptions";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
@@ -22,14 +23,32 @@ function bounds() {
   };
 }
 
-export function SettingsMenu() {
+export type PresetSettingsRequest = PresetEditorRequest & { trigger: HTMLButtonElement };
+
+export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettingsRequest }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [visited, setVisited] = useState(false);
   const [position, setPosition] = useState(bounds);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLElement>(null);
   const [colorScheme, setColorScheme] = useState("dark");
+
+  function openPanel(trigger: HTMLElement) {
+    returnFocus.current = trigger;
+    setPosition(bounds());
+    setVisited(true);
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (presetRequest) openPanel(presetRequest.trigger);
+  }, [presetRequest]);
+
+  useEffect(() => {
+    if (open) closeButton.current?.focus();
+  }, [open, presetRequest]);
 
   useEffect(() => {
     if (!open || !panel.current) return;
@@ -68,7 +87,6 @@ export function SettingsMenu() {
 
   useEffect(() => {
     if (!open) return;
-    closeButton.current?.focus();
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
@@ -113,7 +131,8 @@ export function SettingsMenu() {
 
   function close() {
     setOpen(false);
-    slot?.querySelector<HTMLAnchorElement>("a")?.focus();
+    const trigger = returnFocus.current;
+    (trigger?.isConnected ? trigger : slot?.querySelector<HTMLAnchorElement>("a"))?.focus();
   }
 
   return <>
@@ -121,7 +140,7 @@ export function SettingsMenu() {
       <a className={`Item ct-free-settings-item${open ? " selected" : ""}`} href="#"
         aria-label="Configuración (ChuchoTriz)" title="Configuración · ChuchoTriz"
         aria-controls="ct-free-settings-panel" aria-expanded={open} aria-current={open ? "page" : undefined}
-        onClick={event => { event.preventDefault(); setPosition(bounds()); setVisited(true); setOpen(true); }}>
+        onClick={event => { event.preventDefault(); openPanel(event.currentTarget); }}>
         <img src={chuchotrizIcon} width="20" height="20" alt="" />
       </a>, slot)}
     {visited && <section ref={panel} id="ct-free-settings-panel" className="ct-free-settings-panel" style={position}
@@ -139,7 +158,7 @@ export function SettingsMenu() {
         if (event.target instanceof HTMLInputElement && event.target.getAttribute("role") === "searchbox" && event.target.value) return;
         event.preventDefault(); event.stopPropagation(); close();
       }}>
-      <ChuchoTrizTools embedded active={open} headerAction={
+      <ChuchoTrizTools embedded active={open} presetRequest={presetRequest} headerAction={
         <button ref={closeButton} type="button" aria-label="Volver a Matriz" onClick={close}>×</button>
       } />
     </section>}

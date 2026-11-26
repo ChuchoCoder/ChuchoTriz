@@ -390,15 +390,12 @@ export function format(book: PresetBook): string {
 
 // Coincidencia exacta; si no, el Ticker más largo del Preset book que es comienzo del buscado
 // (AL para AL30); si no, el primero del Preset book que empieza con el buscado (AL30D para AL30).
-// Si ninguno coincide, fallbackPresets.
-export function presetsFor(book: PresetBook, ticker: string): IInstrumentPreset[] {
-  if (book[ticker]) {
-    return book[ticker];
-  }
+export function presetTickerFor(book: Readonly<Record<string, unknown>>, ticker: string): string | null {
+  if (Object.hasOwn(book, ticker)) return ticker;
 
   let prefixMatch: string | null = null;
   let partialMatch: string | null = null;
-  for (const key in book) {
+  for (const key of Object.keys(book)) {
     if (ticker.startsWith(key)) {
       if (prefixMatch === null || key.length > prefixMatch.length) {
         prefixMatch = key;
@@ -409,7 +406,11 @@ export function presetsFor(book: PresetBook, ticker: string): IInstrumentPreset[
     }
   }
 
-  const match = prefixMatch ?? partialMatch;
+  return prefixMatch ?? partialMatch;
+}
+
+export function presetsFor(book: PresetBook, ticker: string): IInstrumentPreset[] {
+  const match = presetTickerFor(book, ticker);
   return match === null ? fallbackPresets : book[match];
 }
 

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { IInstrumentPresets, randomDisplayRange } from "./InstrumentPresets";
 import repository, { StoredSettings } from "./InstrumentPresetsRepository";
-import { defaultBook, format, label, parse } from "./PresetBook";
+import { defaultBook, fallbackPresets, format, label, parse, presetTickerFor } from "./PresetBook";
 import { DraftPreset, DraftPresets, PresetValidationError, serializePresets, toDraft } from "./InstrumentPresetsSettings";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./Options.css";
@@ -40,13 +40,22 @@ function sameSettings(a: EditorSettings, b: EditorSettings): boolean {
     Object.hasOwn(b.presets, ticker) && JSON.stringify(values) === JSON.stringify(b.presets[ticker]));
 }
 const conflictMessage = "Los presets guardados cambiaron. Si tenés cambios sin guardar, copialos desde RAW antes de descartar el borrador.";
+const fallbackDraft = toDraft({ defaults: fallbackPresets }).defaults;
 
-function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) {
+export type PresetEditorRequest = { ticker: string; sourceTicker?: string | null };
+
+function InstrumentPresetsOptions({ embedded = false, active = true, presetRequest }: {
+  embedded?: boolean; active?: boolean; presetRequest?: PresetEditorRequest;
+}) {
   const [presets, setPresets] = useState<DraftPresets>({});
   const [editorMode, setEditorMode] = useState<"visual" | "raw">("visual");
   const [rawText, setRawText] = useState("");
   const rawInput = useRef<HTMLTextAreaElement>(null);
   const [selected, setSelected] = useState("");
+  const [shortcut, setShortcut] = useState<PresetEditorRequest>();
+  const receivedPresetRequest = useRef<typeof presetRequest>(undefined);
+  const pendingPresetRequest = useRef<PresetEditorRequest>(undefined);
+  const instrumentDetail = useRef<HTMLElement>(null);
   const [editing, setEditing] = useState<EditingPreset | null>(null);
   const editFocus = useRef<{ index: number; field: "cantidad" | "mostrar" | "action" } | null>(null);
   const [newTicker, setNewTicker] = useState("");
@@ -70,6 +79,10 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   const query = tickerQuery.trim().toUpperCase();
   const filteredTickers = tickers.filter(ticker => ticker.toUpperCase().includes(query));
   const values = presets[selected] ?? [];
+  const shortcutTicker = shortcut?.ticker ?? "";
+  const sourceTicker = shortcut?.sourceTicker ?? null;
+  const showingShortcut = Boolean(shortcutTicker) && selected === (sourceTicker ?? shortcutTicker);
+  const effectivePresets = showingShortcut ? (sourceTicker ? saved.current.presets[sourceTicker] : fallbackDraft) : undefined;
   const rawErrors = editorMode === "raw" ? parse(rawText).errors : [];
 
   function receiveSettings(next: EditorSettings) {
@@ -131,7 +144,30 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
     else row?.querySelector<HTMLButtonElement>(target.field === "action" ? ".edit-preset" : '[aria-pressed="true"]')?.focus();
   }, [editing]);
 
-  function selectTicker(ticker: string) { setSelected(ticker); setEditing(null); }
+  function selectTicker(ticker: string, request?: PresetEditorRequest) {
+    setSelected(ticker); setShortcut(request); setEditing(null);
+  }
+  function showRequestedTicker(draft: DraftPresets) {
+    const request = pendingPresetRequest.current;
+    if (!request) return;
+    pendingPresetRequest.current = undefined;
+    const { ticker } = request;
+    const sourceTicker = request.sourceTicker === undefined ? presetTickerFor(saved.current.presets, ticker) : request.sourceTicker;
+    const source = sourceTicker ?? ticker;
+    selectTicker(source, { ticker, sourceTicker });
+    setTickerQuery("");
+    setNewTicker(Object.hasOwn(draft, source) ? "" : source);
+    if (instrumentDetail.current) instrumentDetail.current.scrollTop = 0;
+  }
+
+  useEffect(() => {
+    if (!active || !presetRequest || presetRequest === receivedPresetRequest.current || loading || saving || loadFailed) return;
+    receivedPresetRequest.current = presetRequest;
+    pendingPresetRequest.current = presetRequest;
+    if (editorMode === "raw") switchEditorMode("visual");
+    else showRequestedTicker(presets);
+  }, [active, presetRequest, loading, saving, loadFailed, editorMode, presets, rawText]);
+
   function readRawPresets(): IInstrumentPresets | null {
     const result = parse(rawText);
     if (result.errors.length > 0) {
@@ -150,8 +186,11 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
       if (book === null) return;
       const draft = toDraft(book);
       setPresets(draft);
-      setSelected(current => Object.hasOwn(draft, current) ? current : sortTickers(draft)[0] ?? "");
-      setTickerQuery("");
+      if (pendingPresetRequest.current) showRequestedTicker(draft);
+      else {
+        setSelected(current => Object.hasOwn(draft, current) ? current : sortTickers(draft)[0] ?? "");
+        setTickerQuery("");
+      }
     }
     setEditing(null); setEditorMode(mode);
     setError(conflicted.current ? conflictMessage : "");
@@ -220,10 +259,14 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
     }
     const { errors } = parse(`${ticker} 100`);
     if (errors.length > 0) { setError(errors[0].message); return; }
-    setPresets(previous => ({ ...previous, [ticker]: [{ cantidad: "100", mostrar: "0" }] }));
+    const initialPresets = (ticker === selected && effectivePresets?.length ? effectivePresets : [{ cantidad: "100", mostrar: "0" }]);
+    setPresets(previous => ({ ...previous, [ticker]: initialPresets }));
     setSelected(ticker); setNewTicker(""); setTickerQuery("");
     editFocus.current = { index: 0, field: "cantidad" };
-    setEditing({ ticker, index: 0, mode: "all", fixed: "20", divisor: "5" }); markChanged();
+    const first = initialPresets[0];
+    const mode = displayMode(first);
+    setEditing({ ticker, index: 0, mode, fixed: mode === "fixed" ? first.mostrar : "20",
+      divisor: mode === "random" ? first.mostrar.slice(1) : "5" }); markChanged();
   }
   function removeInstrument() {
     setEditing(null);
@@ -283,7 +326,7 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
       await repository.save(parsed);
       if (!conflicted.current) {
         saved.current = candidate; setPresets(candidate.presets); setRawText(format(parsed));
-        dirty.current = false; setEditing(null); setStatus("Cambios guardados");
+        dirty.current = false; setEditing(null); setShortcut(undefined); setStatus("Cambios guardados");
       }
     } catch {
       setStatus(""); setError("No se pudo guardar la configuración. Tus cambios siguen disponibles para reintentar.");
@@ -367,10 +410,16 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
                   <button type="button" onClick={addInstrument} aria-label="Agregar instrumento">+</button></div>
               </div>
             </aside>
-            <section className="instrument-detail" aria-labelledby="selected-instrument">
-              {selected ? <>
+            <section ref={instrumentDetail} className="instrument-detail" aria-labelledby="selected-instrument">
+              {Object.hasOwn(presets, selected) ? <>
                 <div className="instrument-heading"><h2 id="selected-instrument">{selected}</h2>
                   <button type="button" className="text-button" onClick={removeInstrument}>Quitar instrumento</button></div>
+                {showingShortcut && sourceTicker && shortcutTicker !== selected && <p className="preset-hint">
+                  {shortcutTicker} usa la configuración de {selected}.
+                </p>}
+                {showingShortcut && !sourceTicker && <p className="preset-hint">
+                  {shortcutTicker} usa las cantidades predeterminadas hasta que guardes su configuración.
+                </p>}
                 <p className="preset-hint">Hacé clic en cualquier celda para editar. Reordená con ↑/↓. El primero se usa para autocompletar si no hay uno elegido anteriormente.</p>
                 {values.length > 0 && <div className="preset-columns" aria-hidden="true"><span /><span>Cantidad</span><span>A mostrar</span><span /></div>}
                 <div className="preset-rows" ref={presetRows}>
@@ -450,8 +499,17 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
                     y suma entre 0% y 3% en cada aplicación, incluido el autocompletado. El resultado queda fijo al editar el ticket.
                     {" "}El ✓ termina la edición; Guardar cambios guarda la configuración.</p>
                 </div>
-              </> : <div className="empty-instruments"><h2 id="selected-instrument">Agregá tu primer instrumento</h2>
-                <p>Ingresá su símbolo y configurá las cantidades rápidas.</p></div>}
+              </> : effectivePresets ? <div className="preset-preview">
+                <h2 id="selected-instrument">{sourceTicker ?? `Cantidades predeterminadas para ${selected}`}</h2>
+                <p>{sourceTicker ? `${shortcutTicker} usa esta configuración guardada. Se quitó del borrador.`
+                  : `Estas son las cantidades del ticket de ${selected}. Agregá el instrumento para editar una copia.`}</p>
+                <div className="preset-chips">
+                  {effectivePresets.map((preset, index) => <span className="preset-chip" key={index}>{previewLabel(preset)}</span>)}
+                </div>
+              </div> : <div className="empty-instruments">
+                <h2 id="selected-instrument">Agregá tu primer instrumento</h2>
+                <p>Ingresá su símbolo y configurá las cantidades rápidas.</p>
+              </div>}
             </section>
           </div>}
         </fieldset>

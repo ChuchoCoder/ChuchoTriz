@@ -85,6 +85,68 @@ async (page, group) => {
     await label('Precio').click();
     equal(await page.evaluate(() => document.activeElement.id), 'precio', 'Direct price click keeps focus');
     pass('SM-03', 'Form remount keeps preset, Clear forgets it, quote redirects focus and direct click does not');
+
+    await label('Instrumento').fill('GD30 (24hs)');
+    const shortcut = ticket.getByRole('button', { name: 'Configurar cantidades rápidas de GD30' });
+    const quantityBefore = await label('Cantidad').inputValue();
+    await shortcut.press('Enter');
+    const instrument = ticker => page.getByRole('heading', { name: ticker, exact: true });
+    await instrument('GD30').waitFor();
+    equal(await b('Cantidades rápidas').getAttribute('aria-pressed'), 'true', 'Quick quantities tab selected');
+    equal(await label('Cantidad').inputValue(), quantityBefore, 'Opening keeps the ticket quantity');
+    await b('RAW').click();
+    const draft = `${raw}\nGGAL ${Array.from({length: 29}, (_, index) => 123 + index).join(' ')}`;
+    await label('Presets RAW').fill(draft);
+    await b('Volver a Matriz').click();
+    assert(await shortcut.evaluate(button => document.activeElement === button), 'Closing returns focus to the shortcut');
+    await shortcut.press('Space');
+    await instrument('GD30').waitFor();
+    await b('RAW').click();
+    equal((await label('Presets RAW').inputValue()).trim(), draft, 'The shortcut preserves a valid unsaved RAW draft');
+    await label('Presets RAW').fill('GD30 inválido');
+    await b('Volver a Matriz').click();
+    await label('Instrumento').fill('GGAL (CI)');
+    const ggalShortcut = ticket.getByRole('button', { name: 'Configurar cantidades rápidas de GGAL' });
+    await ggalShortcut.click();
+    equal(await label('Presets RAW').inputValue(), 'GD30 inválido', 'Invalid RAW stays available for correction');
+    await page.getByRole('alert').filter({ hasText: 'Línea 1' }).waitFor();
+    await label('Presets RAW').fill(draft);
+    await b('Visual').click();
+    await instrument('GGAL').waitFor();
+    const detail = page.locator('.instrument-detail');
+    assert(await detail.evaluate(element => { element.scrollTop = element.scrollHeight; return element.scrollTop > 0; }), 'Long preset detail can scroll');
+    await b('Volver a Matriz').click();
+    await ggalShortcut.click();
+    equal(await detail.evaluate(element => element.scrollTop), 0, 'Opening the shortcut shows the beginning of the preset detail');
+    await b('Volver a Matriz').click();
+
+    await label('Instrumento').fill('TICKER-NUEVO (CI)');
+    await label('Precio').fill('');
+    await ticket.getByRole('button', { name: 'Configurar cantidades rápidas de TICKER-NUEVO' }).click();
+    await instrument('Cantidades predeterminadas para TICKER-NUEVO').waitFor();
+    equal(await label('Nuevo instrumento').inputValue(), 'TICKER-NUEVO', 'Prefills new ticker even without a price');
+    equal((await page.evaluate(() => chrome.storage.local.get('InstrumentPresets'))).InstrumentPresets['TICKER-NUEVO'], undefined, 'Opening never saves a new ticker');
+    await b('Descartar cambios').click();
+    await b('Volver a Matriz').click();
+
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: {
+      A: [{ cantidad: 50, mostrar: 0 }], AL: [{ cantidad: 500000, mostrar: 'R6' }],
+    } }));
+    await label('Instrumento').fill('AL30 (CI)');
+    await label('Precio').fill('70000');
+    await label('Cantidad').focus();
+    await ticket.getByRole('button', { name: '500k/R6', exact: true }).waitFor();
+    const al30Shortcut = ticket.getByRole('button', { name: 'Configurar cantidades rápidas de AL30' });
+    await al30Shortcut.click();
+    await instrument('AL').waitFor();
+    equal(await page.locator('.preset-preview .preset-chip').allTextContents(), ['500k/R6'], 'Editor uses the same prefix configuration as the ticket');
+    await b('RAW').click();
+    await label('Presets RAW').fill('A 50\nAL 500000/R6\nAL30 999');
+    await b('Volver a Matriz').click();
+    await al30Shortcut.click();
+    await instrument('AL').waitFor();
+    equal(await page.locator('.preset-preview .preset-chip').allTextContents(), ['500k/R6'], 'An unsaved exact match does not replace the active configuration');
+    pass('SM-02-shortcut', 'Shortcut opens the effective configuration, preserves drafts, restores focus and previews defaults');
   } else if (group === 'autocomplete') {
     await page.evaluate(() => chrome.storage.local.set({ Autocomplete: true,
       'AutocompleteInstrument:KEEP': true, 'AutocompleteInstrument:OFF': false }));
@@ -281,6 +343,7 @@ async (page, group) => {
       const buttons = [...form.querySelectorAll('.ButtonPreset')];
       const presets = buttons.map(rect);
       return { form:rect(form), native, presets, checkbox:rect(form.querySelector('.instrument-autocomplete')),
+        shortcut:rect(form.querySelector('.preset-settings-button')),
         rows:new Set(presets.map(r => Math.round(r.y))).size,
         labelsFit:buttons.every(e => e.scrollWidth <= e.clientWidth + 1 && e.scrollHeight <= e.clientHeight + 1) };
     });
@@ -289,7 +352,9 @@ async (page, group) => {
       assert(layout.checkbox.y >= layout.native[0].bottom + 3, `Autocomplete below native buttons ${context}`);
       assert(Math.abs(layout.checkbox.x - layout.native[0].x) < 1 && layout.checkbox.right <= layout.native[2].right + 1,
         `Autocomplete aligned within the action group ${context}`);
-      assert([...layout.native, ...layout.presets, layout.checkbox].every(r =>
+      assert(layout.shortcut.x >= layout.checkbox.right && layout.shortcut.right <= layout.native[2].right + 1,
+        `Preset settings shortcut next to autocomplete ${context}`);
+      assert([...layout.native, ...layout.presets, layout.checkbox, layout.shortcut].every(r =>
         r.x >= layout.form.x && r.right <= layout.form.right + 1 && r.y >= layout.form.y && r.bottom <= layout.form.bottom + 1),
         `Controls fit without clipping ${context}`);
       assert(layout.labelsFit, `Preset labels fit without truncation ${context}`);

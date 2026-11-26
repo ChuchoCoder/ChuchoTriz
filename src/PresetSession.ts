@@ -1,5 +1,6 @@
 import { IInstrumentPreset, resolvePreset } from "./InstrumentPresets";
 import { MiniOrderForm, Ticket } from "./MiniOrderForm";
+import { presetsFor, type PresetBook } from "./PresetBook";
 
 export interface PresetSettings {
   presetsFor(ticker: string): Promise<IInstrumentPreset[]>;
@@ -13,6 +14,7 @@ export interface PresetSession {
   subscribe(listener: () => void): () => void;
   // Carga los botones al montar sin consumir el próximo foco del ticket.
   refresh(): Promise<void>;
+  reloadPresets(book: PresetBook): Promise<void>;
   invalidateAutocomplete(): void;
   choose(preset: IInstrumentPreset): void;
   dispose(): void;
@@ -46,7 +48,7 @@ export function createPresetSession(
     }
   };
 
-  const update = async (fromFocus: boolean) => {
+  const update = async (fromFocus: boolean, updatedBook?: PresetBook) => {
     let request: typeof pendingLookup;
     try {
       const ticket = form.read();
@@ -57,8 +59,8 @@ export function createPresetSession(
       const ticketKey = keyOf(ticket);
       const identity = identityOf(ticket);
       const instrument = instrumentOf(ticket);
-      const alreadyLoadingOrVisible = pendingLookup?.identity === identity ||
-        (!!ticket.precio && visibleInstrument === instrument);
+      const alreadyLoadingOrVisible = !updatedBook && (pendingLookup?.identity === identity ||
+        (!!ticket.precio && visibleInstrument === instrument));
       if (disposed || (fromFocus ? lastTicketKey === ticketKey : alreadyLoadingOrVisible)) {
         return;
       }
@@ -75,7 +77,7 @@ export function createPresetSession(
       lastInstrumento = ticket.instrumento;
       lastTicketKey = fromFocus ? ticketKey : "";
       if (visibleInstrument !== instrument) show(NoPresets);
-      const presets = await settings.presetsFor(ticket.ticker);
+      const presets = updatedBook ? presetsFor(updatedBook, ticket.ticker) : await settings.presetsFor(ticket.ticker);
       if (!current()) return;
 
       // Every await can outlive an instrument change, Limpiar, or manual typing.
@@ -83,12 +85,10 @@ export function createPresetSession(
       if (!current()) return;
       if (!form.read().cantidad && enabled) {
         const lastUsed = lastUsedPresets.get(ticket.instrumento);
-        if (lastUsed) {
-          form.fill(resolvePreset(lastUsed));
-        }
-        else if (presets.length > 0) {
-          form.fill(resolvePreset(presets[0]));
-        }
+        const remembered = lastUsed && presets.find(candidate =>
+          candidate.cantidad === lastUsed.cantidad && candidate.mostrar === lastUsed.mostrar);
+        const preset = remembered ?? presets[0];
+        if (preset) form.fill(resolvePreset(preset));
         // Record the write before focusing: focusin can re-enter this handler.
         lastTicketKey = keyOf(form.read());
         form.editCantidad();
@@ -122,6 +122,7 @@ export function createPresetSession(
       return () => listeners.delete(listener);
     },
     refresh: () => update(false),
+    reloadPresets: book => update(false, book),
     invalidateAutocomplete: () => {
       pendingLookup = undefined;
       lastTicketKey = "";
@@ -129,7 +130,7 @@ export function createPresetSession(
     choose: (preset) => {
       const ticket = form.read();
       // Presets belong to the instrument; editing Precio must not invalidate their buttons.
-      if (disposed || !ticket.precio || instrumentOf(ticket) !== visibleInstrument) return;
+      if (disposed || !ticket.precio || instrumentOf(ticket) !== visibleInstrument || !visiblePresets.includes(preset)) return;
       const resolved = resolvePreset(preset);
       pendingLookup = undefined;
       lastUsedPresets.set(ticket.instrumento, preset);
