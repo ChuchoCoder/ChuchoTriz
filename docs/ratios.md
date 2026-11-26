@@ -31,6 +31,8 @@ y el instrumento B del catálogo de Matriz. El gráfico muestra A dividido B.
 Cada widget guarda los dos instrumentos con su identidad exacta, incluido el
 plazo, y su posición en el dashboard. Los widgets guardados con la configuración
 anterior conservan su par. Si ese par no está disponible, elegí A y B en el editor.
+Arrastrá la esquina inferior derecha o enfocala y usá las flechas para cambiar
+el tamaño. El gráfico se adapta al espacio y el dashboard conserva las dimensiones.
 Desde **+ Referencia C** se puede elegir una especie y activar **Dividir C por
 100**. El widget guarda esa referencia y dibuja A/B en el eje derecho y
 la brecha porcentual a la izquierda. **Sólo brecha** oculta la línea A/B

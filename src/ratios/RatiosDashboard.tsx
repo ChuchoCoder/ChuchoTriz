@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import { containsChangedElements, observePageStructure } from "../pageStructure";
@@ -19,6 +19,99 @@ const widgetSelector = "[data-ct-ratios-slot]";
 const savedWidgetSelector = '[class*="DashboardGridItem-ChuchoTrizRatiosWidget"], [class*="DashboardGridItem-ChuchoTrizIntradayDollarWidget"]';
 const nativeStructure = [dashboardSelector, ".GridLayout", ".DashboardGridItem", menuSelector, "#ToolPanel", ".ToolContent", drawerHeaderSelector].join(", ");
 const discoveryDelays = [250, 750, 2000];
+
+type WidgetSize = { width: number; height: number };
+type ResizeSpace = { right: number; neighbors: { left: number; top: number; right: number; bottom: number }[] };
+
+function resizeSpace(root: HTMLElement, box: DOMRect): ResizeSpace | undefined {
+  const slot = root.closest(".DashboardGridItem");
+  const grid = slot?.closest(".GridLayout");
+  if (!grid) return;
+  const neighbors = [...grid.querySelectorAll(".DashboardGridItem")].filter(item => item !== slot)
+    .map(item => {
+      const rect = item.getBoundingClientRect();
+      return { left: rect.left - box.left, top: rect.top - box.top, right: rect.right - box.left, bottom: rect.bottom - box.top };
+    }).filter(rect => rect.left < rect.right && rect.top < rect.bottom);
+  return { right: grid.getBoundingClientRect().right - box.left, neighbors };
+}
+
+function clampWidgetSize({ width, height }: WidgetSize, current: WidgetSize, space?: ResizeSpace): WidgetSize {
+  width = Math.round(Math.max(360, Math.min(2200, width)));
+  height = Math.round(Math.max(180, Math.min(1400, height)));
+  if (space) {
+    width = Math.min(width, Math.max(current.width, Math.floor(space.right)));
+    // Preserve the upper left corner. First stop at neighbors on the right of
+    // the occupied rows, then stop at neighbors below the resulting width.
+    for (const neighbor of space.neighbors) {
+      if (neighbor.right > current.width && neighbor.top < Math.min(current.height, height) && neighbor.bottom > 0) {
+        width = Math.min(width, Math.max(current.width, Math.floor(neighbor.left)));
+      }
+    }
+    for (const neighbor of space.neighbors) {
+      if (neighbor.bottom > current.height && neighbor.left < width && neighbor.right > 0) {
+        height = Math.min(height, Math.max(current.height, Math.floor(neighbor.top)));
+      }
+    }
+  }
+  return { width, height };
+}
+
+function WidgetResizeHandle({ root, width, height, label, busy, fitDashboard = false, onResize }: WidgetSize & {
+  root: RefObject<HTMLElement | null>; label: string; busy: boolean; fitDashboard?: boolean; onResize(size: WidgetSize): Promise<boolean>;
+}) {
+  const drag = useRef<(WidgetSize & { pointer: number; x: number; y: number; space?: ResizeSpace }) | null>(null);
+  const clearPreview = () => {
+    if (root.current) { root.current.style.width = ""; root.current.style.height = ""; }
+  };
+  const cancel = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (drag.current?.pointer !== event.pointerId) return;
+    drag.current = null;
+    clearPreview();
+  };
+  const dragSize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const start = drag.current;
+    if (start?.pointer !== event.pointerId) return;
+    return clampWidgetSize({ width: start.width + event.clientX - start.x, height: start.height + event.clientY - start.y }, start, start.space);
+  };
+  return <button type="button" className="ct-ratios-resize NoDraggable" aria-label={label}
+    title="Arrastrá para cambiar el tamaño. También podés usar las flechas." aria-disabled={busy}
+    onMouseDown={event => event.stopPropagation()}
+    onPointerDown={event => {
+      if (event.button !== 0 || busy || drag.current || !root.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const box = root.current.getBoundingClientRect();
+      drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, width: box.width, height: box.height,
+        space: fitDashboard ? resizeSpace(root.current, box) : undefined };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }}
+    onPointerMove={event => {
+      const size = dragSize(event);
+      if (!size || !root.current) return;
+      root.current.style.width = size.width + "px";
+      root.current.style.height = size.height + "px";
+    }}
+    onPointerUp={event => {
+      const size = dragSize(event);
+      if (!size) return;
+      drag.current = null;
+      if (busy || size.width === width && size.height === height) clearPreview();
+      else void onResize(size).finally(clearPreview);
+    }}
+    onPointerCancel={cancel} onLostPointerCapture={cancel}
+    onKeyDown={event => {
+      const step: Record<string, [number, number]> = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] };
+      if (!Object.hasOwn(step, event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const element = root.current;
+      if (busy || drag.current || !element) return;
+      const [dx, dy] = step[event.key];
+      const space = fitDashboard ? resizeSpace(element, element.getBoundingClientRect()) : undefined;
+      const size = clampWidgetSize({ width: width + dx, height: height + dy }, { width, height }, space);
+      if (size.width !== width || size.height !== height) void onResize(size);
+    }}>◢</button>;
+}
 
 export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, acceptSuggestionOnTab = false, divisor, describe = instrumentDetail }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
@@ -143,7 +236,6 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const format = formatOverride ?? (compare ? "percent" : defaultRatioFormat(a, b));
   const referenceFormula = referenceCFormula(divideCBy100 ? 100 : undefined);
   const [issue, setIssue] = useState("");
-  const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
@@ -162,12 +254,6 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
       id: p.id, a: p.a.id, b: p.b.id, ...(p.c ? { c: p.c.id, cDivisor: p.cDivisor } : {}), format: p.format || "number",
     })),
   });
-  const finishResize = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!resize.current) return;
-    const start = resize.current; resize.current = null;
-    if (root.current) { root.current.style.width = ""; root.current.style.height = ""; }
-    void run("ratiosResize", { width: start.width + event.clientX - start.x, height: start.height + event.clientY - start.y });
-  };
   return <section className="ct-ratios ct-ratios-widget" ref={root} aria-label="Ratios de instrumentos">
     <header className="ct-ratios-title"><strong>Ratios</strong><span className="ct-ratios-header-actions NoDraggable">
       <button type="button" aria-label="Agregar ratio" title="Agregar ratio" disabled={busy || cfg.pairs.length >= 50} onClick={() => begin()}>＋</button>
@@ -234,25 +320,8 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
       {!cfg.pairs.length && !editing && <button type="button" className="ct-ratios-empty" onClick={() => begin()}>Agregá tu primer ratio</button>}
       </div>
     </div>
-    <button type="button" className="ct-ratios-resize NoDraggable" aria-label="Redimensionar Ratios" title="Arrastrá para cambiar el tamaño; también podés usar las flechas" disabled={busy}
-      onMouseDown={event => event.stopPropagation()}
-      onPointerDown={event => {
-        if (event.button !== 0 || !root.current) return;
-        event.preventDefault(); event.stopPropagation();
-        const box = root.current.getBoundingClientRect();
-        resize.current = { x: event.clientX, y: event.clientY, width: box.width, height: box.height };
-        event.currentTarget.setPointerCapture(event.pointerId);
-      }} onPointerMove={event => {
-        if (!resize.current || !root.current) return;
-        root.current.style.width = Math.max(360, Math.min(2200, resize.current.width + event.clientX - resize.current.x)) + "px";
-        root.current.style.height = Math.max(180, Math.min(1400, resize.current.height + event.clientY - resize.current.y)) + "px";
-      }} onPointerUp={finishResize} onPointerCancel={() => { resize.current = null; if (root.current) { root.current.style.width = ""; root.current.style.height = ""; } }}
-      onKeyDown={event => {
-        const step: Record<string, number[]> = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] };
-        if (!step[event.key]) return;
-        event.preventDefault(); event.stopPropagation();
-        void run("ratiosResize", { width: widget.width + step[event.key][0], height: widget.height + step[event.key][1] });
-      }}>◢</button>
+    <WidgetResizeHandle root={root} width={widget.width} height={widget.height} label="Redimensionar Ratios" busy={busy}
+      onResize={size => run("ratiosResize", size)} />
   </section>;
 }
 
@@ -263,15 +332,15 @@ function intradayInstrumentDetail(instrument: RatioInstrument) {
 
 function DollarWidget({ widget, command, search, busy, visible }: { widget: DollarWidgetState; command: Command; search: Search; busy: boolean; visible: boolean }) {
   const { config, pair } = widget;
+  const root = useRef<HTMLElement>(null);
   const [issue, setIssue] = useState("");
   const [legs, setLegs] = useState<Partial<Pick<RatioPair, "a" | "b">> & { revision: number }>();
   const [reference, setReference] = useState<RatioReference & { revision: number }>();
   const [spreadOnly, setSpreadOnly] = useState(false);
-  const run = async (method: "dollarEdit" | "ratiosRemove", selection?: Partial<Pick<RatioPair, "a" | "b">> & RatioReference, expectedRevision = config.revision) => {
+  const run = async (method: "dollarEdit" | "ratiosRemove" | "ratiosResize", params: Record<string, unknown> = {}) => {
     setIssue("");
     try {
-      await command(method, { widgetId: config.id, revision: expectedRevision,
-        a: selection?.a?.id, b: selection?.b?.id, c: selection?.c?.id, cDivisor: selection?.cDivisor });
+      await command(method, { widgetId: config.id, revision: config.revision, ...params });
       return true;
     } catch (error) {
       setIssue(error instanceof Error ? error.message : "No se pudo guardar el widget.");
@@ -279,9 +348,10 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
     }
   };
   const label = pair ? pairLabel({ a: pair.a, b: pair.b }) : undefined;
+  const referenceLabel = config.c && `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}`;
   const sameInstrument = !!legs?.a && legs.a.id === legs.b?.id;
-  return <section className="ct-ratios ct-intraday-widget" aria-label={label ? `Dólar intradiario · ${label}` : "Dólar intradiario"}>
-    <header className="ct-ratios-title"><strong>{label ?? "Dólar intradiario"}</strong><div className="ct-ratios-header-actions NoDraggable">
+  return <section className="ct-ratios ct-intraday-widget" ref={root} aria-label={label ? `Dólar intradiario · ${label}` : "Dólar intradiario"}>
+    <header className="ct-ratios-title"><strong title={label}>{label ?? "Dólar intradiario"}</strong><div className="ct-ratios-header-actions NoDraggable">
       <button type="button" aria-label="Cerrar widget de dólar intradiario" disabled={busy} onMouseDown={event => event.stopPropagation()}
         onClick={() => void run("ratiosRemove")}>×</button>
     </div></header>
@@ -295,11 +365,12 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
         {pair ? `${pair.a.symbol} / ${pair.b.symbol}` : "Seleccionar A y B"}
       </button>
       <button type="button" className="ct-intraday-config" aria-expanded={!!reference} aria-label="Configurar Referencia C" disabled={busy}
+        title={referenceLabel}
         onClick={() => {
           setLegs(undefined);
           setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor, revision: config.revision });
         }}>
-        {config.c ? `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}` : "+ Referencia C"}
+        {referenceLabel ?? "+ Referencia C"}
       </button>
       {config.c && <button type="button" className="ct-intraday-mode" aria-pressed={spreadOnly}
         onClick={() => setSpreadOnly(value => !value)}>Sólo brecha</button>}
@@ -307,7 +378,9 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
     {legs && <form className="ct-intraday-editor ct-ratios-editor NoDraggable" aria-label="Instrumentos del dólar intradiario"
       onMouseDown={event => event.stopPropagation()} onSubmit={event => {
         event.preventDefault();
-        if (legs.a && legs.b && !sameInstrument) void run("dollarEdit", { ...legs, c: config.c, cDivisor: config.cDivisor }, legs.revision)
+        if (legs.a && legs.b && !sameInstrument) void run("dollarEdit", {
+          a: legs.a.id, b: legs.b.id, c: config.c?.id, cDivisor: config.cDivisor, revision: legs.revision,
+        })
           .then(saved => { if (saved) setLegs(undefined); });
       }}>
       <div className="ct-ratios-pickers">
@@ -324,14 +397,15 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
     {reference && <form className="ct-intraday-editor ct-ratios-editor NoDraggable" aria-label="Referencia del dólar intradiario"
       onMouseDown={event => event.stopPropagation()} onSubmit={event => {
         event.preventDefault();
-        if (reference.c) void run("dollarEdit", reference, reference.revision).then(saved => { if (saved) setReference(undefined); });
+        if (reference.c) void run("dollarEdit", { c: reference.c.id, cDivisor: reference.cDivisor, revision: reference.revision })
+          .then(saved => { if (saved) setReference(undefined); });
       }}>
       <InstrumentPicker label="Referencia C" value={reference.c} search={search} disabled={busy} autoFocus
         onChange={c => setReference(previous => previous && { ...previous, c, cDivisor: c && c.id === previous.c?.id ? previous.cDivisor : undefined })}
         divisor={{ checked: reference.cDivisor === 100, disabled: !reference.c, label: "Dividir C por 100",
           onChange: checked => setReference({ ...reference, cDivisor: checked ? 100 : undefined }) }} />
       <div className="ct-ratios-editor-actions">
-        {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit", undefined, reference.revision)
+        {config.c && <button type="button" disabled={busy} onClick={() => void run("dollarEdit", { revision: reference.revision })
           .then(saved => { if (saved) setReference(undefined); })}>Quitar C</button>}
         <button type="button" disabled={busy} onClick={() => setReference(undefined)}>Cancelar</button>
         <button type="submit" disabled={busy || !reference.c}>Guardar</button>
@@ -339,6 +413,8 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
     </form>}
     {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
     {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} defaultToToday active={visible} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
+    <WidgetResizeHandle root={root} width={widget.width} height={widget.height} label="Redimensionar Dólar intradiario" busy={busy} fitDashboard
+      onResize={size => run("ratiosResize", size)} />
   </section>;
 }
 

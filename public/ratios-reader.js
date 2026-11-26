@@ -286,7 +286,7 @@
         const cached = legacyDollarPairs.get(w);
         if (cached?.context === c.revision && cached.revision === config.revision) pair = cached.pair;
       }
-      return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
+      return { config, width: w.w, height: w.h, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
     });
     const active = new Set(), requested = new Set();
     for (const { config } of widgets) {
@@ -356,6 +356,23 @@
     }
     return { x: 0, y: Math.ceil(Math.max(0, ...boxes.map(b => b.y + b.h)) / row) + 1 };
   }
+  function checkDollarResize(d, widget, width, height) {
+    if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) return;
+    const unit = d.width / d.cols, row = d.rowHeight;
+    const left = widget.x * unit, top = widget.y * row;
+    const expandsOverlap = other => {
+      if (other === widget) return false;
+      const x = other.x * unit, y = other.y * row;
+      const sharedLeft = Math.max(left, x), sharedTop = Math.max(top, y);
+      const right = Math.min(left + width, x + other.w), bottom = Math.min(top + height, y + other.h);
+      return right > sharedLeft && bottom > sharedTop &&
+        (right > Math.min(left + widget.w, x + other.w) || bottom > Math.min(top + widget.h, y + other.h));
+    };
+    if (width > Math.max(widget.w, Math.floor(d.width - left)) ||
+      d.layout.some(expandsOverlap)) {
+      throw Error("No hay espacio para ese tamaño. Mové el widget o reducí el tamaño.");
+    }
+  }
   async function mutate(method, params, op) {
     const c = context(), d = selected(c, params);
     assertCurrent(op);
@@ -375,7 +392,7 @@
       }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);
     } else {
-      const configFor = method === "dollarEdit" ? dollarConfig : method === "ratiosRemove" ? ownsWidget : ownConfig;
+      const configFor = method === "dollarEdit" ? dollarConfig : ["ratiosRemove", "ratiosResize"].includes(method) ? ownsWidget : ownConfig;
       const widget = d.layout.find(w => configFor(w)?.id === params.widgetId);
       if (!widget) throw Error("El widget ya no está en este dashboard.");
       const cfg = dollarConfig(widget) || configOf(widget);
@@ -411,8 +428,11 @@
         } };
       } else if (method === "ratiosResize") {
         if (!finite(params.width) || !finite(params.height)) throw Error("Tamaño inválido.");
-        widget.w = Math.round(Math.max(360, Math.min(2200, params.width)));
-        widget.h = Math.round(Math.max(180, Math.min(1400, params.height)));
+        const width = Math.round(Math.max(360, Math.min(2200, params.width)));
+        const height = Math.round(Math.max(180, Math.min(1400, params.height)));
+        if (dollarConfig(widget)) checkDollarResize(d, widget, width, height);
+        widget.w = width;
+        widget.h = height;
         widget.settings = { ...widget.settings, chuchotrizRatiosSize: { width: widget.w, height: widget.h } };
         d.layout = [...d.layout];
       } else if (method === "ratiosColumns") {
