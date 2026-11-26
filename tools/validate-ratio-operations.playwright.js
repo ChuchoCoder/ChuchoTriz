@@ -354,8 +354,9 @@ async page => {
   const lotRow = page.locator('.ro-operations-table tr').filter({ has:page.getByLabel('Par LOT10/GGAL',{exact:true}) }); await lotRow.waitFor();
   assert((await book()).operations.find(o=>o.legs[0].instrument.symbol==='LOT10')?.legs[0].quantity === 110, 'Native lot multiple submits and persists');
   await click(lotRow.getByRole('button',{name:'Eliminar',exact:true}));
+  await lotRow.waitFor({ state: 'hidden' });
   checks.push('Native lots greater than one accept and save valid multiples while rejecting nonmultiples');
-  await click(button('1 · Monitor'));
+  await button('1 · Monitor').click();
   await click(page.locator('.ro-monitor-table tr').filter({ hasText: 'BMA/GGAL' }).getByRole('button', { name: 'Abrir operación', exact: true }));
   await click(button('Long GGAL / Short BMA')); await click(button('Abrir operación'));
   const sideRows = page.locator('.ro-operations-table tr').filter({ has: page.getByLabel('Par BMA/GGAL', { exact: true }) });
