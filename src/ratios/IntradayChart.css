@@ -27,7 +27,7 @@
 .ct-intraday-widget { padding-bottom: 18px; }
 .ct-intraday-widget .ct-ratios-title { height: 30px; padding-inline: 8px; }
 .ct-intraday-widget .ct-ratios-title strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ct-intraday-controls { flex-shrink: 0; padding: 5px 7px 1px; gap: 4px 8px; font-size: 11px; }
+.ct-intraday-controls { flex: none; flex-wrap: nowrap; padding: 5px 7px 1px; gap: 4px 8px; font-size: 11px; }
 .ct-intraday-status button, .ct-intraday-views button {
   border: 1px solid #8190a5;
   border-radius: 4px;
@@ -53,7 +53,8 @@
   color: inherit;
   font: inherit;
 }
-.ct-intraday-controls .ct-intraday-config { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ct-intraday-controls .ct-intraday-config { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ct-intraday-controls .ct-intraday-mode { flex: none; }
 .ct-intraday-controls .ct-intraday-config, .ct-intraday-controls .ct-intraday-mode,
 .ct-intraday-widget .ct-intraday-session select { padding: 2px 5px; }
 .ct-intraday-controls .ct-intraday-mode[aria-pressed=true] { background: #1378aa; border-color: #1378aa; color: white; }

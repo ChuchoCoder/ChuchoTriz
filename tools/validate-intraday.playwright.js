@@ -197,7 +197,7 @@ async (page, screenshots) => {
     const box = document.querySelector('.ct-intraday-widget')?.getBoundingClientRect();
     return box?.width === width && box?.height === height;
   }, [width, height]);
-  const dragTo = async (width, height) => {
+  const dragTo = async (width, height, expectedWidth = width) => {
     await idle();
     await resize.scrollIntoViewIfNeeded();
     const [handle, box] = await Promise.all([resize.boundingBox(), widget.boundingBox()]);
@@ -205,16 +205,21 @@ async (page, screenshots) => {
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.move(x + width - box.width, y + height - box.height, { steps: 4 });
-    await waitForSize(width, height);
+    await waitForSize(expectedWidth, height);
   };
   const originalPlot = await plotSize();
-  await dragTo(600, 400);
+  const [neighborBox, originalBox] = await Promise.all([page.locator('.ct-ratios-widget').boundingBox(), widget.boundingBox()]);
+  const availableWidth = Math.floor(neighborBox.x - originalBox.x);
+  await dragTo(availableWidth + 100, 400, availableWidth);
   await page.waitForFunction(([width, height]) => {
     const svg = document.querySelector('.ct-intraday-widget svg[role="img"]');
     return svg?.viewBox.baseVal.width > width && svg.viewBox.baseVal.height > height;
   }, originalPlot);
   await page.mouse.up();
   await idle();
+  await waitForSize(availableWidth, 400);
+  const enlargedWidget = await widget.boundingBox();
+  assert(enlargedWidget.x + enlargedWidget.width <= neighborBox.x, 'The saved size stops at the neighboring widget');
   const largePlot = await plotSize();
   assert(largePlot[0] > originalPlot[0] && largePlot[1] > originalPlot[1], 'The plot grows during a drag');
   await dragTo(360, 180);
@@ -227,15 +232,34 @@ async (page, screenshots) => {
   assert(smallPlot[0] < originalPlot[0] && smallPlot[1] < originalPlot[1] &&
     chartBox.y + chartBox.height <= smallWidget.y + smallWidget.height && await daySelector.isVisible(),
     'The plot and session selector fit inside the minimum widget size');
-  await resize.press('ArrowRight');
+  const aboveResizeHandle = locator => locator.evaluate(control => {
+    const widget = control.closest('.ct-intraday-widget');
+    const bottom = widget.querySelector('.ct-ratios-resize').getBoundingClientRect().top;
+    return control.getBoundingClientRect().bottom <= bottom;
+  });
+  await configurePair.click();
+  assert(await aboveResizeHandle(widget.getByRole('button', { name: 'Guardar', exact: true })), 'The compact A/B editor fits above the handle');
+  await widget.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await widget.getByRole('button', { name: 'Configurar Referencia C' }).click();
+  assert(await aboveResizeHandle(widgetEditor.getByRole('button', { name: 'Guardar', exact: true })), 'The compact C editor fits above the handle');
+  await widgetEditor.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await resize.focus();
+  await page.keyboard.press('ArrowUp');
+  await waitForSize(360, 180);
+  assert(await resize.getAttribute('aria-disabled') === 'false', 'An arrow at the minimum does not start a save');
+  await page.keyboard.press('ArrowRight');
   await idle();
   await waitForSize(380, 180);
+  assert(await resize.evaluate(button => document.activeElement === button && button.matches(':focus-visible')), 'The resize handle keeps visible keyboard focus after saving');
+  await page.keyboard.press('ArrowDown');
+  await idle();
+  await waitForSize(380, 200);
   assert(await daySelector.inputValue() === chosenDay, 'Keyboard resizing keeps the selected session');
   await daySelector.selectOption({ index: 0 });
   await valueIs(spreadValue, '—', 'The current session does not use an older reference close');
   await page.reload();
   await widget.getByRole('button', { name: 'Configurar Referencia C' }).filter({ hasText: 'C · D30N6 ÷ 100' }).waitFor();
-  await waitForSize(380, 180);
+  await waitForSize(380, 200);
   checks.push('The exact widget size survives a reload');
   await daySelector.locator('option').nth(1).waitFor({ state: 'attached' });
   assert((await daySelector.locator('option:checked').textContent()).includes('hoy'), 'Reloading opens today again');

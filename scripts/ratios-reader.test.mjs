@@ -521,6 +521,19 @@ test('resizes a dollar widget without changing its instruments or other widget s
   assert.deepEqual(saved.settings.chuchotrizIntradayDollar, before.config);
   assert.deepEqual(otherSizes(), beforeSizes);
 });
+test('prevents a dollar resize from overlapping another widget or crossing the grid edge', async () => {
+  const f = fixture();
+  const { config, width, height } = (await f.request('dollarAdd', await f.args())).result.dollarWidgets[0];
+  const widget = f.d.layout.find(w => w.settings?.chuchotrizIntradayDollar?.id === config.id);
+  const args = { ...await f.args(), widgetId: config.id, revision: config.revision };
+  widget.x = 0;
+  widget.y = 4;
+  f.controls[1].y = 4;
+  assert.match((await f.request('ratiosResize', { ...args, width: 620, height })).error, /No hay espacio/);
+  widget.x = 210;
+  assert.match((await f.request('ratiosResize', { ...args, width: 560, height })).error, /No hay espacio/);
+  assert.deepEqual([widget.w, widget.h], [width, height]);
+});
 test('does not acknowledge failed persistence or allow overlapping mutations', async () => {
   const f = fixture(); f.failSave();
   const pending = f.add();

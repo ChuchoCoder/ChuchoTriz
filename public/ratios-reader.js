@@ -356,6 +356,19 @@
     }
     return { x: 0, y: Math.ceil(Math.max(0, ...boxes.map(b => b.y + b.h)) / row) + 1 };
   }
+  function checkDollarResize(d, widget, width, height) {
+    if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) return;
+    const unit = d.width / d.cols, row = d.rowHeight;
+    const left = widget.x * unit, top = widget.y * row;
+    const intersects = (w, h, other) => {
+      const x = other.x * unit, y = other.y * row;
+      return left < x + other.w && left + w > x && top < y + other.h && top + h > y;
+    };
+    if (width > Math.max(widget.w, Math.floor(d.width - left)) ||
+      d.layout.some(other => other !== widget && !intersects(widget.w, widget.h, other) && intersects(width, height, other))) {
+      throw Error("No hay espacio para ese tamaño. Mové el widget o reducí el tamaño.");
+    }
+  }
   async function mutate(method, params, op) {
     const c = context(), d = selected(c, params);
     assertCurrent(op);
@@ -411,8 +424,11 @@
         } };
       } else if (method === "ratiosResize") {
         if (!finite(params.width) || !finite(params.height)) throw Error("Tamaño inválido.");
-        widget.w = Math.round(Math.max(360, Math.min(2200, params.width)));
-        widget.h = Math.round(Math.max(180, Math.min(1400, params.height)));
+        const width = Math.round(Math.max(360, Math.min(2200, params.width)));
+        const height = Math.round(Math.max(180, Math.min(1400, params.height)));
+        if (dollarConfig(widget)) checkDollarResize(d, widget, width, height);
+        widget.w = width;
+        widget.h = height;
         widget.settings = { ...widget.settings, chuchotrizRatiosSize: { width: widget.w, height: widget.h } };
         d.layout = [...d.layout];
       } else if (method === "ratiosColumns") {

@@ -21,11 +21,45 @@ const nativeStructure = [dashboardSelector, ".GridLayout", ".DashboardGridItem",
 const discoveryDelays = [250, 750, 2000];
 
 type WidgetSize = { width: number; height: number };
+type ResizeSpace = { right: number; neighbors: { left: number; top: number; right: number; bottom: number }[] };
 
-function WidgetResizeHandle({ root, width, height, label, busy, onResize }: WidgetSize & {
-  root: RefObject<HTMLElement | null>; label: string; busy: boolean; onResize(size: WidgetSize): Promise<boolean>;
+function resizeSpace(root: HTMLElement, box: DOMRect): ResizeSpace | undefined {
+  const slot = root.closest(".DashboardGridItem");
+  const grid = slot?.closest(".GridLayout");
+  if (!grid) return;
+  const neighbors = [...grid.querySelectorAll(".DashboardGridItem")].filter(item => item !== slot)
+    .map(item => {
+      const rect = item.getBoundingClientRect();
+      return { left: rect.left - box.left, top: rect.top - box.top, right: rect.right - box.left, bottom: rect.bottom - box.top };
+    }).filter(rect => rect.left < rect.right && rect.top < rect.bottom);
+  return { right: grid.getBoundingClientRect().right - box.left, neighbors };
+}
+
+function clampWidgetSize({ width, height }: WidgetSize, current: WidgetSize, space?: ResizeSpace): WidgetSize {
+  width = Math.round(Math.max(360, Math.min(2200, width)));
+  height = Math.round(Math.max(180, Math.min(1400, height)));
+  if (space) {
+    width = Math.min(width, Math.max(current.width, Math.floor(space.right)));
+    // Preserve the upper left corner. First stop at neighbors on the right of
+    // the occupied rows, then stop at neighbors below the resulting width.
+    for (const neighbor of space.neighbors) {
+      if (neighbor.left >= current.width && neighbor.top < Math.min(current.height, height) && neighbor.bottom > 0) {
+        width = Math.min(width, Math.floor(neighbor.left));
+      }
+    }
+    for (const neighbor of space.neighbors) {
+      if (neighbor.top >= current.height && neighbor.left < width && neighbor.right > 0) {
+        height = Math.min(height, Math.floor(neighbor.top));
+      }
+    }
+  }
+  return { width, height };
+}
+
+function WidgetResizeHandle({ root, width, height, label, busy, fitDashboard = false, onResize }: WidgetSize & {
+  root: RefObject<HTMLElement | null>; label: string; busy: boolean; fitDashboard?: boolean; onResize(size: WidgetSize): Promise<boolean>;
 }) {
-  const drag = useRef<{ pointer: number; x: number; y: number; width: number; height: number } | null>(null);
+  const drag = useRef<(WidgetSize & { pointer: number; x: number; y: number; space?: ResizeSpace }) | null>(null);
   const clearPreview = () => {
     if (root.current) { root.current.style.width = ""; root.current.style.height = ""; }
   };
@@ -37,20 +71,18 @@ function WidgetResizeHandle({ root, width, height, label, busy, onResize }: Widg
   const dragSize = (event: React.PointerEvent<HTMLButtonElement>) => {
     const start = drag.current;
     if (start?.pointer !== event.pointerId) return;
-    return {
-      width: Math.max(360, Math.min(2200, start.width + event.clientX - start.x)),
-      height: Math.max(180, Math.min(1400, start.height + event.clientY - start.y)),
-    };
+    return clampWidgetSize({ width: start.width + event.clientX - start.x, height: start.height + event.clientY - start.y }, start, start.space);
   };
   return <button type="button" className="ct-ratios-resize NoDraggable" aria-label={label}
-    title="Arrastrá para cambiar el tamaño. También podés usar las flechas." disabled={busy}
+    title="Arrastrá para cambiar el tamaño. También podés usar las flechas." aria-disabled={busy}
     onMouseDown={event => event.stopPropagation()}
     onPointerDown={event => {
-      if (event.button !== 0 || drag.current || !root.current) return;
+      if (event.button !== 0 || busy || drag.current || !root.current) return;
       event.preventDefault();
       event.stopPropagation();
       const box = root.current.getBoundingClientRect();
-      drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, width: box.width, height: box.height };
+      drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, width: box.width, height: box.height,
+        space: fitDashboard ? resizeSpace(root.current, box) : undefined };
       event.currentTarget.setPointerCapture(event.pointerId);
     }}
     onPointerMove={event => {
@@ -63,7 +95,7 @@ function WidgetResizeHandle({ root, width, height, label, busy, onResize }: Widg
       const size = dragSize(event);
       if (!size) return;
       drag.current = null;
-      if (size.width === width && size.height === height) clearPreview();
+      if (busy || size.width === width && size.height === height) clearPreview();
       else void onResize(size).finally(clearPreview);
     }}
     onPointerCancel={cancel} onLostPointerCapture={cancel}
@@ -72,9 +104,12 @@ function WidgetResizeHandle({ root, width, height, label, busy, onResize }: Widg
       if (!Object.hasOwn(step, event.key)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (drag.current) return;
+      const element = root.current;
+      if (busy || drag.current || !element) return;
       const [dx, dy] = step[event.key];
-      void onResize({ width: width + dx, height: height + dy });
+      const space = fitDashboard ? resizeSpace(element, element.getBoundingClientRect()) : undefined;
+      const size = clampWidgetSize({ width: width + dx, height: height + dy }, { width, height }, space);
+      if (size.width !== width || size.height !== height) void onResize(size);
     }}>◢</button>;
 }
 
@@ -313,6 +348,7 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
     }
   };
   const label = pair ? pairLabel({ a: pair.a, b: pair.b }) : undefined;
+  const referenceLabel = config.c && `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}`;
   const sameInstrument = !!legs?.a && legs.a.id === legs.b?.id;
   return <section className="ct-ratios ct-intraday-widget" ref={root} aria-label={label ? `Dólar intradiario · ${label}` : "Dólar intradiario"}>
     <header className="ct-ratios-title"><strong title={label}>{label ?? "Dólar intradiario"}</strong><div className="ct-ratios-header-actions NoDraggable">
@@ -329,11 +365,12 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
         {pair ? `${pair.a.symbol} / ${pair.b.symbol}` : "Seleccionar A y B"}
       </button>
       <button type="button" className="ct-intraday-config" aria-expanded={!!reference} aria-label="Configurar Referencia C" disabled={busy}
+        title={referenceLabel}
         onClick={() => {
           setLegs(undefined);
           setReference(value => value ? undefined : { c: config.c, cDivisor: config.cDivisor, revision: config.revision });
         }}>
-        {config.c ? `C · ${config.c.symbol}${config.cDivisor ? ` ÷ ${config.cDivisor}` : ""}` : "+ Referencia C"}
+        {referenceLabel ?? "+ Referencia C"}
       </button>
       {config.c && <button type="button" className="ct-intraday-mode" aria-pressed={spreadOnly}
         onClick={() => setSpreadOnly(value => !value)}>Sólo brecha</button>}
@@ -376,7 +413,7 @@ function DollarWidget({ widget, command, search, busy, visible }: { widget: Doll
     </form>}
     {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
     {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} defaultToToday active={visible} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
-    <WidgetResizeHandle root={root} width={widget.width} height={widget.height} label="Redimensionar Dólar intradiario" busy={busy}
+    <WidgetResizeHandle root={root} width={widget.width} height={widget.height} label="Redimensionar Dólar intradiario" busy={busy} fitDashboard
       onResize={size => run("ratiosResize", size)} />
   </section>;
 }
