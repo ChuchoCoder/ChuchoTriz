@@ -109,6 +109,8 @@ function Preview({ book, button, id, onEnter, onLeave }: {
       try {
         const result = await reader.call<Series>("bookIntraday", { id: book.id });
         if (disposed) return;
+        if (!Array.isArray(result?.points) || !result.points.every(point => Number.isFinite(point?.at) && Number.isFinite(point?.value)) ||
+            result.reference !== undefined && !Number.isFinite(result.reference)) throw Error("Serie intradiaria inválida.");
         setSeries(result);
         setFailed(false);
       } catch {
@@ -149,18 +151,30 @@ function Preview({ book, button, id, onEnter, onLeave }: {
 export default function BookIntraday() {
   const books = useBooks(), id = useId();
   const [active, setActive] = useState<{ book: Book; button: HTMLButtonElement }>();
+  const hovered = useRef<Book>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cancelTimer = () => clearTimeout(timer.current);
   const closeSoon = () => {
     cancelTimer();
     timer.current = setTimeout(() => {
-      setActive(current => current?.button.matches(":focus-visible") ? current : undefined);
+      setActive(current => current && (hovered.current === current.book || current.button.matches(":focus-visible")) ? current : undefined);
     }, 180);
   };
-  const open = (book: Book, button: HTMLButtonElement) => { cancelTimer(); setActive({ book, button }); };
+  const leave = (book: Book) => {
+    if (hovered.current === book) hovered.current = undefined;
+    closeSoon();
+  };
+  const open = (book: Book, button: HTMLButtonElement) => {
+    cancelTimer();
+    if (button.isConnected) setActive({ book, button });
+  };
   const preview = active && books.includes(active.book) && active.button.isConnected ? active : undefined;
 
   useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (hovered.current && !books.includes(hovered.current)) hovered.current = undefined;
+    if (active && !preview) setActive(current => current === active ? undefined : current);
+  }, [active, books, preview]);
   useEffect(() => {
     if (!preview) return;
     const dismiss = (event: KeyboardEvent) => {
@@ -176,13 +190,14 @@ export default function BookIntraday() {
       onPointerEnter={event => {
         if (event.pointerType === "touch") return;
         const button = event.currentTarget;
+        hovered.current = book;
         cancelTimer();
         if (preview?.book !== book) timer.current = setTimeout(() => open(book, button), 180);
-      }} onPointerLeave={closeSoon} onFocus={event => open(book, event.currentTarget)} onBlur={closeSoon}
+      }} onPointerLeave={() => leave(book)} onFocus={event => open(book, event.currentTarget)} onBlur={closeSoon}
       onClick={event => { event.stopPropagation(); open(book, event.currentTarget); }}>
       <ToolbarIcon name="analysis" />
     </button>, book.actions, book.key))}
     {preview && createPortal(<Preview key={preview.book.key} book={preview.book} button={preview.button} id={id}
-      onEnter={cancelTimer} onLeave={closeSoon} />, document.body)}
+      onEnter={() => { hovered.current = preview.book; cancelTimer(); }} onLeave={() => leave(preview.book)} />, document.body)}
   </>;
 }

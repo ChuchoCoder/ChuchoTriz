@@ -93,9 +93,28 @@ it("drops an obsolete response after Matriz updates the instrument in place", as
   expect(preview()).toBeNull();
 });
 
-it("clears a chart after a failed refresh and recovers on retry", async () => {
+it("keeps the preview open when the trigger loses focus while the chart is hovered", async () => {
   let widget!: HTMLElement;
-  readSeries.mockResolvedValueOnce(bars([49, 50])).mockRejectedValueOnce(Error("Cambió el contexto de mercado"))
+  readSeries.mockResolvedValue(bars([49, 50]));
+  await act(async () => { widget = book("bm_MERV_AL30D_CI", "AL30D (CI)"); });
+  await act(async () => { button(widget).focus(); });
+  await act(async () => {
+    move(preview()!, "pointerover");
+    button(widget).blur();
+    await vi.advanceTimersByTimeAsync(180);
+  });
+  expect(preview()).not.toBeNull();
+  await act(async () => { move(preview()!, "pointerout"); await vi.advanceTimersByTimeAsync(180); });
+  expect(preview()).toBeNull();
+  expect(dispose).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ["a reader error", () => Promise.reject(Error("Cambió el contexto de mercado"))],
+  ["a malformed response", () => Promise.resolve({})],
+] as const)("clears a chart after %s and recovers on retry", async (_, failedRead) => {
+  let widget!: HTMLElement;
+  readSeries.mockResolvedValueOnce(bars([49, 50])).mockImplementationOnce(failedRead)
     .mockResolvedValueOnce(bars([51]));
   await act(async () => { widget = book("bm_MERV_AL30D_CI", "AL30D (CI)"); });
   await act(async () => { button(widget).focus(); });

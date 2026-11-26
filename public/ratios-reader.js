@@ -193,7 +193,7 @@
     });
     return { ...market, points: Object.fromEntries(points) };
   }
-  function readIntradaySeries(market, id, refresh, todayOnly = false) {
+  function readIntradaySeries(market, id, { refresh = false, todayOnly = false } = {}) {
     const cache = todayOnly ? bookHistory : intradayHistory;
     const cached = cache.get(id);
     if (cached && (cached.pending || !refresh && cached.until > market.now)) return cached.result;
@@ -232,15 +232,20 @@
     const [security] = market.securities;
     if (!security) throw Error("El instrumento del book no está disponible en Matriz.");
     // The native detail panel uses today's minute closes and the instrument's settlement or previous close.
-    const { points, issue } = await readIntradaySeries(market, id, false, true);
+    const { points, issue } = await readIntradaySeries(market, id, { todayOnly: true });
     if (intradayMarket([id]).revision !== market.revision) throw Error("Cambió el contexto de mercado.");
     if (issue) throw Error(issue);
-    const closes = [...new Map(points.map(({ at, value }) => [at, { at, value }])).values()].sort((a, b) => a.at - b.at);
+    const closes = [...new Map(points.map(point => [point.at, point])).values()].sort((a, b) => a.at - b.at);
+    const latest = closes.at(-1);
     const md = security.md;
     const lastAt = timestamp(md?.lstdStr || md?.lstd);
-    if (lastAt >= market.start && lastAt > (closes.at(-1)?.at ?? 0) && finite(md?.lst)) closes.push({ at: lastAt, value: md.lst });
+    if (lastAt >= market.start && finite(md?.lst)) {
+      const trade = { at: lastAt, value: md.lst };
+      if (!latest || lastAt > latest.at) closes.push(trade);
+      else if (lastAt === latest.at && latest.provisional) closes[closes.length - 1] = trade;
+    }
     const reference = security.settlementOrClose;
-    return { points: closes, reference: finite(reference) ? reference : undefined };
+    return { points: closes.map(({ at, value }) => ({ at, value })), reference: finite(reference) ? reference : undefined };
   }
   function state() {
     const c = context(), connected = !!c.ms.webSocketConnectionStatus;
@@ -444,7 +449,7 @@
       if (msg.method === "ratioIntradayHistory") {
         const market = intradayMarket(params.ids);
         const entries = await Promise.all(market.securities.map((s, i) => s
-          ? readIntradaySeries(market, s.id, params.refresh === true)
+          ? readIntradaySeries(market, s.id, { refresh: params.refresh === true })
           : { points: [], issue: "Instrumento no disponible en el catálogo" }));
         if (intradayMarket(params.ids).revision !== market.revision) throw Error("Cambió el contexto de mercado. Volvé a cargar el histórico.");
         reply({ result: { revision: market.revision, series: Object.fromEntries(params.ids.map((id, i) => [id, entries[i]])) } });
