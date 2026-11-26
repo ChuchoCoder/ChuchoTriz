@@ -42,17 +42,19 @@ function sameSettings(a: EditorSettings, b: EditorSettings): boolean {
 const conflictMessage = "Los presets guardados cambiaron. Si tenés cambios sin guardar, copialos desde RAW antes de descartar el borrador.";
 const fallbackDraft = toDraft({ defaults: fallbackPresets }).defaults;
 
+export type PresetEditorRequest = { ticker: string; sourceTicker?: string | null };
+
 function InstrumentPresetsOptions({ embedded = false, active = true, presetRequest }: {
-  embedded?: boolean; active?: boolean; presetRequest?: { ticker: string };
+  embedded?: boolean; active?: boolean; presetRequest?: PresetEditorRequest;
 }) {
   const [presets, setPresets] = useState<DraftPresets>({});
   const [editorMode, setEditorMode] = useState<"visual" | "raw">("visual");
   const [rawText, setRawText] = useState("");
   const rawInput = useRef<HTMLTextAreaElement>(null);
   const [selected, setSelected] = useState("");
-  const [shortcutTicker, setShortcutTicker] = useState("");
+  const [shortcut, setShortcut] = useState<PresetEditorRequest>();
   const receivedPresetRequest = useRef<typeof presetRequest>(undefined);
-  const pendingPresetTicker = useRef("");
+  const pendingPresetRequest = useRef<PresetEditorRequest>(undefined);
   const instrumentDetail = useRef<HTMLElement>(null);
   const [editing, setEditing] = useState<EditingPreset | null>(null);
   const editFocus = useRef<{ index: number; field: "cantidad" | "mostrar" | "action" } | null>(null);
@@ -77,15 +79,15 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
   const query = tickerQuery.trim().toUpperCase();
   const filteredTickers = tickers.filter(ticker => ticker.toUpperCase().includes(query));
   const values = presets[selected] ?? [];
-  const sourceTicker = shortcutTicker ? presetTickerFor(saved.current.presets, shortcutTicker) : null;
+  const shortcutTicker = shortcut?.ticker ?? "";
+  const sourceTicker = shortcut?.sourceTicker ?? null;
   const showingShortcut = Boolean(shortcutTicker) && selected === (sourceTicker ?? shortcutTicker);
   const effectivePresets = showingShortcut ? (sourceTicker ? saved.current.presets[sourceTicker] : fallbackDraft) : undefined;
   const rawErrors = editorMode === "raw" ? parse(rawText).errors : [];
 
   function receiveSettings(next: EditorSettings) {
-    const previous = saved.current;
+    if (sameSettings(next, saved.current)) return;
     saved.current = next;
-    if (sameSettings(next, previous)) return;
     // Chrome also notifies this editor about its own write.
     if (pendingSave.current && sameSettings(next, pendingSave.current)) return;
     if (dirty.current || pendingSave.current) {
@@ -142,14 +144,17 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
     else row?.querySelector<HTMLButtonElement>(target.field === "action" ? ".edit-preset" : '[aria-pressed="true"]')?.focus();
   }, [editing]);
 
-  function selectTicker(ticker: string, requestedTicker = "") {
-    setSelected(ticker); setShortcutTicker(requestedTicker); setEditing(null);
+  function selectTicker(ticker: string, request?: PresetEditorRequest) {
+    setSelected(ticker); setShortcut(request); setEditing(null);
   }
   function showRequestedTicker(draft: DraftPresets) {
-    const ticker = pendingPresetTicker.current;
-    pendingPresetTicker.current = "";
-    const source = presetTickerFor(saved.current.presets, ticker) ?? ticker;
-    selectTicker(source, ticker);
+    const request = pendingPresetRequest.current;
+    if (!request) return;
+    pendingPresetRequest.current = undefined;
+    const { ticker } = request;
+    const sourceTicker = request.sourceTicker === undefined ? presetTickerFor(saved.current.presets, ticker) : request.sourceTicker;
+    const source = sourceTicker ?? ticker;
+    selectTicker(source, { ticker, sourceTicker });
     setTickerQuery("");
     setNewTicker(Object.hasOwn(draft, source) ? "" : source);
     if (instrumentDetail.current) instrumentDetail.current.scrollTop = 0;
@@ -158,7 +163,7 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
   useEffect(() => {
     if (!active || !presetRequest || presetRequest === receivedPresetRequest.current || loading || saving || loadFailed) return;
     receivedPresetRequest.current = presetRequest;
-    pendingPresetTicker.current = presetRequest.ticker;
+    pendingPresetRequest.current = presetRequest;
     if (editorMode === "raw") switchEditorMode("visual");
     else showRequestedTicker(presets);
   }, [active, presetRequest, loading, saving, loadFailed, editorMode, presets, rawText]);
@@ -181,7 +186,7 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
       if (book === null) return;
       const draft = toDraft(book);
       setPresets(draft);
-      if (pendingPresetTicker.current) showRequestedTicker(draft);
+      if (pendingPresetRequest.current) showRequestedTicker(draft);
       else {
         setSelected(current => Object.hasOwn(draft, current) ? current : sortTickers(draft)[0] ?? "");
         setTickerQuery("");
@@ -321,7 +326,7 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
       await repository.save(parsed);
       if (!conflicted.current) {
         saved.current = candidate; setPresets(candidate.presets); setRawText(format(parsed));
-        dirty.current = false; setEditing(null); setStatus("Cambios guardados");
+        dirty.current = false; setEditing(null); setShortcut(undefined); setStatus("Cambios guardados");
       }
     } catch {
       setStatus(""); setError("No se pudo guardar la configuración. Tus cambios siguen disponibles para reintentar.");

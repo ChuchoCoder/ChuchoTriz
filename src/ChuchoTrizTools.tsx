@@ -1,12 +1,12 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
+import InstrumentPresetsOptions, { type PresetEditorRequest } from "./InstrumentPresetsOptions";
 import OptionsOperations from "./OptionsOperations";
 import OptionsSimulator from "./optionsSimulator/OptionsSimulator";
 import ToolbarIcon from "./ToolbarIcon";
 import RatioOperations from "./ratios/RatioOperations";
 
 export default function ChuchoTrizTools({ embedded = false, active = true, headerAction, presetRequest }: {
-  embedded?: boolean; active?: boolean; headerAction?: ReactNode; presetRequest?: { ticker: string };
+  embedded?: boolean; active?: boolean; headerAction?: ReactNode; presetRequest?: PresetEditorRequest;
 }) {
   const [tab, setTab] = useState(embedded ? "simulator" : "presets");
   useEffect(() => {

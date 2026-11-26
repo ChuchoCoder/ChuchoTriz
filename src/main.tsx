@@ -6,7 +6,7 @@ import { IInstrumentPreset } from "./InstrumentPresets";
 import { bindMiniOrderForm, focusCantidadAfterQuoteClick, observeMiniOrderForm } from "./Matriz";
 import { createPresetSession } from "./PresetSession";
 import instrumentPresetsRepository, { autocompleteFor, StoredSettings } from "./InstrumentPresetsRepository";
-import { presetsFor } from "./PresetBook";
+import { presetTickerFor, presetsFor } from "./PresetBook";
 import { SettingsMenu, type PresetSettingsRequest } from "./SettingsMenu";
 import RatiosDashboard from "./ratios/RatiosDashboard";
 import RatioChart from "./ratios/RatioChart";
@@ -26,7 +26,8 @@ function renderSettings(presetRequest?: PresetSettingsRequest) {
 renderSettings();
 
 function openPresets(ticker: string, trigger: HTMLButtonElement) {
-  renderSettings({ ticker, trigger });
+  const sourceTicker = snapshot && presetTickerFor(snapshot.book, ticker);
+  renderSettings({ ticker, sourceTicker, trigger });
 }
 
 // Read once; subsequent settings changes arrive through Chrome Storage.

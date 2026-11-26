@@ -244,6 +244,30 @@ it.each(["AL", "AL30D"])("opens the configuration %s actually used by an AL30 ti
   expect(panel.querySelector<HTMLInputElement>("#new-instrument")?.value).toBe("");
 });
 
+it("follows the ticket's matching order when storage reorders the saved configurations", async () => {
+  const { emit } = autocompleteStorage({ InstrumentPresets: { AL30D: [{ cantidad: 400, mostrar: 0 }] } });
+  vi.mocked(chrome.storage.local.set).mockImplementation(async () => {
+    emit({ InstrumentPresets: { AL30C: [{ cantidad: 300, mostrar: 0 }], AL30D: [{ cantidad: 400, mostrar: 0 }] } });
+  });
+  const current = createForm();
+  document.body.append(current.form);
+  await boot();
+  const shortcut = current.form.querySelector<HTMLButtonElement>(".preset-settings-button")!;
+  await act(async () => { shortcut.click(); });
+  const panel = document.querySelector<HTMLElement>("#ct-free-settings-panel")!;
+  const button = (text: string) => [...panel.querySelectorAll("button")].find(button => button.textContent === text)!;
+  await act(async () => { button("RAW").click(); });
+  await act(async () => {
+    const raw = panel.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(raw, "AL30D 400\nAL30C 300");
+    raw.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => { button("Guardar cambios").click(); });
+  presetButton(current.form, "300");
+  await act(async () => { shortcut.click(); });
+  expect(panel.querySelector("#selected-instrument")?.textContent).toBe("AL30C");
+});
+
 it("shows the default quantities used by a ticket without a matching configuration", async () => {
   autocompleteStorage({ InstrumentPresets: { GD30: [{ cantidad: 400, mostrar: 0 }] } });
   const current = createForm();

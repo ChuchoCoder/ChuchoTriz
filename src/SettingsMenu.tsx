@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ChuchoTrizTools from "./ChuchoTrizTools";
+import type { PresetEditorRequest } from "./InstrumentPresetsOptions";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
@@ -22,7 +23,7 @@ function bounds() {
   };
 }
 
-export type PresetSettingsRequest = { ticker: string; trigger: HTMLButtonElement };
+export type PresetSettingsRequest = PresetEditorRequest & { trigger: HTMLButtonElement };
 
 export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettingsRequest }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
