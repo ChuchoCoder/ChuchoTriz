@@ -23,7 +23,7 @@ async (page) => {
     }
     window.addEventListener('message', event => {
       if (event.origin !== location.origin || event.data?.kind !== 'request' || event.data?.method !== 'ratiosState') return;
-      if (++window.ratiosStateRequests === 1 && loadCatalogue) setTimeout(loadCatalogue, 100);
+      if (++window.ratiosStateRequests === 4 && loadCatalogue) setTimeout(loadCatalogue, 100);
     });
   });
   await page.evaluate(() => {
@@ -59,8 +59,8 @@ async (page) => {
     assert(await reads() === start, detail);
   };
   const before = await snapshot();
-  await idle();
-  assert(await reads() === 2, 'Discovery recovers when Matriz hydrates its catalogue after the first read without a DOM change');
+  await page.waitForFunction(() => document.querySelector('.ct-ratios-add')?.disabled === false, null, { timeout: 20000 });
+  assert(await reads() === 5, 'An open menu recovers when Matriz hydrates after the fast startup attempts without a DOM change');
   await staysIdle('A dashboard without ratios does not poll even with the widget menu mounted');
   await page.evaluate(() => {
     const popover = document.querySelector('.WidgetsComponentsPopoverList');
@@ -78,7 +78,16 @@ async (page) => {
     document.querySelector('.CustomDashboard').insertAdjacentHTML('afterbegin', '<div class="WidgetsComponentsPopoverList"></div>');
   });
   await idle();
+  await page.waitForTimeout(150);
+  await page.evaluate(() => {
+    window.ratiosFixture.connected(false);
+    document.querySelector('.ct-ratios-add').click();
+  });
+  await page.locator('.ct-ratios-menu-error').filter({ hasText: 'Cambió el dashboard' }).waitFor();
+  await wait(() => document.querySelector('.ct-ratios-add')?.title.includes('Mercado desconectado'));
+  assert((await snapshot()).length === before.length, 'A rejected write refreshes the stale context without adding a widget');
   await b('RATIOS · CHUCHOTRIZ').click(); await idle();
+  await page.evaluate(() => window.ratiosFixture.connected(true));
   const defaults = ['MEP AL30', 'CCL AL30', 'CANJE AL30', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', 'MEP AL30 vs DLR/SPOT', 'CCL AL30 vs DLR/SPOT'];
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));

@@ -9,5 +9,6 @@ Problema y comportamiento resultante:
 - [ ] Integración/inspección humana aplicable de [la guía](https://github.com/ChuchoCoder/ChuchoTriz/blob/main/docs/manual-regression.md), o motivo por el que no corresponde al cambio.
 - Reporte de pruebas (commit probado, casos PASS/FAIL/BLOCKED/NOT RUN y entorno):
 - Cobertura pendiente y motivo, o por qué no aplica un smoke de interfaz:
+- Rendimiento según [la guía de regresión](https://github.com/ChuchoCoder/ChuchoTriz/blob/main/docs/manual-regression.md#rendimiento). Indicá las rutas revisadas y adjuntá la comparación cuando corresponda.
 
 No incluir cuentas, saldos, operaciones reales, credenciales ni capturas sin revisar.

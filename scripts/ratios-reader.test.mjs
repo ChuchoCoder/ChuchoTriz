@@ -424,6 +424,30 @@ test('multiple full panels and replaced pairs do not exhaust a cumulative subscr
   assert.deepEqual(f.calls.filter(Array.isArray).slice(beforeReconnect).map(([, ids]) => ids.length), [100, 100, 100]);
 });
 
+test('projects quotes and subscribes only for visible widgets without losing hidden configurations', async () => {
+  const f = fixture();
+  await f.add(); await f.add();
+  const [{ config: first }, { config: second }] = (await f.state()).widgets;
+  const args = await f.args();
+  const firstEdit = await f.request('ratiosEdit', { ...args, widgetId: first.id, revision: 0, pairs: [{ id: 'first-row', a: 'a', b: 'b' }] });
+  const secondEdit = await f.request('ratiosEdit', { ...args, widgetId: second.id, revision: 0, pairs: [{ id: 'second-row', a: 'c', b: 'ci' }] });
+  assert.equal(firstEdit.error, undefined);
+  assert.equal(secondEdit.error, undefined);
+  f.ms.dmaWebSocket = { addSubscription: (...args) => f.calls.push(args) };
+  f.calls.length = 0;
+
+  const reply = visibleWidgetIds => f.request('ratiosState', { visibleWidgetIds });
+  const hidden = (await reply([])).result;
+  assert.equal(hidden.widgets.length, 2);
+  assert.deepEqual(hidden.quotes, {});
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(Object.keys((await reply([second.id])).result.quotes), ['c', 'ci']);
+  assert.deepEqual(clone(f.calls), [['md', ['md.c', 'md.ci']]]);
+  assert.deepEqual(Object.keys((await reply([first.id])).result.quotes), ['a', 'b']);
+  assert.deepEqual(Object.keys((await reply([second.id])).result.quotes), ['c', 'ci']);
+  assert.equal(f.calls.length, 2, 'revealing a previously subscribed widget does not resubscribe');
+});
+
 test('search separates market/currency/settlement, excludes portfolios, exposes no account data', async () => {
   const f = fixture(); const result = await f.request('ratiosSearch', { ...await f.args(), query: 'AL30' });
   assert.equal(result.result.length, 4);

@@ -1,4 +1,4 @@
-// Invoke via browser_run_code_unsafe as (page, { before, after }) using two preview-free servers.
+// Wrap this source in async page => (<source>)(page, { before, after }) for the shared MCP.
 async (sharedPage, { before, after }) => {
   const urls = { before: new URL(before), after: new URL(after) };
   for (const url of Object.values(urls)) {

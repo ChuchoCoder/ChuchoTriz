@@ -16,6 +16,7 @@ const menuSelector = ".WidgetsComponentsPopoverList";
 const drawerSelector = "#ToolPanel .ToolContent";
 const drawerHeaderSelector = ".ToolContentHeaderText";
 const widgetSelector = "[data-ct-ratios-slot]";
+const savedWidgetSelector = '[class*="DashboardGridItem-ChuchoTrizRatiosWidget"], [class*="DashboardGridItem-ChuchoTrizIntradayDollarWidget"]';
 const nativeStructure = [dashboardSelector, ".GridLayout", ".DashboardGridItem", menuSelector, "#ToolPanel", ".ToolContent", drawerHeaderSelector].join(", ");
 const discoveryDelays = [250, 750, 2000];
 
@@ -345,7 +346,7 @@ export default function RatiosDashboard() {
   const [snapshot, setSnapshot] = useState<RatiosState>(emptyState), [busy, setBusy] = useState(false), [menuIssue, setMenuIssue] = useState("");
   const [notice, setNotice] = useState("");
   const current = useRef(snapshot), reader = useRef<MarketReader | null>(null), pending = useRef(false);
-  const commandVersion = useRef(0), resume = useRef(() => {});
+  const commandVersion = useRef(0), resume = useRef<(discover?: boolean) => void>(() => {});
   const publish = useCallback((next: RatiosState) => {
     current.current = next;
     setSnapshot(next);
@@ -381,6 +382,13 @@ export default function RatiosDashboard() {
       if (delay !== undefined) timer = setTimeout(() => void refresh(), delay);
     };
     const requestRefresh = () => { queued = true; retry = 0; retryDelay = undefined; schedule(); };
+    const retryDiscovery = () => {
+      retryDelay = discoveryDelays.at(retry++);
+      if (retryDelay !== undefined) return;
+      // Slow startup can outlast the initial burst. Keep looking while a menu or a saved widget needs its first state.
+      const hasVisibleMenu = [...menus.keys()].some(parent => parent.getClientRects().length > 0);
+      if (hasVisibleMenu || document.querySelector(savedWidgetSelector)) retryDelay = 5000;
+    };
     const refresh = async () => {
       if (closed || !inScope || document.hidden || running || pending.current) return;
       queued = false;
@@ -390,17 +398,18 @@ export default function RatiosDashboard() {
       const version = commandVersion.current;
       const isCurrent = () => !closed && !document.hidden && reader.current === client && commandVersion.current === version;
       try {
-        const next = await client.call<RatiosState>("ratiosState");
+        const visibleWidgetIds = [...slots.keys()].filter(isVisible);
+        const next = await client.call<RatiosState>("ratiosState", { visibleWidgetIds });
         if (isCurrent()) {
           publish(next);
           // The native shell may mount before its dashboard store has hydrated.
-          if (!next.dashboardId && document.querySelector(dashboardSelector)) retryDelay = discoveryDelays.at(retry++);
+          if (!next.dashboardId && document.querySelector(dashboardSelector)) retryDiscovery();
           else retry = 0;
         }
       } catch (error) {
         if (isCurrent()) {
           publish({ ...current.current, canAdd: false, quotes: {}, issue: error instanceof Error ? error.message : "Ratios no disponible." });
-          if (!shouldPoll()) retryDelay = discoveryDelays.at(retry++);
+          if (!shouldPoll()) retryDiscovery();
         }
       } finally {
         running = false;
@@ -408,12 +417,15 @@ export default function RatiosDashboard() {
       }
     };
     const intersection = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(entries => {
-      const wasPolling = shouldPoll();
+      let revealed = false;
       for (const { target, isIntersecting } of entries) {
-        if (isIntersecting && widgets.has(target as HTMLElement)) visible.add(target); else visible.delete(target);
+        if (isIntersecting && widgets.has(target as HTMLElement)) {
+          revealed ||= !visible.has(target);
+          visible.add(target);
+        } else visible.delete(target);
       }
       showLocations();
-      if (!wasPolling && shouldPoll()) requestRefresh(); else schedule();
+      if (revealed) requestRefresh(); else schedule();
     });
 
     const reconcileMenus = () => {
@@ -474,7 +486,7 @@ export default function RatiosDashboard() {
       path = location.pathname;
       discover();
     };
-    resume.current = schedule;
+    resume.current = discover => { if (discover) requestRefresh(); else schedule(); };
     document.addEventListener("visibilitychange", visibilityChanged);
     navigation?.addEventListener("currententrychange", navigated);
     window.addEventListener("popstate", navigated);
@@ -497,14 +509,21 @@ export default function RatiosDashboard() {
       const next = await reader.current.call<RatiosState>(method, { context: source.context, dashboardId: source.dashboardId, ...params });
       publish(next);
     } catch (error) {
+      // A stale context or a failed save verification can leave native state ahead of this snapshot.
+      resume.current(true);
       // A removed panel has already unmounted, so its inline error cannot be seen.
       if (method === "ratiosRemove") setNotice(error instanceof Error ? error.message : "No se pudo confirmar la eliminación del widget. Recargá Matriz para comprobarlo.");
       throw error;
     } finally { pending.current = false; setBusy(false); resume.current(); }
   }, [publish]);
-  const search: Search = useCallback(query => {
+  const search: Search = useCallback(async query => {
     const source = current.current;
-    return reader.current ? reader.current.call<RatioInstrument[]>("ratiosSearch", { context: source.context, dashboardId: source.dashboardId, query }) : Promise.resolve([]);
+    try {
+      return reader.current ? await reader.current.call<RatioInstrument[]>("ratiosSearch", { context: source.context, dashboardId: source.dashboardId, query }) : [];
+    } catch (error) {
+      resume.current(true);
+      throw error;
+    }
   }, []);
   function addWidget(method: "ratiosAdd" | "dollarAdd", slot: HTMLElement) {
     setMenuIssue("");

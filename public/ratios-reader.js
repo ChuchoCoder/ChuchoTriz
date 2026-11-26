@@ -247,7 +247,7 @@
     const reference = security.settlementOrClose;
     return { points: closes.map(({ at, value }) => ({ at, value })), reference: finite(reference) ? reference : undefined };
   }
-  function state() {
+  function state(visibleWidgetIds) {
     const c = context(), connected = !!c.ms.webSocketConnectionStatus;
     if (!c.d) return { context: c.revision, canAdd: false, connected, widgets: [], quotes: {}, issue: "Abrí o creá un dashboard de Matriz para agregar Ratios." };
     const owned = c.d.layout.filter(ownsWidget);
@@ -278,8 +278,18 @@
       const pair = config.schema === 3 ? { a: config.a, b: config.b } : dollarPair(c.ss.securities, config);
       return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
     });
-    const ids = [...new Set(widgets.flatMap(w => w.config.pairs.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])])))];
-    const active = new Set(ids);
+    const visible = visibleWidgetIds === undefined ? undefined : new Set(visibleWidgetIds);
+    const active = new Set(), requested = new Set();
+    for (const { config } of widgets) {
+      const include = !visible || visible.has(config.id);
+      for (const { a, b, c } of config.pairs) {
+        for (const id of c ? [a.id, b.id, c.id] : [a.id, b.id]) {
+          active.add(id);
+          if (include) requested.add(id);
+        }
+      }
+    }
+    const ids = [...requested];
     // Track only this dashboard's active instruments. Native subscriptions can
     // be shared with other widgets, so never cancel them when a ratio is removed.
     for (const id of subscriptions) if (!active.has(id)) subscriptions.delete(id);
@@ -444,7 +454,11 @@
     let ownsWrite = false;
     try {
       const params = msg.params || {};
-      if (msg.method === "ratiosState") { reply({ result: state() }); return; }
+      if (msg.method === "ratiosState") {
+        const { visibleWidgetIds } = params;
+        if (visibleWidgetIds !== undefined && (!Array.isArray(visibleWidgetIds) || !visibleWidgetIds.every(id => short(id)))) throw Error("Widgets visibles inválidos.");
+        reply({ result: state(visibleWidgetIds) }); return;
+      }
       if (msg.method === "bookIntraday") { reply({ result: await bookIntraday(params.id) }); return; }
       if (msg.method === "ratioIntradayQuotes") { reply({ result: intradayQuotes(params.ids) }); return; }
       if (msg.method === "ratioIntradayHistory") {
