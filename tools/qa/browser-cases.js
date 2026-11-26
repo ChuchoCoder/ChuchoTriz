@@ -523,6 +523,7 @@ async (page, group) => {
     await ticket.locator('.preset-inline').getByRole('alert').waitFor();
     await autocomplete.check();
     await ticket.locator('.preset-inline').getByRole('alert').waitFor({state:'hidden'});
+    await autocomplete.uncheck();
     pass('SM-11-autocomplete', 'A pending save and its error follow Autocomplete between the inline grid and menu');
     await ticket.locator('.ButtonComprar').focus();
     for (const className of ['ButtonVender', 'ButtonLimpiar']) {
