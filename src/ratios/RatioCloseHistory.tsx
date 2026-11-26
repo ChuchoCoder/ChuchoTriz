@@ -1,6 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { formatOptionInput } from "../optionsSimulator/format";
-import { numeric } from "../optionsSimulator/model";
 import { numberLabel } from "./model";
 import { recordedCloses, remaining, type CloseCorrection, type RatioOperation } from "./trading";
 
@@ -55,10 +54,14 @@ export default function RatioCloseHistory({ operation, available, onChange }: Pr
           </div>
           {current?.kind === "edit" ? <form aria-label="Editar cierre" onSubmit={event => {
             event.preventDefault();
-            const fields = new FormData(event.currentTarget);
+            const fields = event.currentTarget.elements;
+            const numberField = (name: string) => {
+              const field = fields.namedItem(name);
+              return field instanceof HTMLInputElement ? field.valueAsNumber : NaN;
+            };
             void save(current, close.entries.map(({ leg }) => ({
-              quantity: numeric(String(fields.get(`quantity-${leg}`))),
-              price: numeric(String(fields.get(`price-${leg}`))),
+              quantity: numberField(`quantity-${leg}`),
+              price: numberField(`price-${leg}`),
             })));
           }}>
             <div className="ro-close-legs">{close.entries.map((entry, index) => {

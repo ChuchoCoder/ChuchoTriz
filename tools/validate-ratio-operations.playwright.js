@@ -771,13 +771,15 @@ async page => {
   assert(await closeEditor.isVisible() && JSON.stringify(await reviewRecord(correctionId)) === JSON.stringify(originalClose), 'Correction cannot close more than the operation total');
   await closeEditor.getByLabel('Cantidad A · nominales', { exact: true }).fill('20');
   await closeEditor.getByLabel('Cantidad B · nominales', { exact: true }).fill('40');
-  await closeEditor.getByLabel('Precio A', { exact: true }).fill('112');
+  await closeEditor.getByLabel('Precio A', { exact: true }).fill('1.12e2');
+  await closeEditor.getByLabel('Precio B', { exact: true }).fill('.45');
   await click(button('Guardar cierre'));
   await reviewWaitHistory(correctionId, [[20, 75], [40, 150]]);
   await page.getByText('Cierre actualizado.', { exact: true }).waitFor();
   const corrected = await reviewRecord(correctionId);
-  assert(corrected.legs[0].exits[0].price === 112 && corrected.legs[0].exits[0].at === originalClose.legs[0].exits[0].at &&
-    JSON.stringify(corrected.legs.map(l => l.exits[1])) === JSON.stringify(originalClose.legs.map(l => l.exits[1])), 'Edit preserves original time and later closes');
+  assert(corrected.legs[0].exits[0].price === 112 && corrected.legs[1].exits[0].price === .45 &&
+    corrected.legs[0].exits[0].at === originalClose.legs[0].exits[0].at &&
+    JSON.stringify(corrected.legs.map(l => l.exits[1])) === JSON.stringify(originalClose.legs.map(l => l.exits[1])), 'Edit accepts numeric input formats and preserves original time and later closes');
   assert(await realizedRow.innerText() !== closedPnl, 'The realized P&L changes after correction');
   const correctionRow = page.locator(`.ro-operations-table tr[data-row-id="${correctionId}"]`);
   assert((await correctionRow.innerText()).includes('Parcial') && (await correctionRow.innerText()).includes('5,00 / 10,00'), 'Editing a full close can reopen both legs');

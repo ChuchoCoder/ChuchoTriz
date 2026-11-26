@@ -238,6 +238,8 @@ movimiento reducido se usa una marca estática breve.
   descarta la edición. **Eliminar cierre** pide confirmación y devuelve al
   saldo abierto las cantidades de ese cierre. Ambos cambios recalculan el P&L.
   Para corregir un cierre de una operación cerrada, elegí **Todas**.
+  Si varios registros antiguos comparten la misma marca de tiempo y no se
+  pueden emparejar con certeza, cada pata se muestra por separado.
 - Editar reemplaza el mismo registro y conserva cierres. Tras cierres parciales
   no se cambian instrumentos/sentido/unidades y las cantidades totales deben
   cubrir lo cerrado. Corregir la entrada o gastos recalcula el resultado histórico.
