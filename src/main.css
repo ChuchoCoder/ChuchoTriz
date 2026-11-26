@@ -194,7 +194,7 @@
   width: max-content;
 }
 
-#MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .ButtonPreset {
+#MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz :is(.ButtonPreset, .preset-label-ruler) {
   --chuchotriz-preset-hover-text: #f8f5ef;
   --chuchotriz-preset-hover-background: rgb(222 219 213 / 8%);
   flex-shrink: 0;
@@ -206,6 +206,20 @@
   border-color: currentColor;
   background: transparent;
   color: #dedbd5;
+}
+
+#MiniOrderForm #root-chuchotriz .preset-slot .preset-label-ruler {
+  position: absolute;
+  display: grid;
+  justify-items: start;
+  grid-auto-rows: max-content;
+  inset-inline-end: 0;
+  inset-block-start: 0;
+  block-size: 0;
+  padding-block: 0;
+  overflow: hidden;
+  visibility: hidden;
+  white-space: nowrap;
 }
 
 :where(html[data-theme="dma_day"]) #MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .ButtonPreset {
@@ -227,6 +241,11 @@
 #MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .preset-panel .ButtonPreset {
   width: max-content;
   min-width: var(--chuchotriz-preset-width);
+  max-width: 100%;
+  height: auto;
+  min-height: var(--chuchotriz-preset-height);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 @supports (left: anchor(--chuchotriz-fields right)) {

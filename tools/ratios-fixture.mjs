@@ -148,7 +148,7 @@ function installChart() {
 const server = createServer((request, response) => {
   const path = new URL(request.url, 'http://127.0.0.1').pathname.slice(1);
   if (path === 'fixture' || path.startsWith('security/')) {
-    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:");
+    response.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:");
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.end(`<!doctype html><html lang="es" data-theme="${theme.attribute}"><meta charset="utf-8"><title>Ratios · DATOS SIMULADOS</title>${styles}${theme.style}<style>.WidgetsComponentsPopoverList{width:280px}.WidgetsComponentsPopoverList .WidgetComponentCard{display:flex}</style><body style="font:14px Arial"><h1>Ratios · DATOS SIMULADOS · Sin conexión a broker</h1><p>Versión: 4.24.4</p><nav class="DirectAccessBar"></nav><div id="tv_chart_container"></div><div class="DashboardGridItem"><div class="SecurityCardWidget"><header class="NewWidgetHeader"><a href="/security/AL30-2">AL30</a><div class="SingleWidgetHeaderButtons"></div></header></div></div><div class="CustomDashboard"><div class="WidgetsComponentsPopoverList"></div><div class="GridLayout" style="position:relative;height:1200px"></div></div><script>(${install.toString()})();${path.startsWith('security/') ? `(${installChart.toString()})();` : ''}</script><script type="module" src="/${main}"></script></body></html>`); return;
   }

@@ -78,7 +78,6 @@ try {
       const url = await fixtureUrl(fixture, theme);
       const origin = new URL(url).origin;
       const suite = readFileSync(join(root, 'tools', file), 'utf8').trim().replace(/;$/, '');
-      const groupArg = file.startsWith('qa/') ? JSON.stringify(group) : 'undefined';
       const result = await call(`async currentPage => {
         const page = await currentPage.context().newPage();
         const errors = [], blocked = [], origin = ${JSON.stringify(origin)};
@@ -111,7 +110,7 @@ try {
             || actual.scheme !== ${JSON.stringify(theme)} || actual.media !== ${JSON.stringify(theme)}) {
             throw Error('Unexpected fixture theme: ' + JSON.stringify(actual));
           }
-          const result = await (${suite})(page, ${groupArg});
+          const result = await (${suite})(page, ${JSON.stringify(group)});
           if (errors.length) throw Error('Uncaught page errors: ' + errors.join('; '));
           if (blocked.length) throw Error('Unexpected external requests were blocked: ' + blocked.join(', '));
           return result;

@@ -478,11 +478,17 @@ async (page, group) => {
     equal(await ticketValues(), initialValues, 'Opening settings from the menu preserves ticket values');
     await narrowTrigger.click();
     await narrowMenu.waitFor();
+    await narrowMenu.getByRole('button', { name:'100', exact:true }).focus();
     await slot.evaluate(el => { el.style.inlineSize = ''; });
     await ticket.locator('.preset-panel:popover-open').waitFor({state:'detached'});
     equal(await ticket.locator('.preset-inline .ButtonPreset').count(), 12,
       'Resizing moves every preset inline and closes the menu');
+    equal(await ticket.locator('.preset-inline .ButtonPreset:focus').textContent(), '100',
+      'A preset that moves out of the menu retains keyboard focus');
     await slot.evaluate(el => { el.style.inlineSize = '76px'; });
+    await narrowTrigger.waitFor();
+    assert(await narrowTrigger.evaluate(el => document.activeElement === el),
+      'A preset that moves into the closed menu hands focus to its trigger');
     await narrowTrigger.click();
     await narrowMenu.getByRole('button', { name:'Configurar cantidades rápidas de AL30' }).click();
     await page.getByRole('heading', {name:'AL30', exact:true}).waitFor();
@@ -491,6 +497,33 @@ async (page, group) => {
     await inlineShortcut.waitFor();
     await b('Volver a Matriz').click();
     assert(await inlineShortcut.evaluate(el => document.activeElement === el), 'Closing settings focuses the current shortcut after reflow');
+    await page.evaluate(() => {
+      const save = chrome.storage.local.set;
+      chrome.storage.local.set = values => {
+        if (!('AutocompleteInstrument:AL30' in values)) return save(values);
+        return new Promise((_, reject) => {
+          window.ctRejectAutocompleteSave = () => {
+            chrome.storage.local.set = save;
+            reject(Error('Simulated delayed storage failure'));
+          };
+        });
+      };
+    });
+    const autocomplete = ticket.getByRole('checkbox', { name:'Autocompletar para AL30' });
+    await autocomplete.click();
+    await page.waitForFunction(() => typeof window.ctRejectAutocompleteSave === 'function');
+    await slot.evaluate(el => { el.style.inlineSize = '76px'; });
+    await narrowTrigger.click();
+    const menuCheckbox = narrowMenu.getByRole('checkbox', { name:'Autocompletar para AL30' });
+    assert(await menuCheckbox.isDisabled(), 'A pending save stays disabled when the checkbox moves to the menu');
+    await page.evaluate(() => window.ctRejectAutocompleteSave());
+    await narrowMenu.getByRole('alert').waitFor();
+    await slot.evaluate(el => { el.style.inlineSize = ''; });
+    await inlineShortcut.waitFor();
+    await ticket.locator('.preset-inline').getByRole('alert').waitFor();
+    await autocomplete.check();
+    await ticket.locator('.preset-inline').getByRole('alert').waitFor({state:'hidden'});
+    pass('SM-11-autocomplete', 'A pending save and its error follow Autocomplete between the inline grid and menu');
     await ticket.locator('.ButtonComprar').focus();
     for (const className of ['ButtonVender', 'ButtonLimpiar']) {
       await page.keyboard.press('Tab');
@@ -564,6 +597,23 @@ async (page, group) => {
     equal(await label('Cantidad').inputValue(), '360', 'Last preset remains reachable in a long list');
     assertControlsFit(await readLayout(), modes.find(mode => mode.sidePanels));
     pass('SM-11-menu', 'Long preset lists stay reachable from the menu without scrolling the ticket');
+
+    await setMode(modes[0]);
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: { CUSTOM: [
+      { cantidad: 1234567, mostrar: 1012345 }, { cantidad: 500, mostrar: 0 }, { cantidad: 1234567, mostrar: 1023456 },
+    ] } }));
+    await label('Instrumento').fill('CUSTOM (CI)'); await label('Precio').focus();
+    const inline = ticket.locator('.preset-inline');
+    await inline.getByRole('button', {name:'500', exact:true}).waitFor();
+    equal(await inline.locator('.ButtonPreset').allTextContents(), ['500'], 'Only presets with room for the full label are inline');
+    await overflowButton.click();
+    equal(await longMenu.locator('.ButtonPreset').allTextContents(), ['1.234567m/1.012345m', '1.234567m/1.023456m'],
+      'The menu displays both quantities in full and preserves their order');
+    equal((await readLayout()).clippedLabels, [], 'Long labels remain fully legible');
+    await longMenu.getByRole('button', {name:'1.234567m/1.023456m', exact:true}).click();
+    equal(await label('Cantidad').inputValue(), '1234567', 'The chosen preset fills its total');
+    equal(await label('Cantidad a mostrar').inputValue(), '1023456', 'The chosen preset fills its exact displayed quantity');
+    pass('SM-11-long-labels', 'Different quantities with long labels remain distinguishable and apply exactly');
 
     await label('Instrumento').fill(''); await label('Precio').focus();
     await page.waitForFunction(() => !document.querySelector('#MiniOrderForm .ButtonPreset'));
