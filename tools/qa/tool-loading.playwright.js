@@ -14,9 +14,26 @@ async page => {
   const tab = name => panel.getByRole('button', { name, exact: true });
   const openPresets = async () => {
     await ticket.getByRole('button', { name: 'Configurar cantidades rápidas de AL30' }).click();
-    await panel.getByRole('searchbox', { name: 'Buscar instrumento por ticker' }).waitFor();
+    await panel.locator('input[role="searchbox"]:enabled').waitFor();
   };
   const hasTools = () => [simulator, operations, ratios].some(pattern => count(pattern) > 0);
+
+  const statusContrast = status => status.evaluate(element => {
+    const luminance = value => value.match(/[\d.]+/g).slice(0, 3).map(Number)
+      .map(channel => channel / 255)
+      .reduce((total, channel, index) => total + [.2126, .7152, .0722][index] *
+        (channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4), 0);
+    const text = luminance(getComputedStyle(element).color);
+    let backgroundColor = 'rgb(255, 255, 255)';
+    for (let parent = element; parent; parent = parent.parentElement) {
+      const color = getComputedStyle(parent).backgroundColor;
+      if (!color.startsWith('rgb(')) continue;
+      backgroundColor = color;
+      break;
+    }
+    const background = luminance(backgroundColor);
+    return (Math.max(text, background) + .05) / (Math.min(text, background) + .05);
+  });
 
   try {
     await page.reload({ waitUntil: 'load' });
@@ -34,9 +51,12 @@ async page => {
       const started = page.waitForRequest(request => simulator.test(request.url()));
       await tab('Simulador de opciones').click();
       await started;
-      await panel.getByRole('status').filter({ hasText: 'Cargando herramienta' }).waitFor();
+      const status = panel.getByRole('status').filter({ hasText: 'Cargando herramienta' });
+      await status.waitFor();
       assert(count(simulator) === 1 && !count(operations) && !count(ratios), 'Only the selected simulator is requested and its loading state is visible');
-      assert(await tab('Cantidades rápidas').isEnabled(), 'Other tabs remain available during loading');
+      assert(await statusContrast(status) >= 4.5, 'Loading text meets the 4.5:1 contrast minimum');
+      await page.keyboard.press('Tab');
+      assert(await tab('Operaciones de opciones').evaluate(button => button.matches(':focus-visible')), 'Keyboard focus moves to the next tool while loading');
     } finally {
       release();
       await page.unroute(simulator, hold);
@@ -61,10 +81,16 @@ async page => {
     try {
       await openPresets();
       await tab('Operaciones de opciones').click();
-      await panel.getByRole('alert').filter({ hasText: 'No se pudo cargar esta herramienta' }).waitFor();
-      await tab('Cantidades rápidas').click();
-      await panel.getByRole('searchbox', { name: 'Buscar instrumento por ticker' }).waitFor();
-      await panel.getByRole('button', { name: 'Volver a Matriz' }).click();
+      const alert = panel.getByRole('alert').filter({ hasText: 'No se pudo cargar esta herramienta' });
+      await alert.waitFor();
+      assert(await statusContrast(alert) >= 4.5, 'Error text meets the 4.5:1 contrast minimum');
+      await page.keyboard.press('Tab');
+      assert(await tab('Cantidades rápidas').evaluate(button => button.matches(':focus-visible')), 'Keyboard focus can leave the failed tool');
+      await page.keyboard.press('Enter');
+      await panel.locator('input[role="searchbox"]:enabled').waitFor();
+      await page.keyboard.press('Escape');
+      await panel.waitFor({ state: 'hidden' });
+      assert(await ticket.getByRole('button', { name: 'Configurar cantidades rápidas de AL30' }).evaluate(button => button.matches(':focus')), 'Escape returns focus to the ticket shortcut');
       await ticket.locator('.ButtonPreset').first().click();
       assert(Number(await page.locator('#cantidad').inputValue()) > 0, 'A failed download leaves the preset editor and ticket usable');
     } finally { await page.unroute(operations, reject); }
