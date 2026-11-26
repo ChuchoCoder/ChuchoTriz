@@ -286,7 +286,7 @@
         const cached = legacyDollarPairs.get(w);
         if (cached?.context === c.revision && cached.revision === config.revision) pair = cached.pair;
       }
-      return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
+      return { config, width: w.w, height: w.h, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
     });
     const active = new Set(), requested = new Set();
     for (const { config } of widgets) {
@@ -375,7 +375,7 @@
       }] }).layout[0];
       widget.dashboard = d; preserveSizes(d); d.addWidget(widget);
     } else {
-      const configFor = method === "dollarEdit" ? dollarConfig : method === "ratiosRemove" ? ownsWidget : ownConfig;
+      const configFor = method === "dollarEdit" ? dollarConfig : ["ratiosRemove", "ratiosResize"].includes(method) ? ownsWidget : ownConfig;
       const widget = d.layout.find(w => configFor(w)?.id === params.widgetId);
       if (!widget) throw Error("El widget ya no está en este dashboard.");
       const cfg = dollarConfig(widget) || configOf(widget);

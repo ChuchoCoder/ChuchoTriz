@@ -190,10 +190,53 @@ async (page, screenshots) => {
   await screenshot('widget-spread-only', widget);
   await spreadOnly.click();
   assert(await widget.locator('svg .ct-intraday-line-ratio').count() === 1, 'Toggling again restores the dollar line');
+  const resize = widget.getByRole('button', { name: 'Redimensionar Dólar intradiario', exact: true });
+  const plot = widget.getByRole('img');
+  const plotSize = () => plot.evaluate(svg => [svg.viewBox.baseVal.width, svg.viewBox.baseVal.height]);
+  const waitForSize = (width, height) => page.waitForFunction(([width, height]) => {
+    const box = document.querySelector('.ct-intraday-widget')?.getBoundingClientRect();
+    return box?.width === width && box?.height === height;
+  }, [width, height]);
+  const dragTo = async (width, height) => {
+    await idle();
+    await resize.scrollIntoViewIfNeeded();
+    const [handle, box] = await Promise.all([resize.boundingBox(), widget.boundingBox()]);
+    const x = handle.x + handle.width / 2, y = handle.y + handle.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + width - box.width, y + height - box.height, { steps: 4 });
+    await waitForSize(width, height);
+  };
+  const originalPlot = await plotSize();
+  await dragTo(600, 400);
+  await page.waitForFunction(([width, height]) => {
+    const svg = document.querySelector('.ct-intraday-widget svg[role="img"]');
+    return svg?.viewBox.baseVal.width > width && svg.viewBox.baseVal.height > height;
+  }, originalPlot);
+  await page.mouse.up();
+  await idle();
+  const largePlot = await plotSize();
+  assert(largePlot[0] > originalPlot[0] && largePlot[1] > originalPlot[1], 'The plot grows during a drag');
+  await dragTo(360, 180);
+  await page.mouse.up();
+  await idle();
+  await waitForSize(360, 180);
+  const smallPlot = await plotSize();
+  const chartBox = await plot.boundingBox();
+  const smallWidget = await widget.boundingBox();
+  assert(smallPlot[0] < originalPlot[0] && smallPlot[1] < originalPlot[1] &&
+    chartBox.y + chartBox.height <= smallWidget.y + smallWidget.height && await daySelector.isVisible(),
+    'The plot and session selector fit inside the minimum widget size');
+  await resize.press('ArrowRight');
+  await idle();
+  await waitForSize(380, 180);
+  assert(await daySelector.inputValue() === chosenDay, 'Keyboard resizing keeps the selected session');
   await daySelector.selectOption({ index: 0 });
   await valueIs(spreadValue, '—', 'The current session does not use an older reference close');
   await page.reload();
   await widget.getByRole('button', { name: 'Configurar Referencia C' }).filter({ hasText: 'C · D30N6 ÷ 100' }).waitFor();
+  await waitForSize(380, 180);
+  checks.push('The exact widget size survives a reload');
   await daySelector.locator('option').nth(1).waitFor({ state: 'attached' });
   assert((await daySelector.locator('option:checked').textContent()).includes('hoy'), 'Reloading opens today again');
   await daySelector.selectOption({ index: 1 });

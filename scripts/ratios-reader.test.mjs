@@ -505,6 +505,22 @@ test('preserves native pixel sizes when Matriz round-trips unchanged dimensions'
   assert.equal((await f.state()).widgets[0].width, 640);
   assert.deepEqual(f.controls.map(w => [w.w, w.h]), before.slice(0, 2));
 });
+test('resizes a dollar widget without changing its instruments or other widget sizes', async () => {
+  const f = fixture(); await f.add();
+  const { config } = (await f.request('dollarAdd', await f.args())).result.dollarWidgets[0];
+  const edit = await f.request('dollarEdit', { ...await f.args(), widgetId: config.id, revision: 0, a: 'a', b: 'b', c: 'c', cDivisor: 100 });
+  const before = edit.result.dollarWidgets[0];
+  const otherSizes = () => Array.from(f.d.layout.slice(0, -1), w => [w.w, w.h]);
+  const beforeSizes = otherSizes();
+  const args = { ...await f.args(), widgetId: config.id, revision: before.config.revision, width: 250, height: 260.4 };
+  assert.match((await f.request('ratiosResize', { ...args, revision: 0 })).error, /cambió/);
+  const resize = await f.request('ratiosResize', args);
+  assert.deepEqual(resize.result.dollarWidgets[0], { ...before, width: 360, height: 260 });
+  const saved = (await f.ds.getDashboard()).layout.find(w => w.settings?.chuchotrizIntradayDollar?.id === config.id);
+  assert.deepEqual(saved.settings.chuchotrizRatiosSize, { width: 360, height: 260 });
+  assert.deepEqual(saved.settings.chuchotrizIntradayDollar, before.config);
+  assert.deepEqual(otherSizes(), beforeSizes);
+});
 test('does not acknowledge failed persistence or allow overlapping mutations', async () => {
   const f = fixture(); f.failSave();
   const pending = f.add();
