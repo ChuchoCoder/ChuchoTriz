@@ -140,7 +140,9 @@ function installMarketFixture(regression) {
       }));
       ticketReport = { reads: 0, series };
       const detail = [12500, -2500].map((totalCurrentSize, settlType) => ({ tradingSymbol: series[1].fixSymbol, settlType, totalCurrentSize, totalInitialCollateralSize: 0 }));
-      positionReport.types.push({ type: 'BOND', securitiesDetailed: [{ symbolReference: 'AL30', instrumentCurrentSize: 10000, detailedPositions: detail }] });
+      positionReport.types.push({ type: 'BOND', securitiesDetailed: [{
+        symbolReference: 'AL30', instrumentCurrentSize: 10000, instrumentCollateralSize: 0, detailedPositions: detail,
+      }] });
       store.securityStore.securities = series;
       store.profileStore.accounts = [store.profileStore.activeAccount];
       const original = readNativePosition.getDetailedPositionReport;

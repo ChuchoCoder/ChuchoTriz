@@ -8,11 +8,15 @@
   const refreshMs = 20_000;
   const requestTimeoutMs = 10_000;
   const maxPendingReads = 2;
+  const maxFillAgeMs = 5 * 60_000;
+  const clockSkewMs = 30_000;
   const format = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 8 });
   const timeZone = "America/Argentina/Buenos_Aires";
   const reportTime = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone });
   const reportDay = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeZone });
-  const isCurrentReport = (time, now) => Number.isFinite(time) && time > 0 && reportDay.format(time) === reportDay.format(now);
+  const isCurrentReport = (time, now) => Number.isFinite(time) && time > 0 &&
+    time <= now + clockSkewMs && reportDay.format(time) === reportDay.format(now);
+  const isRecentReport = time => Date.now() - time <= maxFillAgeMs;
   // Equivalencias no triviales de Resources/Defaults/dollar_cable_equivalences.json (ChuchoBot Premium).
   const equivalents = new Map([
     ["AEC2O", ["AEC2D", "AEC2C"]], ["AER1O", ["AER1D", "AER1C"]],
@@ -115,9 +119,11 @@
     "buyCollateralSize", "sellCollateralSize", "buyInitialCollateralSize", "sellInitialCollateralSize",
     "buyFilledCollateralSize", "sellFilledCollateralSize"];
   function collateralState(record, fields) {
+    const [total, initial, filled] = fields;
     const values = fields.map(field => record[field]).filter(value => value != null);
     if (values.some(value => validQuantity(value) && value !== 0)) return "pledged";
-    return values.length && values.every(validQuantity) ? "clear" : "unknown";
+    if (!values.every(validQuantity)) return "unknown";
+    return record[total] === 0 || record[initial] === 0 && record[filled] === 0 ? "clear" : "unknown";
   }
 
   function readPosition(report, ticket) {
@@ -168,9 +174,9 @@
     };
   }
 
-  function usableQuantity(ticket, position) {
+  function usableQuantity(ticket, position, reportedAt) {
     const { quantity, security } = ticket;
-    if (!position || position.collateral !== "clear" || quantity.disabled || quantity.readOnly) return;
+    if (!position || !isRecentReport(reportedAt) || position.collateral !== "clear" || quantity.disabled || quantity.readOnly) return;
     const { sellable } = position;
     const max = Number(quantity.getAttribute("aria-valuemax") ?? Number.MAX_SAFE_INTEGER);
     const precision = security.refData?.sizePrecision ?? 0;
@@ -209,10 +215,15 @@
       fill.hidden = true;
       return;
     }
-    status.hidden = position.collateral === "clear" || position.collateral === "unknown" && position.sellable === 0;
-    if (!status.hidden) text(status, position.collateral === "pledged" ? "Incluye garantía" : "Garantía sin verificar");
+    const reportLabel = `Último cálculo de Matriz: ${reportTime.format(snapshot.reportedAt)}`;
+    const notices = [];
+    if (!isRecentReport(snapshot.reportedAt)) notices.push(reportLabel);
+    if (position.collateral === "pledged") notices.push("Incluye garantía");
+    if (position.collateral === "unknown" && position.sellable > 0) notices.push("Garantía sin verificar");
+    status.hidden = notices.length === 0;
+    text(status, notices.join(" · "));
     table.hidden = false;
-    table.title = `Último cálculo de Matriz: ${reportTime.format(snapshot.reportedAt)}`;
+    table.title = reportLabel;
     text(orderTerm, term === "CI" ? "Orden en CI" : "Orden a 24 h");
     const value = Number(ticket.quantity.getAttribute("aria-valuenow"));
     const amount = ticket.quantity.value.trim() && value > 0 && validQuantity(value) ? value : 0;
@@ -223,7 +234,7 @@
       text(row.cells[2], amount && validQuantity(buy) ? format.format(buy) : "—");
       text(row.cells[3], amount && validQuantity(sell) ? format.format(sell) : "—");
     }
-    const quantity = usableQuantity(ticket, position);
+    const quantity = usableQuantity(ticket, position, snapshot.reportedAt);
     fill.hidden = quantity === undefined;
     const filling = fillRequest?.selection === selection;
     fill.setAttribute("aria-disabled", String(filling));
@@ -267,7 +278,7 @@
     fill.addEventListener("click", async event => {
       const ticket = readTicket(form);
       if (event.currentTarget !== fill || !isVisible() || !ticket || fillRequest || currentForm() !== form || !sameTicket(ticket, selection) ||
-          usableQuantity(ticket, currentPosition()) === undefined) return;
+          (!inFlight && pendingReads >= maxPendingReads) || usableQuantity(ticket, currentPosition(), snapshot?.reportedAt) === undefined) return;
       const { quantity } = ticket;
       const request = { selection, quantity, value: quantity.value };
       fillRequest = request;
@@ -277,7 +288,7 @@
         const current = readTicket(currentForm());
         if (!isVisible() || fillRequest !== request || request.selection !== selection || !sameTicket(current, ticket) ||
             current.quantity !== quantity || quantity.value !== request.value) return;
-        const nominal = usableQuantity(current, currentPosition());
+        const nominal = usableQuantity(current, currentPosition(), snapshot?.reportedAt);
         if (nominal === undefined) return;
         const value = nominal.toLocaleString("es-AR", { useGrouping: false, maximumFractionDigits: 8 });
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(quantity, value);

@@ -151,7 +151,9 @@ it("keeps a position visible in guarantee while withholding the fill action", as
 });
 
 it("shows balances but cannot load a quantity when collateral is unknown", async () => {
-  portfolio.detailedPositionReport = withRows(holding(al30, 0, 20, null));
+  const position = holding(al30, 0, 20, null);
+  Object.assign(position.detailedPositions[0], { totalInitialCollateralSize: 0 });
+  portfolio.detailedPositionReport = withRows(position);
   new Function(script)();
   await wait();
   expect(row(1)[1]).toBe("20");
@@ -258,6 +260,21 @@ it("recovers on a second detached read even if the first has not settled", async
   resolve(oldReport);
   await wait();
   expect(row(1)[1]).toBe("10");
+});
+
+it("shows the last same-day calculation while withholding a stale fill and rejecting future reports", async () => {
+  vi.setSystemTime(new Date("2026-11-26T15:00:00-03:00"));
+  portfolio.detailedPositionReport = withRows(holding(al30, 0, 80));
+  read().lastCalculation = new Date(Date.now() - 6 * 60_000);
+  new Function(script)();
+  await wait();
+  expect(row(1)[1]).toBe("80");
+  expect(panel().querySelector("[role=status]")?.textContent).toContain("Último cálculo de Matriz");
+  expect(button().hidden).toBe(true);
+  read().lastCalculation = new Date(Date.now() + 60_000);
+  select(al30Ci);
+  await wait();
+  expect(panel().textContent).toContain("Posición no disponible");
 });
 
 it("leaves the eye beside the native field, pauses reads and reloads after reopening", async () => {

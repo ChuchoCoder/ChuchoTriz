@@ -152,13 +152,29 @@ async (page, group) => {
     await contrast('TP-09', 'Tenencia con garantía', status);
     await panel.locator('.ct-ticket-position-fill').waitFor({ state: 'hidden' });
     await page.evaluate(() => {
+      const instrument = window.mainStore.portfolioStore.detailedPositionReport.types.find(item => item.type === 'BOND').securitiesDetailed[0];
+      delete instrument.instrumentCollateralSize;
+      delete instrument.detailedPositions[0].totalCollateralSize;
+    });
+    await select('24hs');
+    await panel.getByText('Garantía sin verificar', { exact: true }).waitFor();
+    await contrast('TP-11', 'Garantía sin verificar', status);
+    await panel.locator('.ct-ticket-position-fill').waitFor({ state: 'hidden' });
+    await page.evaluate(() => {
       const group = window.mainStore.portfolioStore.detailedPositionReport.types.find(item => item.type === 'BOND');
       group.securitiesDetailed = [];
     });
-    await select('24hs');
+    await select();
     await expectRows(['CI', '0', '—', '—'], ['24 h', '0', '—', '—']);
     await contrast('TP-10', 'Tenencia en cero', panel.locator('.ct-current').first());
     await panel.locator('.ct-ticket-position-fill').waitFor({ state: 'hidden' });
+
+    await page.evaluate(() => {
+      Object.getPrototypeOf(window.mainStore.portfolioStore).getDetailedPositionReport = () => new Promise(() => {});
+    });
+    await select('24hs');
+    await panel.getByText('Matriz no respondió.', { exact: false }).waitFor({ timeout: 15_000 });
+    await contrast('TP-12', 'Tiempo de espera agotado', status);
   } else if (group === 'theme-widgets') {
     await page.getByRole('button', { name: 'RATIOS · CHUCHOTRIZ', exact: true }).click();
     await contrast('TH-10', 'Cabecera del widget Ratios', page.locator('.ct-ratios th').first());
