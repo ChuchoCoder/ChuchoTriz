@@ -1,7 +1,8 @@
 .ct-ratios-root { width:100%; height:100%; }
 .ct-ratios { --ratio-bg:var(--panel-body-background,#222c3b); --ratio-text:var(--text-color,#f3f6fa); box-sizing:border-box; width:100%; height:100%; position:relative; display:flex; flex-direction:column; border:1px solid #039be5; border-radius:8px; background:var(--ratio-bg); color:var(--ratio-text); font:12px/1.4 var(--app-font-family,Arial,sans-serif); box-shadow:0 2px 5px #0003; container-type:inline-size; }
 .ct-ratios * { box-sizing:border-box; }
-.ct-ratios-title { display:flex; justify-content:space-between; align-items:center; flex-shrink:0; height:34px; padding:0 10px 0 14px; border-radius:7px 7px 0 0; background:var(--price-panel-title-background,#124d71); color:var(--price-panel-title-color,#fff); cursor:move; user-select:none; font-size:14px; }
+.ct-ratios-title { display:flex; justify-content:space-between; align-items:center; flex-shrink:0; height:36px; padding:0 10px 0 15px; border-radius:7px 7px 0 0; background:var(--ant-modal-header-background,#114068); color:#fff; cursor:move; user-select:none; font-size:14px; }
+.ct-ratios-title strong { font-weight:700; }
 .ct-ratios-header-actions { display:flex; gap:6px; }
 .ct-ratios button { color:inherit; cursor:pointer; font:inherit; }
 .ct-ratios button:disabled { opacity:.5; cursor:default; }
@@ -32,20 +33,22 @@
 .ct-ratios-editor-actions button[type=submit] { border-color:#039be5; background:#039be5; color:#fff; }
 .ct-ratios-issue { margin:0; padding:6px 12px; color:#d3910c; font-size:11px; }
 .ct-ratios-table-wrap { flex:1; min-height:0; overflow:auto; padding-bottom:18px; overscroll-behavior:contain; }
-.ct-ratios table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
-.ct-ratios th { padding:4px 8px; background:var(--price-panel-header-background,#52657b); color:var(--secondary-text-light-color,#d9d9d9); text-align:right; white-space:nowrap; }
+.ct-ratios table { border-collapse:collapse; width:100%; font-size:14px; font-variant-numeric:tabular-nums; }
+.ct-ratios th { height:25px; padding:0 8px; background:var(--MEP-title-color,#56657f); color:var(--light-text-color,#f3f6fa); font-size:.8em; font-weight:600; text-align:right; vertical-align:middle; white-space:nowrap; }
 .ct-ratios th:first-child { text-align:left; }
-.ct-ratios td { height:25px; padding:2px 8px; border-bottom:1px solid #8190a530; text-align:right; vertical-align:middle; white-space:nowrap; }
+.ct-ratios td { height:1.4375rem; padding:0 8px; border-bottom:1px solid #8190a530; font-size:.8rem; text-align:right; vertical-align:middle; white-space:nowrap; }
 .ct-ratios td.ct-ratios-pair { text-align:left; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
-.ct-ratios-pair strong { color:var(--dark-text-color,var(--ratio-text)); font-size:12px; }
+.ct-ratios-pair strong { color:var(--dark-text-color,var(--ratio-text)); font-size:12px; font-weight:700; }
 .ct-ratios-pair .ct-ratios-old { margin-left:5px; }
-.ct-ratios-value { font-weight:bold; }
+.ct-ratios-value,.ct-ratios-quote,.ct-ratios-up,.ct-ratios-down,.ct-ratios-flat { font-weight:800; }
+.ct-ratios-value { color:var(--text-color,#fff); }
 .ct-ratios-quote { color:var(--lst-color,#039be5); }
 .ct-ratios-up { color:var(--green-counter,#0cbd15); }
 .ct-ratios-down { color:var(--red-counter,#f90701); }
 .ct-ratios-flat { color:var(--equal-letter-color,#039be5); }
 .ct-ratios-old { color:#d3910c; }
-.ct-ratios-actions button { display:inline-flex; align-items:center; justify-content:center; padding:0; min-width:22px; height:20px; border:0; background:transparent; font-size:16px; line-height:1; }
+.ct-ratios-actions button { display:inline-flex; align-items:center; justify-content:center; padding:0; min-width:22px; border:0; background:transparent; font-size:16px; line-height:1; }
+.ct-ratios .ct-ratios-actions > :is(button,.ct-ratio-chart-link) { height:22px; vertical-align:middle; }
 .ct-ratios-empty { display:block; margin:20px auto; border:1px solid #039be5; background:transparent; padding:8px 14px; border-radius:3px; }
 .ct-ratios-resize { position:absolute; right:0; bottom:0; border:0; width:22px; height:22px; padding:0; line-height:1!important; font-size:19px!important; cursor:nwse-resize!important; touch-action:none; background:#124d71; color:#fff!important; border-radius:0 0 7px 0; }
 .ct-ratios-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
@@ -56,13 +59,13 @@
 .ct-ratios-notice { position:fixed; z-index:105; bottom:150px; left:50px; max-width:min(520px,calc(100vw - 70px)); display:flex; gap:12px; align-items:center; padding:10px 14px; border:1px solid #d3910c; border-radius:5px; background:#222c3b; color:#fff; font:13px/1.4 Arial,sans-serif; }
 .ct-ratios-notice button { flex-shrink:0; border:0; background:transparent; color:inherit; cursor:pointer; font-size:22px; }
 @container (max-width:520px) {
-  .ct-ratios td.ct-ratios-pair { max-width:170px; }.ct-ratios td { padding:2px 5px; }.ct-ratios th { padding:4px 5px; }
+  .ct-ratios td.ct-ratios-pair { max-width:170px; }.ct-ratios td,.ct-ratios th { padding-inline:5px; }
   .ct-ratios-editor-actions { flex-wrap:wrap; }.ct-ratios-editor-actions span { flex-basis:100%; }
 }
 
 .ct-ratios .ct-ratios-compare{display:flex;align-items:center;gap:6px;font-size:11px;margin:6px 0}.ct-ratios .ct-ratios-compare input{width:auto}
 
-.ct-ratios .ct-ratios-columns-button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;padding:3px;border:0;border-radius:3px;background:transparent;color:inherit}
+.ct-ratios .ct-ratios-columns-button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;padding:3px;border:0;border-radius:3px;background:transparent;color:inherit;vertical-align:middle}
 .ct-ratios .ct-ratios-columns-button:hover{background:#039be530}
 .ct-ratios-column-menu{position:fixed;inset:auto;margin:0;width:220px;max-width:calc(100vw - 16px);padding:10px 12px;border:1px solid #8190a5;border-radius:5px;background:var(--ratio-bg,#222c3b);color:var(--ratio-text,#f3f6fa);box-shadow:0 3px 12px #0006;font:12px/1.4 var(--app-font-family,Arial,sans-serif);text-align:left}
 .ct-ratios-column-menu>strong{display:block;margin-bottom:5px}
