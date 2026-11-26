@@ -290,24 +290,41 @@ async (page, group) => {
 
     for (const width of [1024, 1440, 1920]) {
       await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const inMenu = await box('AL30').count() === 0;
+      if (inMenu) await ticket.getByRole('button', { name: 'Presets de cantidad' }).press('Enter');
       const bounds = await box('AL30').boundingBox();
       assert(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= 1000,
         `Checkbox within viewport at ${width}`);
       await box('AL30').focus(); await page.keyboard.press('Space'); await checked('AL30', false);
       await box('AL30').focus();
       await page.keyboard.press('Space'); await checked('AL30', true);
+      if (inMenu) await page.keyboard.press('Escape');
     }
-    pass('AC-08', 'Checkbox remains visible and keyboard-operable at 1024/1440/1920');
+    pass('AC-08', 'Checkbox remains keyboard-operable inline or in the menu at 1024/1440/1920');
   } else if (group === 'mini-layout') {
-    // Reproduce the native button dimensions and desktop flex layout without broker actions.
+    // Reproduce Matriz's existing rows and fixed form heights without broker actions.
     await page.addStyleTag({ content: `
       :where(#MiniOrderForm.ct-qa-mini-layout) {
         display:flex; align-items:center; gap:18px;
         min-height:56px; max-height:56px;
         --mini-form-button-width:76px; --mini-form-button-height:28px;
       }
-      :where(#MiniOrderForm.ct-qa-mini-layout.ExpandedForm) { min-height:125px; max-height:125px; }
-      :where(#MiniOrderForm.ct-qa-mini-layout > form) { flex:1 1 0; min-width:0; }
+      :where(#MiniOrderForm.ct-qa-mini-layout > form) {
+        flex:1 1 0; min-width:0; flex-direction:column; gap:8px;
+      }
+      :where(#MiniOrderForm.ct-qa-mini-layout form > div) {
+        display:flex; gap:12px; align-items:center; min-width:0;
+      }
+      :where(#MiniOrderForm.ct-qa-mini-layout form > div > div) {
+        flex:0 1 162px; min-width:72px; height:46px;
+      }
+      :where(#MiniOrderForm.ct-qa-mini-layout form input) { box-sizing:border-box; width:100%; }
+      :where(#MiniOrderForm.ct-qa-mini-layout.IsNotExpandedForm .MiniOrderForm_FormMiniOrdenPanel_row-bottom__div) { display:none; }
+      :where(#MiniOrderForm.ct-qa-mini-layout > .MiniOrderForm_checkBoxesBlock) { flex:none; margin-inline-end:8px; }
+      :where(#MiniOrderForm.ct-qa-mini-layout.DesktopExpanded > .MiniOrderForm_checkBoxesBlock) { min-height:62px; }
+      :where(#MiniOrderForm.ct-qa-column) { gap:4px; }
+      :where(#MiniOrderForm.ct-qa-column form > div > div) { height:38px; }
       :where(#MiniOrderForm.ct-qa-mini-layout > .MiniOrderForm_buttonsBlock) {
         display:flex; align-items:center; gap:8px; flex-shrink:0; width:280px;
       }
@@ -321,88 +338,293 @@ async (page, group) => {
       const form = document.getElementById('MiniOrderForm');
       form.classList.add('ct-qa-mini-layout');
       form.style.height = ''; form.style.left = '0'; form.style.right = '0';
+      const fields = form.querySelector('form');
+      fields.classList.add('MiniOrderForm_FormMiniOrdenPanel');
+      const top = document.createElement('div');
+      top.className = 'MiniOrderForm_FormMiniOrdenPanel_row-top__div';
+      const bottom = document.createElement('div');
+      bottom.className = 'MiniOrderForm_FormMiniOrdenPanel_row-bottom__div';
+      const [instrument, price, quantity, shown] = [...fields.children];
+      top.append(instrument, price, quantity);
+      bottom.append(shown);
+      for (const text of ['Cuenta', 'Monto', 'Tipo', 'Vencimiento', 'Fecha']) {
+        const field = document.createElement('div');
+        field.textContent = text;
+        (['Cuenta', 'Monto'].includes(text) ? top : bottom).append(field);
+      }
+      fields.append(top, bottom);
       const block = form.querySelector('.MiniOrderForm_buttonsBlock');
+      const declarations = document.createElement('div');
+      declarations.className = 'MiniOrderForm_checkBoxesBlock';
+      declarations.textContent = 'DDJJ';
+      block.before(declarations);
       block.querySelector(':scope > .ButtonLimpiar').classList.add('OrderButton');
       for (const [name, className] of [['Vender', 'ButtonVender'], ['Comprar', 'ButtonComprar']]) {
         const button = document.createElement('button');
-        button.type = 'button'; button.disabled = true; button.textContent = name;
+        button.type = 'button'; button.textContent = name;
         button.className = 'OrderButton ' + className; block.prepend(button);
       }
-      await chrome.storage.local.set({ InstrumentPresets: { AL30: [1000, 500, 100, 50, 30, 20, 10, 5]
+      await chrome.storage.local.set({ InstrumentPresets: { AL30: [1000, 500, 100, 50, 30, 20, 10, 5, 4, 3, 2, 1]
         .map(cantidad => ({ cantidad, mostrar: 0 })) } });
     });
     const ticket = page.locator('#MiniOrderForm');
     await label('Precio').focus();
     await ticket.getByRole('button', { name:'1k', exact:true }).waitFor();
-    equal(await ticket.locator('.ButtonPreset').count(), 8, 'Eight layout presets loaded');
+    equal(await ticket.locator('.ButtonPreset').count(), 12, 'Twelve layout presets loaded');
     const ticketValues = () => page.locator('#MiniOrderForm input:not([type="checkbox"])').evaluateAll(es => es.map(e => e.value));
     const initialValues = await ticketValues();
     const readLayout = () => ticket.evaluate(form => {
       const rect = e => { const r = e.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height, right:r.right, bottom:r.bottom }; };
       const native = [...form.querySelectorAll('.MiniOrderForm_buttonsBlock > button')].map(rect);
       const buttons = [...form.querySelectorAll('.ButtonPreset')];
-      const presets = buttons.map(rect);
-      return { form:rect(form), native, presets, checkbox:rect(form.querySelector('.instrument-autocomplete')),
-        shortcut:rect(form.querySelector('.preset-settings-button')),
-        rows:new Set(presets.map(r => Math.round(r.y))).size,
-        labelsFit:buttons.every(e => e.scrollWidth <= e.clientWidth + 1 && e.scrollHeight <= e.clientHeight + 1) };
+      const grid = form.querySelector('.preset-inline');
+      const menu = form.querySelector('.preset-panel:popover-open');
+      const trigger = form.querySelector('.preset-overflow');
+      const fields = [...form.querySelectorAll('form > div > div, .MiniOrderForm_checkBoxesBlock')]
+        .map(rect).filter(r => r.width && r.height);
+      const inline = grid ? [...grid.children].map(rect) : [];
+      const checkbox = grid?.querySelector('.instrument-autocomplete');
+      const shortcut = grid?.querySelector('.preset-settings-button');
+      return { form:rect(form), native, inline, fields, menu:menu && rect(menu), checkbox:checkbox && rect(checkbox),
+        shortcut:shortcut && rect(shortcut),
+        menuPresets:menu ? [...menu.querySelectorAll('.ButtonPreset')].map(rect) : [],
+        presets:grid ? [...grid.querySelectorAll('.ButtonPreset')].map(rect) : [],
+        trigger:trigger?.getClientRects().length ? rect(trigger) : null,
+        overflow:grid && (grid.scrollWidth > grid.clientWidth + 1 || grid.scrollHeight > grid.clientHeight + 1),
+        clippedLabels:buttons.filter(e => e.getClientRects().length &&
+          e.firstElementChild.scrollWidth > e.firstElementChild.clientWidth + 1).map(e => e.textContent) };
     });
-    const assertControlsFit = (layout, context) => {
-      assert(layout.native.every(r => Math.abs(r.y - layout.presets[0].y) < 1), `Native/preset row alignment ${context}`);
-      assert(layout.checkbox.y >= layout.native[0].bottom + 3, `Autocomplete below native buttons ${context}`);
-      assert(Math.abs(layout.checkbox.x - layout.native[0].x) < 1 && layout.checkbox.right <= layout.native[2].right + 1,
-        `Autocomplete aligned within the action group ${context}`);
-      assert(layout.shortcut.x >= layout.checkbox.right && layout.shortcut.right <= layout.native[2].right + 1,
-        `Preset settings shortcut next to autocomplete ${context}`);
-      assert([...layout.native, ...layout.presets, layout.checkbox, layout.shortcut].every(r =>
+    const assertControlsFit = (layout, mode) => {
+      const context = mode.name + ' at ' + mode.width;
+      const [buy, sell, clear] = layout.native;
+      equal(layout.form.height, mode.height, `Matriz form keeps its native height ${context}`);
+      assert(clear.right < buy.x && buy.right < sell.x && Math.abs(layout.form.right - sell.right - 8) < 1,
+        `Buy and sell at the far right ${context}`);
+      assert(layout.inline.every(control => control.right <= clear.x &&
+        layout.fields.every(r => r.right <= control.x || r.x >= control.right || r.bottom <= control.y || r.y >= control.bottom)),
+        `Presets stay left of the actions and clear of the fields ${context}`);
+      assert([...layout.native, ...layout.inline].every(r =>
         r.x >= layout.form.x && r.right <= layout.form.right + 1 && r.y >= layout.form.y && r.bottom <= layout.form.bottom + 1),
         `Controls fit without clipping ${context}`);
-      assert(layout.labelsFit, `Preset labels fit without truncation ${context}`);
-    };
-    for (const expanded of [true, false]) {
-      for (const width of [1920, 1440, 1280, 1024]) {
-        await page.setViewportSize({ width, height:1000 });
-        await ticket.evaluate((form, expanded) => {
-          form.classList.toggle('ExpandedForm', expanded);
-          form.classList.toggle('IsNotExpandedForm', !expanded);
-        }, expanded);
-        const layout = await readLayout();
-        const context = `${expanded ? 'expanded' : 'collapsed'} at ${width}`;
-        assertControlsFit(layout, context);
-        if (width === 1920) equal(layout.rows, 1, `Presets use one row ${context}`);
-        if (width <= 1440) equal(layout.rows, 2, `Presets wrap into two rows ${context}`);
-        for (let i = 1; i < layout.presets.length; i++) {
-          const before = layout.presets[i - 1], current = layout.presets[i];
-          if (Math.abs(before.y - current.y) < 1) assert(Math.abs(current.x - before.right - 8) < 1, `Consistent horizontal spacing ${context}`);
-        }
-        equal(await ticketValues(), initialValues, `Layout preserves ticket values ${context}`);
+      if (layout.checkbox) {
+        assert(layout.shortcut.x >= layout.checkbox.right && layout.shortcut.right <= clear.x,
+          `Settings shortcut fits next to Autocomplete ${context}`);
       }
+      assert(!layout.overflow, `Preset grid does not need a scrollbar ${context}`);
+      equal(layout.clippedLabels, [], `Preset labels fit without truncation ${context}`);
+    };
+    const modes = [
+      { name:'DesktopUltrawideExpanded', width:2048, height:125 },
+      { name:'DesktopLargeExpanded', width:1600, height:125 },
+      { name:'DesktopExpanded', width:1440, height:125 },
+      { name:'DesktopUltrawideCollapsed', width:1920, height:56 },
+      { name:'NotebookCollapsed', width:1024, height:56, sidePanels:true },
+      { name:'NotebookExpanded', width:1024, height:140, column:true },
+      { name:'TabletExpanded', width:768, height:160, column:true },
+      { name:'TabletCollapsed', width:768, height:100, column:true },
+    ];
+    const setMode = async mode => {
+      const { width } = mode;
+      await page.setViewportSize({ width, height:1000 });
+      await ticket.evaluate((form, {name,height,column,sidePanels}) => {
+        form.className = ['ct-qa-mini-layout', name.endsWith('Expanded') ? 'ExpandedForm' : 'IsNotExpandedForm', name].join(' ');
+        form.classList.toggle('ct-qa-column', !!column);
+        Object.assign(form.style, {
+          flexDirection:column ? 'column' : 'row',
+          minHeight:`${height}px`, maxHeight:`${height}px`,
+          left:sidePanels ? '40px' : '0', right:sidePanels ? '180px' : '0',
+        });
+      }, mode);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    };
+    const nativePositions = [];
+    let hasPartialOverflow = false;
+    for (const mode of modes) {
+      await setMode(mode);
+      const layout = await readLayout();
+      assertControlsFit(layout, mode);
+      nativePositions.push(layout.native);
+      for (let i = 1; i < layout.presets.length; i++) {
+        const prior = layout.presets[i - 1], preset = layout.presets[i];
+        if (Math.abs(prior.y - preset.y) < 1) assert(Math.abs(preset.x - prior.right - 8) < 1, 'Consistent horizontal spacing');
+      }
+      equal(await ticketValues(), initialValues, 'Layout preserves ticket values');
+      if (mode.width === 2048) {
+        equal(layout.presets.length, 12, 'All 12 presets fit on ultrawide desktop');
+        assert(new Set(layout.presets.map(preset => preset.y)).size >= 2, 'Presets wrap to the next row');
+      }
+      if (mode.width === 2048 || mode.width === 1920) {
+        assert(layout.checkbox && layout.presets.length > 0 && layout.presets.every(preset => preset.y >= layout.checkbox.bottom),
+          'Autocomplete sits alone above the presets when they cannot share a single row');
+      }
+      if (layout.trigger && layout.presets.length > 0) hasPartialOverflow = true;
     }
-    pass('SM-11', 'Native/preset alignment, autocomplete below actions, one/two preset rows, spacing and no clipping at 1024/1280/1440/1920 expanded/collapsed');
+    assert(hasPartialOverflow, 'Medium layouts keep the presets that fit, with the remaining presets in the menu');
+    pass('SM-11', 'Presets wrap to the left of the actions without a scrollbar or any change to native form heights');
+    await setMode(modes[0]);
+    const slot = ticket.locator('.preset-slot');
+    await slot.evaluate(el => { el.style.inlineSize = '76px'; });
+    const narrowTrigger = ticket.getByRole('button', {name:'Presets de cantidad'});
+    await narrowTrigger.waitFor();
+    equal(await ticket.locator('.preset-inline .ButtonPreset').count(), 2,
+      'A single column can still use its available rows for presets');
+    await narrowTrigger.click();
+    const narrowMenu = ticket.locator('.preset-panel:popover-open');
+    await narrowMenu.getByRole('button', { name:'Configurar cantidades rápidas de AL30' }).click();
+    await narrowMenu.waitFor({state:'hidden'});
+    await page.getByRole('heading', {name:'AL30', exact:true}).waitFor();
+    await b('Volver a Matriz').click();
+    assert(await narrowTrigger.evaluate(el => document.activeElement === el), 'Closing settings restores focus to the menu trigger');
+    equal(await ticketValues(), initialValues, 'Opening settings from the menu preserves ticket values');
+    await narrowTrigger.click();
+    await narrowMenu.waitFor();
+    await narrowMenu.getByRole('button', { name:'100', exact:true }).focus();
+    await slot.evaluate(el => { el.style.inlineSize = ''; });
+    await ticket.locator('.preset-panel:popover-open').waitFor({state:'detached'});
+    equal(await ticket.locator('.preset-inline .ButtonPreset').count(), 12,
+      'Resizing moves every preset inline and closes the menu');
+    equal(await ticket.locator('.preset-inline .ButtonPreset:focus').textContent(), '100',
+      'A preset that moves out of the menu retains keyboard focus');
+    await slot.evaluate(el => { el.style.inlineSize = '76px'; });
+    await narrowTrigger.waitFor();
+    assert(await narrowTrigger.evaluate(el => document.activeElement === el),
+      'A preset that moves into the closed menu hands focus to its trigger');
+    await narrowTrigger.click();
+    await narrowMenu.getByRole('button', { name:'Configurar cantidades rápidas de AL30' }).click();
+    await page.getByRole('heading', {name:'AL30', exact:true}).waitFor();
+    await slot.evaluate(el => { el.style.inlineSize = ''; });
+    const inlineShortcut = ticket.locator('.preset-inline .preset-settings-button');
+    await inlineShortcut.waitFor();
+    await b('Volver a Matriz').click();
+    assert(await inlineShortcut.evaluate(el => document.activeElement === el), 'Closing settings focuses the current shortcut after reflow');
+    await page.evaluate(() => {
+      const save = chrome.storage.local.set;
+      chrome.storage.local.set = values => {
+        if (!('AutocompleteInstrument:AL30' in values)) return save(values);
+        return new Promise((_, reject) => {
+          window.ctRejectAutocompleteSave = () => {
+            chrome.storage.local.set = save;
+            reject(Error('Simulated delayed storage failure'));
+          };
+        });
+      };
+    });
+    const autocomplete = ticket.getByRole('checkbox', { name:'Autocompletar para AL30' });
+    await autocomplete.click();
+    await page.waitForFunction(() => typeof window.ctRejectAutocompleteSave === 'function');
+    await slot.evaluate(el => { el.style.inlineSize = '76px'; });
+    await narrowTrigger.click();
+    const menuCheckbox = narrowMenu.getByRole('checkbox', { name:'Autocompletar para AL30' });
+    assert(await menuCheckbox.isDisabled(), 'A pending save stays disabled when the checkbox moves to the menu');
+    await page.evaluate(() => window.ctRejectAutocompleteSave());
+    await narrowMenu.getByRole('alert').waitFor();
+    await slot.evaluate(el => { el.style.inlineSize = ''; });
+    await inlineShortcut.waitFor();
+    await ticket.locator('.preset-inline').getByRole('alert').waitFor();
+    await autocomplete.check();
+    await ticket.locator('.preset-inline').getByRole('alert').waitFor({state:'hidden'});
+    await autocomplete.uncheck();
+    pass('SM-11-autocomplete', 'A pending save and its error follow Autocomplete between the inline grid and menu');
+    await ticket.locator('.ButtonComprar').focus();
+    for (const className of ['ButtonVender', 'ButtonLimpiar']) {
+      await page.keyboard.press('Tab');
+      assert(await ticket.locator('button:focus').evaluate((el, cls) => el.classList.contains(cls), className),
+        'Expanded form keeps the native action tab sequence');
+    }
+    await page.keyboard.press('Tab');
+    equal(await ticket.locator('input[type="checkbox"]:focus').count(), 1, 'Tab reaches Autocomplete');
+    await page.keyboard.press('Tab');
+    equal(await ticket.locator('.preset-settings-button:focus').count(), 1, 'Tab reaches preset settings');
+    await page.keyboard.press('Tab');
+    equal(await ticket.locator('.ButtonPreset:focus').textContent(), '1k', 'Tab reaches the first preset');
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: { GD30: [{cantidad:400, mostrar:0}] } }));
+    await label('Instrumento').fill('GD30 (CI)'); await label('Precio').focus();
+    await ticket.getByRole('button', { name:'400', exact:true }).waitFor();
+    const singleRow = await readLayout();
+    assert(singleRow.checkbox && singleRow.checkbox.bottom > singleRow.presets[0].y && singleRow.checkbox.right <= singleRow.presets[0].x,
+      'Autocomplete shares the row when the controls all fit');
     await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: undefined }));
     await label('Instrumento').fill('AO20 (CI)'); await label('Precio').focus();
     await ticket.getByRole('button', { name:'300k/100k', exact:true }).waitFor();
     equal(await ticket.locator('.ButtonPreset').count(), 10, 'Ten default AO2 presets loaded');
-    for (const expanded of [true, false]) {
-      for (const width of [1920, 1440, 1280, 1024]) {
-        await page.setViewportSize({ width, height:1000 });
-        await ticket.evaluate((form, expanded) => {
-          form.classList.toggle('ExpandedForm', expanded); form.classList.toggle('IsNotExpandedForm', !expanded);
-        }, expanded);
-        assertControlsFit(await readLayout(), `AO2 ${expanded ? 'expanded' : 'collapsed'} at ${width}`);
-      }
+    for (const [i, mode] of modes.entries()) {
+      await setMode(mode);
+      const layout = await readLayout();
+      assertControlsFit(layout, mode);
+      equal(layout.native, nativePositions[i], 'Changing instrument and preset count preserves action coordinates');
     }
-    pass('SM-11-labels', 'Ten default AO2 presets including quantity/display labels remain legible and inside the form');
-    for (const [mode, width, height] of [['NotebookExpanded', 1024, 140], ['TabletExpanded', 768, 160]]) {
-      await page.setViewportSize({ width, height:1000 });
-      await ticket.evaluate((form, {mode, height}) => {
-        form.classList.remove('IsNotExpandedForm', 'NotebookExpanded', 'TabletExpanded');
-        form.classList.add('ExpandedForm', mode);
-        form.style.flexDirection = 'column'; form.style.minHeight = `${height}px`; form.style.maxHeight = `${height}px`;
-      }, {mode, height});
-      assertControlsFit(await readLayout(), mode);
+    pass('SM-11-labels', 'Ten default AO2 presets remain legible, with action coordinates unchanged');
+    await setMode(modes.find(mode => mode.sidePanels));
+    const overflowButton = ticket.getByRole('button', {name:'Presets de cantidad'});
+    await overflowButton.waitFor();
+    equal(await overflowButton.getAttribute('aria-expanded'), 'false', 'Compact menu starts collapsed');
+    await ticket.locator('.ButtonComprar').focus();
+    for (const className of ['ButtonVender', 'ButtonLimpiar']) {
+      await page.keyboard.press('Tab');
+      equal(await ticket.locator('button:focus').evaluate((el, cls) => el.classList.contains(cls), className), true,
+        'Compact form keeps native actions together in the tab sequence');
     }
-    pass('SM-11-column', 'Notebook/tablet column containers preserve native/preset alignment, checkbox placement and long labels');
+    await page.keyboard.press('Tab');
+    equal(await ticket.locator('.preset-inline .ButtonPreset:focus').textContent(), '300k/100k',
+      'Tab reaches the preset in the first available row');
+    await page.keyboard.press('Tab');
+    assert(await overflowButton.evaluate(el => document.activeElement === el), 'Tab reaches the compact preset menu');
+    await page.keyboard.press('Enter');
+    await ticket.locator('.preset-panel:popover-open').waitFor();
+    const opened = await readLayout();
+    assert(opened.menuPresets.every(preset => preset.x >= opened.menu.x && preset.right <= opened.menu.right),
+      'Menu wraps its presets without horizontal scrolling');
+    assert(Math.abs(opened.menu.bottom - opened.form.y) < 1, 'Preset menu is anchored above the form');
+    equal(opened.form.height, 56, 'Opening the preset menu preserves the native form height');
+    await page.keyboard.press('Escape');
+    await ticket.locator('.preset-panel:popover-open').waitFor({state:'hidden'});
+    await page.waitForFunction(() => document.querySelector('.preset-overflow').getAttribute('aria-expanded') === 'false');
+    await overflowButton.click();
+    await ticket.getByRole('button', { name:'100k/50k', exact:true }).click();
+    await ticket.locator('.preset-panel:popover-open').waitFor({state:'hidden'});
+    equal(await label('Cantidad').inputValue(), '100000', 'Choosing a preset closes the menu and fills the ticket');
+    pass('SM-11-column', 'Compact and column layouts keep the native action row with a keyboard-accessible menu in tight space');
+
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: { LONG: Array.from({ length: 360 },
+      (_, index) => ({ cantidad: index + 1, mostrar: 0 })) } }));
+    await label('Instrumento').fill('LONG (CI)'); await label('Precio').focus();
+    await overflowButton.click();
+    const longMenu = ticket.locator('.preset-panel:popover-open');
+    const lastPreset = longMenu.getByRole('button', { name: '360', exact: true });
+    await lastPreset.scrollIntoViewIfNeeded();
+    assert(await longMenu.evaluate(el => el.scrollTop > 0 && el.scrollWidth <= el.clientWidth + 1),
+      'Long preset lists can scroll vertically within the overflow menu');
+    await lastPreset.click();
+    equal(await label('Cantidad').inputValue(), '360', 'Last preset remains reachable in a long list');
+    assertControlsFit(await readLayout(), modes.find(mode => mode.sidePanels));
+    pass('SM-11-menu', 'Long preset lists stay reachable from the menu without scrolling the ticket');
+
+    await setMode(modes[0]);
+    await page.evaluate(() => chrome.storage.local.set({ InstrumentPresets: { CUSTOM: [
+      { cantidad: 1234567, mostrar: 1012345 }, { cantidad: 500, mostrar: 0 }, { cantidad: 1234567, mostrar: 1023456 },
+    ] } }));
+    await label('Instrumento').fill('CUSTOM (CI)'); await label('Precio').focus();
+    const inline = ticket.locator('.preset-inline');
+    await inline.getByRole('button', {name:'500', exact:true}).waitFor();
+    equal(await inline.locator('.ButtonPreset').allTextContents(), ['500'], 'Only presets with room for the full label are inline');
+    await overflowButton.click();
+    equal(await longMenu.locator('.ButtonPreset').allTextContents(), ['1.234567m/1.012345m', '1.234567m/1.023456m'],
+      'The menu displays both quantities in full and preserves their order');
+    equal((await readLayout()).clippedLabels, [], 'Long labels remain fully legible');
+    await longMenu.getByRole('button', {name:'1.234567m/1.023456m', exact:true}).click();
+    equal(await label('Cantidad').inputValue(), '1234567', 'The chosen preset fills its total');
+    equal(await label('Cantidad a mostrar').inputValue(), '1023456', 'The chosen preset fills its exact displayed quantity');
+    pass('SM-11-long-labels', 'Different quantities with long labels remain distinguishable and apply exactly');
+
+    await label('Instrumento').fill(''); await label('Precio').focus();
+    await page.waitForFunction(() => !document.querySelector('#MiniOrderForm .ButtonPreset'));
+    for (const [i, mode] of modes.entries()) {
+      await setMode(mode);
+      const layout = await readLayout();
+      assertControlsFit(layout, mode);
+      equal(layout.native, nativePositions[i], 'Hiding presets preserves action coordinates');
+    }
+    pass('SM-11-empty', 'Empty ticket preserves the coordinates of the action buttons');
   } else if (group === 'quotes') {
     await open();
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.ask = undefined; c.md.asz = undefined; c.md.lst = 9; c.md.seq++; });

@@ -6,7 +6,12 @@ async page => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const label = name => page.getByLabel(name, { exact: true });
   const button = name => page.getByRole('button', { name, exact: true });
-  const click = async locator => { await page.screenshot({ animations: 'disabled', timeout: 10000 }); await locator.click({ force: true }); };
+  const finishAnimations = () => page.evaluate(() => {
+    for (const animation of document.getAnimations()) {
+      if (animation.playbackRate && Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    }
+  });
+  const click = async locator => { await finishAnimations(); await locator.click({ force: true }); };
   const wait = async (fn, arg = null) => page.waitForFunction(fn, arg, { polling: 100, timeout: 10000 });
   const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => [1, 2].includes(v?.schema) && Array.isArray(v.operations)));
   async function choose(name, value) {
@@ -77,7 +82,7 @@ async page => {
   assert(bounds.table < 1000 && bounds.row < 48, 'Compact content-sized columns and rows');
   assert(Math.abs(bounds.a - bounds.add) < 2 && Math.abs(bounds.a - bounds.defaults) < 2, 'Inputs and actions share one row');
   for (const width of [1024, 420, 1440]) {
-    await page.setViewportSize({ width, height: 1000 }); await page.screenshot({ animations: 'disabled', timeout: 10000 });
+    await page.setViewportSize({ width, height: 1000 }); await finishAnimations();
     const layout = await page.evaluate(() => {
       const panel = document.querySelector('.ct-ratio-ops').getBoundingClientRect();
       const controlsFit = [...document.querySelectorAll('.ro-monitor-controls input,.ro-monitor-controls button')].every(e => {
@@ -199,7 +204,7 @@ async page => {
   assert((await orderBook.locator('tbody tr').first().innerText()).includes('120,00'), 'Best-level volume');
   assert((await orderBook.locator('tbody tr').nth(4).innerText()).includes('2.004,00'), 'Fifth-level native volume');
   for (const width of [1440, 1024, 420, 1440]) {
-    await page.setViewportSize({ width, height: 1000 }); await page.screenshot({ animations: 'disabled', timeout: 10000 });
+    await page.setViewportSize({ width, height: 1000 }); await finishAnimations();
     const fits = await page.evaluate(() => [...document.querySelectorAll('.ro-leg')].every(leg => {
       const instrument = leg.querySelector('.ct-ratio-picker input').getBoundingClientRect(), price = leg.querySelector('[aria-label^="Precio de entrada"]').getBoundingClientRect(), quantity = leg.querySelector('[aria-label^="Cantidad"]').getBoundingClientRect();
       const book = leg.querySelector('.ro-book-table').getBoundingClientRect(), bounds = leg.getBoundingClientRect();
@@ -430,7 +435,8 @@ async page => {
   await page.setViewportSize({width:1440,height:1400});
   await page.waitForFunction(()=>document.querySelector('.ro-monitor-table th[aria-sort=ascending] button')?.textContent.includes('Par A/B'));
   const sortedMonitor = await rowIds('.ro-monitor-table'), expectedMonitor = [...sortedMonitor.slice(1), sortedMonitor[0]];
-  await page.locator('.ro-monitor-table tbody tr').first().locator('.ro-row-handle').dragTo(page.locator('.ro-monitor-table tbody tr').last().locator('td').first());
+  await page.locator('.ro-monitor-table tbody tr').first().locator('.ro-row-handle').dragTo(
+    page.locator('.ro-monitor-table tbody tr').last().locator('td').first(), { timeout: 12000 });
   await page.waitForFunction(id => document.querySelector('.ro-monitor-table tbody tr')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', expectedMonitor[0], {polling:100,timeout:10000});
   assert(JSON.stringify((await book()).watch.map(p => p.id)) === JSON.stringify(expectedMonitor), 'Real drag converts the visible sorted order to saved manual order');
   assert(await button('Ordenar por Par A/B').locator('..').getAttribute('aria-sort') === 'none', 'Drag switches back to manual mode');
@@ -457,7 +463,8 @@ async page => {
   assert((await rowIds('.ro-operations-table'))[0] === mixedOperation.id, 'P&L sorting uses only the selected currency, placing other currencies last');
   assert((await button('Ordenar por Neto total').getAttribute('title')).includes('USD'), 'Money sort describes its currency');
   const sortedOperations = await rowIds('.ro-operations-table'), expectedOperations = [...sortedOperations.slice(1), sortedOperations[0]];
-  await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').dragTo(page.locator('.ro-operations-table tbody tr').last().locator('td').first());
+  await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').dragTo(
+    page.locator('.ro-operations-table tbody tr').last().locator('td').first(), { timeout: 12000 });
   await page.waitForFunction(id => document.querySelector('.ro-operations-table tbody tr')?.dataset.rowId === id && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false', expectedOperations[0], {polling:100,timeout:10000});
   assert(JSON.stringify((await book()).operations.map(o => o.id)) === JSON.stringify(expectedOperations), 'Operation drag saves the projected order');
   const closedId = mixedOperation.id, closedIndex = expectedOperations.indexOf(closedId);
@@ -470,16 +477,15 @@ async page => {
   checks.push('Operation ordering separates currencies, supports drag and keyboard, and preserves hidden records and accounting');
   await page.locator('.ro-operations-table tbody tr').first().locator('.ro-pair-chips').click({force:true});
   assert(await page.locator('.ro-operations-table tr.ro-selected').count() === 1 && await page.locator('.ro-detail').count() === 1, 'Clicking a row selects it and opens its detail');
-  for (const theme of ['dark','light']) {
-    await page.locator('.ct-free-settings-panel').evaluate((e,t)=>e.dataset.colorScheme=t,theme);
-    const styles = await page.evaluate(()=>{const table=document.querySelector('.ro-operations-table'),header=getComputedStyle(table.querySelector('th')),even=getComputedStyle(table.querySelector('tbody tr:nth-child(2)')),selected=getComputedStyle(table.querySelector('tr.ro-selected'));return{head:header.backgroundColor,weight:header.fontWeight,sticky:header.position,even:even.backgroundColor,selected:selected.backgroundColor};});
-    assert(styles.head !== 'rgba(0, 0, 0, 0)' && styles.weight === '700' && styles.sticky === 'sticky' && styles.even !== styles.head && styles.selected !== styles.head, 'Styled headers, stripes and selected row remain distinct in '+theme);
-  }
+  const theme = await page.evaluate(() => document.documentElement.dataset.theme === 'dma_day' ? 'light' : 'dark');
+  await page.locator(`.ct-free-settings-panel[data-color-scheme="${theme}"]`).waitFor();
+  const styles = await page.evaluate(()=>{const table=document.querySelector('.ro-operations-table'),header=getComputedStyle(table.querySelector('th')),even=getComputedStyle(table.querySelector('tbody tr:nth-child(2)')),selected=getComputedStyle(table.querySelector('tr.ro-selected'));return{head:header.backgroundColor,weight:header.fontWeight,sticky:header.position,even:even.backgroundColor,selected:selected.backgroundColor};});
+  assert(styles.head !== 'rgba(0, 0, 0, 0)' && styles.weight === '700' && styles.sticky === 'sticky' && styles.even !== styles.head && styles.selected !== styles.head, 'Styled headers, stripes and selected row remain distinct in '+theme);
   await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'})); await click(button('Ratios'));
   await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false');
   await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/})); await click(button('Todas'));
   assert(JSON.stringify(await rowIds('.ro-operations-table')) === JSON.stringify((await book()).operations.map(o=>o.id)), 'Manual operation order survives reload');
-  checks.push('Distinct dark/light headers and selected rows retain operation detail and manual order after reload');
+  checks.push('Distinct headers and selected rows retain operation detail and manual order after reload in ' + theme);
   await page.evaluate(()=>{
     const original=chrome.storage.local.set; window.__gridOriginalSet=original;
     chrome.storage.local.set=async values=>{if(Object.keys(values).some(k=>k.startsWith('RatioOperationsV1:')))await new Promise(resolve=>window.__gridReleaseSave=resolve);return original.call(chrome.storage.local,values);};
@@ -499,7 +505,7 @@ async page => {
   const staleRows=await rowIds('.ro-operations-table'),transfer=await page.evaluateHandle(()=>new DataTransfer());
   await page.locator('.ro-operations-table tbody tr').first().locator('.ro-row-handle').dispatchEvent('dragstart',{dataTransfer:transfer});
   await page.evaluate(async()=>{const values=await chrome.storage.local.get(null);for(const [key,value] of Object.entries(values))if(key.startsWith('RatioOperationsV1:'))await chrome.storage.local.set({[key]:{...value,revision:crypto.randomUUID()}});});
-  await page.screenshot({animations:'disabled',timeout:10000});
+  await finishAnimations();
   const beforeRejected=(await book()).operations.map(o=>o.id);
   await page.locator('.ro-operations-table tbody tr').last().dispatchEvent('drop',{dataTransfer:transfer});
   await wait(()=>document.querySelector('.ro-issue')?.textContent.includes('grilla cambió'));

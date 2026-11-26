@@ -10,13 +10,13 @@
 - Comandos automáticos y resultados:
 - Método de interacción: puntero / teclado / eventos DOM:
 
-Casos de [la guía](../manual-regression.md). Desglosar en una fila por caso;
-usar PASS, FAIL, BLOCKED o NOT RUN y distinguir fixture de Matriz.
+Usar una fila por caso y tema. Registrar PASS, FAIL, BLOCKED o NOT RUN y
+distinguir el fixture de Matriz. [Guía de casos](../manual-regression.md)
 
-| Caso | Entorno | Estado | Observado / evidencia revisada | Pendiente o defecto |
-| --- | --- | --- | --- | --- |
-| SM-01 a SM-10 (desglosar) | | NOT RUN | | |
-| RG-01 a RG-10 (desglosar) | | NOT RUN | | |
+| Caso | Entorno | Tema | Estado | Observado / evidencia revisada | Pendiente o defecto |
+| --- | --- | --- | --- | --- | --- |
+| SM-01 a SM-10 (desglosar) | | Claro / oscuro | NOT RUN | | |
+| RG-01 a RG-10 (desglosar) | | Claro / oscuro | NOT RUN | | |
 
 ## Cierre
 

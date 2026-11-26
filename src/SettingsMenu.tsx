@@ -23,7 +23,7 @@ function bounds() {
   };
 }
 
-export type PresetSettingsRequest = PresetEditorRequest & { trigger: HTMLButtonElement };
+export type PresetSettingsRequest = PresetEditorRequest & { returnFocus: () => HTMLElement | null };
 
 export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettingsRequest }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -31,19 +31,19 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
   const [visited, setVisited] = useState(false);
   const [position, setPosition] = useState(bounds);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
+  const returnFocus = useRef<PresetSettingsRequest["returnFocus"] | null>(null);
   const panel = useRef<HTMLElement>(null);
   const [colorScheme, setColorScheme] = useState("dark");
 
-  function openPanel(trigger: HTMLElement) {
-    returnFocus.current = trigger;
+  function openPanel(resolveTrigger: PresetSettingsRequest["returnFocus"]) {
+    returnFocus.current = resolveTrigger;
     setPosition(bounds());
     setVisited(true);
     setOpen(true);
   }
 
   useEffect(() => {
-    if (presetRequest) openPanel(presetRequest.trigger);
+    if (presetRequest) openPanel(presetRequest.returnFocus);
   }, [presetRequest]);
 
   useEffect(() => {
@@ -131,7 +131,7 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
 
   function close() {
     setOpen(false);
-    const trigger = returnFocus.current;
+    const trigger = returnFocus.current?.();
     (trigger?.isConnected ? trigger : slot?.querySelector<HTMLAnchorElement>("a"))?.focus();
   }
 
@@ -140,7 +140,11 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
       <a className={`Item ct-free-settings-item${open ? " selected" : ""}`} href="#"
         aria-label="Configuración (ChuchoTriz)" title="Configuración · ChuchoTriz"
         aria-controls="ct-free-settings-panel" aria-expanded={open} aria-current={open ? "page" : undefined}
-        onClick={event => { event.preventDefault(); openPanel(event.currentTarget); }}>
+        onClick={event => {
+          event.preventDefault();
+          const trigger = event.currentTarget;
+          openPanel(() => trigger);
+        }}>
         <img src={chuchotrizIcon} width="20" height="20" alt="" />
       </a>, slot)}
     {visited && <section ref={panel} id="ct-free-settings-panel" className="ct-free-settings-panel" style={position}

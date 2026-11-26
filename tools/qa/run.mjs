@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { StdioClient, toolJSON } from './mcp-stdio.mjs';
+import { testPlan } from './test-plan.mjs';
+import { fixtureTheme } from './themes.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const mode = process.argv.includes('--smoke') ? 'smoke' : 'regression';
@@ -15,10 +17,37 @@ const report = { mode, startedAt: new Date().toISOString(), commit: execFileSync
   dirty: !!execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim(),
   version: JSON.parse(readFileSync(join(root, 'manifest.json'))).version, cases: [], manual: 'See docs/manual-regression.md: installed Matriz, live freshness and human visual review.' };
 const lock = join(tmpdir(), 'chuchotriz-free-qa.lock');
-let lockFd, client, server, fixture;
-const groups = ['opening', 'presets', 'autocomplete', 'mini-layout', 'quotes', 'columns', 'tooltip', 'preload', 'position', 'operations', 'analysis'];
-if (mode === 'regression') groups.push('oracle', 'editing', 'accounting', 'scope', 'roll', 'limits', 'reader-errors', 'layout');
-const call = async code => toolJSON(await client.request('tools/call', { name: 'browser_run_code_unsafe', arguments: { code } }, 180000));
+let lockFd, client;
+const servers = new Map();
+const call = async (code, timeout) => toolJSON(await client.request('tools/call', { name: 'browser_run_code_unsafe', arguments: { code } }, timeout));
+
+function fixtureUrl(kind, theme) {
+  const key = `${theme}/${kind}`;
+  if (servers.has(key)) return servers.get(key).ready;
+  const runner = kind === 'ratios' ? 'ratios-fixture.mjs' : 'preview-free.mjs';
+  const processArgs = [join(root, 'tools', runner)];
+  const child = spawn(process.execPath, processArgs, { cwd: root, env: {
+    ...process.env, CHUCHOTRIZ_PREVIEW_PORT: '0', CHUCHOTRIZ_PREVIEW_THEME: theme,
+  }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const ready = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error(`Fixture startup timed out: ${key}`)), 10000);
+    let stdout = '', stderr = '';
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-2000); });
+    child.on('error', error => { clearTimeout(timer); reject(error); });
+    child.once('exit', code => { clearTimeout(timer); reject(Error(`Fixture ${key} exited (${code}): ${stderr}`)); });
+    child.stdout.on('data', chunk => {
+      stdout += chunk;
+      const match = stdout.match(/(?:Local preview|Ratios fixture): (http:\/\/127\.0\.0\.1:\d+)/);
+      if (match) {
+        clearTimeout(timer);
+        resolve(match[1] + (kind === 'ratios' ? '/fixture' : '/fixture?scenario=regression'));
+      }
+    });
+  });
+  servers.set(key, { child, ready });
+  return ready;
+}
+
 function save() {
   report.finishedAt = new Date().toISOString();
   report.passed = report.cases.filter(c => c.status === 'PASS').length;
@@ -26,9 +55,14 @@ function save() {
   const escape = s => String(s ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
   report.complete = !report.selectedGroup && report.failed === 0 && report.completedSuites?.length === report.expectedSuites?.length;
   writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
-  writeFileSync(join(output, 'report.md'), `# ChuchoTriz ${report.version} — ${mode}${report.selectedGroup ? ' (PARTIAL: ' + report.selectedGroup + ')' : ''}\n\nCommit: ${report.commit}${report.dirty ? ' (working tree modified)' : ''}\n\n${report.passed} PASS / ${report.failed} FAIL. ${report.complete ? 'All suites in this mode completed.' : 'Incomplete or deliberately partial run.'} Synthetic data only; not broker validation.\n\nExpected suites: ${(report.expectedSuites ?? []).join(', ')}.\nCompleted: ${(report.completedSuites ?? []).join(', ')}.\n\n| Case | Result | Detail |\n| --- | --- | --- |\n${report.cases.map(c => `| ${escape(c.id)} | ${c.status} | ${escape(c.detail)} |`).join('\n')}\n\nManual: ${report.manual}\n`);
+  writeFileSync(join(output, 'report.md'), `# ChuchoTriz ${report.version} — ${mode}${report.selectedGroup ? ' (PARTIAL: ' + report.selectedGroup + ')' : ''}\n\nCommit: ${report.commit}${report.dirty ? ' (working tree modified)' : ''}\n\n${report.passed} PASS / ${report.failed} FAIL. ${report.complete ? 'All suites in this mode completed in both themes.' : 'Incomplete or deliberately partial run.'} Synthetic data only.\n\nExpected suites: ${(report.expectedSuites ?? []).join(', ')}.\nCompleted: ${(report.completedSuites ?? []).join(', ')}.\n\n| Theme | Group | Case | Result | Detail |\n| --- | --- | --- | --- | --- |\n${report.cases.map(c => `| ${escape(c.theme)} | ${escape(c.group)} | ${escape(c.id)} | ${c.status} | ${escape(c.detail)} |`).join('\n')}\n\nManual: ${report.manual}\n`);
 }
 try {
+  const selected = process.argv.find(arg => arg.startsWith('--group='))?.slice(8);
+  const suites = testPlan(mode, selected);
+  report.expectedSuites = testPlan(mode).map(suite => suite.id);
+  report.completedSuites = [];
+  if (selected) report.selectedGroup = selected;
   if (process.platform !== 'win32' || !existsSync(launcher)) throw Error('Shared ChuchoTriz launcher unavailable. Set CHUCHOTRIZ_BROWSER_LAUNCHER to Start-Browser.ps1 on Windows. No isolated browser fallback.');
   try { lockFd = openSync(lock, 'wx'); writeFileSync(lockFd, String(process.pid)); }
   catch { throw Error(`Another QA run holds ${lock}. If interrupted, verify that its recorded PID is gone before removing the lock.`); }
@@ -38,78 +72,63 @@ try {
   client.notify('notifications/initialized');
   const tools = await client.request('tools/list', {});
   if (!tools.tools.some(t => t.name === 'browser_run_code_unsafe')) throw Error('The shared MCP server does not expose browser_run_code_unsafe. Update its configured launcher; no fallback browser will be opened.');
-  server = spawn(process.execPath, [join(root, 'tools/preview-free.mjs')], { cwd: root, env: { ...process.env, CHUCHOTRIZ_PREVIEW_PORT: '0' }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  fixture = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(Error('Fixture startup timed out')), 10000);
-    let data = '';
-    server.on('error', error => { clearTimeout(timer); reject(error); });
-    server.once('exit', () => { clearTimeout(timer); reject(Error('Fixture exited before startup')); });
-    server.stdout.on('data', chunk => { data += chunk; const match = data.match(/Local preview: (http:\/\/127\.0\.0\.1:\d+)/); if (match) { clearTimeout(timer); resolve(match[1] + '/fixture?scenario=regression'); } });
-    server.stderr.on('data', () => {});
-  });
-  await call(`async page => {
-    const testPage = await page.context().newPage();
-    testPage.qaBlockedOrigins = [];
-    await testPage.route('**/*', route => {
-      const origin = new URL(route.request().url()).origin;
-      if (origin === ${JSON.stringify(new URL(fixture).origin)}) return route.continue();
-      testPage.qaBlockedOrigins.push(origin); return route.abort();
-    });
-    await testPage.routeWebSocket('**/*', socket => {
-      testPage.qaBlockedOrigins.push(new URL(socket.url()).origin); socket.close();
-    });
-    await testPage.goto(${JSON.stringify(fixture)}); return { ready: true };
-  }`);
-  const source = readFileSync(join(root, 'tools/qa/browser-cases.js'), 'utf8');
-  let suites = mode === 'regression' ? ['baseline', ...groups] : groups;
-  report.expectedSuites = [...suites]; report.completedSuites = [];
-  const selected = process.argv.find(arg => arg.startsWith('--group='))?.slice(8);
-  if (selected) {
-    if (!suites.includes(selected)) throw Error(`Unknown group: ${selected}`);
-    report.selectedGroup = selected;
-    suites = [selected];
-  }
-  for (const group of suites) {
-    console.log(`QA ${group}...`);
-    const suite = group === 'baseline' ? readFileSync(join(root, 'tools/validate-options-simulator.playwright.js'), 'utf8') : source;
+  for (const { id, group, theme, fixture, file, expectedChecks, groupArgument, mcpTimeoutMs = 180000 } of suites) {
+    console.log(`QA ${id}...`);
     try {
+      const url = await fixtureUrl(fixture, theme);
+      const origin = new URL(url).origin;
+      const suite = readFileSync(join(root, 'tools', file), 'utf8').trim().replace(/;$/, '');
       const result = await call(`async currentPage => {
-        const page = currentPage.context().pages().find(p => p.url() === ${JSON.stringify(fixture)});
-        if (!page) throw Error('The owned fixture tab is no longer available.');
-        const session = await page.context().newCDPSession(page);
-        const viewport = page.viewportSize();
-        const errors = [];
-        const onError = error => errors.push(error.message);
-        page.on('pageerror', onError);
+        const page = await currentPage.context().newPage();
+        const errors = [], blocked = [], origin = ${JSON.stringify(origin)};
+        let session;
         try {
+          session = await page.context().newCDPSession(page);
+          page.on('pageerror', error => errors.push(error.message));
+          await page.route('**/*', route => {
+            const target = new URL(route.request().url()).origin;
+            if (target === origin) return route.continue();
+            blocked.push(target); return route.abort();
+          });
+          await page.routeWebSocket('**/*', socket => { blocked.push(new URL(socket.url()).origin); socket.close(); });
+          await page.addInitScript(ownedOrigin => {
+            if (location.origin !== ownedOrigin || sessionStorage.getItem('ct-qa-started')) return;
+            localStorage.clear(); sessionStorage.setItem('ct-qa-started', '1');
+          }, origin);
           await session.send('Emulation.setFocusEmulationEnabled', {enabled:true});
           await page.setViewportSize({width:1440,height:1000});
+          await page.emulateMedia({colorScheme:${JSON.stringify(theme)}});
           page.setDefaultTimeout(6000);
-          const result = await (${suite})(page, ${JSON.stringify(group)});
+          await page.goto(${JSON.stringify(url)}, {waitUntil:'domcontentloaded', timeout:15000});
+          await page.bringToFront();
+          const actual = await page.evaluate(() => ({
+            fixture: document.documentElement.dataset.theme,
+            scheme: getComputedStyle(document.documentElement).colorScheme,
+            media: matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
+          }));
+          if (actual.fixture !== ${JSON.stringify(fixtureTheme(theme).attribute)}
+            || actual.scheme !== ${JSON.stringify(theme)} || actual.media !== ${JSON.stringify(theme)}) {
+            throw Error('Unexpected fixture theme: ' + JSON.stringify(actual));
+          }
+          const result = await (${suite})(page, ${JSON.stringify(groupArgument) ?? 'undefined'});
           if (errors.length) throw Error('Uncaught page errors: ' + errors.join('; '));
-          if (page.qaBlockedOrigins.length) throw Error('Unexpected external requests were blocked: ' + page.qaBlockedOrigins.join(', '));
+          if (blocked.length) throw Error('Unexpected external requests were blocked: ' + blocked.join(', '));
           return result;
         } catch (error) {
-          if (page.url() === ${JSON.stringify(fixture)}) await page.screenshot({path:${JSON.stringify(join(output, group + '.png'))}}).catch(() => {});
+          if (new URL(page.url()).origin === origin) await page.screenshot({path:${JSON.stringify(join(output, `${theme}-${group}.png`))}, timeout:5000}).catch(() => {});
           throw error;
         } finally {
-          page.removeListener('pageerror', onError);
-          if (viewport) await page.setViewportSize(viewport);
-          else await session.send('Emulation.clearDeviceMetricsOverride');
-          await session.send('Emulation.setFocusEmulationEnabled', {enabled:false});
-          await session.detach();
+          if (session) await session.detach().catch(() => {});
+          await page.close();
         }
-      }`);
-      if (group === 'baseline') {
-        if (result.passed !== 34 || result.checks?.length !== 34) throw Error('Incomplete baseline result');
-        report.cases.push(...result.checks.map((detail, i) => ({ id: `BASE-${i + 1}`, status: 'PASS', detail })));
-      } else {
-        if (!result?.cases?.length || result.cases.some(c => !['PASS', 'FAIL'].includes(c.status))) throw Error('Incomplete case result');
-        report.cases.push(...result.cases);
-      }
-      report.completedSuites.push(group);
+      }`, mcpTimeoutMs);
+      if (expectedChecks && (result.checks?.length !== expectedChecks || result.passed !== expectedChecks)) throw Error('Incomplete baseline result');
+      const cases = result.cases ?? result.checks?.map((detail, i) => ({ id: `${group}-${i + 1}`, status: 'PASS', detail }));
+      if (!cases?.length || cases.some(c => !['PASS', 'FAIL'].includes(c.status) || typeof c.detail !== 'string')) throw Error('Incomplete case result');
+      report.cases.push(...cases.map(c => ({ ...c, group, theme })));
+      report.completedSuites.push(id);
     } catch (error) {
-      report.cases.push({ id: group, status: 'FAIL', detail: error.message });
+      report.cases.push({ id: group, group, theme, status: 'FAIL', detail: error.message });
     }
     save();
     console.log(`  ${report.passed} PASS / ${report.failed} FAIL (accumulated)`);
@@ -117,12 +136,8 @@ try {
 } catch (error) {
   report.cases.push({ id: 'infrastructure', status: 'FAIL', detail: error.message });
 } finally {
-  if (client && fixture) {
-    try { await call(`async page => { const own = page.context().pages().find(p => p.url() === ${JSON.stringify(fixture)}); if (own) await own.close(); return {closedOwnedTab:!!own}; }`); }
-    catch (error) { report.cases.push({ id: 'cleanup', status: 'FAIL', detail: error.message }); }
-  }
   await client?.close();
-  server?.kill();
+  for (const { child } of servers.values()) child.kill();
   if (lockFd !== undefined) { closeSync(lockFd); unlinkSync(lock); }
   save();
 }

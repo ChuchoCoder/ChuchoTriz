@@ -2,7 +2,13 @@
 async (page) => {
   if (!/^http:\/\/127\.0\.0\.1:\d+\/fixture$/.test(page.url()) || !await page.evaluate(() => !!window.ratiosFixture)) throw Error("The offline ratios fixture is required.");
   const origin = new URL(page.url()).origin;
-  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  const blocked = [];
+  await page.route('**/*', route => {
+    const target = new URL(route.request().url()).origin;
+    if (target === origin) return route.continue();
+    blocked.push(target);
+    return route.abort();
+  });
   await page.evaluate(() => { localStorage.removeItem('ct-ratios-fixture-main'); localStorage.removeItem('ct-ratios-fixture-alternate'); });
   await page.reload({ waitUntil: 'domcontentloaded' });
   const checks = [];
@@ -299,5 +305,6 @@ async (page) => {
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', undefined));
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].some(e => e.title === 'Sin cotización válida de la referencia C' && e.textContent === '—'));
   assert(true, 'A missing reference clears the percentage and its absolute difference together');
+  assert(!blocked.length, 'All widget requests stayed on the loopback fixture');
   return { passed: checks.length, checks, before, after, simulated: true, brokerConnection: false };
 }

@@ -29,9 +29,9 @@ function renderSettings(presetRequest?: PresetSettingsRequest) {
 }
 renderSettings();
 
-function openPresets(ticker: string, trigger: HTMLButtonElement) {
+function openPresets(ticker: string, returnFocus: PresetSettingsRequest["returnFocus"]) {
   const sourceTicker = snapshot && presetTickerFor(snapshot.book, ticker);
-  renderSettings({ ticker, sourceTicker, trigger });
+  renderSettings({ ticker, sourceTicker, returnFocus });
 }
 // Read once; subsequent settings changes arrive through Chrome Storage.
 let storedSettings = instrumentPresetsRepository.readSettings();

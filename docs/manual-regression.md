@@ -59,7 +59,8 @@ npm run test:regression
 
 Ambos compilan primero el paquete de producción. Smoke ejecuta los recorridos
 básicos; regression agrega las 34 comprobaciones anteriores de estrategias y
-los casos ampliados de contabilidad, cuentas/vencimientos, rolado y límites.
+los casos ampliados de contabilidad, cuentas/vencimientos, rolado, límites y
+las suites del widget, las operaciones, el gráfico nativo y el intradiario de Ratios.
 Los tests usan el bundle recién generado y los lectores reales sobre APIs externas
 ficticias. **No prueban por sí solos que Chrome haya instalado ese bundle ni que
 la versión actual de Matriz mantenga el contrato simulado.**
@@ -72,20 +73,20 @@ falla y registra el motivo. Abrilo explícitamente con el launcher compartido.
 La ubicación habitual es `%LOCALAPPDATA%/AgentBrowsers/ChuchoTriz/Start-Browser.ps1`;
 se puede indicar otra con `CHUCHOTRIZ_BROWSER_LAUNCHER`.
 
-El recorrido abre únicamente una pestaña nueva en un puerto loopback asignado
-por el sistema, bloquea solicitudes externas desde esa pestaña, y conserva las
-pestañas y preferencias de Matriz. Usa almacenamiento del origen local y una
-captura temporal del portapapeles ficticio; no reemplaza el portapapeles del
-sistema. Al terminar cierra su pestaña y servidor local, no el navegador compartido.
-No interactuar con la pestaña de prueba mientras corre. Un lock impide dos
+El recorrido usa pestañas propias y servidores en puertos loopback asignados
+por el sistema. Las pestañas de prueba bloquean solicitudes externas y los
+casos que abren un gráfico validan su destino local. El almacenamiento y el
+portapapeles son ficticios. Al terminar cierra sus pestañas y servidores y
+conserva el navegador, las pestañas y las preferencias de Matriz.
+Durante la ejecución, dejá las pestañas de prueba bajo el control del ejecutor. Un lock impide dos
 ejecuciones CLI simultáneas. Si se interrumpe abruptamente y queda un lock,
 comprobar que el PID del archivo temporal `chuchotriz-free-qa.lock` ya no existe
 antes de eliminarlo; no cerrar ni terminar procesos del navegador para limpiarlo.
 
 Cada ejecución guarda `report.json` y `report.md` en una carpeta nueva bajo
 `test-results/qa-<fecha-UTC>/`, con commit, indicador de cambios locales, versión,
-SHA-256 del ZIP, suites esperadas/completadas y resultados. Ante un fallo del
-recorrido intenta guardar además una captura de **su fixture**, nunca de Matriz.
+SHA-256 del ZIP, suites esperadas/completadas y resultados por tema. Ante un fallo
+del recorrido intenta guardar una captura del fixture identificada por tema y grupo.
 Los artefactos se ignoran en Git. Adjuntar al PR el resumen revisado o copiarlo a
 `docs/qa/` siguiendo la allowlist. No marcar aprobado un reporte parcial.
 
@@ -95,11 +96,41 @@ Para depurar un grupo sin repetir todo:
 npm run test:regression -- --group=scope
 ```
 
-Ese reporte se marca **PARTIAL**, aun si el grupo aprueba. Los grupos disponibles
+Ese reporte ejecuta el grupo en ambos temas y se marca **PARTIAL**, aun si el grupo aprueba. Los grupos disponibles
 son los de la tabla siguiente. CI ejecuta automáticamente los tests unitarios,
-de lectores y del transporte/parseo MCP mediante `npm test`; la suite de navegador
+de lectores, del plan de temas y del transporte/parseo MCP mediante `npm test`. La suite de navegador
 se ejecuta localmente porque requiere el perfil compartido. No se lanza un
 navegador aislado en CI.
+
+## Temas claro y oscuro
+
+Smoke, regression y cada `--group` ejecutan los casos en ambos temas por
+defecto. El claro y el oscuro usan orígenes loopback distintos con su propia
+paleta de Matriz. Configuración detecta el tema a partir de ese fondo, como
+en una sesión real. El ejecutor también fija la preferencia de color del navegador
+para cada pestaña de prueba.
+
+Para cualquier cambio de interfaz, elegí un caso que llegue al estado
+modificado o agregalo al grupo correspondiente. Registrá los grupos nuevos en
+`tools/qa/test-plan.mjs` para que se ejecuten en los dos temas. Comprobá en ambos temas la
+legibilidad de texto, iconos y líneas de gráfico, el foco por teclado y los
+estados seleccionados, vacíos o de error que cambien. Cuando el cambio afecte
+la geometría, comprobá también que etiquetas y controles entren en su espacio.
+El reporte debe incluir el resultado de claro y oscuro. Si una comprobación
+queda bloqueada, anotá el motivo y el estado pendiente de ese tema.
+
+Los grupos `theme-controls` y `theme-widgets` miden el contraste de elementos
+visibles del bundle frente a su fondo efectivo. Los mínimos son 4,5:1 para
+texto normal y 3:1 para líneas de datos. [Contraste de texto](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) · [Contraste no textual](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)
+
+Para reproducirlos por separado,
+ejecutá `npm run test:smoke -- --group=theme-controls` o
+`npm run test:smoke -- --group=theme-widgets`. Para inspección manual de un
+fixture, arrancá su servidor con `CHUCHOTRIZ_PREVIEW_THEME=light` o `dark`.
+La página de Opciones independiente se comprueba con ambas preferencias del
+navegador y hoy usa una paleta oscura propia. Los tests del gráfico nativo
+comprueban los comandos sobre una API simulada. Revisá el gráfico renderizado
+en Matriz cuando el cambio afecte su aspecto.
 
 ## Cobertura automática y comprobaciones humanas
 
@@ -108,7 +139,7 @@ navegador aislado en CI.
 | SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
 | SM-02, SM-03, SM-02-shortcut, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, último preset, Limpiar, reemplazo de formulario y foco tras cotización. El engranaje abre la configuración que usa el ticket, conserva el borrador y devuelve el foco al cerrar. |
 | AC-01–AC-08 | `autocomplete` | Default apagado, presets manuales, elección exacta por ticker/plazos, persistencia, ajuste global ausente y clave antigua ignorada, preferencias por instrumento conservadas al guardar presets, eventos externos, errores/reintentos, guardados demorados, remount, teclado y geometría a 1024/1440/1920. |
-| SM-11, SM-11-labels, SM-11-column | `mini-layout` | Botones nativos y presets alineados, Autocompletar debajo de Comprar/Vender/Limpiar, salto a dos filas y márgenes uniformes, sin recortes a 1024/1280/1440/1920 en modo expandido y compacto. Incluye los diez presets predeterminados de AO2 con cantidad/mostrar y contenedores en columna Notebook/Tablet. |
+| SM-11, SM-11-labels, SM-11-column, SM-11-menu, SM-11-long-labels, SM-11-autocomplete, SM-11-empty | `mini-layout` | Los presets usan las filas disponibles a la izquierda de las acciones, sin scroll en el mini formulario. Los que no entran y los de etiqueta larga se leen completos en el menú. Autocompletar ocupa su propia fila arriba cuando los controles no entran juntos y hay altura disponible. Si cambia la distribución, se mantienen el foco y el estado de guardado de Autocompletar. Verifica la altura nativa y la posición estable de las acciones al cambiar de instrumento y con el ticket vacío. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
 | SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
 | SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. Extrínseco Bid/Ask: selección e intercambio, calls/puts ATM/ITM/OTM, puntas independientes, ceros/negativos, VI ausente, precio/tamaño inválidos y desconexión/recuperación. |
@@ -126,6 +157,10 @@ navegador aislado en CI.
 | RG-07 | `roll` | Rolado comprado/vendido, contratos financiables, gastos y falta de liquidez. |
 | SM-08, SM-09 | `reader-errors` | Reportes vacíos/fallidos, errores sin datos privados, cambio de cuenta y recuperación. |
 | RG-10 | `layout` | Geometría a 1024/1920, scroll, controles, teclado y devolución de foco. |
+| TH-01–TH-09, TH-15 | `theme-controls` | Contraste de presets en reposo y al pasar el mouse, mini formulario, Configuración, editor de presets, simulador, ejecuciones, Ratios y Opciones independiente. |
+| TH-10–TH-14 | `theme-widgets` | Contraste del widget Ratios, el nombre, el eje y la línea del Book intradiario. |
+| Cadena de opciones | `options-grid` | Densidad, geometría y scroll mientras cargan las cotizaciones. |
+| Ratios | `ratio-operations`, `ratios-widget`, `ratio-chart`, `ratio-futures`, `intraday` | Recorridos dedicados de regresión en ambos temas. |
 
 Quedan como comprobaciones humanas de integración, no como pasos repetidos sobre
 la fixture:
@@ -136,8 +171,8 @@ la fixture:
 2. **Datos reales:** con sesión/2FA cuando corresponda y durante rueda, contrastar
    instrumento, plazo, puntas/VI/tasa, tenencia y ejecuciones contra Matriz. No
    editar primas personales para fabricar pruebas ni confirmar órdenes.
-3. **Inspección visual:** legibilidad, recortes, tooltips y gráficos con el tema,
-   zoom de Windows y densidad de datos reales utilizados. La geometría automática
+3. **Inspección visual:** legibilidad, recortes, tooltips y gráficos en claro y
+   oscuro con el zoom de Windows y densidad de datos reales utilizados. La geometría automática
    no reemplaza ese juicio visual ni una revisión con lector de pantalla.
 
 Repetir la integración cuando el PR afecte los adaptadores, la instalación o esos
