@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import ToolbarIcon from "../ToolbarIcon";
 import { MarketReader } from "../optionsSimulator/market";
 import type { RatioInstrument } from "./model";
-import "./RatioChart.css";
 
 type ChartPair = { a: RatioInstrument; b: RatioInstrument; c?: RatioInstrument };
 const validId = (id: string) => id.length > 0 && id.length <= 240 && !/[\u0000-\u001f\u007f]/.test(id);

@@ -2,7 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { addDays, chartPriceRange, curve, dateDay, daysToExpiry, expirySummary, initialSimulation, Leg, MAX_LEGS,
   newLeg, numeric, openRollContracts, parseSignedQuantity, parseSimulation, resultAt, rollFees, simulationLegs, Simulation,
   standardDeviationLevels, Strategy, underlyingExposure, validOptionTicketValues } from "./model";
-import "./OptionsSimulator.css";
+import simulatorStyles from "./OptionsSimulator.css?inline";
+import metricsStyles from "./OptionsMetrics.css?inline";
+import chainStyles from "./MarketChain.css?inline";
+import { installToolStyles } from "../toolStyles";
 import MarketChain, { SignedQuantityInput } from "./MarketChain";
 import ToolbarIcon from "../ToolbarIcon";
 import { preloadOptionTicket } from "../Matriz";
@@ -11,6 +14,8 @@ import { adjustStrategyQuantity, adjustStrategyWidth, setStrategyPrice, shiftStr
 import { PositionAccountingConflict, savePositionAccounting, saveUnderlyingCost, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
 import { optionTicketRestriction, useCaucionMarket, type Contract } from "./market";
 import { caucionReferenceLabel } from "./caucionRate";
+
+installToolStyles([simulatorStyles, metricsStyles, chainStyles].join("\n"));
 
 // A native double click delivers two click events: 1 + 9 makes ten in total.
 const quantityClickSteps = (detail: number) => detail > 0 && detail % 2 === 0 ? 9 : 1;

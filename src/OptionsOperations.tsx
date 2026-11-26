@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MarketReader } from "./optionsSimulator/market";
 import { executionClipboard, executionFormatters, groupExecutions, normalizeExecutionLocale, type ExecutionGroup, type ExecutionLocale, type OptionExecution, type OptionKind } from "./optionExecutions";
-import "./OptionsOperations.css";
+import styles from "./OptionsOperations.css?inline";
+import { installToolStyles } from "./toolStyles";
+
+installToolStyles(styles);
 
 interface ExecutionReport {
   contextId: string;

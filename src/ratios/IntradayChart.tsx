@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
 import { calculateRatio, pairKey, pairLabel, ratioLabel, type RatioPair } from "./model";
-import "./IntradayChart.css";
 
 export type IntradayPair = Pick<RatioPair, "a" | "b" | "c" | "cDivisor">;
 type View = "ratio" | "comparison" | "spread" | "dollar-spread";

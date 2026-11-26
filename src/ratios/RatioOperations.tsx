@@ -14,7 +14,10 @@ import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingSt
 import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, partialCloseQuantities, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, quoteUnitChanged, remaining, sameCurrency,
   reviseRecordedClose, validateBook, validateOperation, type CloseCorrection, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair, type TradingQuote } from "./trading";
-import "./RatioOperations.css";
+import styles from "./RatioOperations.css?inline";
+import { installToolStyles } from "../toolStyles";
+
+installToolStyles(styles);
 
 type View = "monitor" | "opening" | "operations";
 type GridKind = "watch" | "operations";

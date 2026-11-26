@@ -10,5 +10,5 @@ export default defineConfig({
     // Build Chrome Extension
     crx({ manifest }),
   ],
-  build: { target: "chrome107", sourcemap: false, emptyOutDir: true, modulePreload: { polyfill: false } },
+  build: { target: "chrome107", sourcemap: false, emptyOutDir: true, modulePreload: false },
 });

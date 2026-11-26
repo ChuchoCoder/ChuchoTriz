@@ -1,0 +1,16 @@
+.ct-tools { font: 14px/1.45 "Lato", system-ui, sans-serif; color: #e8edf6; background: #151d2b; }
+.ct-tools-embedded { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ct-tools-tabs { display: flex; flex-shrink: 0; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #64748b; background: #202b3d; flex-wrap: wrap; }
+.ct-tools-tabs button { border: 1px solid #8291a7; border-radius: 5px; padding: 4px 10px; background: transparent; color: #e8edf6; cursor: pointer; font: inherit; font-size: 13px; }
+.ct-tools-tabs button[aria-pressed="true"] { background: #c8a9ff; color: #211033; border-color: #c8a9ff; }
+.ct-free-settings-header .ct-tools-tabs { flex: 1; flex-wrap: nowrap; min-width: 0; overflow-x: auto; scrollbar-width: thin; padding: 0; border: 0; background: transparent; }
+.ct-free-settings-header .ct-tools-tabs button { flex-shrink: 0; padding: 2px 8px; white-space: nowrap; color: inherit; font-size: 11px; }
+.ct-free-settings-header .ct-tools-tabs button[aria-pressed="true"] { color: #211033; }
+.ct-free-settings-panel[data-color-scheme="light"] .ct-tools-tabs button[aria-pressed="true"] { background: #e5d9f8; border-color: #7149a9; color: #361766; }
+.ct-tools-content { min-width: 0; }
+.ct-tools-embedded > .ct-tools-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ct-tools-content[hidden], .ct-tools-embedded > .ct-tools-content[hidden] { display: none; }
+.ct-tools button:focus-visible, .ct-tools input:focus-visible, .ct-tools select:focus-visible, .ct-tools summary:focus-visible { outline: 2px solid #c8a9ff; outline-offset: 2px; }
+.ct-tool-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.ct-tool-icon { flex: none; }
+.ct-tool-status { margin: 0; padding: 12px; }

@@ -8,6 +8,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const hosts = ['https://*.xoms.com.ar/*', 'https://remarkets.matriz.com.ar/*'];
 const matrizResources = ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js', 'ticket-position.js'];
+const builtToolScripts = /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|jsx-runtime|Matriz|pageStructure|RatiosDashboard|market|OptionsOperations|OptionsSimulator|RatioOperations|toolStyles|positionStorage)-[\w-]+\.js$/;
+const builtSharedToolsStyles = /^assets\/ChuchoTrizTools-[\w-]+\.css$/;
+const builtEntryAssets = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
 const same = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -58,7 +61,7 @@ export function assertManifest(manifest, built = false) {
       assert(!('extension_ids' in resource), 'Resource exposure to other extensions is not allowed');
       assert(same(resource.matches, hosts), 'Unexpected resource hosts');
       for (const path of resource.resources) {
-        assert(matrizResources.includes(path) || /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools)-[\w-]+\.js$/.test(path), 'Unexpected exposed resource');
+        assert(matrizResources.includes(path) || builtToolScripts.test(path) || builtSharedToolsStyles.test(path), 'Unexpected exposed resource');
       }
     }
   }
@@ -91,10 +94,9 @@ export function checkFree({ built = false, directory = root } = {}) {
   if (built) {
     const output = join(directory, 'dist');
     const staticFiles = ['manifest.json', 'index.html', ...allowed.filter(path => path.startsWith('public/')).map(path => path.slice(7))];
-    const assetPattern = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
     const files = filesIn(output);
     for (const path of files) {
-      assert(staticFiles.includes(path) || assetPattern.test(path), `Unexpected packaged file: ${path}`);
+      assert(staticFiles.includes(path) || builtEntryAssets.test(path) || builtToolScripts.test(path), `Unexpected packaged file: ${path}`);
       if (/\.(?:js|css|json|html|txt)$/.test(path)) assertFreeText(readFileSync(join(output, path), 'utf8'), path);
     }
     const manifest = readJson(join(output, 'manifest.json'));
