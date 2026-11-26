@@ -15,6 +15,12 @@ async (page, screenshots) => {
     sessionStorage.removeItem('ct-reference-history-lag');
   });
   await page.reload();
+  await page.evaluate(() => {
+    window.dollarQuoteReads = 0;
+    window.addEventListener('message', event => {
+      if (event.origin === location.origin && event.data?.kind === 'request' && event.data?.method === 'ratioIntradayQuotes') window.dollarQuoteReads++;
+    });
+  });
   const assert = (value, label) => { if (!value) throw Error(label); checks.push(label); };
   const button = name => page.getByRole('button', { name, exact: true });
   const idle = () => page.waitForFunction(() => document.querySelector('.ct-ratios-add')?.disabled === false);
@@ -59,6 +65,32 @@ async (page, screenshots) => {
   const legendValue = widget.locator('.ct-intraday-legend strong');
   await widget.getByRole('img', { name: 'Gráfico intradiario de MEP AL30' }).waitFor();
   await valueIs(legendValue, '1.400,00', 'MEP AL30 24 h uses AL30 / AL30D');
+  await page.addStyleTag({ content: 'body { min-height: 2600px; }' });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(150);
+  const suspended = await page.evaluate(() => window.dollarQuoteReads);
+  await page.waitForTimeout(2400);
+  assert(suspended > 0 && suspended === await page.evaluate(() => window.dollarQuoteReads), 'Scrolling out of view pauses Dólar Intradiario quotes');
+  await page.evaluate(() => { window.ratiosFixture.price('AL30-2', 71000); window.scrollTo(0, 0); });
+  await valueIs(legendValue, '1.420,00', 'Dólar Intradiario refreshes on returning to the viewport');
+  await page.evaluate(() => window.ratiosFixture.price('AL30-2', 70000));
+  await valueIs(legendValue, '1.400,00', 'The visible dollar widget keeps updating');
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('ct-delay-dollar-legs')) return;
+    sessionStorage.removeItem('ct-delay-dollar-legs');
+    Object.defineProperty(window, 'mainStore', { configurable: true, set(store) {
+      delete window.mainStore;
+      window.mainStore = store;
+      const catalogue = store.securityStore.securities;
+      store.securityStore.securities = [];
+      window.restoreDollarLegs = () => { store.securityStore.securities = catalogue; };
+    } });
+  });
+  await page.evaluate(() => sessionStorage.setItem('ct-delay-dollar-legs', '1'));
+  await page.reload();
+  await widget.getByText('Elegí los instrumentos A y B para mostrar el intradiario.').waitFor();
+  await page.evaluate(() => window.restoreDollarLegs());
+  await valueIs(legendValue, '1.400,00', 'Saved legacy dollar legs resolve when the catalogue fills without a DOM mutation');
   await screenshot('widget', widget);
   await editPair(undefined, ['AL30C', 'AL30C-2']);
   await widget.getByRole('img', { name: 'Gráfico intradiario de CCL AL30' }).waitFor();

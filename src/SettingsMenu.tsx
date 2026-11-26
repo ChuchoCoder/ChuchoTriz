@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ChuchoTrizTools from "./ChuchoTrizTools";
 import type { PresetEditorRequest } from "./InstrumentPresetsOptions";
+import { containsChangedElements, observePageStructure } from "./pageStructure";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
@@ -74,15 +75,17 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
   useEffect(() => {
     const item = document.createElement("div");
     item.className = "ct-free-settings-slot";
+    let bar: Element | null = null;
     const attach = () => {
-      const bar = document.querySelector(barSelector);
+      bar = document.querySelector(barSelector);
       if (bar && item.parentElement !== bar) bar.append(item);
       setSlot(bar ? item : null);
     };
     attach();
-    const observer = new MutationObserver(attach);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => { observer.disconnect(); item.remove(); };
+    const stop = observePageStructure(records => {
+      if (bar && (!bar.isConnected || item.parentElement !== bar) || containsChangedElements(records, barSelector)) attach();
+    });
+    return () => { stop(); item.remove(); };
   }, []);
 
   useEffect(() => {
@@ -112,8 +115,9 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
       update();
     };
     bind(); update();
-    const mutation = new MutationObserver(bind);
-    mutation.observe(document.body, { childList: true, subtree: true });
+    const stop = observePageStructure(records => {
+      if (observed.some(node => !node.isConnected) || containsChangedElements(records, boundarySelectors.join(", "))) bind();
+    });
     const navigate = (event: MouseEvent) => {
       if (event.target instanceof Element) {
         const item = event.target.closest(`${barSelector} a.Item, ${headerSelector} a.NavItem`);
@@ -123,7 +127,7 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
     document.addEventListener("click", navigate, true);
     window.addEventListener("resize", update);
     return () => {
-      cancelAnimationFrame(frame); resize.disconnect(); toolState.disconnect(); mutation.disconnect();
+      cancelAnimationFrame(frame); resize.disconnect(); toolState.disconnect(); stop();
       document.removeEventListener("click", navigate, true);
       window.removeEventListener("resize", update);
     };

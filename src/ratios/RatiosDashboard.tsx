@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
+import { containsChangedElements, observePageStructure } from "../pageStructure";
 import ToolbarIcon from "../ToolbarIcon";
 import { IntradayChart, ReferenceChartButton } from "./IntradayChart";
 import { RatioChartLink } from "./RatioChart";
@@ -10,6 +11,13 @@ import "./RatiosDashboard.css";
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit";
 type Command = (method: Mutation, params?: Record<string, unknown>) => Promise<void>;
 type Search = (query: string) => Promise<RatioInstrument[]>;
+const dashboardSelector = ".CustomDashboard";
+const menuSelector = ".WidgetsComponentsPopoverList";
+const drawerSelector = "#ToolPanel .ToolContent";
+const drawerHeaderSelector = ".ToolContentHeaderText";
+const widgetSelector = "[data-ct-ratios-slot]";
+const nativeStructure = [dashboardSelector, ".GridLayout", ".DashboardGridItem", menuSelector, "#ToolPanel", ".ToolContent", drawerHeaderSelector].join(", ");
+const discoveryDelays = [250, 750, 2000];
 
 export function InstrumentPicker({ label, value, onChange, search, disabled, autoFocus = false, onAutoFocus, acceptSuggestionOnTab = false, divisor, describe = instrumentDetail }: {
   label: string; value?: RatioInstrument; onChange(value?: RatioInstrument): void; search: Search; disabled: boolean; autoFocus?: boolean;
@@ -252,7 +260,7 @@ function intradayInstrumentDetail(instrument: RatioInstrument) {
   return instrumentDetail(instrument) + (term ? ` · ${term}` : "");
 }
 
-function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetState; command: Command; search: Search; busy: boolean }) {
+function DollarWidget({ widget, command, search, busy, visible }: { widget: DollarWidgetState; command: Command; search: Search; busy: boolean; visible: boolean }) {
   const { config, pair } = widget;
   const [issue, setIssue] = useState("");
   const [legs, setLegs] = useState<Partial<Pick<RatioPair, "a" | "b">> & { revision: number }>();
@@ -329,7 +337,7 @@ function DollarWidget({ widget, command, search, busy }: { widget: DollarWidgetS
       </div>
     </form>}
     {issue && <p className="ct-intraday-settings-error" role="alert">{issue}</p>}
-    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} defaultToToday /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
+    {pair ? <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? (spreadOnly ? "spread" : "dollar-spread") : "ratio"} defaultToToday active={visible} /> : <p className="ct-intraday-empty" role="status">{widget.issue}</p>}
   </section>;
 }
 
@@ -337,58 +345,163 @@ export default function RatiosDashboard() {
   const [snapshot, setSnapshot] = useState<RatiosState>(emptyState), [busy, setBusy] = useState(false), [menuIssue, setMenuIssue] = useState("");
   const [notice, setNotice] = useState("");
   const current = useRef(snapshot), reader = useRef<MarketReader | null>(null), pending = useRef(false);
-  current.current = snapshot;
-  const [locations, setLocations] = useState<{ menus: HTMLElement[]; widgets: Map<string, HTMLElement> }>({ menus: [], widgets: new Map() });
-  useEffect(() => {
-    if (typeof chrome?.runtime?.getURL !== "function") return;
-    const client = new MarketReader("ratios-reader.js"); reader.current = client;
-    let closed = false, timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      try { const next = await client.call<RatiosState>("ratiosState"); if (!closed) setSnapshot(next); }
-      catch (error) { if (!closed) setSnapshot(previous => ({ ...previous, canAdd: false, quotes: {}, issue: error instanceof Error ? error.message : "Ratios no disponible." })); }
-      finally { if (!closed) timer = setTimeout(() => void tick(), 1500); }
-    };
-    void tick();
-    return () => { closed = true; clearTimeout(timer); reader.current = null; client.dispose(); };
+  const commandVersion = useRef(0), resume = useRef(() => {});
+  const publish = useCallback((next: RatiosState) => {
+    current.current = next;
+    setSnapshot(next);
   }, []);
+  const [locations, setLocations] = useState({ menus: [] as HTMLElement[], widgets: new Map<string, HTMLElement>(), visible: new Set<string>() });
   useEffect(() => {
-    const menus = new Map<Element, HTMLElement>(), widgets = new Map<Element, HTMLElement>();
-    const reconcile = () => {
-      const lists = [...document.querySelectorAll(".WidgetsComponentsPopoverList")];
+    if (typeof globalThis.chrome?.runtime?.getURL !== "function") return;
+    const menus = new Map<Element, HTMLElement>(), widgets = new Map<HTMLElement, HTMLElement>();
+    const visible = new Set<Element>();
+    let slots = new Map<string, HTMLElement>();
+    let drawerHeaders: Element[] = [];
+    let closed = false, inScope = false, running = false, queued = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let retry = 0, retryDelay: number | undefined;
+
+    const isVisible = (id: string) => {
+      const host = slots.get(id)?.parentElement;
+      return host?.isConnected && visible.has(host);
+    };
+    const shouldPoll = () => current.current.widgets.some(({ config }) => config.pairs.length > 0 && isVisible(config.id)) ||
+      // A visible legacy dollar widget can resolve its legs after the security list arrives.
+      current.current.dollarWidgets?.some(({ config }) => isVisible(config.id));
+    const schedule = () => {
+      clearTimeout(timer);
+      if (closed || pending.current) return;
+      if (!inScope) {
+        reader.current?.dispose(); reader.current = null;
+        if (current.current !== emptyState) publish(emptyState);
+        return;
+      }
+      if (document.hidden || running) return;
+      const delay = queued ? 0 : retryDelay ?? (shouldPoll() ? 1500 : undefined);
+      if (delay !== undefined) timer = setTimeout(() => void refresh(), delay);
+    };
+    const requestRefresh = () => { queued = true; retry = 0; retryDelay = undefined; schedule(); };
+    const refresh = async () => {
+      if (closed || !inScope || document.hidden || running || pending.current) return;
+      queued = false;
+      retryDelay = undefined;
+      running = true;
+      const client = reader.current ??= new MarketReader("ratios-reader.js");
+      const version = commandVersion.current;
+      const isCurrent = () => !closed && !document.hidden && reader.current === client && commandVersion.current === version;
+      try {
+        const next = await client.call<RatiosState>("ratiosState");
+        if (isCurrent()) {
+          publish(next);
+          // The native shell may mount before its dashboard store has hydrated.
+          if (!next.dashboardId && document.querySelector(dashboardSelector)) retryDelay = discoveryDelays.at(retry++);
+          else retry = 0;
+        }
+      } catch (error) {
+        if (isCurrent()) {
+          publish({ ...current.current, canAdd: false, quotes: {}, issue: error instanceof Error ? error.message : "Ratios no disponible." });
+          if (!shouldPoll()) retryDelay = discoveryDelays.at(retry++);
+        }
+      } finally {
+        running = false;
+        schedule();
+      }
+    };
+    const intersection = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(entries => {
+      const wasPolling = shouldPoll();
+      for (const { target, isIntersecting } of entries) {
+        if (isIntersecting && widgets.has(target as HTMLElement)) visible.add(target); else visible.delete(target);
+      }
+      showLocations();
+      if (!wasPolling && shouldPoll()) requestRefresh(); else schedule();
+    });
+
+    const reconcileMenus = () => {
+      const lists = [...document.querySelectorAll(menuSelector)];
+      const headers: Element[] = [];
       // Some Matriz deployments expose the same menu in the right toolbar.
-      for (const drawer of document.querySelectorAll("#ToolPanel .ToolContent")) {
-        if (drawer.querySelector(".ToolContentHeaderText")?.textContent?.trim() === "Nuevo widget" && !drawer.querySelector(".WidgetsComponentsPopoverList")) lists.push(drawer);
+      for (const drawer of document.querySelectorAll(drawerSelector)) {
+        const header = drawer.querySelector(drawerHeaderSelector);
+        if (header) headers.push(header);
+        if (header?.textContent?.trim() === "Nuevo widget" && !drawer.querySelector(menuSelector)) lists.push(drawer);
+      }
+      if (headers.length !== drawerHeaders.length || headers.some((header, index) => header !== drawerHeaders[index])) {
+        drawerObserver.disconnect();
+        for (const header of headers) drawerObserver.observe(header, { childList: true, characterData: true, subtree: true });
+        drawerHeaders = headers;
       }
       for (const [parent, slot] of menus) if (!parent.isConnected || !lists.includes(parent)) { slot.remove(); menus.delete(parent); }
       for (const list of lists) if (!menus.get(list)?.isConnected) {
         const slot = document.createElement("div"); slot.className = "WidgetComponentCard ct-ratios-menu-slot"; list.append(slot); menus.set(list, slot);
       }
-      const parents = [...document.querySelectorAll<HTMLElement>("[data-ct-ratios-slot]")];
-      for (const [parent, slot] of widgets) if (!parent.isConnected || !parents.includes(parent as HTMLElement)) { slot.remove(); widgets.delete(parent); }
+    };
+    const reconcileWidgets = () => {
+      const parents = new Set(document.querySelectorAll<HTMLElement>(widgetSelector));
+      for (const [parent, slot] of widgets) if (!parents.has(parent)) {
+        intersection?.unobserve(parent); visible.delete(parent); slot.remove(); widgets.delete(parent);
+      }
       for (const parent of parents) if (!widgets.get(parent)?.isConnected) {
+        if (intersection) intersection.observe(parent); else visible.add(parent);
         const slot = document.createElement("div"); slot.className = "ct-ratios-root"; parent.append(slot); widgets.set(parent, slot);
       }
-      const next = { menus: [...menus.values()], widgets: new Map([...widgets].map(([parent, slot]) => [(parent as HTMLElement).dataset.ctRatiosSlot!, slot])) };
-      setLocations(previous => previous.menus.length === next.menus.length && previous.menus.every((slot, index) => slot === next.menus[index]) && previous.widgets.size === next.widgets.size && [...previous.widgets].every(([id, slot]) => next.widgets.get(id) === slot) ? previous : next);
+      slots = new Map([...widgets].map(([parent, slot]) => [parent.dataset.ctRatiosSlot!, slot]));
     };
-    const observer = new MutationObserver(reconcile);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ct-ratios-slot"] });
-    reconcile();
-    return () => { observer.disconnect(); for (const slot of [...menus.values(), ...widgets.values()]) slot.remove(); };
-  }, []);
+    const showLocations = () => {
+      const visibleIds = new Set([...widgets].flatMap(([host]) => visible.has(host) ? [host.dataset.ctRatiosSlot!] : []));
+      const next = { menus: [...menus.values()], widgets: slots, visible: visibleIds };
+      setLocations(previous => previous.menus.length === next.menus.length && previous.menus.every((slot, index) => slot === next.menus[index]) &&
+        previous.widgets.size === next.widgets.size && [...previous.widgets].every(([id, slot]) => next.widgets.get(id) === slot) &&
+        previous.visible.size === visibleIds.size && [...previous.visible].every(id => visibleIds.has(id)) ? previous : next);
+    };
+    const discover = () => {
+      reconcileMenus(); reconcileWidgets(); showLocations();
+      inScope = menus.size > 0 || !!document.querySelector(dashboardSelector);
+      if (inScope) requestRefresh(); else schedule();
+    };
+    const drawerObserver = new MutationObserver(discover);
+    const stop = observePageStructure(records => {
+      if (containsChangedElements(records, nativeStructure)) discover();
+      else if (records.some(({ type }) => type === "attributes") || containsChangedElements(records, widgetSelector) ||
+        [...menus.entries(), ...widgets.entries()].some(([parent, slot]) => slot.parentElement !== parent)) {
+        reconcileMenus(); reconcileWidgets(); showLocations(); schedule();
+      }
+    });
+    const visibilityChanged = () => { if (document.hidden) schedule(); else discover(); };
+    const navigation = (window as Window & { navigation?: EventTarget }).navigation;
+    let path = location.pathname;
+    const navigated = () => {
+      if (path === location.pathname) return;
+      path = location.pathname;
+      discover();
+    };
+    resume.current = schedule;
+    document.addEventListener("visibilitychange", visibilityChanged);
+    navigation?.addEventListener("currententrychange", navigated);
+    window.addEventListener("popstate", navigated);
+    discover();
+    return () => {
+      closed = true; clearTimeout(timer); intersection?.disconnect(); drawerObserver.disconnect(); stop();
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      navigation?.removeEventListener("currententrychange", navigated);
+      window.removeEventListener("popstate", navigated);
+      resume.current = () => {};
+      reader.current?.dispose(); reader.current = null;
+      for (const slot of [...menus.values(), ...widgets.values()]) slot.remove();
+    };
+  }, [publish]);
   const command: Command = useCallback(async (method, params = {}) => {
     if (pending.current || !reader.current) throw Error("Hay un cambio guardándose. Esperá a que termine.");
-    pending.current = true; setBusy(true);
+    pending.current = true; commandVersion.current++; setBusy(true);
     const source = current.current;
     try {
       const next = await reader.current.call<RatiosState>(method, { context: source.context, dashboardId: source.dashboardId, ...params });
-      setSnapshot(next);
+      publish(next);
     } catch (error) {
       // A removed panel has already unmounted, so its inline error cannot be seen.
       if (method === "ratiosRemove") setNotice(error instanceof Error ? error.message : "No se pudo confirmar la eliminación del widget. Recargá Matriz para comprobarlo.");
       throw error;
-    } finally { pending.current = false; setBusy(false); }
-  }, []);
+    } finally { pending.current = false; setBusy(false); resume.current(); }
+  }, [publish]);
   const search: Search = useCallback(query => {
     const source = current.current;
     return reader.current ? reader.current.call<RatioInstrument[]>("ratiosSearch", { context: source.context, dashboardId: source.dashboardId, query }) : Promise.resolve([]);
@@ -418,7 +531,7 @@ export default function RatiosDashboard() {
     })}
     {snapshot.dollarWidgets?.map(widget => {
       const slot = locations.widgets.get(widget.config.id);
-      return slot ? createPortal(<DollarWidget widget={widget} command={command} search={search} busy={busy} />, slot, widget.config.id) : null;
+      return slot ? createPortal(<DollarWidget widget={widget} command={command} search={search} busy={busy} visible={locations.visible.has(widget.config.id)} />, slot, widget.config.id) : null;
     })}
   </>;
 }

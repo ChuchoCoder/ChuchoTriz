@@ -264,7 +264,8 @@
     if (corrected) c.d.layout = [...c.d.layout];
     for (const w of owned) {
       const slot = document.querySelector(".DashboardGridItem-" + CSS.escape(w.key));
-      if (slot) slot.dataset.ctRatiosSlot = ownsWidget(w).id;
+      const id = ownsWidget(w).id;
+      if (slot && slot.dataset.ctRatiosSlot !== id) slot.dataset.ctRatiosSlot = id;
     }
     const widgets = owned.filter(ownConfig).map(w => {
       const config = configOf(w);

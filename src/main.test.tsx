@@ -564,6 +564,24 @@ it("mounts Configuración in the left menu even before the order form exists", a
   computedStyle.mockRestore();
 });
 
+it("leaves the ticket and settings bar alone when unrelated market rows change", async () => {
+  const ticket = createForm();
+  const market = document.createElement("main"), bar = document.createElement("nav");
+  bar.className = "DirectAccessBar";
+  document.body.append(market, bar, ticket.form);
+  await boot();
+  const byId = vi.spyOn(document, "getElementById"), query = vi.spyOn(document, "querySelector");
+  await act(async () => {
+    market.append(document.createElement("span"));
+    await Promise.resolve();
+    market.replaceChildren(document.createElement("strong"));
+  });
+  expect(byId).not.toHaveBeenCalledWith("MiniOrderForm");
+  expect(query).not.toHaveBeenCalledWith(".DirectAccessBar");
+  await act(async () => { presetButton(ticket.form, "200").click(); });
+  expect(ticket.amount.value).toBe("200");
+});
+
 it("remounts on the new form and waits for ticket focus before applying the last chosen preset", async () => {
   const previous = createForm();
   document.body.append(previous.form);

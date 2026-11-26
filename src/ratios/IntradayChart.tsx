@@ -29,20 +29,24 @@ function acquireReader() {
   return { client, release() { if (--subscribers === 0) { client.dispose(); reader = undefined; } } };
 }
 
-function useIntraday(ids: readonly string[]) {
+function useIntraday(ids: readonly string[], active: boolean) {
   const [history, setHistory] = useState<History>({}), [live, setLive] = useState<Live>({});
   const [start, setStart] = useState<number>(), [connected, setConnected] = useState<boolean>();
   const [loading, setLoading] = useState(true), [historyIssue, setHistoryIssue] = useState(""), [liveIssue, setLiveIssue] = useState("");
   const retryHistory = useRef<() => void>(() => {});
+  const watching = useRef(active), syncPolling = useRef(() => {});
   useEffect(() => {
-    const { client, release } = acquireReader();
+    let connection: ReturnType<typeof acquireReader> | undefined;
     let disposed = false, revision: number | undefined, previousConnection: boolean | undefined;
     let previousAvailability: string | undefined;
     let timer: ReturnType<typeof setTimeout>, historyRequest = 0;
+    let polling = false;
+    const canPoll = () => !disposed && watching.current && !document.hidden;
     const loadHistory = (refresh = false) => {
+      if (!connection) return;
       const request = ++historyRequest;
       setLoading(true); setHistoryIssue("");
-      return client.call<HistoryResponse>("ratioIntradayHistory", { ids, refresh }).then(result => {
+      return connection.client.call<HistoryResponse>("ratioIntradayHistory", { ids, refresh }).then(result => {
         if (disposed || request !== historyRequest || result.revision !== revision) return;
         setHistory(previous => Object.fromEntries(ids.map(id => {
           const incoming = result.series[id], existing = previous[id]?.points ?? [];
@@ -56,9 +60,12 @@ function useIntraday(ids: readonly string[]) {
       });
     };
     const poll = async () => {
+      if (!canPoll() || polling) return;
+      polling = true;
       try {
+        const { client } = connection ??= acquireReader();
         const result = await client.call<LiveResponse>("ratioIntradayQuotes", { ids });
-        if (disposed) return;
+        if (!canPoll()) return;
         const switched = result.revision !== revision;
         const availability = result.available?.join("\u0000");
         if (switched) {
@@ -82,15 +89,25 @@ function useIntraday(ids: readonly string[]) {
         previousConnection = result.connected;
         previousAvailability = availability;
       } catch (error) {
-        if (!disposed) { setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false); }
+        if (canPoll()) { setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false); }
       } finally {
-        if (!disposed) timer = setTimeout(() => void poll(), 2000);
+        polling = false;
+        if (canPoll()) timer = setTimeout(() => void poll(), 2000);
       }
     };
+    const visibilityChanged = () => { clearTimeout(timer); void poll(); };
     retryHistory.current = () => { if (revision !== undefined) void loadHistory(true); };
+    syncPolling.current = visibilityChanged;
+    document.addEventListener("visibilitychange", visibilityChanged);
     void poll();
-    return () => { disposed = true; clearTimeout(timer); retryHistory.current = () => {}; release(); };
+    return () => {
+      disposed = true; clearTimeout(timer); retryHistory.current = () => {};
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      syncPolling.current = () => {};
+      connection?.release();
+    };
   }, [ids]);
+  useEffect(() => { watching.current = active; syncPolling.current(); }, [active]);
   return { history, live, start, connected, loading, historyIssue, liveIssue, retry: () => retryHistory.current() };
 }
 
@@ -229,10 +246,10 @@ function Plot({ rows, lines, dual, label }: {
   </div>;
 }
 
-export function IntradayChart({ pair, view = "ratio", defaultToToday = false }: { pair: IntradayPair; view?: View; defaultToToday?: boolean }) {
+export function IntradayChart({ pair, view = "ratio", defaultToToday = false, active = true }: { pair: IntradayPair; view?: View; defaultToToday?: boolean; active?: boolean }) {
   const [a, b, c] = [pair.a.id, pair.b.id, pair.c?.id];
   const ids = useMemo(() => [...new Set(c ? [a, b, c] : [a, b])], [a, b, c]);
-  const market = useIntraday(ids);
+  const market = useIntraday(ids, active);
   const [chosenDay, setChosenDay] = useState<number>();
   const past = useMemo(() => defaultToToday ? [] : intradayPoints(pair, market.history), [a, b, c, pair.cDivisor, market.history, defaultToToday]);
   const points = useMemo(() => intradayPoints(pair, market.history, market.live),
