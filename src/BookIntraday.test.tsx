@@ -160,6 +160,27 @@ it("stops polling when a connected node loses its native chart class", async () 
   expect(readSeries).toHaveBeenCalledTimes(1);
 });
 
+it("closes the preview when Matriz moves the same chart element to another row", async () => {
+  const first = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  const second = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  const chart = first.icon.parentElement!;
+  readSeries.mockResolvedValue(bars([49]));
+  await act(async () => {
+    move(first.icon, "pointerover");
+    second.icon.parentElement!.replaceWith(chart);
+    await vi.advanceTimersByTimeAsync(180);
+  });
+  expect(readSeries).not.toHaveBeenCalled();
+  await act(async () => { move(first.icon, "pointerover"); await vi.advanceTimersByTimeAsync(180); });
+  expect(preview()).not.toBeNull();
+  await act(async () => { first.row.querySelector(".ActionCell")!.append(chart); });
+  expect(first.icon.isConnected).toBe(true);
+  expect(preview()).toBeNull();
+  expect(dispose).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(readSeries).toHaveBeenCalledTimes(1);
+});
+
 it("opens a hovered native chart when a different trigger loses keyboard focus during the delay", async () => {
   const { icon } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
   let widget!: HTMLElement;

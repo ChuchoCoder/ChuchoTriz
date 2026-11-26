@@ -33,11 +33,19 @@ function readInstrument(link?: HTMLAnchorElement | null): Instrument | undefined
   } catch { /* Matriz can temporarily render a link without a usable instrument. */ }
 }
 
+function chartContainer(anchor: HTMLElement) {
+  return anchor.matches(BOOK_BUTTON)
+    ? anchor.closest(".NewWidgetHeader")
+    : anchor.closest(PRICE_ROW) ?? anchor.closest("a[href]");
+}
+
 function instrumentFor(anchor: HTMLElement) {
   if (!anchor.isConnected || !anchor.matches(CHART_TRIGGER)) return;
-  if (anchor.matches(BOOK_BUTTON)) return readInstrument(anchor.closest(".NewWidgetHeader")?.querySelector<HTMLAnchorElement>(":scope > a[href]"));
-  const row = anchor.closest(PRICE_ROW);
-  const link = row ? row.querySelector<HTMLAnchorElement>(".SymbolCell > a[href]") : anchor.closest<HTMLAnchorElement>("a[href]");
+  const container = chartContainer(anchor);
+  if (anchor.matches(BOOK_BUTTON)) return readInstrument(container?.querySelector<HTMLAnchorElement>(":scope > a[href]"));
+  const link = container?.matches(PRICE_ROW)
+    ? container.querySelector<HTMLAnchorElement>(".SymbolCell > a[href]")
+    : container instanceof HTMLAnchorElement ? container : undefined;
   return readInstrument(link);
 }
 
@@ -233,7 +241,11 @@ export default function BookIntraday() {
       if (!instrument) return;
       hovered.current = anchor;
       cancelTimers();
-      openTimer.current = setTimeout(() => open(anchor, instrument), HOVER_DELAY);
+      const container = chartContainer(anchor);
+      openTimer.current = setTimeout(() => {
+        if (chartContainer(anchor) === container) open(anchor, instrument);
+        else leave(anchor);
+      }, HOVER_DELAY);
     };
     const pointerOut = (event: PointerEvent) => {
       const anchor = trigger(event.target);
@@ -271,13 +283,10 @@ export default function BookIntraday() {
   useEffect(() => {
     if (!active) return;
     const anchor = active.anchor;
-    const container = anchor.matches(BOOK_BUTTON)
-      ? anchor.closest(".NewWidgetHeader")
-      : anchor.closest(PRICE_ROW) ?? anchor.closest("a[href]");
-    const scope = container ?? anchor;
+    const scope = chartContainer(anchor) ?? anchor;
     const checkAnchor = () => {
       const instrument = instrumentFor(anchor);
-      if (instrument?.id === active.id && instrument.label === active.label) return;
+      if (chartContainer(anchor) === scope && instrument?.id === active.id && instrument.label === active.label) return;
       if (hovered.current === anchor) hovered.current = undefined;
       setActive(current => current === active ? undefined : current);
     };
