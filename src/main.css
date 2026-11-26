@@ -281,3 +281,159 @@
     min-inline-size: 0;
   }
 }
+
+#MiniOrderForm > .ct-ticket-position {
+  --ct-buy: #009807;
+  --ct-sell: #f90701;
+  --ct-buy-text: #81dfa0;
+  --ct-sell-text: #ffaaa5;
+  --ct-position-heading: #a6ccff;
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-end: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: calc(100% - 16px);
+  padding: 5px 30px 5px 9px;
+  border: 1px solid var(--modal-border-color, #62748a);
+  border-radius: 6px 6px 0 0;
+  background: var(--panel-body-background, Canvas);
+  color: var(--text-color, CanvasText);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(html, body)[data-theme="dma_day"] #MiniOrderForm > .ct-ticket-position {
+  --ct-buy-text: #066219;
+  --ct-sell-text: #a92723;
+  --ct-position-heading: #154680;
+}
+
+#MiniOrderForm > .ct-ticket-position[hidden],
+#MiniOrderForm .ct-ticket-position > [hidden],
+#MiniOrderForm .ct-ticket-position-show[hidden] {
+  display: none;
+}
+
+.ct-ticket-position-projection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ct-ticket-position-label {
+  display: grid;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.ct-ticket-position-label strong,
+.ct-ticket-position .ct-current {
+  color: var(--ct-position-heading);
+}
+
+.ct-ticket-position table {
+  border-collapse: collapse;
+  font: inherit;
+}
+
+.ct-ticket-position :is(td, th) {
+  padding: 1px 6px;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.ct-ticket-position tr > :first-child { text-align: start; }
+.ct-ticket-position thead { border-bottom: 1px solid var(--modal-border-color, #62748a); }
+.ct-ticket-position .ct-buy { color: var(--ct-buy-text); background: rgb(0 152 7 / 9%); }
+.ct-ticket-position .ct-sell { color: var(--ct-sell-text); background: rgb(249 7 1 / 9%); }
+.ct-ticket-position thead .ct-buy { border-bottom: 2px solid var(--ct-buy); }
+.ct-ticket-position thead .ct-sell { border-bottom: 2px solid var(--ct-sell); }
+
+#MiniOrderForm .ct-ticket-position-fill {
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#MiniOrderForm .ct-ticket-position-fill[aria-disabled="true"] { cursor: progress; }
+
+#MiniOrderForm :is(.ct-ticket-position-close, .ct-ticket-position-show) {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color, CanvasText);
+  cursor: pointer;
+}
+
+#MiniOrderForm .ct-ticket-position-close {
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-end: 1px;
+  inline-size: 24px;
+  block-size: 24px;
+  border: 0;
+}
+
+#MiniOrderForm .ct-ticket-position-close svg { inline-size: 12px; block-size: 12px; }
+
+#MiniOrderForm .ct-ticket-position-show {
+  inline-size: 26px;
+  block-size: 26px;
+  flex: 0 0 auto;
+  border: 1px solid var(--modal-border-color, #62748a);
+}
+
+#MiniOrderForm .ct-ticket-position-show svg { inline-size: 16px; block-size: 16px; }
+
+#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-form-item-control-input-content:has(> .ct-ticket-position-show:not([hidden])) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])),
+#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])) .ant-input-number-input-wrap {
+  min-inline-size: 0;
+  flex: 1 1 0;
+}
+
+#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])) input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+}
+
+#MiniOrderForm :is(.ct-ticket-position-fill, .ct-ticket-position-close, .ct-ticket-position-show):hover {
+  background: var(--ant-input-background, ButtonFace);
+}
+
+#MiniOrderForm :is(.ct-ticket-position-fill, .ct-ticket-position-close, .ct-ticket-position-show):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+@media (max-width: 480px) {
+  .ct-ticket-position-projection { gap: 5px; }
+  .ct-ticket-position :is(td, th) { padding-inline: 3px; }
+  .ct-ticket-position :is(td, thead th) { white-space: normal; overflow-wrap: anywhere; }
+}
+
+@media (pointer: coarse) {
+  #MiniOrderForm > .ct-ticket-position { padding-inline-end: 46px; }
+  #MiniOrderForm :is(.ct-ticket-position-close, .ct-ticket-position-show) { inline-size: 44px; block-size: 44px; }
+}

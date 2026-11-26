@@ -98,11 +98,12 @@ function installMarketFixture(regression) {
     const input = document.getElementById(id);
     input.addEventListener('input', () => input.setAttribute('aria-valuenow', input.value.replace(',', '.')));
   }
-  const positionReport = { lastCalculation: new Date(), types: [{ type: 'STOCK_OPTION_CALL', securitiesDetailed: [
+  class FixturePositionReport {}
+  const positionReport = Object.assign(new FixturePositionReport(), { lastCalculation: new Date(), types: [{ type: 'STOCK_OPTION_CALL', securitiesDetailed: [
     { detailedPositions: [{ tradingSymbol: `DEMO FIX call ${spot}`, totalCurrentSize: 2, totalCollateralSize: 0 }] },
     { detailedPositions: [{ tradingSymbol: `DEMO FIX call ${spot + step}`, totalCurrentSize: -1, totalCollateralSize: 0 }] },
   ] }, { type: 'STOCK', securitiesDetailed: [{ symbolReference: underlying.symbolStr, security: underlying, instrumentCurrentSize: 100,
-    detailedPositions: [{ security: underlying, totalCurrentSize: 100 }] }] }] };
+    detailedPositions: [{ security: underlying, totalCurrentSize: 100 }] }] }] });
   const executionPriceScale = regression ? 1 : 20;
   const execution = { account: 'DEMO-NO-BROKER', eventSubtype: 'execution_report', execType: 'F', ordStatus: '2',
     side: '1', securityId: `call-${spot}`, transactTime: new Date().toISOString(), lastQty: 2, lastPx: 10 * executionPriceScale };
@@ -117,10 +118,49 @@ function installMarketFixture(regression) {
     md: { lst: regression ? 1e-10 : 30 - (7 - days) / 2, lstdStr: new Date(Date.now() - 2 * 60000).toISOString() },
   }));
   const securities = new Map([underlying, ...options, ...cauciones].map(s => [s.id, s]));
+  const readNativePosition = {
+    async getDetailedPositionReport() {
+      return Object.assign(this.detailedPositionReport, { types: positionReport.types, lastCalculation: new Date() });
+    },
+  };
   window.mainStore = { orderEventStore: { getOrderEventsForAccountReport: async () => executions },
     securityStore: { options, underlyingsForMatrix: [underlying], findSecurityFromId: id => securities.get(id), getSecurity: async id => securities.get(id) },
-    portfolioStore: { detailedPositionReport: positionReport, getDetailedPositionReport: async () => { positionReport.lastCalculation = new Date(); return positionReport; } },
+    portfolioStore: Object.assign(Object.create(readNativePosition), { detailedPositionReport: positionReport }),
     dmaWebSocket: { addSubscription() {} }, profileStore: { activeAccount: 'DEMO-NO-BROKER' }, webSocketConnectionStatus: true };
+
+  let ticketReport;
+  window.ctUseTicketPositionFixture = (term = 'CI') => {
+    const store = window.mainStore;
+    const quantity = document.getElementById('cantidad');
+    if (!ticketReport) {
+      const series = ['CI', '24hs'].map(settlement => ({
+        id: 'demo-AL30-' + settlement, fixSymbol: 'MERV - XMEV - AL30 - ' + settlement,
+        symbolStr: settlement === 'CI' ? 'AL30 (CI)' : 'AL30', settlementType: settlement === 'CI' ? '1' : '2',
+        marketId: 'bm', currency: 'ARS', cfiCode: 'DBXXXX',
+      }));
+      ticketReport = { reads: 0, series };
+      const detail = [12500, -2500].map((totalCurrentSize, settlType) => ({ tradingSymbol: series[1].fixSymbol, settlType, totalCurrentSize, totalInitialCollateralSize: 0 }));
+      positionReport.types.push({ type: 'BOND', securitiesDetailed: [{
+        symbolReference: 'AL30', instrumentCurrentSize: 10000, instrumentCollateralSize: 0, detailedPositions: detail,
+      }] });
+      store.securityStore.securities = series;
+      store.profileStore.accounts = [store.profileStore.activeAccount];
+      const original = readNativePosition.getDetailedPositionReport;
+      readNativePosition.getDetailedPositionReport = async function () { ticketReport.reads++; return original.call(this); };
+      const form = document.querySelector('#MiniOrderForm form');
+      form.insertAdjacentHTML('afterbegin', '<div class="account-form-item"><span class="ant-select-selection-item" title="DEMO-NO-BROKER">Demo</span></div>');
+      instrument.parentElement.classList.add('SearchSecurity');
+      instrument.setAttribute('role', 'combobox');
+      const wrap = quantity.parentElement;
+      wrap.insertAdjacentHTML('beforebegin', '<div class="ant-form-item-control-input-content" style="width:140px"><div class="ant-input-number"></div></div>');
+      wrap.previousElementSibling.firstElementChild.append(wrap);
+    }
+    const security = ticketReport.series[term === 'CI' ? 0 : 1];
+    quantity.__reactProps$fixture = { security };
+    instrument.value = security.symbolStr;
+    instrument.dispatchEvent(new Event('input', { bubbles: true }));
+    return ticketReport.reads;
+  };
 }
 
 const mime = { js: 'text/javascript', css: 'text/css', html: 'text/html', json: 'application/json', png: 'image/png', ico: 'image/x-icon' };

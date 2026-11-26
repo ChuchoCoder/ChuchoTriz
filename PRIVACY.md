@@ -8,6 +8,13 @@ Al pulsar la acción de carga del simulador, copia el instrumento, la cantidad y
 el precio de la operación elegida al Mini Order Form.
 Completar el formulario no envía una orden: la confirmación corresponde a Matriz.
 
+Cuando el ticket tiene un instrumento y un plazo compatibles, ChuchoTriz
+consulta el reporte nativo de la cuenta seleccionada para mostrar el saldo y
+los nominales que quedarían después de comprar o vender. El botón **Usar**
+actualiza esa consulta y completa Cantidad. La cuenta, el reporte y el saldo
+calculado se usan dentro de la página de Matriz, en memoria. Si ocultás la franja,
+ChuchoTriz pausa las consultas y guarda esa preferencia en `chrome.storage.local`.
+
 Los presets y la preferencia de autocompletar de cada instrumento se guardan en
 `chrome.storage.local`, dentro del perfil de Chrome. El último preset elegido
 por instrumento se mantiene en memoria durante la sesión del formulario.
