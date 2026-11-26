@@ -159,7 +159,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
     if (root.current) { root.current.style.width = ""; root.current.style.height = ""; }
     void run("ratiosResize", { width: start.width + event.clientX - start.x, height: start.height + event.clientY - start.y });
   };
-  return <section className="ct-ratios" ref={root} aria-label="Ratios de instrumentos">
+  return <section className="ct-ratios ct-ratios-widget" ref={root} aria-label="Ratios de instrumentos">
     <header className="ct-ratios-title"><strong>Ratios</strong><span className="ct-ratios-header-actions NoDraggable">
       <button type="button" aria-label="Agregar ratio" title="Agregar ratio" disabled={busy || cfg.pairs.length >= 50} onClick={() => begin()}>＋</button>
       <button type="button" aria-label="Cerrar widget de ratios" title="Quitar este widget del dashboard" disabled={busy} onClick={() => void run("ratiosRemove", {})}>×</button>
