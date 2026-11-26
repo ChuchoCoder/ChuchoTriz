@@ -355,6 +355,7 @@ export default function RatiosDashboard() {
   useEffect(() => {
     if (typeof globalThis.chrome?.runtime?.getURL !== "function") return;
     const menus = new Map<Element, HTMLElement>(), widgets = new Map<HTMLElement, HTMLElement>();
+    const menuVisibility = new Map<Element, boolean>();
     const visible = new Set<Element>();
     let slots = new Map<string, HTMLElement>();
     let drawerHeaders: Element[] = [];
@@ -386,7 +387,7 @@ export default function RatiosDashboard() {
       retryDelay = discoveryDelays.at(retry++);
       if (retryDelay !== undefined) return;
       // Slow startup can outlast the initial burst. Keep looking while a menu or a saved widget needs its first state.
-      const hasVisibleMenu = [...menus.keys()].some(parent => parent.getClientRects().length > 0);
+      const hasVisibleMenu = [...menus.keys()].some(parent => menuVisibility.get(parent) ?? parent.getClientRects().length > 0);
       if (hasVisibleMenu || document.querySelector(savedWidgetSelector)) retryDelay = 5000;
     };
     const refresh = async () => {
@@ -419,6 +420,11 @@ export default function RatiosDashboard() {
     const intersection = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(entries => {
       let revealed = false;
       for (const { target, isIntersecting } of entries) {
+        if (menus.has(target)) {
+          revealed ||= isIntersecting && menuVisibility.get(target) === false;
+          menuVisibility.set(target, isIntersecting);
+          continue;
+        }
         if (isIntersecting && widgets.has(target as HTMLElement)) {
           revealed ||= !visible.has(target);
           visible.add(target);
@@ -442,9 +448,12 @@ export default function RatiosDashboard() {
         for (const header of headers) drawerObserver.observe(header, { childList: true, characterData: true, subtree: true });
         drawerHeaders = headers;
       }
-      for (const [parent, slot] of menus) if (!parent.isConnected || !lists.includes(parent)) { slot.remove(); menus.delete(parent); }
+      for (const [parent, slot] of menus) if (!parent.isConnected || !lists.includes(parent)) {
+        intersection?.unobserve(parent); menuVisibility.delete(parent); slot.remove(); menus.delete(parent);
+      }
       for (const list of lists) if (!menus.get(list)?.isConnected) {
         const slot = document.createElement("div"); slot.className = "WidgetComponentCard ct-ratios-menu-slot"; list.append(slot); menus.set(list, slot);
+        intersection?.observe(list);
       }
     };
     const reconcileWidgets = () => {

@@ -12,13 +12,17 @@ async (page) => {
   await page.addInitScript(() => {
     window.ratiosStateRequests = 0;
     let loadCatalogue;
-    if (sessionStorage.getItem('ct-delay-ratios-catalog')) {
+    const delayed = sessionStorage.getItem('ct-delay-ratios-catalog');
+    if (delayed) {
       sessionStorage.removeItem('ct-delay-ratios-catalog');
+      if (delayed === 'hidden') {
+        window.addEventListener('DOMContentLoaded', () => { document.querySelector('.WidgetsComponentsPopoverList').style.display = 'none'; }, { once: true });
+      }
       Object.defineProperty(window, 'mainStore', { configurable: true, set(store) {
         delete window.mainStore;
         const catalogue = store.securityStore;
         window.mainStore = { ...store, securityStore: undefined };
-        loadCatalogue = () => { window.mainStore.securityStore = catalogue; };
+        loadCatalogue = () => { window.mainStore.securityStore = catalogue; window.ratiosCatalogueReady = true; };
       } });
     }
     window.addEventListener('message', event => {
@@ -62,6 +66,13 @@ async (page) => {
   await page.waitForFunction(() => document.querySelector('.ct-ratios-add')?.disabled === false, null, { timeout: 20000 });
   assert(await reads() === 5, 'An open menu recovers when Matriz hydrates after the fast startup attempts without a DOM change');
   await staysIdle('A dashboard without ratios does not poll even with the widget menu mounted');
+  await page.evaluate(() => sessionStorage.setItem('ct-delay-ratios-catalog', 'hidden'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await wait(() => window.ratiosCatalogueReady);
+  assert(await reads() === 4, 'A hidden menu stops after the fast startup attempts');
+  await page.evaluate(() => { document.querySelector('.WidgetsComponentsPopoverList').style.removeProperty('display'); });
+  await idle();
+  assert(await reads() === 5, 'Revealing an already mounted menu refreshes its availability');
   await page.evaluate(() => {
     const popover = document.querySelector('.WidgetsComponentsPopoverList');
     popover.remove();

@@ -10,6 +10,7 @@
     ["BMA", "GGAL"], ["ALUA", "TXAR"], ["PESOS - 7D", "PESOS - 1D"],
     ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"]];
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
+  const legacyDollarPairs = new WeakMap();
   let identity, revision = 0, writing = false;
   const intradayDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" });
   const intradayHistory = new Map(), bookHistory = new Map(), intradaySubscriptions = new Set(), intradaySequences = new Map();
@@ -273,12 +274,20 @@
       return { config, width: w.w, height: w.h, columns: columnsOf(w), issue: Array.isArray(missing) && missing.length && missing.length <= DEFAULT_PAIRS.length && missing.every(p => short(p))
         ? "No se pudieron cargar estos pares iniciales: " + missing.join(", ") + ". Agregalos manualmente cuando estén disponibles." : undefined };
     });
+    const visible = visibleWidgetIds === undefined ? undefined : new Set(visibleWidgetIds);
     const dollarWidgets = owned.filter(dollarConfig).map(w => {
       const config = dollarConfig(w);
-      const pair = config.schema === 3 ? { a: config.a, b: config.b } : dollarPair(c.ss.securities, config);
+      let pair;
+      if (config.schema === 3) pair = { a: config.a, b: config.b };
+      else if (!visible || visible.has(config.id)) {
+        pair = dollarPair(c.ss.securities, config);
+        legacyDollarPairs.set(w, { context: c.revision, revision: config.revision, pair });
+      } else {
+        const cached = legacyDollarPairs.get(w);
+        if (cached?.context === c.revision && cached.revision === config.revision) pair = cached.pair;
+      }
       return { config, pair: pair && { ...pair, c: config.c, cDivisor: config.cDivisor }, issue: pair ? undefined : "Elegí los instrumentos A y B para mostrar el intradiario." };
     });
-    const visible = visibleWidgetIds === undefined ? undefined : new Set(visibleWidgetIds);
     const active = new Set(), requested = new Set();
     for (const { config } of widgets) {
       const include = !visible || visible.has(config.id);

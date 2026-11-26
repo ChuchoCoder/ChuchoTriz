@@ -433,14 +433,22 @@ test('projects quotes and subscribes only for visible widgets without losing hid
   const secondEdit = await f.request('ratiosEdit', { ...args, widgetId: second.id, revision: 0, pairs: [{ id: 'second-row', a: 'c', b: 'ci' }] });
   assert.equal(firstEdit.error, undefined);
   assert.equal(secondEdit.error, undefined);
+  const dollar = (await f.request('dollarAdd', args)).result.dollarWidgets[0].config;
   f.ms.dmaWebSocket = { addSubscription: (...args) => f.calls.push(args) };
   f.calls.length = 0;
+  let catalogueReads = 0;
+  const security = f.securities[0], originalSymbol = security.symbolStr;
+  Object.defineProperty(security, 'symbolStr', { get() { catalogueReads++; return originalSymbol; } });
 
   const reply = visibleWidgetIds => f.request('ratiosState', { visibleWidgetIds });
   const hidden = (await reply([])).result;
   assert.equal(hidden.widgets.length, 2);
   assert.deepEqual(hidden.quotes, {});
   assert.deepEqual(f.calls, []);
+  assert.equal(catalogueReads, 0, 'the hidden legacy dollar widget does not scan the catalogue');
+  const onlyDollar = (await reply([dollar.id])).result;
+  assert.equal(onlyDollar.dollarWidgets[0].pair.a.id, 'a');
+  assert.deepEqual(onlyDollar.quotes, {}, 'a visible dollar widget does not fetch hidden ratio quotes');
   assert.deepEqual(Object.keys((await reply([second.id])).result.quotes), ['c', 'ci']);
   assert.deepEqual(clone(f.calls), [['md', ['md.c', 'md.ci']]]);
   assert.deepEqual(Object.keys((await reply([first.id])).result.quotes), ['a', 'b']);
