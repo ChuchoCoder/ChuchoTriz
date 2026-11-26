@@ -5,6 +5,7 @@ const smoke = ['opening', 'presets', 'autocomplete', 'mini-layout', 'quotes', 'c
 const regression = ['oracle', 'editing', 'accounting', 'scope', 'roll', 'limits', 'reader-errors', 'layout'];
 const extra = [
   { group: 'theme-controls', file: 'qa/browser-theme-cases.js', fixture: 'preview' },
+  { group: 'ticket-position', file: 'qa/browser-theme-cases.js', fixture: 'preview' },
   { group: 'theme-widgets', file: 'qa/browser-theme-cases.js', fixture: 'ratios' },
 ];
 const dedicated = [

@@ -65,6 +65,63 @@ async (page, group) => {
     });
     await page.goto(new URL('/index.html', page.url()).href, { waitUntil: 'domcontentloaded' });
     await contrast('TH-09', 'Título de Opciones independiente', page.locator('.options-heading h1'));
+  } else if (group === 'ticket-position') {
+    const panel = page.getByRole('region', { name: 'Tenencia del instrumento', exact: true });
+    const close = page.getByRole('button', { name: 'Ocultar tenencia', exact: true });
+    const eye = page.getByRole('button', { name: 'Mostrar tenencia', exact: true });
+    const qty = page.locator('#cantidad');
+    const select = (term = 'CI') => page.evaluate(value => window.ctUseTicketPositionFixture(value), term);
+    const expectRows = async (ci, next) => {
+      await panel.locator('table').waitFor();
+      const result = await panel.locator('tbody').evaluate(element => [...element.rows].map(row => [...row.cells].map(cell => cell.textContent)));
+      if (JSON.stringify(result) !== JSON.stringify([ci, next])) throw Error(`Saldos incorrectos: ${JSON.stringify(result)}`);
+    };
+    await select();
+    await qty.fill('2500');
+    await expectRows(['CI', '12.500', '15.000', '10.000'], ['24 h', '10.000', '12.500', '7.500']);
+    const buy = await contrast('TP-01', 'Columna Si comprás', panel.locator('thead .ct-buy'));
+    const sell = await contrast('TP-02', 'Columna Si vendés', panel.locator('thead .ct-sell'));
+    if (buy.ratio === sell.ratio) throw Error('Compra y venta deben usar colores distintos');
+    await contrast('TP-03', 'Tenencia actual', panel.locator('.ct-current').first());
+    await contrast('TP-04', 'Cruz de cierre', close.locator('svg'), { foreground: 'stroke', minimum: 3 });
+    await select('24hs');
+    await panel.getByText('Orden a 24 h', { exact: true }).waitFor();
+    await expectRows(['CI', '12.500', '12.500', '12.500'], ['24 h', '10.000', '12.500', '7.500']);
+    const [stripBox, closeBox] = await Promise.all([panel.boundingBox(), close.boundingBox()]);
+    if (!stripBox || !closeBox || closeBox.y - stripBox.y > 4 || stripBox.x + stripBox.width - closeBox.x - closeBox.width > 4) {
+      throw Error('Cruz fuera de la esquina del panel');
+    }
+    await close.press('Space');
+    await eye.waitFor();
+    await panel.waitFor({ state: 'hidden' });
+    if (!await eye.evaluate(button => document.activeElement === button && button.matches(':focus-visible'))) throw Error('Foco perdido al ocultar');
+    if (await qty.inputValue() !== '2500') throw Error('Ocultar alteró la cantidad');
+    const [eyeBox, qtyBox] = await Promise.all([eye.boundingBox(), qty.boundingBox()]);
+    if (!eyeBox || !qtyBox || eyeBox.x < qtyBox.x + qtyBox.width - 1 || Math.abs(eyeBox.y - qtyBox.y) > 8) {
+      throw Error('Ojo desalineado respecto de Cantidad');
+    }
+    await contrast('TP-05', 'Ojo junto a Cantidad', eye.locator('svg'), { foreground: 'stroke', minimum: 3 });
+    await eye.evaluate(button => button.click());
+    if ((await page.evaluate(() => chrome.storage.local.get('TicketPositionVisible'))).TicketPositionVisible !== false) {
+      throw Error('Un clic sintético cambió la preferencia persistida');
+    }
+    await page.reload();
+    await select('24hs');
+    await eye.waitFor();
+    await panel.waitFor({ state: 'hidden' });
+    if (await select('24hs') !== 0) throw Error('Se consultó la tenencia con la franja oculta');
+    await qty.fill('2500');
+    await eye.press('Enter');
+    await close.waitFor();
+    await expectRows(['CI', '12.500', '12.500', '12.500'], ['24 h', '10.000', '12.500', '7.500']);
+    if (!await close.evaluate(button => document.activeElement === button && button.matches(':focus-visible'))) throw Error('Foco perdido al mostrar');
+    await panel.getByRole('button', { name: /^Usar 10\.000/ }).click();
+    await page.waitForFunction(() => document.getElementById('cantidad').value === '10000');
+    await expectRows(['CI', '12.500', '12.500', '12.500'], ['24 h', '10.000', '20.000', '0']);
+    await page.reload();
+    await select();
+    await panel.locator('table').waitFor();
+    cases.push({ id: 'TP-06', status: 'PASS', detail: 'CI y 24 h, cruz y ojo con teclado, borrador conservado, preferencia oculta/visible tras recarga, pausa y recarga de posición' });
   } else if (group === 'theme-widgets') {
     await page.getByRole('button', { name: 'RATIOS · CHUCHOTRIZ', exact: true }).click();
     await contrast('TH-10', 'Cabecera del widget Ratios', page.locator('.ct-ratios th').first());

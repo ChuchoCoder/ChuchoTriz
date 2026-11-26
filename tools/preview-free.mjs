@@ -121,6 +121,38 @@ function installMarketFixture(regression) {
     securityStore: { options, underlyingsForMatrix: [underlying], findSecurityFromId: id => securities.get(id), getSecurity: async id => securities.get(id) },
     portfolioStore: { detailedPositionReport: positionReport, getDetailedPositionReport: async () => { positionReport.lastCalculation = new Date(); return positionReport; } },
     dmaWebSocket: { addSubscription() {} }, profileStore: { activeAccount: 'DEMO-NO-BROKER' }, webSocketConnectionStatus: true };
+
+  let ticketReport;
+  window.ctUseTicketPositionFixture = (term = 'CI') => {
+    const store = window.mainStore;
+    const quantity = document.getElementById('cantidad');
+    if (!ticketReport) {
+      const series = ['CI', '24hs'].map(settlement => ({
+        id: 'demo-AL30-' + settlement, fixSymbol: 'MERV - XMEV - AL30 - ' + settlement,
+        symbolStr: settlement === 'CI' ? 'AL30 (CI)' : 'AL30', settlementType: settlement === 'CI' ? '1' : '2',
+        marketId: 'bm', currency: 'ARS', cfiCode: 'DBXXXX',
+      }));
+      ticketReport = { reads: 0, series };
+      const detail = [12500, -2500].map((totalCurrentSize, settlType) => ({ tradingSymbol: series[1].fixSymbol, settlType, totalCurrentSize }));
+      positionReport.types.push({ type: 'BOND', securitiesDetailed: [{ symbolReference: 'AL30', instrumentCurrentSize: 10000, detailedPositions: detail }] });
+      store.securityStore.securities = series;
+      store.profileStore.accounts = [store.profileStore.activeAccount];
+      const original = store.portfolioStore.getDetailedPositionReport;
+      store.portfolioStore.getDetailedPositionReport = async () => { ticketReport.reads++; return original(); };
+      const form = document.querySelector('#MiniOrderForm form');
+      form.insertAdjacentHTML('afterbegin', '<div class="account-form-item"><span class="ant-select-selection-item" title="DEMO-NO-BROKER">Demo</span></div>');
+      instrument.parentElement.classList.add('SearchSecurity');
+      instrument.setAttribute('role', 'combobox');
+      const wrap = quantity.parentElement;
+      wrap.insertAdjacentHTML('beforebegin', '<div class="ant-form-item-control-input-content" style="width:140px"><div class="ant-input-number"></div></div>');
+      wrap.previousElementSibling.firstElementChild.append(wrap);
+    }
+    const security = ticketReport.series[term === 'CI' ? 0 : 1];
+    quantity.__reactProps$fixture = { security };
+    instrument.value = security.symbolStr;
+    instrument.dispatchEvent(new Event('input', { bubbles: true }));
+    return ticketReport.reads;
+  };
 }
 
 const mime = { js: 'text/javascript', css: 'text/css', html: 'text/html', json: 'application/json', png: 'image/png', ico: 'image/x-icon' };
