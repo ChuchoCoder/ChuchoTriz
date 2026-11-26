@@ -360,12 +360,16 @@
     if (!(d.width > 0 && d.cols > 0 && d.rowHeight > 0)) return;
     const unit = d.width / d.cols, row = d.rowHeight;
     const left = widget.x * unit, top = widget.y * row;
-    const intersects = (w, h, other) => {
+    const expandsOverlap = other => {
+      if (other === widget) return false;
       const x = other.x * unit, y = other.y * row;
-      return left < x + other.w && left + w > x && top < y + other.h && top + h > y;
+      const sharedLeft = Math.max(left, x), sharedTop = Math.max(top, y);
+      const right = Math.min(left + width, x + other.w), bottom = Math.min(top + height, y + other.h);
+      return right > sharedLeft && bottom > sharedTop &&
+        (right > Math.min(left + widget.w, x + other.w) || bottom > Math.min(top + widget.h, y + other.h));
     };
     if (width > Math.max(widget.w, Math.floor(d.width - left)) ||
-      d.layout.some(other => other !== widget && !intersects(widget.w, widget.h, other) && intersects(width, height, other))) {
+      d.layout.some(expandsOverlap)) {
       throw Error("No hay espacio para ese tamaño. Mové el widget o reducí el tamaño.");
     }
   }

@@ -43,13 +43,13 @@ function clampWidgetSize({ width, height }: WidgetSize, current: WidgetSize, spa
     // Preserve the upper left corner. First stop at neighbors on the right of
     // the occupied rows, then stop at neighbors below the resulting width.
     for (const neighbor of space.neighbors) {
-      if (neighbor.left >= current.width && neighbor.top < Math.min(current.height, height) && neighbor.bottom > 0) {
-        width = Math.min(width, Math.floor(neighbor.left));
+      if (neighbor.right > current.width && neighbor.top < Math.min(current.height, height) && neighbor.bottom > 0) {
+        width = Math.min(width, Math.max(current.width, Math.floor(neighbor.left)));
       }
     }
     for (const neighbor of space.neighbors) {
-      if (neighbor.top >= current.height && neighbor.left < width && neighbor.right > 0) {
-        height = Math.min(height, Math.floor(neighbor.top));
+      if (neighbor.bottom > current.height && neighbor.left < width && neighbor.right > 0) {
+        height = Math.min(height, Math.max(current.height, Math.floor(neighbor.top)));
       }
     }
   }
