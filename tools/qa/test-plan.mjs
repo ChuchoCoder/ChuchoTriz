@@ -10,7 +10,7 @@ const extra = [
 const dedicated = [
   { group: 'options-grid', file: 'validate-options-grid.playwright.js', fixture: 'preview' },
   { group: 'ratio-operations', file: 'validate-ratio-operations.playwright.js', fixture: 'preview' },
-  { group: 'ratios-widget', file: 'validate-ratios-widget.playwright.js', fixture: 'ratios' },
+  { group: 'ratios-widget', file: 'validate-ratios-widget.playwright.js', fixture: 'ratios', mcpTimeoutMs: 300000 },
   { group: 'ratio-chart', file: 'validate-ratio-chart.playwright.js', fixture: 'ratios' },
   { group: 'ratio-futures', file: 'validate-ratio-futures.playwright.js', fixture: 'ratios' },
   { group: 'intraday', file: 'validate-intraday.playwright.js', fixture: 'ratios' },

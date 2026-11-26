@@ -19,7 +19,7 @@ const report = { mode, startedAt: new Date().toISOString(), commit: execFileSync
 const lock = join(tmpdir(), 'chuchotriz-free-qa.lock');
 let lockFd, client;
 const servers = new Map();
-const call = async code => toolJSON(await client.request('tools/call', { name: 'browser_run_code_unsafe', arguments: { code } }, 180000));
+const call = async (code, timeout) => toolJSON(await client.request('tools/call', { name: 'browser_run_code_unsafe', arguments: { code } }, timeout));
 
 function fixtureUrl(kind, theme) {
   const key = `${theme}/${kind}`;
@@ -72,7 +72,7 @@ try {
   client.notify('notifications/initialized');
   const tools = await client.request('tools/list', {});
   if (!tools.tools.some(t => t.name === 'browser_run_code_unsafe')) throw Error('The shared MCP server does not expose browser_run_code_unsafe. Update its configured launcher; no fallback browser will be opened.');
-  for (const { id, group, theme, fixture, file, expectedChecks, groupArgument } of suites) {
+  for (const { id, group, theme, fixture, file, expectedChecks, groupArgument, mcpTimeoutMs = 180000 } of suites) {
     console.log(`QA ${id}...`);
     try {
       const url = await fixtureUrl(fixture, theme);
@@ -121,7 +121,7 @@ try {
           if (session) await session.detach().catch(() => {});
           await page.close();
         }
-      }`);
+      }`, mcpTimeoutMs);
       if (expectedChecks && (result.checks?.length !== expectedChecks || result.passed !== expectedChecks)) throw Error('Incomplete baseline result');
       const cases = result.cases ?? result.checks?.map((detail, i) => ({ id: `${group}-${i + 1}`, status: 'PASS', detail }));
       if (!cases?.length || cases.some(c => !['PASS', 'FAIL'].includes(c.status) || typeof c.detail !== 'string')) throw Error('Incomplete case result');
