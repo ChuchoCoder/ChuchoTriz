@@ -1,14 +1,17 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import InstrumentPresetsOptions from "./InstrumentPresetsOptions";
 import OptionsOperations from "./OptionsOperations";
 import OptionsSimulator from "./optionsSimulator/OptionsSimulator";
 import ToolbarIcon from "./ToolbarIcon";
 import RatioOperations from "./ratios/RatioOperations";
 
-export default function ChuchoTrizTools({ embedded = false, active = true, headerAction }: {
-  embedded?: boolean; active?: boolean; headerAction?: ReactNode;
+export default function ChuchoTrizTools({ embedded = false, active = true, headerAction, presetRequest }: {
+  embedded?: boolean; active?: boolean; headerAction?: ReactNode; presetRequest?: { ticker: string };
 }) {
   const [tab, setTab] = useState(embedded ? "simulator" : "presets");
+  useEffect(() => {
+    if (presetRequest) setTab("presets");
+  }, [presetRequest]);
   const id = useId();
   const navigation = <nav className="ct-tools-tabs" aria-label="Herramientas de ChuchoTriz">
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "ratios"} aria-controls={`${id}-ratios`}
@@ -27,6 +30,8 @@ export default function ChuchoTrizTools({ embedded = false, active = true, heade
     <div id={`${id}-executions`} className="ct-tools-content" hidden={tab !== "executions"}>
       {active && tab === "executions" && <OptionsOperations embedded={embedded} />}
     </div>
-    <div id={`${id}-presets`} className="ct-tools-content" hidden={tab !== "presets"}><InstrumentPresetsOptions embedded={embedded} /></div>
+    <div id={`${id}-presets`} className="ct-tools-content" hidden={tab !== "presets"}>
+      <InstrumentPresetsOptions embedded={embedded} active={active && tab === "presets"} presetRequest={presetRequest} />
+    </div>
   </div>;
 }

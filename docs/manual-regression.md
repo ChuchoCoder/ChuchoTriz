@@ -106,7 +106,7 @@ navegador aislado en CI.
 | Casos de la guía | Grupo de navegador | Cobertura reproducible |
 | --- | --- | --- |
 | SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
-| SM-02, SM-03, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, cambio de instrumento, último preset, Limpiar, reemplazo de formulario y foco tras cotización. |
+| SM-02, SM-03, SM-02-shortcut, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, último preset, Limpiar, reemplazo de formulario y foco tras cotización. El engranaje abre el ticker vigente, conserva el borrador y devuelve el foco al cerrar. |
 | AC-01–AC-08 | `autocomplete` | Default apagado, presets manuales, elección exacta por ticker/plazos, persistencia, ajuste global ausente y clave antigua ignorada, preferencias por instrumento conservadas al guardar presets, eventos externos, errores/reintentos, guardados demorados, remount, teclado y geometría a 1024/1440/1920. |
 | SM-11, SM-11-labels, SM-11-column | `mini-layout` | Botones nativos y presets alineados, Autocompletar debajo de Comprar/Vender/Limpiar, salto a dos filas y márgenes uniformes, sin recortes a 1024/1280/1440/1920 en modo expandido y compacto. Incluye los diez presets predeterminados de AO2 con cantidad/mostrar y contenedores en columna Notebook/Tablet. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
@@ -182,6 +182,7 @@ con broker. Un caso sin posiciones o cotizaciones no cuenta como aprobado.
 | --- | --- | --- |
 | SM-01 | Comprobar versión e ID en Extensiones, recargar Matriz y abrir/cerrar ChuchoTriz dos veces. Revisar errores de extensión y consola. | Una instancia; panel abre y cierra sin error atribuible a ChuchoTriz. |
 | SM-02 | En Cantidades rápidas revisar un preset existente. Volver a Matriz, seleccionar ese instrumento/plazo y pulsar un preset; cambiar instrumento y volver. Pulsar Limpiar. | Cantidad correcta para el instrumento; no mezcla presets; Limpiar no reaplica la selección anterior. No se envían órdenes. |
+| SM-02-shortcut | Seleccionar un instrumento en el ticket. Abrir el engranaje junto a Autocompletar, editar un preset, guardar y cerrar. Restaurar el preset original del mismo modo. | Abre el instrumento seleccionado. Al cerrar, el ticket muestra los botones guardados y conserva la cantidad que estaba ingresada. |
 | SM-03 | Hacer clic en una cotización nativa y comprobar foco en Cantidad. Abrir/cerrar el panel lateral o navegar y volver al ticket. | Presets y foco funcionan sobre el formulario vigente, sin duplicados ni escritura sobre el formulario anterior. |
 | SM-04 | Abrir simulador; elegir subyacente/vencimiento. Seleccionar ASK de call y BID de put; volver a pulsar una punta. Probar una punta sin precio. | Compra/venta y cantidades firmadas correctas; segundo clic quita la pata. Sin punta usa último o exige prima manual; nunca inventa cero. |
 | SM-04-drag | Seleccionar un ASK o BID y arrastrarlo al strike central o a la misma punta de otra fila. Repetir en el otro sentido y cancelar un intento con Escape. | El destino válido se resalta. La pata conserva tipo, lado y cantidad y usa la prima y VI disponibles del destino. Al cancelar se conserva la pata de origen. |

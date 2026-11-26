@@ -41,12 +41,17 @@ function sameSettings(a: EditorSettings, b: EditorSettings): boolean {
 }
 const conflictMessage = "Los presets guardados cambiaron. Si tenés cambios sin guardar, copialos desde RAW antes de descartar el borrador.";
 
-function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) {
+function InstrumentPresetsOptions({ embedded = false, active = true, presetRequest }: {
+  embedded?: boolean; active?: boolean; presetRequest?: { ticker: string };
+}) {
   const [presets, setPresets] = useState<DraftPresets>({});
   const [editorMode, setEditorMode] = useState<"visual" | "raw">("visual");
   const [rawText, setRawText] = useState("");
   const rawInput = useRef<HTMLTextAreaElement>(null);
   const [selected, setSelected] = useState("");
+  const receivedPresetRequest = useRef<typeof presetRequest>(undefined);
+  const pendingPresetTicker = useRef("");
+  const instrumentDetail = useRef<HTMLElement>(null);
   const [editing, setEditing] = useState<EditingPreset | null>(null);
   const editFocus = useRef<{ index: number; field: "cantidad" | "mostrar" | "action" } | null>(null);
   const [newTicker, setNewTicker] = useState("");
@@ -132,6 +137,23 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
   }, [editing]);
 
   function selectTicker(ticker: string) { setSelected(ticker); setEditing(null); }
+  function showRequestedTicker(draft: DraftPresets) {
+    const ticker = pendingPresetTicker.current;
+    pendingPresetTicker.current = "";
+    selectTicker(ticker);
+    setTickerQuery("");
+    setNewTicker(Object.hasOwn(draft, ticker) ? "" : ticker);
+    if (instrumentDetail.current) instrumentDetail.current.scrollTop = 0;
+  }
+
+  useEffect(() => {
+    if (!active || !presetRequest || presetRequest === receivedPresetRequest.current || loading || saving || loadFailed) return;
+    receivedPresetRequest.current = presetRequest;
+    pendingPresetTicker.current = presetRequest.ticker;
+    if (editorMode === "raw") switchEditorMode("visual");
+    else showRequestedTicker(presets);
+  }, [active, presetRequest, loading, saving, loadFailed, editorMode, presets, rawText]);
+
   function readRawPresets(): IInstrumentPresets | null {
     const result = parse(rawText);
     if (result.errors.length > 0) {
@@ -150,8 +172,11 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
       if (book === null) return;
       const draft = toDraft(book);
       setPresets(draft);
-      setSelected(current => Object.hasOwn(draft, current) ? current : sortTickers(draft)[0] ?? "");
-      setTickerQuery("");
+      if (pendingPresetTicker.current) showRequestedTicker(draft);
+      else {
+        setSelected(current => Object.hasOwn(draft, current) ? current : sortTickers(draft)[0] ?? "");
+        setTickerQuery("");
+      }
     }
     setEditing(null); setEditorMode(mode);
     setError(conflicted.current ? conflictMessage : "");
@@ -367,8 +392,8 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
                   <button type="button" onClick={addInstrument} aria-label="Agregar instrumento">+</button></div>
               </div>
             </aside>
-            <section className="instrument-detail" aria-labelledby="selected-instrument">
-              {selected ? <>
+            <section ref={instrumentDetail} className="instrument-detail" aria-labelledby="selected-instrument">
+              {Object.hasOwn(presets, selected) ? <>
                 <div className="instrument-heading"><h2 id="selected-instrument">{selected}</h2>
                   <button type="button" className="text-button" onClick={removeInstrument}>Quitar instrumento</button></div>
                 <p className="preset-hint">Hacé clic en cualquier celda para editar. Reordená con ↑/↓. El primero se usa para autocompletar si no hay uno elegido anteriormente.</p>
@@ -450,8 +475,10 @@ function InstrumentPresetsOptions({ embedded = false }: { embedded?: boolean }) 
                     y suma entre 0% y 3% en cada aplicación, incluido el autocompletado. El resultado queda fijo al editar el ticket.
                     {" "}El ✓ termina la edición; Guardar cambios guarda la configuración.</p>
                 </div>
-              </> : <div className="empty-instruments"><h2 id="selected-instrument">Agregá tu primer instrumento</h2>
-                <p>Ingresá su símbolo y configurá las cantidades rápidas.</p></div>}
+              </> : <div className="empty-instruments">
+                <h2 id="selected-instrument">{selected ? `${selected} todavía no tiene configuración` : "Agregá tu primer instrumento"}</h2>
+                <p>{selected ? "Usá Agregar instrumento para configurar sus cantidades rápidas." : "Ingresá su símbolo y configurá las cantidades rápidas."}</p>
+              </div>}
             </section>
           </div>}
         </fieldset>

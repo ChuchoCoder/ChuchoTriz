@@ -198,6 +198,68 @@ async function changeInstrument(form: HTMLElement, value: string) {
   });
 }
 
+it("opens quick quantities for the current ticker and returns focus to the shortcut", async () => {
+  const current = createForm("500000");
+  document.body.append(current.form);
+  await boot();
+  const shortcut = () => current.form.querySelector<HTMLButtonElement>('button[aria-controls="ct-free-settings-panel"]');
+  const panel = () => document.querySelector<HTMLElement>("#ct-free-settings-panel")!;
+  const selected = () => panel().querySelector("h2#selected-instrument")?.textContent;
+  await changeInstrument(current.form, "GD30 (24hs)");
+  expect(shortcut()?.ariaLabel).toBe("Configurar cantidades rápidas de GD30");
+  await act(async () => { shortcut()!.click(); });
+  expect(panel().hidden).toBe(false);
+  expect(panel().querySelector('.ct-tools-tabs [aria-pressed="true"]')?.textContent).toBe("Cantidades rápidas");
+  expect(selected()).toBe("GD30");
+  expect(current.amount.value).toBe("500000");
+
+  await act(async () => { panel().querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); });
+  expect(panel().hidden).toBe(true);
+  expect(document.activeElement).toBe(shortcut());
+
+  await changeInstrument(current.form, "AL30 (CI)");
+  await act(async () => { shortcut()!.click(); });
+  expect(selected()).toBe("AL30");
+  await changeInstrument(current.form, "TICKER-NUEVO (24hs)");
+  current.price.value = "";
+  await act(async () => { shortcut()!.click(); });
+  expect(panel().querySelector<HTMLInputElement>("#new-instrument")?.value).toBe("TICKER-NUEVO");
+  expect(vi.mocked(chrome.storage.local.set)).not.toHaveBeenCalled();
+
+  await changeInstrument(current.form, "");
+  expect(shortcut()).toBeNull();
+});
+
+it("refreshes the current ticket's buttons after saving from the shortcut without filling the ticket", async () => {
+  autocompleteStorage({ InstrumentPresets: { GD30: [{ cantidad: 400, mostrar: 0 }] },
+    "AutocompleteInstrument:GD30": true });
+  const current = createForm();
+  current.form.querySelector<HTMLInputElement>("#rc_select_2")!.value = "GD30 (CI)";
+  document.body.append(current.form);
+  await boot();
+  const previousPreset = presetButton(current.form, "400");
+  await act(async () => { previousPreset.click(); });
+  expect(current.amount.value).toBe("400");
+  const shortcut = current.form.querySelector<HTMLButtonElement>(".preset-settings-button")!;
+  await act(async () => { shortcut.click(); });
+  const panel = document.querySelector<HTMLElement>("#ct-free-settings-panel")!;
+  const button = (text: string) => [...panel.querySelectorAll("button")].find(button => button.textContent === text)!;
+  await act(async () => { button("RAW").click(); });
+  await act(async () => {
+    const raw = panel.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(raw, "GD30 405");
+    raw.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  current.amount.value = "";
+  await act(async () => { button("Guardar cambios").click(); });
+  await act(async () => { panel.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); });
+  expect(previousPreset.isConnected).toBe(false);
+  presetButton(current.form, "405");
+  expect(current.amount.value).toBe("");
+  await act(async () => { current.price.focus(); });
+  expect(current.amount.value).toBe("405");
+});
+
 it("starts with autocomplete off and still allows manual preset buttons", async () => {
   autocompleteStorage();
   const current = createForm();

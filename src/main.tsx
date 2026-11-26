@@ -7,7 +7,7 @@ import { bindMiniOrderForm, focusCantidadAfterQuoteClick, observeMiniOrderForm }
 import { createPresetSession } from "./PresetSession";
 import instrumentPresetsRepository, { autocompleteFor, StoredSettings } from "./InstrumentPresetsRepository";
 import { presetsFor } from "./PresetBook";
-import { SettingsMenu } from "./SettingsMenu";
+import { SettingsMenu, type PresetSettingsRequest } from "./SettingsMenu";
 import RatiosDashboard from "./ratios/RatiosDashboard";
 import RatioChart from "./ratios/RatioChart";
 
@@ -17,18 +17,32 @@ focusCantidadAfterQuoteClick();
 const settingsContainer = document.createElement("div");
 settingsContainer.id = "root-chuchotriz-settings";
 document.body.append(settingsContainer);
-createRoot(settingsContainer).render(<React.StrictMode><SettingsMenu /><RatiosDashboard /><RatioChart /></React.StrictMode>);
+const settingsRoot = createRoot(settingsContainer);
+function renderSettings(presetRequest?: PresetSettingsRequest) {
+  settingsRoot.render(<React.StrictMode>
+    <SettingsMenu presetRequest={presetRequest} /><RatiosDashboard /><RatioChart />
+  </React.StrictMode>);
+}
+renderSettings();
+
+function openPresets(ticker: string, trigger: HTMLButtonElement) {
+  renderSettings({ ticker, trigger });
+}
 
 // Read once; subsequent settings changes arrive through Chrome Storage.
 let storedSettings = instrumentPresetsRepository.readSettings();
 let snapshot: StoredSettings | undefined;
 const settingsListeners = new Set<() => void>();
 const publishSettings = (settings: StoredSettings) => {
-  const ticker = active?.session.ticker();
-  if (snapshot && ticker && autocompleteFor(snapshot, ticker) !== autocompleteFor(settings, ticker)) {
-    active?.session.invalidateAutocomplete();
-  }
+  const session = active?.session;
+  const previous = snapshot;
   snapshot = settings;
+  const ticker = session?.ticker();
+  if (previous && previous.book !== settings.book) {
+    void session?.reloadPresets(settings.book);
+  } else if (previous && ticker && autocompleteFor(previous, ticker) !== autocompleteFor(settings, ticker)) {
+    session?.invalidateAutocomplete();
+  }
   settingsListeners.forEach(listener => listener());
 };
 const updateSettings = (change: Partial<StoredSettings>) => {
@@ -86,6 +100,6 @@ observeMiniOrderForm((form, buttons) => {
   const root = createRoot(container);
   panel = { buttons, container, root };
   root.render(
-    <React.StrictMode><App session={active.session} autocomplete={autocomplete} /></React.StrictMode>
+    <React.StrictMode><App session={active.session} autocomplete={autocomplete} openPresets={openPresets} /></React.StrictMode>
   );
 });
