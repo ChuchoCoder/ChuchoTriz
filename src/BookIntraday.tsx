@@ -36,8 +36,9 @@ function readInstrument(link?: HTMLAnchorElement | null): Instrument | undefined
 function instrumentFor(anchor: HTMLElement) {
   if (!anchor.isConnected || !anchor.matches(CHART_TRIGGER)) return;
   if (anchor.matches(BOOK_BUTTON)) return readInstrument(anchor.closest(".NewWidgetHeader")?.querySelector<HTMLAnchorElement>(":scope > a[href]"));
-  const link = anchor.closest(PRICE_ROW)?.querySelector<HTMLAnchorElement>(".SymbolCell > a[href]");
-  return readInstrument(link) ?? readInstrument(anchor.closest<HTMLAnchorElement>("a[href]"));
+  const row = anchor.closest(PRICE_ROW);
+  const link = row ? row.querySelector<HTMLAnchorElement>(".SymbolCell > a[href]") : anchor.closest<HTMLAnchorElement>("a[href]");
+  return readInstrument(link);
 }
 
 function useBooks() {
@@ -148,18 +149,23 @@ function Preview({ target, id, onEnter, onLeave }: {
       let side: number | undefined, alignAbove: boolean | undefined;
       element.style.width = "";
       element.style.maxHeight = "";
+      element.style.pointerEvents = "";
       if (anchor.matches(NATIVE_CHART_ICON)) {
-        // Keep the next row's chart icon reachable even in a narrow viewport.
-        const rightRoom = window.innerWidth - rect.right - gap - inset, leftRoom = rect.left - gap - inset;
+        const favorite = anchor.closest(".ActionCell")?.querySelector(".FavoriteButton")?.getBoundingClientRect();
+        const controlsLeft = favorite?.width ? Math.min(rect.left, favorite.left) : rect.left;
+        const controlsRight = favorite?.width ? Math.max(rect.right, favorite.right) : rect.right;
+        const rightRoom = window.innerWidth - controlsRight - gap - inset, leftRoom = controlsLeft - gap - inset;
         if (Math.max(rightRoom, leftRoom) >= 180) {
           const onRight = rightRoom >= 354 || rightRoom >= leftRoom;
           const width = Math.min(354, onRight ? rightRoom : leftRoom);
           element.style.width = `${width}px`;
-          side = onRight ? rect.right + gap : rect.left - gap - width;
+          side = onRight ? controlsRight + gap : controlsLeft - gap - width;
         } else {
           const belowRoom = window.innerHeight - below - inset, aboveRoom = rect.top - gap - inset;
           alignAbove = aboveRoom > belowRoom;
           element.style.maxHeight = `${Math.max(0, alignAbove ? aboveRoom : belowRoom)}px`;
+          // A stacked preview must leave the surrounding rows' controls clickable.
+          element.style.pointerEvents = "none";
         }
       }
       const { width, height } = element.getBoundingClientRect();
@@ -189,19 +195,24 @@ export default function BookIntraday() {
   const books = useBooks(), id = useId();
   const [active, setActive] = useState<ChartTarget>();
   const hovered = useRef<HTMLElement>(undefined);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const openTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cancelTimers = useCallback(() => { clearTimeout(openTimer.current); clearTimeout(closeTimer.current); }, []);
   const closeSoon = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
       setActive(current => current && (hovered.current === current.anchor || current.anchor.matches(":focus-visible")) ? current : undefined);
     }, HOVER_DELAY);
   }, []);
   const leave = useCallback((anchor: HTMLElement) => {
-    if (hovered.current === anchor) hovered.current = undefined;
+    if (hovered.current === anchor) {
+      hovered.current = undefined;
+      clearTimeout(openTimer.current);
+    }
     closeSoon();
   }, [closeSoon]);
   const open = useCallback((anchor: HTMLElement, expected?: Instrument) => {
-    clearTimeout(timer.current);
+    cancelTimers();
     const instrument = instrumentFor(anchor);
     if (!instrument || expected && (instrument.id !== expected.id || instrument.label !== expected.label)) {
       if (hovered.current === anchor) hovered.current = undefined;
@@ -209,7 +220,7 @@ export default function BookIntraday() {
       return;
     }
     setActive(current => current?.anchor === anchor && current.id === instrument.id && current.label === instrument.label ? current : { ...instrument, anchor });
-  }, [closeSoon]);
+  }, [cancelTimers, closeSoon]);
 
   useEffect(() => {
     // Delegate to the shared Matriz icon so virtualized rows don't need their own listeners.
@@ -221,8 +232,8 @@ export default function BookIntraday() {
       const instrument = instrumentFor(anchor);
       if (!instrument) return;
       hovered.current = anchor;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => open(anchor, instrument), HOVER_DELAY);
+      cancelTimers();
+      openTimer.current = setTimeout(() => open(anchor, instrument), HOVER_DELAY);
     };
     const pointerOut = (event: PointerEvent) => {
       const anchor = trigger(event.target);
@@ -236,7 +247,7 @@ export default function BookIntraday() {
       const anchor = trigger(event.target);
       if (anchor && crossed(anchor, event.relatedTarget)) closeSoon();
     };
-    const dismiss = () => { clearTimeout(timer.current); setActive(undefined); };
+    const dismiss = () => { cancelTimers(); setActive(undefined); };
     const nativeClick = (event: MouseEvent) => {
       if (event.target instanceof Element && event.target.closest(".TradingChartModal")) dismiss();
     };
@@ -248,7 +259,7 @@ export default function BookIntraday() {
     document.addEventListener("click", nativeClick, true);
     document.addEventListener("keydown", keyDown, true);
     return () => {
-      clearTimeout(timer.current);
+      cancelTimers();
       document.removeEventListener("pointerover", pointerOver, true);
       document.removeEventListener("pointerout", pointerOut, true);
       document.removeEventListener("focusin", focusIn, true);
@@ -256,20 +267,25 @@ export default function BookIntraday() {
       document.removeEventListener("click", nativeClick, true);
       document.removeEventListener("keydown", keyDown, true);
     };
-  }, [open, leave, closeSoon]);
+  }, [open, leave, closeSoon, cancelTimers]);
   useEffect(() => {
     if (!active) return;
-    const scope = active.anchor.closest(`.NewWidgetHeader, ${PRICE_ROW}, a[href]`) ?? active.anchor;
+    const anchor = active.anchor;
+    const container = anchor.matches(BOOK_BUTTON)
+      ? anchor.closest(".NewWidgetHeader")
+      : anchor.closest(PRICE_ROW) ?? anchor.closest("a[href]");
+    const scope = container ?? anchor;
     const checkAnchor = () => {
-      const instrument = instrumentFor(active.anchor);
+      const instrument = instrumentFor(anchor);
       if (instrument?.id === active.id && instrument.label === active.label) return;
-      if (hovered.current === active.anchor) hovered.current = undefined;
+      if (hovered.current === anchor) hovered.current = undefined;
       setActive(current => current === active ? undefined : current);
     };
     const observer = new MutationObserver(records => {
-      if (!active.anchor.isConnected || !scope.contains(active.anchor) || records.some(({ target }) => scope.contains(target))) checkAnchor();
+      if (!anchor.isConnected || !scope.contains(anchor) || records.some(({ target }) => scope.contains(target))) checkAnchor();
     });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"], characterData: true });
+    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(scope, { attributes: true, attributeFilter: ["href", "class"], characterData: true, subtree: true });
     checkAnchor();
     return () => observer.disconnect();
   }, [active]);
@@ -281,6 +297,6 @@ export default function BookIntraday() {
       <ToolbarIcon name="analysis" />
     </button>, book.actions, book.key))}
     {active && createPortal(<Preview key={active.id} target={active} id={id}
-      onEnter={() => { hovered.current = active.anchor; clearTimeout(timer.current); }} onLeave={() => leave(active.anchor)} />, document.body)}
+      onEnter={() => { hovered.current = active.anchor; cancelTimers(); }} onLeave={() => leave(active.anchor)} />, document.body)}
   </>;
 }

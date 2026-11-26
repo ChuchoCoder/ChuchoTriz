@@ -39,6 +39,15 @@ function priceRow(className: string, id: string, label: string) {
   };
 }
 
+function wrapChartInLink(icon: Element) {
+  const chart = icon.parentElement!;
+  const wrapper = document.createElement("a");
+  wrapper.href = "/security/bm_MERV_GD30_CI";
+  wrapper.textContent = "Abrir gráfico";
+  chart.replaceWith(wrapper);
+  wrapper.append(chart);
+}
+
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -90,6 +99,7 @@ it.each(["PricePanelRow-row", "PricePanelRowWidget-row"])("previews the exact in
   const ci = priceRow(className, "bm_MERV_AL30D_CI", "AL30D (CI)");
   const next = priceRow(className, "bm_MERV_AL30D_24hs", "AL30D");
   const expired = priceRow(className, "EXPIRADO", "EXPIRADO");
+  wrapChartInLink(expired.icon);
   const clickNative = vi.fn((event: Event) => event.defaultPrevented);
   ci.icon.parentElement!.addEventListener("click", clickNative);
   readSeries.mockResolvedValue(bars([49, 50]));
@@ -120,6 +130,7 @@ it.each(["PricePanelRow-row", "PricePanelRowWidget-row"])("previews the exact in
 
 it("discards the pending hover and later the preview when Matriz recycles a price row", async () => {
   const { icon, link } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  wrapChartInLink(icon);
   readSeries.mockResolvedValue(bars([49]));
   await act(async () => {
     move(icon, "pointerover");
@@ -136,6 +147,34 @@ it("discards the pending hover and later the preview when Matriz recycles a pric
   expect(dispose).toHaveBeenCalledTimes(1);
 });
 
+it("stops polling when a connected node loses its native chart class", async () => {
+  const { icon } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  readSeries.mockResolvedValue(bars([49]));
+  await act(async () => { move(icon, "pointerover"); await vi.advanceTimersByTimeAsync(180); });
+  expect(preview()).not.toBeNull();
+  await act(async () => { icon.classList.remove("TradingChartModal-Icon"); });
+  expect(icon.isConnected).toBe(true);
+  expect(preview()).toBeNull();
+  expect(dispose).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(readSeries).toHaveBeenCalledTimes(1);
+});
+
+it("opens a hovered native chart when a different trigger loses keyboard focus during the delay", async () => {
+  const { icon } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  let widget!: HTMLElement;
+  readSeries.mockResolvedValue(bars([49, 50]));
+  await act(async () => { widget = book("bm_MERV_GD30_24hs", "GD30"); });
+  await act(async () => { button(widget).focus(); move(icon, "pointerover"); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+    button(widget).blur();
+    await vi.advanceTimersByTimeAsync(80);
+  });
+  expect(readSeries).toHaveBeenNthCalledWith(2, "bookIntraday", { id: "bm_MERV_AL30D_CI" });
+  expect(preview()?.querySelector("strong")?.textContent).toBe("Intradiario · AL30D (CI)");
+});
+
 it("fits the native preview beside the icon column in a narrow window", async () => {
   const { icon } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
   let widget!: HTMLElement;
@@ -150,6 +189,27 @@ it("fits the native preview beside the icon column in a narrow window", async ()
   expect(parseFloat(styles.left) + parseFloat(styles.width)).toBeLessThan(600);
   await act(async () => { move(icon, "pointerout"); move(button(widget), "pointerover"); await vi.advanceTimersByTimeAsync(180); });
   expect((preview() as HTMLElement).style.width).toBe("");
+});
+
+it("leaves the star clear when the native preview opens to the left", async () => {
+  const { icon, star } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  vi.stubGlobal("innerWidth", 600);
+  vi.spyOn(icon, "getBoundingClientRect").mockReturnValue(new DOMRect(480, 100, 16, 16));
+  vi.spyOn(star, "getBoundingClientRect").mockReturnValue(new DOMRect(460, 100, 14, 16));
+  readSeries.mockResolvedValue(bars([49]));
+  await act(async () => { move(icon, "pointerover"); await vi.advanceTimersByTimeAsync(180); });
+  const styles = (preview() as HTMLElement).style;
+  expect(parseFloat(styles.left) + parseFloat(styles.width)).toBeLessThan(460);
+});
+
+it("lets pointer events reach adjacent rows if the native preview must stack vertically", async () => {
+  const { icon } = priceRow("PricePanelRow-row", "bm_MERV_AL30D_CI", "AL30D (CI)");
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 300);
+  vi.spyOn(icon, "getBoundingClientRect").mockReturnValue(new DOMRect(187, 100, 16, 16));
+  readSeries.mockResolvedValue(bars([49]));
+  await act(async () => { move(icon, "pointerover"); await vi.advanceTimersByTimeAsync(180); });
+  expect((preview() as HTMLElement).style.pointerEvents).toBe("none");
 });
 
 it("drops an obsolete response after Matriz updates the instrument in place", async () => {
