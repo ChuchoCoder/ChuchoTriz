@@ -139,7 +139,7 @@ en Matriz cuando el cambio afecte su aspecto.
 | SM-01 | `opening` | Apertura/cierre/reapertura, una instancia y coexistencia de herramientas. |
 | SM-02, SM-03, SM-02-shortcut, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, último preset, Limpiar, reemplazo de formulario y foco tras cotización. El engranaje abre la configuración que usa el ticket, conserva el borrador y devuelve el foco al cerrar. |
 | AC-01–AC-08 | `autocomplete` | Default apagado, presets manuales, elección exacta por ticker/plazos, persistencia, ajuste global ausente y clave antigua ignorada, preferencias por instrumento conservadas al guardar presets, eventos externos, errores/reintentos, guardados demorados, remount, teclado y geometría a 1024/1440/1920. |
-| SM-11, SM-11-labels, SM-11-column | `mini-layout` | Botones nativos y presets alineados, Autocompletar debajo de Comprar/Vender/Limpiar, salto a dos filas y márgenes uniformes, sin recortes a 1024/1280/1440/1920 en modo expandido y compacto. Incluye los diez presets predeterminados de AO2 con cantidad/mostrar y contenedores en columna Notebook/Tablet. |
+| SM-11, SM-11-labels, SM-11-column, SM-11-menu, SM-11-empty | `mini-layout` | Los presets usan las filas disponibles a la izquierda de las acciones, sin scroll en el mini formulario. Autocompletar ocupa su propia fila arriba cuando los controles no entran juntos y hay altura disponible. Los que no entran quedan en un menú accesible por teclado que admite listas largas. Configuración devuelve el foco al acceso visible del ticket, incluso si cambia la distribución. Verifica la altura nativa y la posición estable de las acciones al cambiar de instrumento y con el ticket vacío. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
 | SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
 | SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. Extrínseco Bid/Ask: selección e intercambio, calls/puts ATM/ITM/OTM, puntas independientes, ceros/negativos, VI ausente, precio/tamaño inválidos y desconexión/recuperación. |
@@ -157,7 +157,7 @@ en Matriz cuando el cambio afecte su aspecto.
 | RG-07 | `roll` | Rolado comprado/vendido, contratos financiables, gastos y falta de liquidez. |
 | SM-08, SM-09 | `reader-errors` | Reportes vacíos/fallidos, errores sin datos privados, cambio de cuenta y recuperación. |
 | RG-10 | `layout` | Geometría a 1024/1920, scroll, controles, teclado y devolución de foco. |
-| TH-01–TH-09 | `theme-controls` | Contraste del mini formulario, Configuración, editor de presets, simulador, ejecuciones, Ratios y Opciones independiente. |
+| TH-01–TH-09, TH-15 | `theme-controls` | Contraste de presets en reposo y al pasar el mouse, mini formulario, Configuración, editor de presets, simulador, ejecuciones, Ratios y Opciones independiente. |
 | TH-10–TH-14 | `theme-widgets` | Contraste del widget Ratios, el nombre, el eje y la línea del Book intradiario. |
 | Cadena de opciones | `options-grid` | Densidad, geometría y scroll mientras cargan las cotizaciones. |
 | Ratios | `ratio-operations`, `ratios-widget`, `ratio-chart`, `ratio-futures`, `intraday` | Recorridos dedicados de regresión en ambos temas. |

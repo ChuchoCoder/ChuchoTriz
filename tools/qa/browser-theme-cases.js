@@ -5,7 +5,11 @@ async (page, group) => {
   const cases = [];
   const contrast = async (id, name, locator, { foreground = 'color', minimum = 4.5, state = 'visible' } = {}) => {
     await locator.waitFor({ state });
-    const result = await locator.evaluate((element, property) => {
+    const result = await locator.evaluate(async (element, property) => {
+      const style = getComputedStyle(element);
+      // Force style resolution before waiting for the CSS transition.
+      void style.getPropertyValue(property);
+      await Promise.allSettled(element.getAnimations().map(animation => animation.finished));
       const rgb = value => {
         const parts = value.match(/^rgba?\(([^)]+)\)$/)?.[1].split(',').map(Number);
         if (!parts || parts.length < 3 || parts.some(x => !Number.isFinite(x))) throw Error('Unsupported computed color ' + value);
@@ -15,22 +19,30 @@ async (page, group) => {
       const layers = [];
       for (let node = element; node; node = node.parentElement) layers.unshift(rgb(getComputedStyle(node).backgroundColor));
       const background = layers.reduce((back, front) => overlay(front, back), [255, 255, 255]);
-      const text = overlay(rgb(getComputedStyle(element).getPropertyValue(property)), background);
+      const text = overlay(rgb(style.getPropertyValue(property)), background);
       const luminance = channels => channels.reduce((total, channel, i) => {
         const x = channel / 255;
         return total + [.2126, .7152, .0722][i] * (x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4);
       }, 0);
       const a = luminance(text), b = luminance(background);
-      return { ratio: (Math.max(a, b) + .05) / (Math.min(a, b) + .05), text, background };
+      return { ratio: (Math.max(a, b) + .05) / (Math.min(a, b) + .05), text, background,
+        alpha: rgb(style.backgroundColor)[3], border: style.borderTopColor };
     }, foreground);
     const detail = `${name}: ${result.ratio.toFixed(2)}:1 (mínimo ${minimum}:1)`;
     if (result.ratio < minimum) throw Error(`${detail}. RGB ${result.text} sobre ${result.background}.`);
     cases.push({ id, status: 'PASS', detail });
+    return result;
   };
 
   if (group === 'theme-controls') {
     const preset = page.locator('#MiniOrderForm .ButtonPreset').first();
-    await contrast('TH-01', 'Preset del ticket', preset);
+    const rest = await contrast('TH-01', 'Preset del ticket', preset);
+    await preset.hover();
+    const hovered = await contrast('TH-15', 'Preset al pasar el mouse', preset, { minimum: rest.ratio });
+    if (rest.alpha !== 0 || hovered.alpha <= 0 || hovered.alpha >= 1 || hovered.border === rest.border) {
+      throw Error('Preset hover must add a translucent tint and change the border');
+    }
+    await page.mouse.move(2, 2);
     await contrast('TH-02', 'Autocompletar del ticket', page.locator('#MiniOrderForm .instrument-autocomplete label'));
     await page.getByRole('link', { name: 'Configuración (ChuchoTriz)' }).click();
     const panel = page.locator(`#ct-free-settings-panel[data-color-scheme="${theme}"]`);

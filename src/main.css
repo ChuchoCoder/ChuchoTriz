@@ -23,50 +23,127 @@
     #MiniOrderForm {
         flex-wrap: nowrap !important;
     }
+}
 
-    #MiniOrderForm > div.MiniOrderForm_buttonsBlock
-    {
-        width: auto;
-    }
+/* The compact form leaves its remaining inline space to the preset strip. */
+#MiniOrderForm {
+  anchor-name: --chuchotriz-mini-form;
+}
+
+#MiniOrderForm.IsNotExpandedForm:not(.TabletCollapsed):has(> .MiniOrderForm_buttonsBlock > #root-chuchotriz)
+  > .MiniOrderForm_FormMiniOrdenPanel {
+  flex: 0 1 max-content;
 }
 
 #MiniOrderForm > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) {
-  display: grid;
-  grid-template-columns: repeat(3, max-content) minmax(0, 1fr);
-  grid-template-rows: var(--mini-form-button-height, 28px) auto;
-  align-items: start;
-  align-content: center;
-  justify-content: start;
-  gap: 4px 8px;
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: min-content;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--mini-form-spacing-sm, 8px);
+  flex: 1 0 0;
+  margin-inline-start: auto;
+  margin-inline-end: 8px;
   width: auto;
+  height: var(--mini-form-button-height, 28px);
   position: static;
 }
 
-#MiniOrderForm > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) > button {
-  grid-row: 1;
+#MiniOrderForm:is(.NotebookExpanded, .TabletCollapsed, .TabletExpanded)
+  > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) {
+  align-self: stretch;
+  flex: none;
+  margin-inline-start: 8px;
 }
 
-#MiniOrderForm.IsNotExpandedForm:has(#root-chuchotriz) {
-  max-height: none;
+#MiniOrderForm > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) > .ButtonLimpiar {
+  anchor-name: --chuchotriz-actions;
+  order: -1;
 }
 
-#root-chuchotriz,
-#root-chuchotriz .preset-panel {
+#root-chuchotriz {
   display: contents;
 }
 
+#root-chuchotriz .preset-slot {
+  --chuchotriz-preset-width: var(--mini-form-button-width, 76px);
+  --chuchotriz-preset-height: var(--mini-form-button-height, 28px);
+  order: -2;
+  flex: 1 1 0;
+  min-inline-size: 28px;
+  block-size: var(--chuchotriz-preset-height);
+}
+
+#MiniOrderForm.IsNotExpandedForm:not(.TabletCollapsed) #root-chuchotriz .preset-slot {
+  --chuchotriz-preset-height: 24px;
+  block-size: calc(var(--mini-form-height-collapsed, 56px) - 4px);
+}
+
+#root-chuchotriz .preset-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--chuchotriz-preset-width));
+  grid-auto-rows: var(--chuchotriz-preset-height);
+  justify-content: end;
+  align-content: center;
+  align-items: center;
+  gap: 4px var(--mini-form-spacing-sm, 8px);
+  block-size: 100%;
+  overflow: clip;
+  overflow-clip-margin: 2px;
+}
+
+#root-chuchotriz .preset-inline:has([role="alert"]) {
+  overflow: visible;
+}
+
+#root-chuchotriz .preset-inline:has(> .preset-overflow:only-child) {
+  display: flex;
+  justify-content: flex-end;
+}
+
+#root-chuchotriz .preset-overflow {
+  inline-size: 28px;
+  block-size: var(--chuchotriz-preset-height);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+#root-chuchotriz .preset-panel:popover-open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--mini-form-spacing-sm, 8px);
+  position: fixed;
+  inset: auto 8px 64px;
+  inset-block-end: anchor(--chuchotriz-mini-form top, 64px);
+  margin: 0;
+  max-block-size: 65dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--icons, #7d8da3);
+  border-radius: 4px;
+  background: var(--base-miniorder, #253140);
+  color: var(--icons, #edf3fb);
+}
+
 #root-chuchotriz .preset-panel-actions {
-  grid-column: 1 / 4;
-  grid-row: 2;
+  grid-column: span 2;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
+#root-chuchotriz .preset-inline[data-autocomplete-row] > .preset-panel-actions {
+  grid-column: 1 / -1;
+}
+
 #root-chuchotriz .instrument-autocomplete {
+  position: relative;
+  margin: 0;
   font-size: 12px;
 }
 
@@ -93,6 +170,7 @@
 }
 
 #root-chuchotriz .instrument-autocomplete label {
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -104,19 +182,83 @@
   accent-color: #3fb1e5;
 }
 
-#root-chuchotriz .DefaultSizeShowButtons {
-  grid-column: 4;
-  grid-row: 1 / 3;
-  min-width: 0;
-  margin: 0;
-  position: static;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: start;
-  gap: 4px 8px;
+#root-chuchotriz .instrument-autocomplete [role="alert"] {
+  display: block;
+  padding: 2px 4px;
+  background: var(--base-miniorder, #253140);
 }
 
-#root-chuchotriz .ButtonPreset {
-  min-width: min-content;
-  max-width: calc((100% - 24px) / 4);
+#root-chuchotriz .preset-inline .instrument-autocomplete [role="alert"] {
+  position: absolute;
+  inset: auto auto 100% 0;
+  width: max-content;
+}
+
+#MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .ButtonPreset {
+  --chuchotriz-preset-hover-text: #f8f5ef;
+  --chuchotriz-preset-hover-background: rgb(222 219 213 / 8%);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: var(--chuchotriz-preset-width);
+  min-width: 0;
+  height: var(--chuchotriz-preset-height);
+  padding-inline: 4px;
+  border-color: currentColor;
+  background: transparent;
+  color: #dedbd5;
+}
+
+:where(html[data-theme="dma_day"]) #MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .ButtonPreset {
+  --chuchotriz-preset-hover-text: #34302b;
+  --chuchotriz-preset-hover-background: rgb(81 77 70 / 12%);
+  color: #514d46;
+}
+
+#MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .ButtonPreset:hover {
+  background-color: var(--chuchotriz-preset-hover-background);
+  color: var(--chuchotriz-preset-hover-text);
+}
+
+#root-chuchotriz .preset-inline .ButtonPreset > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#MiniOrderForm .MiniOrderForm_buttonsBlock #root-chuchotriz .preset-panel .ButtonPreset {
+  width: max-content;
+  min-width: var(--chuchotriz-preset-width);
+}
+
+@supports (left: anchor(--chuchotriz-fields right)) {
+  #MiniOrderForm:is(.DesktopExpanded, .DesktopLargeExpanded, .DesktopUltrawideExpanded)
+    > .MiniOrderForm_FormMiniOrdenPanel {
+    anchor-name: --chuchotriz-fields;
+  }
+
+  #MiniOrderForm:is(.DesktopExpanded, .DesktopLargeExpanded, .DesktopUltrawideExpanded)
+    > :is(.MiniOrderForm_checkBoxesBlock, .MiniOrderForm_declaracionesJuradas) {
+    anchor-name: --chuchotriz-declarations;
+  }
+
+  #MiniOrderForm:is(.DesktopExpanded, .DesktopLargeExpanded, .DesktopUltrawideExpanded)
+    > .MiniOrderForm_buttonsBlock:has(> #root-chuchotriz) {
+    flex: none;
+  }
+
+  /* Keep room for the menu even when Matriz's fields take up the rest of the row. */
+  #MiniOrderForm:is(.DesktopExpanded, .DesktopLargeExpanded, .DesktopUltrawideExpanded)
+    > .MiniOrderForm_buttonsBlock:has(.preset-slot) {
+    padding-inline-start: calc(28px + var(--mini-form-spacing-md, 12px) + var(--mini-form-spacing-sm, 8px));
+  }
+
+  #MiniOrderForm:is(.DesktopExpanded, .DesktopLargeExpanded, .DesktopUltrawideExpanded)
+    #root-chuchotriz .preset-slot {
+    position: absolute;
+    order: 0;
+    inset-inline-start: calc(max(anchor(--chuchotriz-fields right), anchor(--chuchotriz-declarations right, 0px)) + var(--mini-form-spacing-md, 12px));
+    inset-inline-end: calc(anchor(--chuchotriz-actions left) + var(--mini-form-spacing-sm, 8px));
+    inset-block: 4px;
+    block-size: auto;
+    min-inline-size: 0;
+  }
 }
