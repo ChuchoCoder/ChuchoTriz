@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const hosts = ['https://*.xoms.com.ar/*', 'https://remarkets.matriz.com.ar/*'];
 const matrizResources = ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js', 'ticket-position.js'];
-const builtToolScripts = /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|jsx-runtime|Matriz|pageStructure|RatiosDashboard|market|OptionsOperations|OptionsSimulator|RatioOperations|toolStyles|positionStorage)-[\w-]+\.js$/;
+const builtToolScripts = /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|rolldown-runtime|OptionsOperations|OptionsSimulator|RatioOperations|toolStyles|positionStorage)-[\w-]+\.js$/;
 const builtSharedToolsStyles = /^assets\/ChuchoTrizTools-[\w-]+\.css$/;
 const builtEntryAssets = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
 const same = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
