@@ -7,10 +7,12 @@
   const isVisible = () => document.documentElement.getAttribute(preferenceAttribute) !== "false";
   const refreshMs = 20_000;
   const requestTimeoutMs = 10_000;
+  const maxPendingReads = 2;
   const format = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 8 });
-  const reportTime = new Intl.DateTimeFormat("es-AR", {
-    dateStyle: "short", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires",
-  });
+  const timeZone = "America/Argentina/Buenos_Aires";
+  const reportTime = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone });
+  const reportDay = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeZone });
+  const isCurrentReport = (time, now) => Number.isFinite(time) && time > 0 && reportDay.format(time) === reportDay.format(now);
   // Equivalencias no triviales de Resources/Defaults/dollar_cable_equivalences.json (ChuchoBot Premium).
   const equivalents = new Map([
     ["AEC2O", ["AEC2D", "AEC2C"]], ["AER1O", ["AER1D", "AER1C"]],
@@ -57,15 +59,18 @@
 
     const { profileStore: profile, portfolioStore: portfolio, securityStore: securities } = window.mainStore ?? {};
     const account = form.querySelector(".account-form-item .ant-select-selection-item")?.title?.trim();
+    const readReport = portfolio && Object.getPrototypeOf(portfolio)?.getDetailedPositionReport;
+    const Report = portfolio?.detailedPositionReport?.constructor;
     if (!account || !Array.isArray(profile?.accounts) || !profile.accounts.includes(account) ||
-        typeof portfolio?.getDetailedPositionReport !== "function" || !Array.isArray(securities?.securities)) return;
+        typeof readReport !== "function" || readReport !== portfolio.getDetailedPositionReport ||
+        typeof Report !== "function" || Report === Object || !Array.isArray(securities?.securities)) return;
     return { account, profile, activeAccount: profile.activeAccount, portfolio, securities, security, symbol, quantity,
-      collateral: profile.context?.riskDetailedCollateralEnabled };
+      readReport, Report };
   }
 
   function sameTicket(a, b) {
     return a?.account === b?.account && a?.security === b?.security && a?.profile === b?.profile && a?.activeAccount === b?.activeAccount &&
-      a?.portfolio === b?.portfolio && a?.securities === b?.securities && a?.collateral === b?.collateral;
+      a?.portfolio === b?.portfolio && a?.securities === b?.securities && a?.Report === b?.Report;
   }
 
   function familyTickers(ticket) {
@@ -105,33 +110,50 @@
       Math.abs(left - right) <= Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right));
   }
 
+  const summaryCollateral = ["instrumentCollateralSize", "instrumentInitialCollateralSize", "instrumentFilledCollateralSize"];
+  const rowCollateral = ["totalCollateralSize", "totalInitialCollateralSize", "totalFilledCollateralSize",
+    "buyCollateralSize", "sellCollateralSize", "buyInitialCollateralSize", "sellInitialCollateralSize",
+    "buyFilledCollateralSize", "sellFilledCollateralSize"];
+  function collateralState(record, fields) {
+    const values = fields.map(field => record[field]).filter(value => value != null);
+    if (values.some(value => validQuantity(value) && value !== 0)) return "pledged";
+    return values.length && values.every(validQuantity) ? "clear" : "unknown";
+  }
+
   function readPosition(report, ticket) {
     if (!Array.isArray(report?.types)) throw Error("Reporte de posición incompleto");
     const tickers = familyTickers(ticket);
-    let ci = 0, nextDay = 0, collateral = false;
+    let ci = 0, nextDay = 0, pledged = false, collateralUnknown = false;
     for (const group of report.types) {
       if (!Array.isArray(group?.securitiesDetailed)) throw Error("Falta el detalle de posición");
       for (const instrument of group.securitiesDetailed) {
         const expectsFamily = tickers.has(instrument?.symbolReference);
         const rows = instrument?.detailedPositions;
         if (!Array.isArray(rows)) throw Error("Falta el detalle del instrumento");
-        let matched = false;
+        let matched = false, missingCollateralDetail = false;
         for (const row of rows) {
           const symbol = fixSymbol(row?.tradingSymbol);
           if (!symbol && expectsFamily) throw Error("Símbolo de posición inválido");
           if (symbol?.segment !== ticket.symbol.segment || !tickers.has(symbol.ticker)) continue;
           matched = true;
           const size = row.totalCurrentSize;
-          if (!validQuantity(size) || ![0, 1].includes(row.settlType)) throw Error("Nominales o plazo de posición inválidos");
+          if (!validQuantity(size) || ![0, 1, 2].includes(row.settlType)) throw Error("Nominales o plazo de posición inválidos");
           // settlType in the risk report is the effective time to settlement. A settled
           // holding can retain its original 24hs trading symbol and belong to bucket 0.
           if (row.settlType === 0) ci += size;
-          else nextDay += size;
-          collateral ||= row.totalCollateralSize != null && row.totalCollateralSize !== 0;
+          else if (row.settlType === 1) nextDay += size;
+          const collateral = collateralState(row, rowCollateral);
+          pledged ||= collateral === "pledged";
+          missingCollateralDetail ||= size !== 0 && collateral === "unknown";
         }
         if ((expectsFamily || matched) && (!rows.every(row => validQuantity(row?.totalCurrentSize)) ||
             !sameQuantity(instrument.instrumentCurrentSize, rows.reduce((sum, row) => sum + row.totalCurrentSize, 0)))) {
           throw Error("El detalle y el total de nominales no coinciden");
+        }
+        if (matched) {
+          const collateral = collateralState(instrument, summaryCollateral);
+          pledged ||= collateral === "pledged";
+          collateralUnknown ||= missingCollateralDetail && collateral === "unknown";
         }
       }
     }
@@ -142,13 +164,13 @@
       ci,
       at24h: ci + nextDay,
       sellable: Math.max(0, immediate ? ci + Math.min(0, nextDay) : ci + nextDay),
-      collateral,
+      collateral: pledged ? "pledged" : collateralUnknown ? "unknown" : "clear",
     };
   }
 
   function usableQuantity(ticket, position) {
     const { quantity, security } = ticket;
-    if (!position || position.collateral || quantity.disabled || quantity.readOnly) return;
+    if (!position || position.collateral !== "clear" || quantity.disabled || quantity.readOnly) return;
     const { sellable } = position;
     const max = Number(quantity.getAttribute("aria-valuemax") ?? Number.MAX_SAFE_INTEGER);
     const precision = security.refData?.sizePrecision ?? 0;
@@ -164,8 +186,11 @@
   }
 
   let form, panel, status, table, orderTerm, rows, fill, close, show, selection, snapshot, inFlight, fillRequest;
-  let nextRefresh = 0, unavailable = false, queued = false;
-  const currentPosition = () => snapshot && Date.now() - snapshot.readAt < 2 * refreshMs ? snapshot.position : undefined;
+  let nextRefresh = 0, failure, pendingReads = 0, queued = false;
+  function currentPosition() {
+    const now = Date.now();
+    if (snapshot && now - snapshot.readAt < 2 * refreshMs && isCurrentReport(snapshot.reportedAt, now)) return snapshot.position;
+  }
 
   function text(element, value) {
     if (element.textContent !== value) element.textContent = value;
@@ -177,15 +202,15 @@
     const position = currentPosition();
     const term = ticket.symbol.term === "CI" ? "CI" : "24 h";
     if (!position) {
-      text(status, unavailable || inFlight?.expired ? "Posición no disponible" : `Consultando posición ${term}…`);
-      status.removeAttribute("title");
+      text(status, failure === "timeout" || !inFlight && pendingReads >= maxPendingReads ? "Matriz no respondió. Si el problema continúa, recargá la página." :
+        failure ? "Posición no disponible" : `Consultando posición ${term}…`);
       status.hidden = false;
       table.hidden = true;
       fill.hidden = true;
       return;
     }
-    status.hidden = !position.collateral;
-    if (position.collateral) text(status, "Incluye garantía");
+    status.hidden = position.collateral === "clear" || position.collateral === "unknown" && position.sellable === 0;
+    if (!status.hidden) text(status, position.collateral === "pledged" ? "Incluye garantía" : "Garantía sin verificar");
     table.hidden = false;
     table.title = `Último cálculo de Matriz: ${reportTime.format(snapshot.reportedAt)}`;
     text(orderTerm, term === "CI" ? "Orden en CI" : "Orden a 24 h");
@@ -200,10 +225,11 @@
     }
     const quantity = usableQuantity(ticket, position);
     fill.hidden = quantity === undefined;
-    fill.disabled = fillRequest?.selection === selection;
+    const filling = fillRequest?.selection === selection;
+    fill.setAttribute("aria-disabled", String(filling));
     if (quantity !== undefined) {
       const label = `Cargar ${format.format(quantity)} nominales en Cantidad`;
-      text(fill, fill.disabled ? "Consultando…" : `Usar ${format.format(quantity)}`);
+      text(fill, filling ? "Consultando…" : `Usar ${format.format(quantity)}`);
       fill.title = label;
       fill.setAttribute("aria-label", `${fill.textContent}: ${label}`);
     }
@@ -243,7 +269,7 @@
       if (event.currentTarget !== fill || !isVisible() || !ticket || fillRequest || currentForm() !== form || !sameTicket(ticket, selection) ||
           usableQuantity(ticket, currentPosition()) === undefined) return;
       const { quantity } = ticket;
-      const request = { selection, value: quantity.value };
+      const request = { selection, quantity, value: quantity.value };
       fillRequest = request;
       render(ticket);
       try {
@@ -256,7 +282,7 @@
         const value = nominal.toLocaleString("es-AR", { useGrouping: false, maximumFractionDigits: 8 });
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(quantity, value);
         quantity.dispatchEvent(new Event("input", { bubbles: true }));
-        quantity.focus();
+        if (document.activeElement === fill) quantity.focus();
       } finally {
         if (fillRequest === request) fillRequest = undefined;
         schedule();
@@ -291,13 +317,17 @@
   function refresh(ticket) {
     const request = {};
     inFlight = request;
+    pendingReads++;
+    failure = undefined;
     let timer;
     const timeout = new Promise(resolve => {
       timer = setTimeout(() => {
         request.expired = true;
+        if (inFlight === request) inFlight = undefined;
         if (ticket === selection) {
           snapshot = undefined;
-          unavailable = true;
+          failure = "timeout";
+          nextRefresh = Date.now() + refreshMs;
         }
         schedule();
         resolve();
@@ -305,25 +335,29 @@
     });
     const nativeRead = (async () => {
       try {
-        const report = await ticket.portfolio.getDetailedPositionReport(ticket.account, ticket.collateral);
+        // The native method writes to its receiver. Give each account read its
+        // own report and skip the UI-specific enrichment of the broker rows.
+        const reader = { detailedPositionReport: new ticket.Report(), setSecurityToDetailPosition() {} };
+        const report = await ticket.readReport.call(reader, ticket.account, true);
         if (!isVisible() || request.expired || ticket !== selection || !sameTicket(ticket, readTicket(currentForm()))) return;
         const reportedAt = report?.lastCalculation?.getTime?.();
-        if (report !== ticket.portfolio.detailedPositionReport || !Number.isFinite(reportedAt) || reportedAt <= 0) {
+        // The native settlement buckets are relative to the report's trading day.
+        if (report !== reader.detailedPositionReport || !isCurrentReport(reportedAt, Date.now())) {
           throw Error("Reporte de posición sin verificar");
         }
         snapshot = { position: readPosition(report, ticket), reportedAt, readAt: Date.now() };
-        unavailable = false;
       } catch {
-        if (ticket === selection) {
+        if (!request.expired && ticket === selection) {
           snapshot = undefined;
-          unavailable = true;
+          failure = "unavailable";
         }
       } finally {
-        // The native report is a shared object. Keep one native request in flight
-        // even after the UI has timed out, and discard its late result.
         clearTimeout(timer);
-        inFlight = undefined;
-        if (ticket === selection && !request.expired) nextRefresh = Date.now() + refreshMs;
+        pendingReads--;
+        if (inFlight === request) {
+          inFlight = undefined;
+          if (ticket === selection) nextRefresh = Date.now() + refreshMs;
+        }
         schedule();
       }
     })();
@@ -356,13 +390,13 @@
     if (!sameTicket(selection, ticket)) {
       selection = ticket;
       snapshot = fillRequest = undefined;
-      unavailable = false;
+      failure = undefined;
       nextRefresh = Date.now() + 200;
     }
     render(ticket);
     if (opening) (ticket ? close : quantity)?.focus();
     if (closing) show?.focus();
-    if (ticket && !inFlight && !document.hidden && Date.now() >= nextRefresh) void refresh(selection);
+    if (ticket && !inFlight && pendingReads < maxPendingReads && !document.hidden && Date.now() >= nextRefresh) void refresh(selection);
   }
 
   function schedule() {
@@ -374,7 +408,11 @@
   new MutationObserver(() => { if (form !== currentForm()) schedule(); }).observe(document.body, { subtree: true, childList: true });
   new MutationObserver(schedule).observe(document.documentElement, { attributes: true, attributeFilter: [preferenceAttribute] });
   for (const event of ["input", "change", "focusin", "focusout"]) {
-    document.addEventListener(event, ({ target }) => { if (form?.contains(target)) schedule(); });
+    document.addEventListener(event, ({ target }) => {
+      if (!form?.contains(target)) return;
+      if ((event === "input" || event === "change") && target === fillRequest?.quantity) fillRequest = undefined;
+      schedule();
+    }, true);
   }
   document.addEventListener("visibilitychange", schedule);
   setInterval(schedule, 500);

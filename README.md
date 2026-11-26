@@ -134,10 +134,11 @@ dólar MEP y cable se suman cuando el catálogo permite asociarlas, como AL30,
 AL30D y AL30C.
 
 **Usar** muestra cuántos nominales cargaría en **Cantidad**, actualiza la consulta
-y completa el campo con el saldo
-vendible para ese plazo. En CI usa el saldo liquidado y descuenta el saldo
+y completa el campo según el último cálculo de Matriz para ese plazo.
+En CI usa el saldo liquidado y descuenta el saldo
 negativo pendiente a 24 h. En 24 h suma ambos plazos. La orden se confirma desde
-los controles habituales de Matriz.
+los controles habituales de Matriz. El botón requiere información de garantía
+verificada en el reporte.
 
 La **×** de la esquina superior derecha oculta la franja y pausa las consultas.
 El ojo junto a **Cantidad** vuelve a mostrarla y consulta el saldo del ticket.

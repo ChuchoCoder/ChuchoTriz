@@ -14,13 +14,25 @@ const al30c = security("AL30C", "CI", "USD");
 al30.securityMepId = al30d.id;
 al30Ci.securityCableId = al30c.id;
 
-const holding = (instrument: ReturnType<typeof security>, settlType: number, totalCurrentSize: number, totalCollateralSize = 0) => ({
+const holding = (instrument: ReturnType<typeof security>, settlType: number, totalCurrentSize: number, totalCollateralSize: number | null = 0) => ({
   symbolReference: instrument.symbolStr.replace(" (CI)", ""),
   instrumentCurrentSize: totalCurrentSize,
   detailedPositions: [{ tradingSymbol: instrument.fixSymbol, settlType, totalCurrentSize, totalCollateralSize }],
 });
-const withRows = (...rows: ReturnType<typeof holding>[]) => ({ lastCalculation: new Date(), types: [{ securitiesDetailed: rows }] });
-const portfolio = { detailedPositionReport: withRows(), getDetailedPositionReport: vi.fn() };
+class NativeReport {
+  lastCalculation = new Date();
+  types: { securitiesDetailed: ReturnType<typeof holding>[] }[] = [];
+}
+const withRows = (...rows: ReturnType<typeof holding>[]) => Object.assign(new NativeReport(), { types: [{ securitiesDetailed: rows }] });
+const reportRequest = vi.fn<(account: string, collateral: boolean) => Promise<NativeReport>>();
+class NativePortfolio {
+  detailedPositionReport = withRows();
+  async getDetailedPositionReport(account: string, collateral: boolean) {
+    Object.assign(this.detailedPositionReport, await reportRequest(account, collateral));
+    return this.detailedPositionReport;
+  }
+}
+const portfolio = new NativePortfolio();
 const catalog = { securities: [al30, al30Ci, al30d, al30c] };
 const profile = { accounts: ["TEST-1", "TEST-2"] };
 type NativeInput = HTMLInputElement & { __reactProps$fixture: { security: ReturnType<typeof security> } };
@@ -62,7 +74,7 @@ beforeEach(() => {
   });
   vi.stubGlobal("mainStore", { profileStore: profile, portfolioStore: portfolio, securityStore: catalog });
   portfolio.detailedPositionReport = withRows(holding(al30, 0, 80), holding(al30d, 1, -25), holding(al30c, 0, 5));
-  portfolio.getDetailedPositionReport.mockReset().mockImplementation(async () => read());
+  reportRequest.mockReset().mockImplementation(async () => read());
   catalog.securities = [al30, al30Ci, al30d, al30c];
   fixture();
 });
@@ -77,6 +89,7 @@ afterEach(() => {
 });
 
 it("groups pesos, D and C, using the report's effective settlement even for a 24hs symbol", async () => {
+  read().types[0].securitiesDetailed.push(holding(al30, 2, 500));
   new Function(script)();
   await wait();
   expect(row(0)).toEqual(["CI", "85", "—", "—"]);
@@ -103,6 +116,7 @@ it("does not sell a future long in CI and only writes the native quantity field"
   select(al30Ci);
   new Function(script)();
   await wait();
+  button().focus();
   button().click();
   await wait();
   expect(qty().value).toBe("80");
@@ -126,11 +140,22 @@ it("identifies nonstandard Premium aliases and keeps unrelated D/C tickers separ
 });
 
 it("keeps a position visible in guarantee while withholding the fill action", async () => {
-  portfolio.detailedPositionReport = withRows(holding(al30, 0, 20, 5));
+  const position = holding(al30, 0, 20, null);
+  Object.assign(position.detailedPositions[0], { totalInitialCollateralSize: 5 });
+  portfolio.detailedPositionReport = withRows(position);
   new Function(script)();
   await wait();
   expect(row(1)[1]).toBe("20");
   expect(panel().querySelector("[role=status]")?.textContent).toBe("Incluye garantía");
+  expect(button().hidden).toBe(true);
+});
+
+it("shows balances but cannot load a quantity when collateral is unknown", async () => {
+  portfolio.detailedPositionReport = withRows(holding(al30, 0, 20, null));
+  new Function(script)();
+  await wait();
+  expect(row(1)[1]).toBe("20");
+  expect(panel().querySelector("[role=status]")?.textContent).toBe("Garantía sin verificar");
   expect(button().hidden).toBe(true);
 });
 
@@ -143,26 +168,40 @@ it("refreshes before loading the full position and preserves a newer manual edit
   expect(qty().value).toBe("30");
 
   let resolve!: (report: ReturnType<typeof read>) => void;
-  portfolio.getDetailedPositionReport.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  reportRequest.mockReturnValueOnce(new Promise(done => { resolve = done; }));
   button().click();
-  expect(button().disabled).toBe(true);
+  expect(button().getAttribute("aria-disabled")).toBe("true");
   setQuantity("12");
+  setQuantity("30");
+  portfolio.detailedPositionReport = withRows(holding(al30, 0, 50));
   resolve(read());
   await wait();
-  expect(qty().value).toBe("12");
+  expect(qty().value).toBe("30");
+
+  reportRequest.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  button().focus();
+  button().click();
+  search().focus();
+  resolve(read());
+  await wait();
+  expect(qty().value).toBe("50");
+  expect(document.activeElement).toBe(search());
 });
 
 it("drops replies for another account and hides during instrument search", async () => {
   let resolve!: (report: ReturnType<typeof read>) => void;
-  portfolio.getDetailedPositionReport.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  reportRequest.mockReturnValueOnce(new Promise(done => { resolve = done; }));
   new Function(script)();
   await wait();
   const first = read();
   document.querySelector(".ant-select-selection-item")!.setAttribute("title", "TEST-2");
   portfolio.detailedPositionReport = withRows(holding(al30, 0, 7));
+  const nativeReport = read();
   resolve(first);
   await wait();
-  expect(portfolio.getDetailedPositionReport).toHaveBeenLastCalledWith("TEST-2", undefined);
+  expect(reportRequest).toHaveBeenLastCalledWith("TEST-2", true);
+  expect(portfolio.detailedPositionReport).toBe(nativeReport);
+  expect(read().types[0].securitiesDetailed[0].instrumentCurrentSize).toBe(7);
   expect(row(1)[1]).toBe("7");
   search().value = "AL30C";
   search().dispatchEvent(new Event("input", { bubbles: true }));
@@ -183,28 +222,39 @@ it("distinguishes an empty or short position from an unavailable report", async 
   await wait();
   expect(row(1)[1]).toBe("-15");
   expect(button().hidden).toBe(true);
-  portfolio.getDetailedPositionReport.mockRejectedValueOnce(Error("sin conexión"));
+  reportRequest.mockRejectedValueOnce(Error("sin conexión"));
   select(al30c);
   await wait();
   expect(panel().textContent).toContain("Posición no disponible");
   expect(button().hidden).toBe(true);
 });
 
-it("rejects incomplete detail and recovers from a timed-out native refresh", async () => {
+it("rejects incomplete detail and an older broker-day report", async () => {
   portfolio.detailedPositionReport = withRows({ ...holding(al30, 0, 30), detailedPositions: [] });
   new Function(script)();
   await wait();
   expect(panel().textContent).toContain("Posición no disponible");
+  portfolio.detailedPositionReport = withRows(holding(al30, 0, 30));
+  read().lastCalculation = new Date(Date.now() - 86_400_000);
+  select(al30Ci);
+  await wait();
+  expect(panel().textContent).toContain("Posición no disponible");
+  expect(button().hidden).toBe(true);
+});
 
+it("recovers on a second detached read even if the first has not settled", async () => {
   let resolve!: (report: ReturnType<typeof read>) => void;
-  portfolio.getDetailedPositionReport.mockReturnValueOnce(new Promise(done => { resolve = done; }));
-  select(al30d);
+  reportRequest.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  new Function(script)();
   await wait();
   expect(panel().textContent).toContain("Consultando posición");
   await vi.advanceTimersByTimeAsync(10_500);
-  expect(panel().textContent).toContain("Posición no disponible");
+  expect(panel().textContent).toContain("Matriz no respondió");
   const oldReport = read();
   portfolio.detailedPositionReport = withRows(holding(al30, 0, 10));
+  select(al30d);
+  await wait();
+  expect(row(1)[1]).toBe("10");
   resolve(oldReport);
   await wait();
   expect(row(1)[1]).toBe("10");
@@ -218,7 +268,7 @@ it("leaves the eye beside the native field, pauses reads and reloads after reope
   expect(panel().hidden).toBe(true);
   expect(show().hidden).toBe(false);
   expect(show().previousElementSibling).toBe(qty().closest(".ant-input-number"));
-  expect(portfolio.getDetailedPositionReport).not.toHaveBeenCalled();
+  expect(reportRequest).not.toHaveBeenCalled();
   setQuantity("15");
   show().focus();
   visibility(true);
@@ -228,7 +278,7 @@ it("leaves the eye beside the native field, pauses reads and reloads after reope
   expect(show().hidden).toBe(true);
 
   let resolve!: (report: ReturnType<typeof read>) => void;
-  portfolio.getDetailedPositionReport.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  reportRequest.mockReturnValueOnce(new Promise(done => { resolve = done; }));
   button().click();
   visibility(false);
   await wait();
@@ -236,7 +286,7 @@ it("leaves the eye beside the native field, pauses reads and reloads after reope
   resolve(read());
   await vi.advanceTimersByTimeAsync(22_000);
   expect(qty().value).toBe("15");
-  expect(portfolio.getDetailedPositionReport).toHaveBeenCalledTimes(2);
+  expect(reportRequest).toHaveBeenCalledTimes(2);
 
   const oldEye = show();
   oldEye.parentElement!.replaceWith(oldEye.parentElement!.cloneNode(true));

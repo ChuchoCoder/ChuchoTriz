@@ -367,6 +367,8 @@
   cursor: pointer;
 }
 
+#MiniOrderForm .ct-ticket-position-fill[aria-disabled="true"] { cursor: progress; }
+
 #MiniOrderForm :is(.ct-ticket-position-close, .ct-ticket-position-show) {
   display: inline-grid;
   place-items: center;

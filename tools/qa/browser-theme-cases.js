@@ -122,6 +122,43 @@ async (page, group) => {
     await select();
     await panel.locator('table').waitFor();
     cases.push({ id: 'TP-06', status: 'PASS', detail: 'CI y 24 h, cruz y ojo con teclado, borrador conservado, preferencia oculta/visible tras recarga, pausa y recarga de posición' });
+
+    await page.evaluate(() => {
+      const portfolio = Object.getPrototypeOf(window.mainStore.portfolioStore);
+      const read = portfolio.getDetailedPositionReport;
+      portfolio.getDetailedPositionReport = () => new Promise((_, reject) => {
+        window.ctRejectTicketPositionRead = () => {
+          portfolio.getDetailedPositionReport = read;
+          reject(Error('Falla de posición simulada'));
+        };
+      });
+    });
+    await select('24hs');
+    const status = panel.getByRole('status');
+    await panel.getByText('Consultando posición 24 h…', { exact: true }).waitFor();
+    await contrast('TP-07', 'Consulta de posición', status);
+    await page.waitForFunction(() => typeof window.ctRejectTicketPositionRead === 'function');
+    await page.evaluate(() => window.ctRejectTicketPositionRead());
+    await panel.getByText('Posición no disponible', { exact: true }).waitFor();
+    await contrast('TP-08', 'Posición no disponible', status);
+    await panel.locator('table').waitFor({ state: 'hidden' });
+
+    await page.evaluate(() => {
+      const group = window.mainStore.portfolioStore.detailedPositionReport.types.find(item => item.type === 'BOND');
+      group.securitiesDetailed[0].detailedPositions[0].totalCollateralSize = 1;
+    });
+    await select();
+    await panel.getByText('Incluye garantía', { exact: true }).waitFor();
+    await contrast('TP-09', 'Tenencia con garantía', status);
+    await panel.locator('.ct-ticket-position-fill').waitFor({ state: 'hidden' });
+    await page.evaluate(() => {
+      const group = window.mainStore.portfolioStore.detailedPositionReport.types.find(item => item.type === 'BOND');
+      group.securitiesDetailed = [];
+    });
+    await select('24hs');
+    await expectRows(['CI', '0', '—', '—'], ['24 h', '0', '—', '—']);
+    await contrast('TP-10', 'Tenencia en cero', panel.locator('.ct-current').first());
+    await panel.locator('.ct-ticket-position-fill').waitFor({ state: 'hidden' });
   } else if (group === 'theme-widgets') {
     await page.getByRole('button', { name: 'RATIOS · CHUCHOTRIZ', exact: true }).click();
     await contrast('TH-10', 'Cabecera del widget Ratios', page.locator('.ct-ratios th').first());
