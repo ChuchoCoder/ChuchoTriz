@@ -21,6 +21,12 @@ test('a selected group still runs in both themes and rejects unknown groups', ()
   assert.throws(() => testPlan('regression', 'typo'), /Unknown group/);
 });
 
+test('group names are passed only to suites that dispatch multiple groups', () => {
+  for (const suite of testPlan('regression', 'mini-layout')) assert.equal(suite.groupArgument, 'mini-layout');
+  for (const suite of testPlan('regression', 'theme-controls')) assert.equal(suite.groupArgument, 'theme-controls');
+  for (const suite of testPlan('regression', 'intraday')) assert.equal(suite.groupArgument, undefined);
+});
+
 test('every loopback Playwright validator is registered in the regression', () => {
   const registered = new Set(testPlan('regression').map(suite => suite.file));
   for (const file of readdirSync(new URL('../', import.meta.url)).filter(name => /^validate-.+\.playwright\.js$/.test(name))) {

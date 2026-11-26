@@ -72,7 +72,7 @@ try {
   client.notify('notifications/initialized');
   const tools = await client.request('tools/list', {});
   if (!tools.tools.some(t => t.name === 'browser_run_code_unsafe')) throw Error('The shared MCP server does not expose browser_run_code_unsafe. Update its configured launcher; no fallback browser will be opened.');
-  for (const { id, group, theme, fixture, file, expectedChecks } of suites) {
+  for (const { id, group, theme, fixture, file, expectedChecks, groupArgument } of suites) {
     console.log(`QA ${id}...`);
     try {
       const url = await fixtureUrl(fixture, theme);
@@ -110,7 +110,7 @@ try {
             || actual.scheme !== ${JSON.stringify(theme)} || actual.media !== ${JSON.stringify(theme)}) {
             throw Error('Unexpected fixture theme: ' + JSON.stringify(actual));
           }
-          const result = await (${suite})(page, ${JSON.stringify(group)});
+          const result = await (${suite})(page, ${JSON.stringify(groupArgument) ?? 'undefined'});
           if (errors.length) throw Error('Uncaught page errors: ' + errors.join('; '));
           if (blocked.length) throw Error('Unexpected external requests were blocked: ' + blocked.join(', '));
           return result;

@@ -21,7 +21,9 @@ export function testPlan(mode, selected) {
   if (mode !== 'smoke' && mode !== 'regression') throw Error(`Unknown browser QA mode ${mode}`);
   const builtIn = [...smoke, ...(mode === 'regression' ? regression : [])]
     .map(group => ({ group, file: 'qa/browser-cases.js', fixture: 'preview' }));
-  const suites = mode === 'smoke' ? [...builtIn, ...extra] : [baseline, ...builtIn, ...extra, ...dedicated];
+  // Only the grouped suites take a group name. Standalone validators own their optional arguments.
+  const grouped = [...builtIn, ...extra].map(suite => ({ ...suite, groupArgument: suite.group }));
+  const suites = mode === 'smoke' ? grouped : [baseline, ...grouped, ...dedicated];
   if (selected && !suites.some(suite => suite.group === selected)) throw Error(`Unknown group: ${selected}`);
   return themes.flatMap(theme => suites.filter(suite => !selected || suite.group === selected)
     .map(suite => ({ ...suite, theme, id: `${theme}/${suite.group}` })));
