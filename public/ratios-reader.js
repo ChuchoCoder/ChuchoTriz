@@ -12,7 +12,7 @@
   const channels = new Set([channel]), retired = new Set(), subscriptions = new Set(), sequences = new Map(), patched = new Map();
   let identity, revision = 0, writing = false;
   const intradayDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" });
-  const intradayHistory = new Map(), intradaySubscriptions = new Set(), intradaySequences = new Map();
+  const intradayHistory = new Map(), bookHistory = new Map(), intradaySubscriptions = new Set(), intradaySequences = new Map();
   let intradayScope, intradayConnection, intradayRevision = 0;
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
@@ -163,7 +163,7 @@
     const now = Date.now(), start = Date.parse(intradayDate.format(now) + "T00:00:00-03:00");
     const scope = [ms, ss, ms.profileStore?.activeAccount, ms.seriesStore, start];
     if (!intradayScope || scope.some((value, i) => value !== intradayScope[i])) {
-      intradayScope = scope; intradayRevision++; intradayHistory.clear(); intradaySubscriptions.clear(); intradaySequences.clear();
+      intradayScope = scope; intradayRevision++; intradayHistory.clear(); bookHistory.clear(); intradaySubscriptions.clear(); intradaySequences.clear();
     }
     const connected = !!ms.webSocketConnectionStatus;
     const connection = [ms.dmaWebSocket, connected];
@@ -193,15 +193,16 @@
     });
     return { ...market, points: Object.fromEntries(points) };
   }
-  function readIntradaySeries(market, id, refresh) {
-    const cached = intradayHistory.get(id);
+  function readIntradaySeries(market, id, { refresh = false, todayOnly = false } = {}) {
+    const cache = todayOnly ? bookHistory : intradayHistory;
+    const cached = cache.get(id);
     if (cached && (cached.pending || !refresh && cached.until > market.now)) return cached.result;
-    const entry = { until: market.now + 20000, pending: true };
+    const entry = { until: market.now + (todayOnly ? 30000 : 20000), pending: true };
     entry.result = Promise.resolve().then(async () => {
       let timer;
       try {
         const store = market.ms.seriesStore;
-        const range = typeof store?.getIntradaySeries === "function";
+        const range = !todayOnly && typeof store?.getIntradaySeries === "function";
         if (!range && typeof store?.getIntradayTodaySeries !== "function") return { points: [], issue: "Histórico no disponible en Matriz" };
         const since = range ? market.start - (HISTORY_DAYS - 1) * DAY : market.start;
         const request = range ? store.getIntradaySeries(id, since / 1000, Math.ceil(market.now / 1000), "1") : store.getIntradayTodaySeries(id);
@@ -215,16 +216,36 @@
           const provisional = Math.floor(at / 60000) === Math.floor(market.now / 60000);
           return [{ at, value, ...(provisional ? { provisional: true } : {}) }];
         });
-        if (points.length) entry.until = Date.now() + 60000;
-        return { points, issue: points.length ? undefined : range ? `Sin histórico intradiario en los últimos ${HISTORY_DAYS} días` : "Sin histórico de la rueda actual" };
+        if (points.length && !todayOnly) entry.until = Date.now() + 60000;
+        return { points, issue: points.length || todayOnly ? undefined : range ? `Sin histórico intradiario en los últimos ${HISTORY_DAYS} días` : "Sin histórico de la rueda actual" };
       } catch (error) {
         const status = error?.response?.status ?? error?.status;
         return { points: [], issue: Number.isInteger(status) ? `Histórico no disponible (HTTP ${status})` : "No se pudo cargar el histórico" };
       } finally { clearTimeout(timer); }
     }).finally(() => { entry.pending = false; });
-    if (intradayHistory.size >= 120) intradayHistory.delete(intradayHistory.keys().next().value);
-    intradayHistory.set(id, entry);
+    if (cache.size >= 120) cache.delete(cache.keys().next().value);
+    cache.set(id, entry);
     return entry.result;
+  }
+  async function bookIntraday(id) {
+    const market = intradayMarket([id]);
+    const [security] = market.securities;
+    if (!security) throw Error("El instrumento del book no está disponible en Matriz.");
+    // The native detail panel uses today's minute closes and the instrument's settlement or previous close.
+    const { points, issue } = await readIntradaySeries(market, id, { todayOnly: true });
+    if (intradayMarket([id]).revision !== market.revision) throw Error("Cambió el contexto de mercado.");
+    if (issue) throw Error(issue);
+    const closes = [...new Map(points.map(point => [point.at, point])).values()].sort((a, b) => a.at - b.at);
+    const latest = closes.at(-1);
+    const md = security.md;
+    const lastAt = timestamp(md?.lstdStr || md?.lstd);
+    if (lastAt >= market.start && finite(md?.lst)) {
+      const trade = { at: lastAt, value: md.lst };
+      if (!latest || lastAt > latest.at) closes.push(trade);
+      else if (lastAt === latest.at && latest.provisional) closes[closes.length - 1] = trade;
+    }
+    const reference = security.settlementOrClose;
+    return { points: closes.map(({ at, value }) => ({ at, value })), reference: finite(reference) ? reference : undefined };
   }
   function state() {
     const c = context(), connected = !!c.ms.webSocketConnectionStatus;
@@ -423,11 +444,12 @@
     try {
       const params = msg.params || {};
       if (msg.method === "ratiosState") { reply({ result: state() }); return; }
+      if (msg.method === "bookIntraday") { reply({ result: await bookIntraday(params.id) }); return; }
       if (msg.method === "ratioIntradayQuotes") { reply({ result: intradayQuotes(params.ids) }); return; }
       if (msg.method === "ratioIntradayHistory") {
         const market = intradayMarket(params.ids);
         const entries = await Promise.all(market.securities.map((s, i) => s
-          ? readIntradaySeries(market, s.id, params.refresh === true)
+          ? readIntradaySeries(market, s.id, { refresh: params.refresh === true })
           : { points: [], issue: "Instrumento no disponible en el catálogo" }));
         if (intradayMarket(params.ids).revision !== market.revision) throw Error("Cambió el contexto de mercado. Volvé a cargar el histórico.");
         reply({ result: { revision: market.revision, series: Object.fromEntries(params.ids.map((id, i) => [id, entries[i]])) } });

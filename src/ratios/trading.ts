@@ -14,7 +14,7 @@ export interface TradingQuote {
   tradedAt?: number; amountFactor?: number; issue?: string; reference?: number; referenceDate?: string;
 }
 export interface TradingPair extends RatioReference { id: string; a: TradingInstrument; b: TradingInstrument; c?: TradingInstrument }
-export interface RatioExit { quantity: number; price: number; at: string }
+export interface RatioExit { quantity: number; price: number; at: string; closeId?: string }
 export interface TradingLeg {
   instrument: TradingInstrument; side: 1 | -1; quantity: number; entry: number;
   factor: number; step: number; ddmm: number; exits: RatioExit[];
@@ -106,12 +106,19 @@ export function counterpart(qa: number, pa: number, pb: number, fa: number, fb: 
 export function validateOperation(o: RatioOperation): void {
   if (!text(o?.id) || !date(o.openedAt) || Date.parse(o.openedAt) > Date.now() || ![1, -1].includes(o.direction) || !rate(o.commission) || !positive(o.fx) ||
     o.targetRatio !== null && !positive(o.targetRatio) || !Array.isArray(o.legs) || o.legs.length !== 2 || o.legs[0]?.instrument?.id === o.legs[1]?.instrument?.id) throw Error("Operación de ratio inválida.");
+  const closeTimes = new Map<string, string>();
   o.legs.forEach((l, index) => {
     if (!validInstrument(l?.instrument) || l.side !== (index === 0 ? o.direction : -o.direction) || !quantity(l.quantity) || !quantity(l.step) || l.quantity % l.step !== 0 ||
       isMonitorOnly(l.instrument) || !positive(l.entry) || !positive(l.factor) || !rate(l.ddmm) || l.quantity * l.entry * l.factor > 1e15 || !Array.isArray(l.exits) || l.exits.length > 1000) throw Error("Revisá precios, factores, lotes, cantidades y DDMM de ambas patas. Las tasas TNA y referencias sólo se monitorean.");
     let at = Date.parse(o.openedAt);
+    const closeIds = new Set<string>();
     for (const e of l.exits) {
       if (!quantity(e?.quantity) || e.quantity % l.step !== 0 || !positive(e.price) || e.quantity * e.price * l.factor > 1e15 || !date(e.at) || Date.parse(e.at) < at || Date.parse(e.at) > Date.now()) throw Error("Los cierres registrados son inválidos.");
+      if (e.closeId !== undefined) {
+        if (!text(e.closeId) || closeIds.has(e.closeId) || (closeTimes.get(e.closeId) ?? e.at) !== e.at) throw Error("Los cierres registrados son inválidos.");
+        closeIds.add(e.closeId);
+        closeTimes.set(e.closeId, e.at);
+      }
       at = Date.parse(e.at);
     }
     if (closedQuantity(l) > l.quantity) throw Error("La cantidad total no puede ser menor que la cantidad ya cerrada.");
@@ -149,13 +156,76 @@ export function closeOperationByQuantity(o: RatioOperation, leg: 0 | 1, amount: 
 }
 function recordClose(o: RatioOperation, quantities: [number, number], prices: [number, number], at: string): RatioOperation {
   if (!prices.every(positive)) throw Error("Revisá los dos precios de cierre.");
+  const closeId = crypto.randomUUID();
   const legs = o.legs.map((l, i) => {
     const q = quantities[i];
     if (q === 0) return l;
-    return { ...l, exits: [...l.exits, { quantity: q, price: prices[i], at }] };
+    return { ...l, exits: [...l.exits, { quantity: q, price: prices[i], at, closeId }] };
   }) as RatioOperation["legs"];
   const result = { ...o, legs }; validateOperation(result); return result;
 }
+
+interface RecordedCloseLeg extends RatioExit { index: number; leg: 0 | 1 }
+export interface RecordedClose {
+  key: string;
+  at: string;
+  entries: RecordedCloseLeg[];
+}
+
+export function recordedCloses(o: RatioOperation): RecordedClose[] {
+  const grouped = new Map<string, RecordedClose>();
+  for (const leg of [0, 1] as const) {
+    o.legs[leg].exits.forEach((exit, index) => {
+      const key = exit.closeId ? `id:${exit.closeId}` : `time:${exit.at}`;
+      const group = grouped.get(key) ?? { key, at: exit.at, entries: [] };
+      group.entries.push({ ...exit, index, leg });
+      grouped.set(key, group);
+    });
+  }
+  return [...grouped.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).flatMap(group => {
+    const { at, entries } = group;
+    if (entries.length === 1 || entries.length === 2 && entries[0].leg !== entries[1].leg) return [group];
+    // A legacy timestamp shared by several exits cannot identify their pairings.
+    return entries.map(entry => ({ key: `legacy:${at}:${entry.leg}:${entry.index}`, at, entries: [entry] }));
+  });
+}
+
+export type CloseCorrection = Pick<RatioExit, "quantity" | "price">;
+
+export function reviseRecordedClose(o: RatioOperation, key: string, corrections: CloseCorrection[] | null): RatioOperation {
+  const close = recordedCloses(o).find(item => item.key === key);
+  if (!close) throw Error("El cierre ya no está en el historial.");
+  if (corrections && corrections.length !== close.entries.length) throw Error("Completá los datos de cada pata del cierre.");
+  const legs: RatioOperation["legs"] = [...o.legs];
+  close.entries.forEach(({ leg, index }, i) => {
+    const exits = [...legs[leg].exits];
+    if (corrections) {
+      const { quantity: amount, price } = corrections[i];
+      if (!quantity(amount) || amount % legs[leg].step !== 0 || !positive(price)) {
+        throw Error(`Revisá el precio y la cantidad de ${legs[leg].instrument.symbol}. La cantidad debe respetar el lote de ${legs[leg].step}.`);
+      }
+      if (amount > remaining(legs[leg]) + exits[index].quantity) {
+        throw Error(`La cantidad de ${legs[leg].instrument.symbol} supera el saldo disponible para corregir este cierre.`);
+      }
+      exits[index] = { ...exits[index], quantity: amount, price };
+    } else {
+      exits.splice(index, 1);
+    }
+    legs[leg] = { ...legs[leg], exits };
+  });
+  // After deleting from an ambiguous legacy group, keep the remaining exits
+  // distinct even if only one per leg now shares the same timestamp.
+  if (!corrections && close.key.startsWith("legacy:")) {
+    for (const leg of [0, 1] as const) {
+      legs[leg] = { ...legs[leg], exits: legs[leg].exits.map(exit =>
+        !exit.closeId && exit.at === close.at ? { ...exit, closeId: crypto.randomUUID() } : exit) };
+    }
+  }
+  const result = { ...o, legs };
+  validateOperation(result);
+  return result;
+}
+
 export interface CurrencyPnl { currency: string; realized: number; pending?: number; net?: number; gross?: number; commission?: number; ddmm?: number; issue?: string }
 export function quoteUnitChanged(quote: TradingQuote | undefined, savedFactor: number): boolean {
   // The form saves the factor at its displayed precision.

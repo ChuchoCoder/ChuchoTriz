@@ -159,7 +159,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
     if (root.current) { root.current.style.width = ""; root.current.style.height = ""; }
     void run("ratiosResize", { width: start.width + event.clientX - start.x, height: start.height + event.clientY - start.y });
   };
-  return <section className="ct-ratios" ref={root} aria-label="Ratios de instrumentos">
+  return <section className="ct-ratios ct-ratios-widget" ref={root} aria-label="Ratios de instrumentos">
     <header className="ct-ratios-title"><strong>Ratios</strong><span className="ct-ratios-header-actions NoDraggable">
       <button type="button" aria-label="Agregar ratio" title="Agregar ratio" disabled={busy || cfg.pairs.length >= 50} onClick={() => begin()}>＋</button>
       <button type="button" aria-label="Cerrar widget de ratios" title="Quitar este widget del dashboard" disabled={busy} onClick={() => void run("ratiosRemove", {})}>×</button>
@@ -208,7 +208,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
             {columns.lastA && <td className={qa?.last === undefined ? undefined : "ct-ratios-quote"} title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
             {columns.lastB && <td className={qb?.last === undefined ? undefined : "ct-ratios-quote"} title={`Última operación B: ${tradeLabel(qb?.tradedAt)}`}>{numberLabel(qb?.last)}</td>}
             {showReference && <td className={qc?.last === undefined ? undefined : "ct-ratios-quote"} title={pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""} · ${tradeLabel(qc?.tradedAt)}` : undefined}>{numberLabel(qc?.last)}</td>}
-            <td className={result.ratio === undefined ? "ct-ratios-value" : "ct-ratios-value ct-ratios-quote"} title={result.issue || (pair.c ? `(A/B) ÷ ${reference}. Porcentaje = ((A/B) ÷ ${reference} − 1) × 100. Diferencia absoluta |A/B − ${reference}| entre paréntesis.` : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
+            <td className="ct-ratios-value" title={result.issue || (pair.c ? `(A/B) ÷ ${reference}. Porcentaje = ((A/B) ÷ ${reference} − 1) × 100. Diferencia absoluta |A/B − ${reference}| entre paréntesis.` : undefined) || (pair.format === "percent" ? "(Último A ÷ último B − 1) × 100" : "Último A ÷ último B")} aria-label={result.issue}>{ratioLabel(result.ratio, pair.format, result.absoluteDifference)}</td>
             <td className={changeClass} title={result.referenceIssue || "(Ratio actual / ratio de referencia diaria − 1) × 100"} aria-label={result.referenceIssue}>
               {change === undefined ? "—" : change.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%"}
             </td>

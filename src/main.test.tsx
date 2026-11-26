@@ -230,6 +230,22 @@ it("opens quick quantities for the current ticker and returns focus to the short
   expect(shortcut()).toBeNull();
 });
 
+it("keeps the book intraday button mounted when the order ticket opens quick quantities", async () => {
+  const current = createForm();
+  document.body.append(current.form);
+  document.body.insertAdjacentHTML("beforeend", `<div class="DashboardGridItem"><div class="SecurityCardWidget">
+    <div class="NewWidgetHeader"><a href="/security/bm_MERV_AL30_CI">AL30 (CI)</a>
+    <div class="SingleWidgetHeaderButtons"></div></div></div></div>`);
+  await boot();
+  const intraday = () => document.querySelector('[aria-label="Gráfico intradiario de AL30 (CI)"]');
+  const original = intraday();
+  expect(original).not.toBeNull();
+  const shortcut = current.form.querySelector<HTMLButtonElement>(".preset-settings-button")!;
+  await act(async () => { shortcut.click(); });
+  expect(document.querySelector<HTMLElement>("#ct-free-settings-panel")?.hidden).toBe(false);
+  expect(intraday()).toBe(original);
+});
+
 it.each(["AL", "AL30D"])("opens the configuration %s actually used by an AL30 ticket", async sourceTicker => {
   autocompleteStorage({ InstrumentPresets: { [sourceTicker]: [{ cantidad: 500000, mostrar: "R6" }] } });
   const current = createForm();

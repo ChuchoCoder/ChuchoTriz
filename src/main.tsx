@@ -10,6 +10,7 @@ import { presetTickerFor, presetsFor } from "./PresetBook";
 import { SettingsMenu, type PresetSettingsRequest } from "./SettingsMenu";
 import RatiosDashboard from "./ratios/RatiosDashboard";
 import RatioChart from "./ratios/RatioChart";
+import BookIntraday from "./BookIntraday";
 
 focusCantidadAfterQuoteClick();
 
@@ -20,7 +21,10 @@ document.body.append(settingsContainer);
 const settingsRoot = createRoot(settingsContainer);
 function renderSettings(presetRequest?: PresetSettingsRequest) {
   settingsRoot.render(<React.StrictMode>
-    <SettingsMenu presetRequest={presetRequest} /><RatiosDashboard /><RatioChart />
+    <SettingsMenu presetRequest={presetRequest} />
+    <RatiosDashboard />
+    <RatioChart />
+    <BookIntraday />
   </React.StrictMode>);
 }
 renderSettings();
@@ -29,7 +33,6 @@ function openPresets(ticker: string, trigger: HTMLButtonElement) {
   const sourceTicker = snapshot && presetTickerFor(snapshot.book, ticker);
   renderSettings({ ticker, sourceTicker, trigger });
 }
-
 // Read once; subsequent settings changes arrive through Chrome Storage.
 let storedSettings = instrumentPresetsRepository.readSettings();
 let snapshot: StoredSettings | undefined;
