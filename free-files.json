@@ -163,6 +163,7 @@
   "docs/qa/0.0.25-2026-11-17-independent-formats.md",
   "public/ratio-operations-reader.js",
   "src/ratios/RatioOperations.tsx",
+  "src/ratios/RatioCloseHistory.tsx",
   "src/ratios/RatioOperations.css",
   "src/ratios/trading.ts",
   "src/ratios/tradingMarket.ts",

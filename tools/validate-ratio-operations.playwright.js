@@ -747,5 +747,58 @@ async page => {
   assert(await label('Precio cierre A').inputValue() === '100.1', 'A changed unit disables market selection and retains the entered price');
   assert((await factorPnl.innerText()).includes('—') && (await page.locator('.ro-detail > .ro-issue').innerText()).includes('Cambió la unidad'), 'P&L flags a genuine quote unit change');
   checks.push('Close quotes and P&L agree on rounding at the saved factor precision and on genuine quote unit changes');
+
+  const correctionId = await reviewOpen('BMA/GGAL', '100', '50');
+  await label('Precio cierre A').fill('110'); await label('Precio cierre B').fill('45');
+  await click(button('Cerrar 25%')); await reviewWaitHistory(correctionId, [[25], [50]]);
+  await click(button('Cerrar todo')); await reviewWaitHistory(correctionId, [[25, 75], [50, 150]]);
+  const history = page.getByRole('region', { name: 'Historial de cierres', exact: true });
+  const closeRows = history.getByRole('listitem');
+  const older = closeRows.nth(1);
+  assert(await closeRows.count() === 2 && (await older.innerText()).includes('BMA') && (await older.innerText()).includes('GGAL'), 'Each close has one row with both legs');
+  const originalClose = await reviewRecord(correctionId);
+  const closedPnl = await realizedRow.innerText();
+  const closeEditor = page.getByRole('form', { name: 'Editar cierre', exact: true });
+  const editOlder = older.getByRole('button', { name: 'Editar cierre', exact: true });
+  await click(editOlder);
+  await closeEditor.getByLabel('Precio A', { exact: true }).fill('115');
+  await closeEditor.getByRole('button', { name: 'Cancelar', exact: true }).press('Enter');
+  assert(JSON.stringify(await reviewRecord(correctionId)) === JSON.stringify(originalClose), 'Cancel leaves the close record unchanged');
+  assert(await editOlder.evaluate(button => button === document.activeElement), 'Cancel returns keyboard focus to Editar cierre');
+  await click(editOlder);
+  await closeEditor.getByLabel('Cantidad A · nominales', { exact: true }).fill('26');
+  await click(button('Guardar cierre'));
+  assert(await closeEditor.isVisible() && JSON.stringify(await reviewRecord(correctionId)) === JSON.stringify(originalClose), 'Correction cannot close more than the operation total');
+  await closeEditor.getByLabel('Cantidad A · nominales', { exact: true }).fill('20');
+  await closeEditor.getByLabel('Cantidad B · nominales', { exact: true }).fill('40');
+  await closeEditor.getByLabel('Precio A', { exact: true }).fill('1.12e2');
+  await closeEditor.getByLabel('Precio B', { exact: true }).fill('.45');
+  await click(button('Guardar cierre'));
+  await reviewWaitHistory(correctionId, [[20, 75], [40, 150]]);
+  await page.getByText('Cierre actualizado.', { exact: true }).waitFor();
+  const corrected = await reviewRecord(correctionId);
+  assert(corrected.legs[0].exits[0].price === 112 && corrected.legs[1].exits[0].price === .45 &&
+    corrected.legs[0].exits[0].at === originalClose.legs[0].exits[0].at &&
+    JSON.stringify(corrected.legs.map(l => l.exits[1])) === JSON.stringify(originalClose.legs.map(l => l.exits[1])), 'Edit accepts numeric input formats and preserves original time and later closes');
+  assert(await realizedRow.innerText() !== closedPnl, 'The realized P&L changes after correction');
+  const correctionRow = page.locator(`.ro-operations-table tr[data-row-id="${correctionId}"]`);
+  assert((await correctionRow.innerText()).includes('Parcial') && (await correctionRow.innerText()).includes('5,00 / 10,00'), 'Editing a full close can reopen both legs');
+  const newer = closeRows.first();
+  await click(newer.getByRole('button', { name: 'Eliminar cierre', exact: true }));
+  const confirmation = page.getByRole('group', { name: 'Confirmar eliminación del cierre' });
+  await click(confirmation.getByRole('button', { name: 'Cancelar', exact: true }));
+  assert(JSON.stringify(await reviewRecord(correctionId)) === JSON.stringify(corrected), 'Canceling confirmation leaves both legs in the ledger');
+  await click(newer.getByRole('button', { name: 'Eliminar cierre', exact: true }));
+  await click(button('Confirmar eliminación'));
+  await reviewWaitHistory(correctionId, [[20], [40]]);
+  await page.getByText('Cierre eliminado del registro local.', { exact: true }).waitFor();
+  assert((await correctionRow.innerText()).includes('80,00 / 160,00'), 'Deleting the latest close restores exactly its quantities');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
+  await click(page.getByRole('button', { name: /^3 · Operaciones abiertas/ }));
+  await click(correctionRow.getByRole('button', { name: 'Detalle', exact: true }));
+  assert(await closeRows.count() === 1 && (await closeRows.first().innerText()).includes('112,00'), 'Edited prices and deleted closes persist after reload');
+  checks.push('Recorded closes group both legs and support cancellation, validated edits and confirmed deletion with persisted balances and P&L');
+
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
