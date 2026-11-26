@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
+import RatioCloseHistory from "./RatioCloseHistory";
 import { RatioChartLink } from "./RatioChart";
 import { ReferenceChartButton } from "./IntradayChart";
 import { GridActionIcon, GridColumnPicker, GridRowHandle, GridSortHeader, monitorColumns, operationColumns, useGridColumns, nextGridSort, reorderGridRows, sortGridRows, type GridSort, type GridValue } from "./RatioGrid";
@@ -12,7 +13,7 @@ import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
 import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, partialCloseQuantities, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
   goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, quoteUnitChanged, remaining, sameCurrency,
-  validateBook, validateOperation, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair, type TradingQuote } from "./trading";
+  reviseRecordedClose, validateBook, validateOperation, type CloseCorrection, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair, type TradingQuote } from "./trading";
 import "./RatioOperations.css";
 
 type View = "monitor" | "opening" | "operations";
@@ -328,10 +329,28 @@ export default function RatioOperations({ active }: { active: boolean }) {
     });
     if (ok) { setCloseDraft(undefined); setAll(true); setNotice("Cierre registrado localmente con los precios ingresados."); }
   }
+  async function changeRecordedClose(key: string, snapshot: string, corrections: CloseCorrection[] | null) {
+    if (!op) return false;
+    let closed = false;
+    const ok = await commit(base => {
+      const latest = base.operations.find(o => o.id === op.id);
+      if (!latest || JSON.stringify(latest) !== snapshot) throw Error("La operación cambió. Volvé a seleccionar el cierre para revisar los datos.");
+      const next = reviseRecordedClose(latest, key, corrections);
+      closed = isClosed(next);
+      return { ...base, operations: base.operations.map(o => o.id === next.id ? next : o) };
+    });
+    if (ok) {
+      setCloseDraft(undefined);
+      if (closed) setAll(true);
+      setNotice(corrections ? "Cierre actualizado." : "Cierre eliminado del registro local.");
+    }
+    return ok;
+  }
   const pnlLines = (o: RatioOperation, field: "realized" | "pending" | "net" | "gross" | "commission" | "ddmm") => operationPnl(o, quotes).map(p =>
     <span key={p.currency} className={field === "commission" || field === "ddmm" ? "" : signed(p[field])} title={p.issue}>{money(p[field], p.currency)}</span>);
   const goalText = (o: RatioOperation) => o.targetRatio === null ? "Sin objetivo de ratio" : `Objetivo: ${pairRatioLabel(o.targetRatio, o.legs[0].instrument, o.legs[1].instrument)}${isClosed(o) ? "" : goalReached(o, currentRatio(o, quotes)) ? " · alcanzado" : " · pendiente"}`;
   const selectedPnl = op ? operationPnl(op, quotes) : [];
+  const bothLegsOpen = op?.legs.every(leg => remaining(leg) > 0);
   const shownRatio = (raw: number | undefined, percent: boolean) => raw === undefined ? undefined : percent ? (raw - 1) * 100 : raw;
   const monitorRows = projectGrid(book.watch, "watch", monitorSort, (pair, column) => {
     if (column === "pair") return pairLabel(pair);
@@ -514,12 +533,14 @@ export default function RatioOperations({ active }: { active: boolean }) {
           {closeIssue && <p className="ro-close-issue" role="alert">{closeIssue}</p>}
           <div className="ro-close-actions">
             <button type="button" className="ro-primary ro-register-close" disabled={!available || !closeQuantities || !closePrices.every(p => numeric(p) > 0 && Number.isFinite(numeric(p)))} onClick={() => void registerClose()}>Registrar cierre</button>
-            <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available} onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div>
+            <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available || f < 1 && !bothLegsOpen}
+              title={f < 1 && !bothLegsOpen ? "Ingresá una cantidad para cerrar una sola pata." : undefined}
+              onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div>
           </div>
           <small>Los accesos de porcentaje cierran esa parte del remanente. Podés ingresar los precios reales del cierre.</small>
         </section>}
 
-        {op.legs.some(l => l.exits.length) && <div className="ro-ledger">{op.legs.flatMap((l, i) => l.exits.map((e, n) => <div key={`${i}-${n}`}>Cierre {l.instrument.symbol}: {numberLabel(e.quantity)} a {numberLabel(e.price)}<small>{new Date(e.at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hourCycle: "h23" })}</small></div>))}</div>}
+        <RatioCloseHistory key={`${scope}:${op.id}`} operation={op} available={available} onChange={changeRecordedClose} />
       </aside>}
     </div>}
   </section>;

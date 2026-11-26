@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, closeOperationByQuantity, partialCloseQuantities, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
 import { calculateRatio, instrumentDetail, pairLabel } from "./model";
-import { isMonitorOnly } from "./trading";
+import { isMonitorOnly, recordedCloses, remaining, reviseRecordedClose } from "./trading";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
 const defaultInstrument = (symbol: string): TradingInstrument => symbol === "DLR/SPOT" ? { ...instrument("rx_DDF_DLR_SPOT"), symbol, market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true } : instrument(symbol, symbol === "AL30D" ? "USD" : symbol === "AL30C" ? "EXT" : "ARS");
@@ -147,6 +147,63 @@ it("freezes partial close history and realized P&L across market updates and rel
   expect(operationPnl(closed, {})[0].pending).toBe(0); expect(operationPnl(closed, {})[0].net).toBe(operationPnl(closed, {})[0].realized);
   expect(validateBook(JSON.parse(JSON.stringify({ ...emptyBook(), operations: [closed] })))).toMatchObject({ operations: [closed] });
 });
+it("corrects an older paired close and reopens the remaining balance without rewriting later exits", () => {
+  const first = closeOperation(operation(), .25, [110, 45], exitAt);
+  const later = "2026-01-03T13:00:00.000Z";
+  const closed = closeOperation(first, 1, [120, 40], later);
+  const [newer, older] = recordedCloses(closed);
+  expect([newer.at, older.at]).toEqual([later, exitAt]);
+  expect(older.entries.map(e => [e.leg, e.quantity])).toEqual([[0, 25], [1, 50]]);
+  const corrected = reviseRecordedClose(closed, older.key, [{ quantity: 20, price: 105 }, { quantity: 40, price: 46 }]);
+  expect(corrected.legs.map(remaining)).toEqual([5, 10]);
+  expect(corrected.legs.map(l => l.exits[1])).toEqual(closed.legs.map(l => l.exits[1]));
+  expect(corrected.legs.map(l => l.exits[0].at)).toEqual([exitAt, exitAt]);
+  expect(operationPnl(corrected, {})[0].realized).toBeCloseTo(2825.32);
+  expect(isClosed(closed)).toBe(true);
+  expect(() => reviseRecordedClose(closed, older.key, [{ quantity: 26, price: 105 }, { quantity: 50, price: 45 }])).toThrow(/saldo/);
+  expect(() => reviseRecordedClose(closed, older.key, [{ quantity: 20, price: 0 }, { quantity: 40, price: 46 }])).toThrow(/precio/);
+  const reopened = reviseRecordedClose(corrected, newer.key, null);
+  expect(reopened.legs.map(remaining)).toEqual([80, 160]);
+  const restored = reviseRecordedClose(reopened, older.key, null);
+  expect(restored).toEqual(operation());
+  expect(operationPnl(restored, {})[0].realized).toBe(0);
+  expect(() => reviseRecordedClose(restored, older.key, null)).toThrow(/historial/);
+});
+it("identifies new closes independently of timestamps and preserves a historical one-leg close", () => {
+  const first = closeOperation(operation(), .25, [110, 45], exitAt);
+  const second = closeOperation(first, 1, [120, 40], exitAt);
+  const [older, newer] = recordedCloses(second);
+  expect([older, newer].map(close => close.entries.map(e => e.price))).toEqual([[110, 45], [120, 40]]);
+  expect(older.key).not.toBe(newer.key);
+  expect(reviseRecordedClose(second, newer.key, null)).toEqual(first);
+  const malformed = structuredClone(second);
+  malformed.legs[0].exits[1].closeId = malformed.legs[0].exits[0].closeId;
+  expect(() => validateOperation(malformed)).toThrow(/inválidos/);
+
+  const legacy = operation();
+  legacy.legs[1].exits = [{ at: exitAt, quantity: 200, price: 45 }];
+  const only = recordedCloses(legacy)[0];
+  expect(only.entries.map(e => e.leg)).toEqual([1]);
+  const corrected = reviseRecordedClose(legacy, only.key, [{ quantity: 100, price: 44 }]);
+  expect(corrected.legs.map(remaining)).toEqual([100, 100]);
+  expect(reviseRecordedClose(corrected, only.key, null)).toEqual(operation());
+});
+it("separates ambiguous legacy exits before and after deletion and still groups historical paired exits", () => {
+  const legacy = operation();
+  const firstA = { at: exitAt, quantity: 10, price: 100 };
+  const secondA = { at: exitAt, quantity: 15, price: 105 };
+  const pairedB = { at: exitAt, quantity: 30, price: 45 };
+  legacy.legs[0].exits = [firstA, secondA];
+  legacy.legs[1].exits = [pairedB];
+  const [single] = recordedCloses(legacy);
+  expect(recordedCloses(legacy).map(group => group.entries.length)).toEqual([1, 1, 1]);
+  const revised = reviseRecordedClose(legacy, single.key, null);
+  expect(recordedCloses(revised).map(group => group.entries.length)).toEqual([1, 1]);
+  expect(revised.legs.map(l => l.exits[0])).toEqual([expect.objectContaining(secondA), expect.objectContaining(pairedB)]);
+  legacy.legs[0].exits = [secondA];
+  expect(recordedCloses(legacy)[0].entries.map(e => e.leg)).toEqual([0, 1]);
+  expect(reviseRecordedClose(legacy, recordedCloses(legacy)[0].key, null)).toEqual(operation());
+});
 it("separates currencies, preserves realized when quotes fail, and rejects unit drift", () => {
   const o = closeOperation(operation(), .25, [110, 45], exitAt); o.legs[1].instrument.currency = "USD";
   const p = operationPnl(o, { A: { last: 110 } });
@@ -201,7 +258,9 @@ it("rejects invalid nominal closes and closes below one automatic lot without ch
 it("persists nominal exit history and keeps realized P&L fixed across subsequent market updates", () => {
   const original = operation(), snapshot = JSON.stringify(original);
   const closed = closeOperationByQuantity(original, 1, 60, [110, 45], exitAt);
-  expect(closed.legs.map(l => l.exits)).toEqual([[{ quantity: 30, price: 110, at: exitAt }], [{ quantity: 60, price: 45, at: exitAt }]]);
+  const closeId = closed.legs[0].exits[0].closeId;
+  expect(closeId).toBeTruthy();
+  expect(closed.legs.map(l => l.exits)).toEqual([[{ quantity: 30, price: 110, at: exitAt, closeId }], [{ quantity: 60, price: 45, at: exitAt, closeId }]]);
   const first = operationPnl(closed, { A: { last: 110 }, B: { last: 45 } })[0];
   const second = operationPnl(closed, { A: { last: 130 }, B: { last: 40 } })[0];
   expect(first.realized).toBeCloseTo(1541 * .3); expect(second.realized).toBe(first.realized);

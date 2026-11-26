@@ -233,6 +233,11 @@ movimiento reducido se usa una marca estática breve.
   los accesos **Cerrar 25%**, **Cerrar 50%** y **Cerrar todo**. Cantidades inválidas,
   mayores al remanente o que no alcanzan un lote impiden el cierre. Si la operación
   cambia mientras se completa el borrador, hay que volver a ingresar la cantidad.
+- En el detalle, **Historial de cierres** agrupa las dos patas de cada cierre.
+  **Editar cierre** permite corregir sus precios y cantidades, y **Cancelar**
+  descarta la edición. **Eliminar cierre** pide confirmación y devuelve al
+  saldo abierto las cantidades de ese cierre. Ambos cambios recalculan el P&L.
+  Para corregir un cierre de una operación cerrada, elegí **Todas**.
 - Editar reemplaza el mismo registro y conserva cierres. Tras cierres parciales
   no se cambian instrumentos/sentido/unidades y las cantidades totales deben
   cubrir lo cerrado. Corregir la entrada o gastos recalcula el resultado histórico.
