@@ -3,7 +3,6 @@ import { formatOptionAmount, formatOptionNumber, formatOptionVolatility } from "
 import type { MetricCell, MetricScale } from "./marketMetrics";
 import { viGradeColor } from "./marketMetrics";
 import type { Contract as OptionContract } from "./market";
-import "./OptionsMetrics.css";
 const tradeTimeFormat = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "medium", hour12: false });
 const fmt = (value: number, precision?: number) => formatOptionNumber(value === 0 ? 0 : value, precision);
 const formatSensitivity = (value: number) => value.toLocaleString("es-AR", value !== 0 && (value < .0001 || value >= 10000)

@@ -23,8 +23,11 @@ export function testPlan(mode, selected) {
   const builtIn = [...smoke, ...(mode === 'regression' ? regression : [])]
     .map(group => ({ group, file: 'qa/browser-cases.js', fixture: 'preview' }));
   // Only the grouped suites take a group name. Standalone validators own their optional arguments.
-  const grouped = [...builtIn, ...extra].map(suite => ({ ...suite, groupArgument: suite.group }));
-  const suites = mode === 'smoke' ? grouped : [baseline, ...grouped, ...dedicated];
+  const common = [
+    ...[...builtIn, ...extra].map(suite => ({ ...suite, groupArgument: suite.group })),
+    { group: 'tool-loading', file: 'qa/tool-loading.playwright.js', fixture: 'preview' },
+  ];
+  const suites = mode === 'smoke' ? common : [baseline, ...common, ...dedicated];
   if (selected && !suites.some(suite => suite.group === selected)) throw Error(`Unknown group: ${selected}`);
   return themes.flatMap(theme => suites.filter(suite => !selected || suite.group === selected)
     .map(suite => ({ ...suite, theme, id: `${theme}/${suite.group}` })));

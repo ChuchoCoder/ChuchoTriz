@@ -29,6 +29,18 @@ test('rejects page bridges, network code, secrets and source maps', () => {
   assert.doesNotThrow(() => assertFreeText('const presets = [{ cantidad: 100, mostrar: 0 }];', 'fixture.js'));
 });
 
+test('allows only reviewed tool chunks on the Matriz hosts in production', () => {
+  const built = manifest();
+  const [script] = built.content_scripts;
+  script.js = ['assets/main.tsx-loader-example.js'];
+  const resources = ['assets/OptionsSimulator-example.js', 'assets/OptionsOperations-example.js', 'assets/RatioOperations-example.js', 'assets/ChuchoTrizTools-example.css'];
+  built.web_accessible_resources = [{ resources, matches: script.matches }];
+  assert.doesNotThrow(() => assertManifest(built, true));
+  for (const path of ['assets/unknown-example.js', 'assets/OptionsSimulator-example.css']) {
+    assert.throws(() => assertManifest({ ...built, web_accessible_resources: [{ resources: [...resources, path], matches: script.matches }] }, true), /Unexpected exposed resource/);
+  }
+});
+
 test('accepts exactly the scoped options market reader and rejects broader page exposure', () => {
   const resource = { resources: ['options-market-reader.js'], matches: manifest().content_scripts[0].matches };
   assert.doesNotThrow(() => assertManifest({ ...manifest(), web_accessible_resources: [resource] }));

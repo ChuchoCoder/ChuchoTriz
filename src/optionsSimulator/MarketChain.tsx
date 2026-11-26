@@ -9,7 +9,6 @@ import { formatExpiryDays, formatOptionAmount, formatOptionExpiry, formatOptionI
 import { daysToExpiry, Leg, localDate, MAX_LEGS, newLeg, numeric, parseSignedQuantity, simulationLegs, Simulation, validOptionTicketValues, type standardDeviationLevels } from "./model";
 import { importPosition, readPositionSnapshot, setPositionQuantity, startPositionDraft, type PositionSeries } from "./positions";
 import { premiumNeedsReview, signedPositionQuantity, validHistoricalPremium } from "./positionStorage";
-import "./MarketChain.css";
 import StrategyPicker from "./StrategyPicker";
 import ToolbarIcon from "../ToolbarIcon";
 import { preferredOptionMarket, quotePrice, recipeDraftPrices, strategyRecipe, type StrategyChoice } from "./strategyTemplates";

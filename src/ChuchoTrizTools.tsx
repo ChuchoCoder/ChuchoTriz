@@ -1,17 +1,61 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { Component, useEffect, useId, useState, type ComponentType, type ReactNode } from "react";
 import InstrumentPresetsOptions, { type PresetEditorRequest } from "./InstrumentPresetsOptions";
-import OptionsOperations from "./OptionsOperations";
-import OptionsSimulator from "./optionsSimulator/OptionsSimulator";
 import ToolbarIcon from "./ToolbarIcon";
-import RatioOperations from "./ratios/RatioOperations";
+import "./ChuchoTrizTools.css";
+import "./ratios/RatiosDashboard.css";
+import "./ratios/IntradayChart.css";
+import "./ratios/RatioChart.css";
+
+const loadOptionsOperations = () => import("./OptionsOperations");
+const loadOptionsSimulator = () => import("./optionsSimulator/OptionsSimulator");
+const loadRatioOperations = () => import("./ratios/RatioOperations");
+
+const loadError = <p className="ct-tool-status" role="alert">No se pudo cargar esta herramienta. Recargá la página para volver a intentarlo.</p>;
+
+class ToolBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() { return { failed: true }; }
+
+  render() {
+    return this.state.failed ? loadError : this.props.children;
+  }
+}
+
+type ToolModule<Props> = { default: ComponentType<Props> };
+
+function DeferredTool<Props extends object>({ active, keepMounted = false, load, toolProps }: {
+  active: boolean; keepMounted?: boolean; load: () => Promise<ToolModule<Props>>; toolProps: Props;
+}) {
+  const [module, setModule] = useState<ToolModule<Props> | null>();
+  useEffect(() => {
+    if (!active || module !== undefined) return;
+    // Commit the tool as soon as its module resolves, without React's Suspense fallback delay.
+    let cancelled = false;
+    void load().then(
+      next => { if (!cancelled) setModule(next); },
+      () => { if (!cancelled) setModule(null); },
+    );
+    return () => { cancelled = true; };
+  }, [active, load, module]);
+
+  if (!active && (!keepMounted || !module)) return null;
+  if (module === null) return loadError;
+  if (!module) return <p className="ct-tool-status" role="status">Cargando herramienta…</p>;
+  const Tool = module.default;
+  return <ToolBoundary><Tool {...toolProps} /></ToolBoundary>;
+}
 
 export default function ChuchoTrizTools({ embedded = false, active = true, headerAction, presetRequest }: {
   embedded?: boolean; active?: boolean; headerAction?: ReactNode; presetRequest?: PresetEditorRequest;
 }) {
-  const [tab, setTab] = useState(embedded ? "simulator" : "presets");
-  useEffect(() => {
+  const [tab, setTab] = useState(embedded && !presetRequest ? "simulator" : "presets");
+  const [lastPresetRequest, setLastPresetRequest] = useState(presetRequest);
+  // Resolve the shortcut before rendering a pane, including the first visit from the ticket.
+  if (lastPresetRequest !== presetRequest) {
+    setLastPresetRequest(presetRequest);
     if (presetRequest) setTab("presets");
-  }, [presetRequest]);
+  }
   const id = useId();
   const navigation = <nav className="ct-tools-tabs" aria-label="Herramientas de ChuchoTriz">
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "ratios"} aria-controls={`${id}-ratios`}
@@ -25,10 +69,16 @@ export default function ChuchoTrizTools({ embedded = false, active = true, heade
   </nav>;
   return <div className={`ct-tools${embedded ? " ct-tools-embedded" : ""}`}>
     {embedded ? <header className="ct-free-settings-header"><h1>ChuchoTriz</h1>{navigation}{headerAction}</header> : navigation}
-    <div id={`${id}-ratios`} className="ct-tools-content" hidden={tab !== "ratios"}><RatioOperations active={active && tab === "ratios"} /></div>
-    <div id={`${id}-simulator`} className="ct-tools-content" hidden={tab !== "simulator"}><OptionsSimulator active={active && tab === "simulator"} marketReference={embedded} /></div>
+    <div id={`${id}-ratios`} className="ct-tools-content" hidden={tab !== "ratios"}>
+      <DeferredTool active={active && tab === "ratios"} keepMounted load={loadRatioOperations}
+        toolProps={{ active: active && tab === "ratios" }} />
+    </div>
+    <div id={`${id}-simulator`} className="ct-tools-content" hidden={tab !== "simulator"}>
+      <DeferredTool active={active && tab === "simulator"} keepMounted load={loadOptionsSimulator}
+        toolProps={{ active: active && tab === "simulator", marketReference: embedded }} />
+    </div>
     <div id={`${id}-executions`} className="ct-tools-content" hidden={tab !== "executions"}>
-      {active && tab === "executions" && <OptionsOperations embedded={embedded} />}
+      <DeferredTool active={active && tab === "executions"} load={loadOptionsOperations} toolProps={{ embedded }} />
     </div>
     <div id={`${id}-presets`} className="ct-tools-content" hidden={tab !== "presets"}>
       <InstrumentPresetsOptions embedded={embedded} active={active && tab === "presets"} presetRequest={presetRequest} />

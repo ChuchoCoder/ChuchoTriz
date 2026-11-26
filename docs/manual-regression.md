@@ -141,6 +141,10 @@ en Matriz cuando el cambio afecte su aspecto.
 
 Para reproducir el costo en reposo de Ratios y del ticket, levantá `tools/preview-free.mjs` con el build de cada revisión en puertos loopback distintos. En `browser_run_code_unsafe` del MCP compartido, envolvé el contenido de `tools/qa/measure-ratios-idle.playwright.js` como `async page => (<contenido>)(page, { before, after })`, usando las dos URLs completas de `/fixture?scenario=regression` como valores de `before` y `after`. El script cuenta trabajo de la extensión y mide el hilo principal con 12 widgets simulados.
 
+Para medir la carga inicial de las herramientas, usá el mismo envoltorio con `tools/qa/measure-tools-startup.playwright.js`. El script alterna ambos builds en una sola pestaña con caché desactivada y registra por separado el primer preset habilitado y el acceso a Configuración. Mide los recursos de arranque y hace tres primeras aperturas de cada herramienta por build. Cada apertura parte de una navegación nueva y se mide en la página, desde el clic hasta que aparecen los datos o el primer control habilitado. El fixture sirve el paquete por HTTP en loopback y usa datos simulados.
+
+El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a Cantidades rápidas quedan disponibles antes de pedir las herramientas. También cubre la primera visita, la reapertura del simulador, el contraste y el foco durante la carga y el uso del ticket después de un fallo de descarga.
+
 ## Cobertura automática y comprobaciones humanas
 
 | Casos de la guía | Grupo de navegador | Cobertura reproducible |
