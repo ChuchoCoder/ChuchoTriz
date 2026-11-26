@@ -9,7 +9,32 @@ async (page) => {
     blocked.push(target);
     return route.abort();
   });
-  await page.evaluate(() => { localStorage.removeItem('ct-ratios-fixture-main'); localStorage.removeItem('ct-ratios-fixture-alternate'); });
+  await page.addInitScript(() => {
+    window.ratiosStateRequests = 0;
+    let loadCatalogue;
+    const delayed = sessionStorage.getItem('ct-delay-ratios-catalog');
+    if (delayed) {
+      sessionStorage.removeItem('ct-delay-ratios-catalog');
+      if (delayed === 'hidden') {
+        window.addEventListener('DOMContentLoaded', () => { document.querySelector('.WidgetsComponentsPopoverList').style.display = 'none'; }, { once: true });
+      }
+      Object.defineProperty(window, 'mainStore', { configurable: true, set(store) {
+        delete window.mainStore;
+        const catalogue = store.securityStore;
+        window.mainStore = { ...store, securityStore: undefined };
+        loadCatalogue = () => { window.mainStore.securityStore = catalogue; window.ratiosCatalogueReady = true; };
+      } });
+    }
+    window.addEventListener('message', event => {
+      if (event.origin !== location.origin || event.data?.kind !== 'request' || event.data?.method !== 'ratiosState') return;
+      if (++window.ratiosStateRequests === 4 && loadCatalogue) setTimeout(loadCatalogue, 100);
+    });
+  });
+  await page.evaluate(() => {
+    localStorage.removeItem('ct-ratios-fixture-main');
+    localStorage.removeItem('ct-ratios-fixture-alternate');
+    sessionStorage.setItem('ct-delay-ratios-catalog', '1');
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   const checks = [];
   const assert = (ok, detail) => { if (!ok) throw Error(detail); checks.push(detail); };
@@ -30,8 +55,50 @@ async (page) => {
     await select(0, a, aSymbol, aDetail); await select(1, bb, bSymbol, bDetail); await save();
   };
   const snapshot = () => page.evaluate(() => window.mainStore.dashboardStore.currentDashboard.layout.map(w => ({ component: w.component, x: w.x, y: w.y, w: w.w, h: w.h, settings: JSON.parse(JSON.stringify(w.settings)) })));
+  const reads = () => page.evaluate(() => window.ratiosStateRequests);
+  const staysIdle = async detail => {
+    // Observe more than two polling intervals to detect accidental rescheduling.
+    const start = await reads();
+    await page.waitForTimeout(3200);
+    assert(await reads() === start, detail);
+  };
   const before = await snapshot();
-  await idle(); await b('RATIOS · CHUCHOTRIZ').click(); await idle();
+  await page.waitForFunction(() => document.querySelector('.ct-ratios-add')?.disabled === false, null, { timeout: 20000 });
+  assert(await reads() === 5, 'An open menu recovers when Matriz hydrates after the fast startup attempts without a DOM change');
+  await staysIdle('A dashboard without ratios does not poll even with the widget menu mounted');
+  await page.evaluate(() => sessionStorage.setItem('ct-delay-ratios-catalog', 'hidden'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await wait(() => window.ratiosCatalogueReady);
+  assert(await reads() === 4, 'A hidden menu stops after the fast startup attempts');
+  await page.evaluate(() => { document.querySelector('.WidgetsComponentsPopoverList').style.removeProperty('display'); });
+  await idle();
+  assert(await reads() === 5, 'Revealing an already mounted menu refreshes its availability');
+  await page.evaluate(() => {
+    const popover = document.querySelector('.WidgetsComponentsPopoverList');
+    popover.remove();
+    document.body.insertAdjacentHTML('beforeend', '<aside id="ToolPanel"><div class="ToolContent"><header class="ToolContentHeaderText"><span>Otro panel</span></header></div></aside>');
+  });
+  await b('RATIOS · CHUCHOTRIZ').waitFor({ state: 'detached' });
+  await page.locator('.ToolContentHeaderText span').evaluate(label => { label.textContent = 'Nuevo widget'; });
+  await idle();
+  assert(await page.locator('#ToolPanel .ct-ratios-add').count() === 2, 'A nested drawer title change exposes both add-widget choices');
+  await page.locator('.ToolContentHeaderText span').evaluate(label => { label.textContent = 'Otro panel'; });
+  await b('RATIOS · CHUCHOTRIZ').waitFor({ state: 'detached' });
+  await page.evaluate(() => {
+    document.getElementById('ToolPanel').remove();
+    document.querySelector('.CustomDashboard').insertAdjacentHTML('afterbegin', '<div class="WidgetsComponentsPopoverList"></div>');
+  });
+  await idle();
+  await page.waitForTimeout(150);
+  await page.evaluate(() => {
+    window.ratiosFixture.connected(false);
+    document.querySelector('.ct-ratios-add').click();
+  });
+  await page.locator('.ct-ratios-menu-error').filter({ hasText: 'Cambió el dashboard' }).waitFor();
+  await wait(() => document.querySelector('.ct-ratios-add')?.title.includes('Mercado desconectado'));
+  assert((await snapshot()).length === before.length, 'A rejected write refreshes the stale context without adding a widget');
+  await b('RATIOS · CHUCHOTRIZ').click(); await idle();
+  await page.evaluate(() => window.ratiosFixture.connected(true));
   const defaults = ['MEP AL30', 'CCL AL30', 'CANJE AL30', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'PESOS - 7D/PESOS - 1D', 'MEP AL30 vs DLR/SPOT', 'CCL AL30 vs DLR/SPOT'];
   assert(JSON.stringify(await page.locator('.ct-ratios-pair strong').allTextContents()) === JSON.stringify(defaults), 'New widgets start with all nine requested pairs in order');
   await wait(() => [...document.querySelectorAll('.ct-ratios-value')].every(e => e.textContent !== '—'));
@@ -46,6 +113,27 @@ async (page) => {
   };
   await waitSpreads(1572.5);
   assert(true, 'Both default MEP and CCL spreads use their own bond denominator and the official reference');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await staysIdle('A hidden document pauses polling even with a populated widget');
+  await page.evaluate(() => {
+    window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1580);
+    delete document.hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await waitSpreads(1580);
+  assert(true, 'Returning to the document refreshes a quote that changed while hidden');
+  await page.addStyleTag({ content: 'body { min-height: 2600px; }' });
+  await page.evaluate(() => { window.scrollTo(0, document.body.scrollHeight); });
+  assert(await page.locator('[data-ct-ratios-slot]').first().evaluate(slot => slot.getBoundingClientRect().bottom <= 0), 'The Ratios widget is above the viewport after scrolling');
+  await page.waitForTimeout(150);
+  await staysIdle('A widget out of view does not keep its polling timer running');
+  await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1590));
+  await page.evaluate(() => { window.scrollTo(0, 0); });
+  await waitSpreads(1590);
+  assert(true, 'A widget refreshes when it becomes visible again');
   await page.evaluate(() => window.ratiosFixture.price('rx_DDF_DLR_SPOT', 1600)); await waitSpreads(1600);
   assert(true, 'One official-dollar update refreshes both default spreads independently');
   await page.evaluate(() => window.mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md.refp = undefined);

@@ -1,4 +1,5 @@
 import { MiniOrderForm, Ticket } from "./MiniOrderForm";
+import { containsChangedElements, observePageStructure } from "./pageStructure";
 
 // Selectores anclados en las clases propias de cada campo.
 const numberInput = (formItemClass: string) =>
@@ -17,12 +18,18 @@ const limpiarButtonSelector = `#MiniOrderForm > ${buttonsSelector} > button.Butt
 const currentMiniOrderForm = () => document.getElementById("MiniOrderForm");
 
 export function observeMiniOrderForm(update: (form: HTMLElement | null, buttons: HTMLElement | null) => void) {
+    let form: HTMLElement | null = null;
     const reconcile = () => {
-        const form = currentMiniOrderForm();
+        form = currentMiniOrderForm();
         update(form, form?.querySelector<HTMLElement>(`:scope > ${buttonsSelector}`) ?? null);
     };
     const body = document.body;
-    new MutationObserver(reconcile).observe(body, { childList: true, subtree: true });
+    observePageStructure(({ targets, elements }) => {
+        const ticket = form;
+        const insideTicket = ticket && targets.some(target => ticket.contains(target) &&
+            target instanceof Element && !target.closest("#root-chuchotriz"));
+        if (insideTicket || containsChangedElements(elements, "#MiniOrderForm")) reconcile();
+    });
     // Matriz puede enfocar el formulario nuevo antes de que se ejecute el observador.
     body.addEventListener("focusin", ({ target }) => {
         if (target instanceof Element && target.matches(ticketInputSelector) && target.closest("#MiniOrderForm")) {

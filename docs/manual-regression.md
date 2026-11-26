@@ -132,6 +132,15 @@ navegador y hoy usa una paleta oscura propia. Los tests del gráfico nativo
 comprueban los comandos sobre una API simulada. Revisá el gráfico renderizado
 en Matriz cuando el cambio afecte su aspecto.
 
+## Rendimiento
+
+1. Identificá qué trabajo cambia al cargar Matriz, con la herramienta cerrada, al usarla y al dejarla abierta. Revisá observadores del DOM, timers, suscripciones, lecturas, renders y memoria según las rutas tocadas. Comprobá quién inicia cada recurso, cuándo se pausa o libera y cómo recupera datos vigentes al reabrir, navegar o volver a la pestaña.
+2. Si el cambio toca una ruta de arranque o interacción frecuente, agrega trabajo recurrente o altera una lectura, compará builds del commit base y del candidato con el mismo fixture, secuencia y tamaño de datos. Usá el perfil compartido con CPU limitada (4× como punto de partida). Incluí reposo y uso activo cuando apliquen. Reproducí varias pestañas si el costo puede multiplicarse por pestaña.
+3. Elegí una métrica que capture el riesgo. Para trabajo recurrente, contá solicitudes, suscripciones, callbacks o renders y medí tiempo de JavaScript y del hilo principal por separado. Para una interacción, medí desde la entrada hasta la actualización visible. Para carga inicial o memoria, registrá respectivamente el volumen y la latencia de arranque o las muestras tras abrir y cerrar la herramienta. Repetí las corridas y registrá mediana y variación.
+4. Verificá que el ahorro conserve el comportamiento del recorrido afectado, incluida la frescura de datos al reanudar y la respuesta del ticket si comparte la página. Anotá en el PR los commits, escenario, CPU, resultados y límites del fixture. Si una métrica empeora, investigá la causa o documentá la decisión con los datos. Si la comparación resulta inconclusa, registrala así.
+
+Para reproducir el costo en reposo de Ratios y del ticket, levantá `tools/preview-free.mjs` con el build de cada revisión en puertos loopback distintos. En `browser_run_code_unsafe` del MCP compartido, envolvé el contenido de `tools/qa/measure-ratios-idle.playwright.js` como `async page => (<contenido>)(page, { before, after })`, usando las dos URLs completas de `/fixture?scenario=regression` como valores de `before` y `after`. El script cuenta trabajo de la extensión y mide el hilo principal con 12 widgets simulados.
+
 ## Cobertura automática y comprobaciones humanas
 
 | Casos de la guía | Grupo de navegador | Cobertura reproducible |
