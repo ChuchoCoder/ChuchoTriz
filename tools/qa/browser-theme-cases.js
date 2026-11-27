@@ -67,16 +67,20 @@ async (page, group) => {
     await page.goto(new URL('/index.html', page.url()).href, { waitUntil: 'domcontentloaded' });
     await contrast('TH-09', 'Título de Opciones independiente', page.locator('.options-heading h1'));
   } else if (group === 'ticket-position') {
-    await page.clock.install({ time: new Date('2026-11-27T14:00:00-03:00') });
-    await page.reload();
-    await page.evaluate(() => {
+    // Simulate the broker timestamp inside the fixture. The Playwright clock affects the shared browser context.
+    const olderReport = await page.evaluate(() => {
       const portfolio = Object.getPrototypeOf(window.mainStore.portfolioStore);
       const read = portfolio.getDetailedPositionReport;
+      const day = new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short' });
+      const now = new Date();
+      const earlier = new Date(now.getTime() - 30 * 60_000);
+      const sameDay = day.format(earlier) === day.format(now);
       portfolio.getDetailedPositionReport = async function (...args) {
         const report = await read.apply(this, args);
-        report.lastCalculation = new Date('2026-11-27T13:30:00-03:00');
+        if (sameDay && day.format(earlier) === day.format(new Date())) report.lastCalculation = earlier;
         return report;
       };
+      return sameDay;
     });
     const panel = page.getByRole('region', { name: 'Tenencia del instrumento', exact: true });
     const close = page.getByRole('button', { name: 'Ocultar tenencia', exact: true });
@@ -95,7 +99,7 @@ async (page, group) => {
     if (await panel.getByRole('status').isVisible() || !(await panel.locator('.ct-ticket-position-projection').getAttribute('title'))?.includes('Último cálculo de Matriz')) {
       throw Error('La fecha debe quedar en el tooltip sin ocultar Usar');
     }
-    cases.push({ id: 'TP-13', status: 'PASS', detail: 'Cálculo del día con 30 minutos de antigüedad: el botón sigue disponible y la hora queda en el tooltip' });
+    cases.push({ id: 'TP-13', status: 'PASS', detail: `${olderReport ? 'Cálculo del día con 30 minutos de antigüedad' : 'Cálculo del día'}: el botón está disponible y la hora queda en el tooltip` });
     const buy = await contrast('TP-01', 'Columna Si comprás', panel.locator('thead .ct-buy'));
     const sell = await contrast('TP-02', 'Columna Si vendés', panel.locator('thead .ct-sell'));
     if (buy.ratio === sell.ratio) throw Error('Compra y venta deben usar colores distintos');

@@ -80,8 +80,10 @@ se puede indicar otra con `CHUCHOTRIZ_BROWSER_LAUNCHER`.
 El recorrido usa pestañas propias y servidores en puertos loopback asignados
 por el sistema. Las pestañas de prueba bloquean solicitudes externas y los
 casos que abren un gráfico validan su destino local. El almacenamiento y el
-portapapeles son ficticios. Al terminar cierra sus pestañas y servidores y
-conserva el navegador, las pestañas y las preferencias de Matriz.
+portapapeles son ficticios. Las fechas de esos casos se simulan en los datos
+del fixture, con el reloj del navegador compartido en tiempo real. Al terminar,
+el ejecutor cierra sus pestañas y servidores y conserva el navegador, las
+pestañas y las preferencias de Matriz.
 Durante la ejecución, dejá las pestañas de prueba bajo el control del ejecutor. Un lock impide dos
 ejecuciones CLI simultáneas. Si se interrumpe abruptamente y queda un lock,
 comprobar que el PID del archivo temporal `chuchotriz-free-qa.lock` ya no existe
