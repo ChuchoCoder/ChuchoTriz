@@ -878,7 +878,7 @@ async page => {
     const [longAButton, ratio, longBButton] = [...directions.children].map(el => el.getBoundingClientRect());
     const right = Math.max(a.right, b.right);
     const aligned = (x, y) => Math.abs(x - y) < 2;
-    const sameRow = (x, y) => Math.abs(x.top - y.top) < 2;
+    const sameRow = (x, y) => aligned(x.top, y.top);
     return {
       four: a.right <= b.left && b.right <= c.left && c.right <= d.left && sameRow(a, b) && sameRow(b, c) && sameRow(c, d),
       two: c.top >= Math.max(a.bottom, b.bottom) && c.right <= d.left && sameRow(c, d),
@@ -936,7 +936,7 @@ async page => {
   await closeEditor.getByLabel('Precio referencia C', { exact: true }).fill('1600');
   await click(closeEditor.getByRole('button', { name: 'Guardar cierre', exact: true }));
   await history.getByText('Brecha de cierre · -1,25%', { exact: true }).waitFor();
-  checks.push('Historical official benchmark can be entered and corrected, and its live objective is independent from A/B P&L');
+  checks.push('Long/Short aligns over the legs with a centered ratio at three widths. Historical C can be entered and corrected, and its live objective is independent from A/B P&L');
 
   await click(button('1 · Monitor'));
   await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
