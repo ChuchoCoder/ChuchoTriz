@@ -180,7 +180,7 @@ El grupo `widget-startup` mide cuándo aparecen los widgets guardados de Ratios 
 | TH-01–TH-09, TH-15 | `theme-controls` | Contraste de presets en reposo y al pasar el mouse, mini formulario, Configuración, editor de presets, simulador, ejecuciones, Ratios y Opciones independiente. |
 | TH-10–TH-14, TH-16–TH-23 | `theme-widgets` | Contraste del widget Ratios y del Book intradiario, ubicación del gráfico, ancho reducido y redimensionamiento del widget. |
 | Cadena de opciones | `options-grid` | Densidad, geometría y scroll mientras cargan las cotizaciones. |
-| Ratios | `ratio-operations`, `ratios-widget`, `ratio-chart`, `ratio-futures`, `intraday` | Recorridos dedicados de regresión en ambos temas. |
+| Ratios | `ratio-operations`, `ratios-widget`, `ratio-history`, `ratio-chart`, `ratio-futures`, `intraday` | Recorridos dedicados en ambos temas. El histórico cubre posición, selección, rangos, estilos, bandas móviles y recuperación sin datos. |
 
 Quedan como comprobaciones humanas de integración, no como pasos repetidos sobre
 la fixture:
