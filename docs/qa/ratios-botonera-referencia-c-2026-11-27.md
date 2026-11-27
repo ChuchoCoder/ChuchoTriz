@@ -16,12 +16,20 @@ Con el CSS anterior, a 1920 px el centro del ratio quedaba 156 px a
 la izquierda del centro de las patas. La regresión verifica la alineación
 con cuatro columnas, dos columnas y patas apiladas.
 
-El smoke general del cambio registró 168 comprobaciones aprobadas y cuatro
-fallos. Sobre `main` (`5b22348`), Tenencia obtuvo el mismo timeout al
-esperar su tabla en ambos temas, y Presets reprodujo en claro el mismo
-fallo de geometría del editor angosto. En oscuro Presets aprobó la pasada
-sobre `main`. El [registro del PR anterior](ratios-modal-intradiario-2026-11-27.md)
-documenta un fallo intermitente de esa comprobación en oscuro.
+La primera pasada de Operaciones de Ratios aprobó los 104 casos. En una
+repetición, la suite agotó la espera del botón Detalle antes de llegar a
+la botonera. El build anterior también registró ese timeout en una pasada.
+La comprobación puntual de la geometría a 1440, 1024 y 760 px y de ambos
+sentidos volvió a aprobar en claro y oscuro con la prueba revisada.
+
+El smoke general registró 168 comprobaciones aprobadas y cuatro fallos.
+Tenencia obtuvo el mismo timeout al esperar su tabla en el PR y en `main`
+(`5b22348`), en ambos temas. En Presets, la geometría del editor angosto
+falló en oscuro en el PR y en claro en `main`. El
+[registro del PR anterior](ratios-modal-intradiario-2026-11-27.md) documenta
+un fallo intermitente de esa comprobación en oscuro. Presets en claro
+falló al comprobar la posición de desplazamiento del editor durante el
+smoke del PR y aprobó los seis casos al repetir el grupo.
 
 `npm test` y `npm run package:free` aprobaron. La revisión del CSS
 cubre el impacto en rendimiento. La regla de ancho afectaba únicamente
