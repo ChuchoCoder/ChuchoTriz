@@ -813,7 +813,12 @@ async page => {
   await click(button('1 · Monitor'));
   await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
   const lastC = page.getByRole('button', { name: /^Usar último C/ });
+  const openedMinute = await label('Fecha/hora de apertura · Argentina').inputValue();
+  await page.clock.setFixedTime(new Date(Date.now() + 120_000));
   await lastC.click();
+  assert(await label('Fecha/hora de apertura · Argentina').inputValue() > openedMinute,
+    'Copying a later market C updates the live draft timestamp');
+  await page.clock.setFixedTime(new Date());
   await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
     'Changing the opening date clears current market prefills');
@@ -934,6 +939,11 @@ async page => {
   await click(button('Registrar cierre'));
   await reviewWaitHistory(future.id, [[50, 10], [50, 10], [1, 1]]);
   await history.getByText('Brecha de cierre · 0,00%', { exact: true }).waitFor();
+  await label('Precio cierre A').fill('80000'); await label('Precio cierre B').fill('50');
+  await label('Precio C al cerrar').fill('160000');
+  assert(await button('Cerrar 25%').isEnabled(), 'Percentage shortcuts stay available for A/B after the C contract is closed');
+  await click(button('Cerrar 25%'));
+  await reviewWaitHistory(future.id, [[50, 10, 10], [50, 10, 10], [1, 1]]);
   checks.push('Four opening cards align on desktop, reflow with keyboard focus and support independent future closes');
   await click(button('1 · Monitor')); await click(button('Quitar par MEP AL30 vs (DLR/DIC26 ÷ 100)'));
   await page.reload({ waitUntil: 'domcontentloaded' });

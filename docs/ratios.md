@@ -87,8 +87,9 @@ permite incluir la posición localmente. Ingresá el sentido, los contratos, el
 lote, el factor monetario y los DDMM. El factor multiplica el resultado en la
 moneda del contrato. En el cierre podés marcar **Ingresar cantidades por pata**
 para registrar las cantidades ejecutadas y cerrar C por separado si corresponde.
-Mientras A y B tengan saldo, se registran juntas para conservar el ratio de
-cierre. La opción **Dividir Referencia C por 100** se aplica
+Si A y B tenían saldo en la fecha elegida, se registran juntas para conservar
+el ratio de cierre. Después de cerrar los contratos de C, los accesos de
+25% y 50% siguen disponibles para A y B. La opción **Dividir Referencia C por 100** se aplica
 exclusivamente a la brecha.
 
 ## Referencias cotizadas por 100 nominales

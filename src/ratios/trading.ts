@@ -180,13 +180,16 @@ export function correctOperation(previous: RatioOperation, next: RatioOperation)
     throw Error("Con cierres registrados se conservan instrumentos, sentido y unidades de cotización.");
   }
   const result: RatioOperation = { ...next, legs: next.legs.map((l, i) => ({ ...l, exits: structuredClone(previous.legs[i]?.exits ?? []) })) as TradingLegs };
-  validateOperation(result); return result;
+  validateOperation(result);
+  preservePairedFutureCloses(previous, result);
+  return result;
 }
 export function closeOperation(o: RatioOperation, fraction: number, prices: number[], at: string, referencePrice?: number): RatioOperation {
   if (isClosed(o) || ![.25, .5, 1].includes(fraction)) throw Error("Revisá la proporción del cierre.");
-  const quantities = o.legs.map(l => {
-    const q = fraction === 1 ? remaining(l) : Math.floor(remaining(l) * fraction / l.step) * l.step;
-    if (q <= 0 && fraction !== 1) throw Error("El cierre parcial debe alcanzar al menos un lote de cada pata.");
+  const quantities = o.legs.map((l, index) => {
+    const balance = remaining(l);
+    const q = fraction === 1 ? balance : Math.floor(balance * fraction / l.step) * l.step;
+    if (q <= 0 && fraction !== 1 && (index !== 2 || balance > 0)) throw Error("El cierre parcial debe alcanzar al menos un lote de cada pata abierta.");
     return q;
   });
   return recordClose(o, quantities, prices, at, referencePrice);
@@ -239,7 +242,10 @@ function recordClose(o: RatioOperation, quantities: number[], prices: number[], 
     const exit = { quantity: q, price: prices[i], at, closeId, ...(i === referenceLeg ? { referencePrice } : {}) };
     return { ...l, exits: [...l.exits, exit].sort((a, b) => a.at.localeCompare(b.at)) };
   }) as TradingLegs;
-  const result = { ...o, legs }; validateOperation(result); return result;
+  const result = { ...o, legs };
+  validateOperation(result);
+  preservePairedFutureCloses(o, result);
+  return result;
 }
 
 interface RecordedCloseLeg extends RatioExit { index: number; leg: TradingLegIndex }
@@ -266,6 +272,30 @@ export function recordedCloses(o: RatioOperation): RecordedClose[] {
     // A legacy timestamp shared by several exits cannot identify their pairings.
     return entries.map(entry => ({ key: `legacy:${at}:${entry.leg}:${entry.index}`, at, entries: [entry] }));
   });
+}
+
+function unpairedFutureCloses(o: RatioOperation) {
+  const invalid: string[] = [];
+  if (!o.legs[2]) return invalid;
+  let openA = o.legs[0].quantity, openB = o.legs[1].quantity;
+  const closes = recordedCloses(o).sort((a, b) => a.at.localeCompare(b.at));
+  for (const close of closes) {
+    const quantityA = close.entries.find(entry => entry.leg === 0)?.quantity ?? 0;
+    const quantityB = close.entries.find(entry => entry.leg === 1)?.quantity ?? 0;
+    if (openA > 0 && openB > 0 && !!quantityA !== !!quantityB) invalid.push(close.key);
+    openA -= quantityA;
+    openB -= quantityB;
+  }
+  return invalid;
+}
+
+function preservePairedFutureCloses(previous: RatioOperation, next: RatioOperation) {
+  const invalid = unpairedFutureCloses(next);
+  if (!invalid.length) return;
+  const existing = new Set(unpairedFutureCloses(previous));
+  if (invalid.some(key => !existing.has(key))) {
+    throw Error("Registrá A y B juntas si ambas tenían saldo en la fecha del cierre. Revisá los cierres posteriores.");
+  }
 }
 
 export type CloseCorrection = Pick<RatioExit, "quantity" | "price">;
@@ -305,6 +335,7 @@ export function reviseRecordedClose(o: RatioOperation, key: string, corrections:
   }
   const result = { ...o, legs };
   validateOperation(result);
+  preservePairedFutureCloses(o, result);
   return result;
 }
 

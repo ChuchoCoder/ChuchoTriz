@@ -48,6 +48,9 @@ function referenceDraft(instrument: TradingInstrument, divisor?: 100, saved?: Op
 const dateInput = (iso = new Date().toISOString()) => new Date(iso).toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 16).replace(" ", "T");
 const emptyDraft = (): Draft => ({ pa: "", pb: "", qa: "100", fa: "", fb: "", sa: "1", sb: "1", ddmma: "", ddmmb: "", commission: "0", target: "", at: dateInput(), direction: 1, sourceA: "last", sourceB: "last" });
 const input = (n?: number) => n === undefined ? "" : formatOptionInput(n);
+function withMarketEntry(previous: Draft, change: Partial<Draft>): Draft {
+  return { ...previous, ...change, at: previous.reference && !previous.explicitDate ? dateInput() : previous.at };
+}
 const entrySourceLabels = { last: "mercado", bid: "Compra", ask: "Venta", manual: "manual", saved: "registrado" } as const;
 function resolveEntryPrice(price: string, source: Source, quote?: TradingQuote): { price: string; source: Source } {
   if (source === "last" && !price) return { price: input(quote?.last), source };
@@ -165,7 +168,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
       const a = resolveEntryPrice(previous.pa, previous.sourceA, quotes[previous.a?.id || ""]);
       const b = resolveEntryPrice(previous.pb, previous.sourceB, quotes[previous.b?.id || ""]);
       return a.price === previous.pa && b.price === previous.pb && a.source === previous.sourceA && b.source === previous.sourceB
-        ? previous : { ...previous, pa: a.price, pb: b.price, sourceA: a.source, sourceB: b.source };
+        ? previous : withMarketEntry(previous, { pa: a.price, pb: b.price, sourceA: a.source, sourceB: b.source });
     });
   }, [quotes]);
 
@@ -247,10 +250,10 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setDraft(previous => {
       if (!instrument) return { ...previous, [key]: undefined, preservedB: undefined };
       const first = key === "a", changed = previous[key]?.id !== instrument.id;
-      return { ...previous, [key]: instrument, preservedB: undefined, [first ? "pa" : "pb"]: previous.explicitDate ? "" : input(quotes[instrument.id]?.last),
+      return withMarketEntry(previous, { [key]: instrument, preservedB: undefined, [first ? "pa" : "pb"]: previous.explicitDate ? "" : input(quotes[instrument.id]?.last),
         [first ? "fa" : "fb"]: input(instrument.amountFactor), [first ? "sa" : "sb"]: input(instrument.quantityStep),
         [first ? "ddmma" : "ddmmb"]: input(defaultMarketRights(instrument)), [first ? "sourceA" : "sourceB"]: previous.explicitDate ? "manual" : "last", target: changed ? "" : previous.target,
-        reference: changed && previous.reference ? { ...previous.reference, goal: "" } : previous.reference };
+        reference: changed && previous.reference ? { ...previous.reference, goal: "" } : previous.reference });
     });
   }
   function entryPrices(direction: Draft["direction"], a?: TradingInstrument, b?: TradingInstrument, waitForQuotes = false) {
@@ -276,7 +279,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
       commission: input(o.commission), preservedB: !sameCurrency(o.legs[0].instrument, o.legs[1].instrument) && o.legs[0].quantity !== o.legs[1].quantity ? o.legs[1].quantity : undefined,
       target: goalInput(o), at: dateInput(o.openedAt), direction: o.direction, sourceA: "saved", sourceB: "saved",
       reference: o.reference && referenceDraft(o.reference.instrument, o.reference.divisor, o.reference, o.legs[2]),
-      explicitDate: dateInput(o.openedAt) !== dateInput() });
+      explicitDate: !!o.reference || dateInput(o.openedAt) !== dateInput() });
     setPickerSession(n => n + 1); setView("opening"); setIssue(""); setNotice("");
   }
   const pa = numeric(draft.pa), pb = numeric(draft.pb), qa = numeric(draft.qa), fa = numeric(draft.fa), fb = numeric(draft.fb), sa = numeric(draft.sa), sb = numeric(draft.sb);
@@ -290,7 +293,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const marketSpread = ref && draft.a && draft.b
     ? calculateRatio(quotes[draft.a.id], quotes[draft.b.id], referenceCQuote(quotes, { c: ref.instrument, cDivisor: ref.divisor })).ratio : undefined;
   function changeReference(change: Partial<ReferenceDraft>) {
-    setDraft(previous => previous.reference ? { ...previous, reference: { ...previous.reference, ...change } } : previous);
+    setDraft(previous => {
+      if (!previous.reference) return previous;
+      const reference = { ...previous.reference, ...change };
+      return change.copiedPrice ? withMarketEntry(previous, { reference }) : { ...previous, reference };
+    });
   }
   const missingEntrySides = view === "opening" ? [
     { price: draft.pa, source: draft.sourceA, symbol: draft.a?.symbol || "A" },
@@ -304,7 +311,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   function selectDirection(direction: 1 | -1) {
     if (!available || partiallyClosed) return;
     setDraft(previous => previous.explicitDate ? { ...previous, direction }
-      : { ...previous, ...entryPrices(direction, previous.a, previous.b) });
+      : withMarketEntry(previous, entryPrices(direction, previous.a, previous.b)));
     setIssue("");
   }
 
@@ -473,7 +480,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
   }
   const selectedMetrics = op && operationMetrics(op);
   const selectedPnl = op ? operationPnl(op, quotes) : [];
-  const allLegsOpen = op?.legs.every(leg => remaining(leg) > 0);
+  const bothPairedLegsOpen = op && remaining(op.legs[0]) > 0 && remaining(op.legs[1]) > 0;
   const shownRatio = (raw: number | undefined, percent: boolean) => raw === undefined ? undefined : percent ? (raw - 1) * 100 : raw;
   const monitorRows = projectGrid(book.watch, "watch", monitorSort, (pair, column) => {
     if (column === "pair") return pairLabel(pair);
@@ -513,7 +520,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     const last = quote?.issue ? undefined : quote?.last, priceChange = dailyPriceChange(quote);
     return <section className="ro-leg" aria-label={`Pata ${key.toUpperCase()}`} key={key}>
       <header><div className="ro-leg-header-identity"><strong className="ro-leg-title">{instrument?.symbol || `Instrumento ${key.toUpperCase()}`}</strong><small className="ro-leg-label">Pata {key.toUpperCase()}</small><span className={`ro-chip ${side === 1 ? "buy" : "sell"}`}>{side === 1 ? "Compra · Long" : "Venta · Short"}</span></div>
-        <div className="ro-leg-header-quote"><button type="button" className="ro-header-last" disabled={!available || draft.explicitDate || last === undefined} title={draft.explicitDate ? "Ingresá el precio histórico" : "Usar este precio de mercado"} aria-label={`Usar último de ${key.toUpperCase()}`} onClick={() => { if (last !== undefined) setDraft(p => ({ ...p, [priceKey]: input(last), [sourceKey]: "last" })); }}><OptionQuoteValue key={instrument?.id || key} value={last} formatValue={numberLabel} /></button>
+        <div className="ro-leg-header-quote"><button type="button" className="ro-header-last" disabled={!available || draft.explicitDate || last === undefined} title={draft.explicitDate ? "Ingresá el precio histórico" : "Usar este precio de mercado"} aria-label={`Usar último de ${key.toUpperCase()}`} onClick={() => { if (last !== undefined) setDraft(p => withMarketEntry(p, { [priceKey]: input(last), [sourceKey]: "last" })); }}><OptionQuoteValue key={instrument?.id || key} value={last} formatValue={numberLabel} /></button>
           <span className={signed(priceChange)} aria-label={`Variación diaria de ${key.toUpperCase()}`} title={priceChange === undefined ? quote?.issue || "Sin referencia diaria del instrumento" : "(Precio actual / referencia diaria − 1) × 100"}>{priceChange === undefined ? "—" : dailyLabel(priceChange)}</span></div>
         <small className="ro-leg-header-note">{!first ? draft.preservedB !== undefined ? "Cantidad registrada" : "Cantidad automática" : ""}</small></header>
       <div className="ro-entry-fields"><div className="ro-leg-instrument"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={priceSearch} disabled={!available || partiallyClosed} /></div>
@@ -521,7 +528,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
         <label><span title={`${edit ? "Cantidad total" : "Cantidad"} ${key.toUpperCase()} · ${instrument?.quantityUnit || "unidades"}`}>{edit ? "Cantidad total" : "Cantidad"} {key.toUpperCase()} · {instrument?.quantityUnit || "unidades"}</span><input aria-label={`Cantidad ${key.toUpperCase()}`} type="number" min={first && Number.isFinite(sa) && sa > 0 ? sa : 1} step={first && Number.isFinite(sa) && sa > 0 ? sa : 1} value={first ? draft.qa : Number.isFinite(qb) ? qb : ""} readOnly={!first} disabled={!available}
           onChange={e => setDraft(p => ({ ...p, qa: e.target.value, preservedB: undefined }))} /></label></div>
       <RatioOrderBook leg={first ? "A" : "B"} quote={quote} selectedPrice={selectedPrice} selectedSide={source === "bid" || source === "ask" ? source : undefined} disabled={!available || !!draft.explicitDate}
-        onChoose={(side, level) => setDraft(p => ({ ...p, [priceKey]: input(level.price), [sourceKey]: side }))} />
+        onChoose={(side, level) => setDraft(p => withMarketEntry(p, { [priceKey]: input(level.price), [sourceKey]: side }))} />
       <div className="ro-leg-footer"><small>{instrument ? `${instrumentKind(instrument.cfi)} · ${currencyLabel(instrument.currency)} · ${instrument.amountFactor === .01 ? "precio por 100 nominales" : `monto = cantidad × precio × ${numberLabel(numeric(draft[factorKey]))}`}` : "Seleccioná el instrumento"}<br />Última operación: {tradeLabel(quote?.tradedAt)}</small></div>
       {instrument && (!instrument.amountFactor || !instrument.quantityStep) && <div className="ro-manual-units"><label>Factor monetario por unidad<input type="number" min="0" step="any" value={draft[factorKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [factorKey]: e.target.value }))} /></label><label>Lote mínimo<input type="number" min="1" step="1" value={draft[stepKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [stepKey]: e.target.value }))} /></label></div>}
       {ref && <div className="ro-leg-sizing">
@@ -744,8 +751,8 @@ export default function RatioOperations({ active }: { active: boolean }) {
           {closeIssue && <p className="ro-close-issue" role="alert">{closeIssue}</p>}
           <div className="ro-close-actions">
             <button type="button" className="ro-primary ro-register-close" disabled={!available || !closeQuantities || !closeHasPrices} onClick={() => void registerClose()}>Registrar cierre</button>
-            {!independentQuantities && <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available || !closeHasPrices || f < 1 && !allLegsOpen}
-              title={f < 1 && !allLegsOpen ? "Ingresá una cantidad para cerrar una sola pata." : undefined}
+            {!independentQuantities && <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available || !closeHasPrices || f < 1 && !bothPairedLegsOpen}
+              title={f < 1 && !bothPairedLegsOpen ? "Ingresá una cantidad para cerrar una sola pata." : undefined}
               onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div>}
           </div>
           <small>{closeInput?.at ? "Ingresá los precios ejecutados en la fecha elegida." :

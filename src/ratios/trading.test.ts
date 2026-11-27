@@ -353,4 +353,23 @@ it("records exits of the futures leg and the A/B legs on different dates", () =>
   const second = closeOperationIndependently(first, [0, 0, 1], [0, 0, 1.99], "2026-01-03T13:00:00.000Z");
   expect(second.legs.map(remaining)).toEqual([75, 150, 0]);
   expect(recordedCloses(second)[0].entries.map(e => e.leg)).toEqual([2]);
+  const percent = closeOperation(second, .25, [103, 51, 0], "2026-01-04T13:00:00.000Z", 2.02);
+  expect(recordedCloses(percent)[0].entries.map(e => e.quantity)).toEqual([18, 37]);
+  expect(percent.legs.map(remaining)).toEqual([57, 113, 0]);
+});
+
+it("validates A/B pairing against historical balances when inserting or correcting an exit", () => {
+  const o = operation();
+  const c: TradingInstrument = { ...instrument("DIC26"), market: "rx", settlement: "Futuro", cfi: "FXXXXX", quantityUnit: "contratos", monitorOnly: true };
+  o.reference = { instrument: c, entry: 2 };
+  o.legs = [o.legs[0], { ...o.legs[1], quantity: 50 }, { instrument: c, side: -1, quantity: 5, entry: 2, factor: 1000, step: 1, ddmm: 0, exits: [] }];
+  const later = "2026-01-03T13:00:00.000Z";
+  const paired = closeOperationIndependently(o, [50, 50, 0], [103, 51, 0], later, 2.02);
+  expect(() => closeOperationIndependently(paired, [10, 0, 0], [103, 0, 0], exitAt)).toThrow(/fecha del cierre/);
+  const solo = closeOperationIndependently(paired, [10, 0, 0], [103, 0, 0], later);
+  expect(solo.legs.map(remaining)).toEqual([40, 0, 5]);
+  const pairedKey = recordedCloses(solo).find(close => close.entries.length === 2)!.key;
+  expect(() => reviseRecordedClose(solo, pairedKey, null)).toThrow(/cierres posteriores/);
+  expect(() => reviseRecordedClose(solo, pairedKey, [{ quantity: 50, price: 103 }, { quantity: 49, price: 51 }])).toThrow(/cierres posteriores/);
+  expect(() => correctOperation(solo, { ...solo, legs: [solo.legs[0], { ...solo.legs[1], quantity: 51 }, solo.legs[2]!] })).toThrow(/cierres posteriores/);
 });
