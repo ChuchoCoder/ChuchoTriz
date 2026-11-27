@@ -47,9 +47,9 @@ export class MarketReader {
   };
   constructor(private resource: "options-market-reader.js" | "options-position-reader.js" | "options-executions-reader.js" | "ratios-reader.js" | "ratio-operations-reader.js" | "ratio-chart-reader.js" = "options-market-reader.js") {
     this.channel = `chuchotriz-${resource}-${crypto.randomUUID()}`;
-    window.addEventListener("message", this.receive);
     this.script.dataset.channel = this.channel;
     this.script.src = chrome.runtime.getURL(resource);
+    window.addEventListener("message", this.receive);
     this.ready = new Promise((resolve, reject) => {
       this.releaseReady = resolve;
       this.script.onload = () => {
@@ -60,17 +60,24 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit" | "bookIntraday" | "ratioIntradayHistory" | "ratioIntradayQuotes" | "ratioDailyHistory" | "ratioContext" | "ratioSearch" | "ratioQuotes" | "ratioChart" | "verifyExecutionContext", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit" | "bookIntraday" | "ratioIntradayHistory" | "ratioIntradayQuotes" | "ratioDailyHistory" | "ratioContext" | "ratioSearch" | "ratioQuotes" | "ratioChart" | "verifyExecutionContext", params = {}, options?: { signal: AbortSignal; canDispatch?: () => boolean }): Promise<T> {
+    const { signal, canDispatch } = options ?? {};
     await this.ready;
-    if (this.disposed) throw Error("Lectura cerrada.");
+    if (this.disposed || signal?.aborted || canDispatch?.() === false) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
-      const timer = setTimeout(() => {
-        this.pending.delete(id); window.postMessage({ channel: this.channel, kind: "retire", id }, location.origin);
-        reject(Error("La lectura de Matriz no respondió a tiempo."));
-      }, this.resource === "options-market-reader.js" ? 5000 : this.resource === "ratio-chart-reader.js" ? 30000 :
+      const retire = (error: Error) => {
+        clearTimeout(timer); this.pending.delete(id); finished();
+        window.postMessage({ channel: this.channel, kind: "retire", id }, location.origin);
+        reject(error);
+      };
+      const abort = () => retire(Error("Lectura cerrada."));
+      const finished = () => signal?.removeEventListener("abort", abort);
+      const timer = setTimeout(() => retire(Error("La lectura de Matriz no respondió a tiempo.")),
+        this.resource === "options-market-reader.js" ? 5000 : this.resource === "ratio-chart-reader.js" ? 30000 :
         method === "ratioIntradayHistory" || method === "ratioDailyHistory" || method === "bookIntraday" ? 22000 : 15000);
-      this.pending.set(id, { resolve: value => resolve(value as T), reject, timer });
+      this.pending.set(id, { resolve: value => { finished(); resolve(value as T); }, reject: error => { finished(); reject(error); }, timer });
+      signal?.addEventListener("abort", abort, { once: true });
       window.postMessage({ channel: this.channel, kind: "request", id, method, params }, location.origin);
     });
   }

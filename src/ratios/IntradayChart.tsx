@@ -28,18 +28,75 @@ function acquireReader() {
   return { client, release() { if (--subscribers === 0) { client.dispose(); reader = undefined; } } };
 }
 
+type QuoteUpdate = { result: LiveResponse } | { error: unknown };
+type QuoteListener = (update: QuoteUpdate) => void;
+type SubscribeToQuoteGroup = (listener: QuoteListener) => () => void;
+const quoteGroups = new WeakMap<MarketReader, Map<string, SubscribeToQuoteGroup>>();
+
+function createQuoteGroup(client: MarketReader, ids: string[], onIdle: () => void): SubscribeToQuoteGroup {
+  const listeners = new Set<QuoteListener>();
+  const controller = new AbortController();
+  const { signal } = controller;
+  const active = () => !signal.aborted && !document.hidden;
+  let timer: ReturnType<typeof setTimeout>;
+  async function poll() {
+    if (!active()) return;
+    let recipients: QuoteListener[] | undefined;
+    const canDispatch = () => {
+      if (!active()) return false;
+      // All charts waiting for reader startup can share its very first response.
+      recipients = [...listeners];
+      return true;
+    };
+    const update = await client.call<LiveResponse>("ratioIntradayQuotes", { ids }, { signal, canDispatch })
+      .then(result => ({ result }), error => ({ error }));
+    if (!active()) return;
+    for (const listener of recipients ?? listeners) if (listeners.has(listener)) listener(update);
+    timer = setTimeout(() => void poll(), 2000);
+  }
+  return listener => {
+    // Give each registration its own identity when a chart leaves and rejoins.
+    const receive: QuoteListener = update => listener(update);
+    listeners.add(receive);
+    if (listeners.size === 1) void poll();
+    return () => {
+      if (!listeners.delete(receive) || listeners.size) return;
+      clearTimeout(timer);
+      controller.abort();
+      onIdle();
+    };
+  };
+}
+
+function subscribeQuotes(client: MarketReader, ids: readonly string[], listener: QuoteListener) {
+  const sortedIds = [...ids].sort(), key = JSON.stringify(sortedIds);
+  let groups = quoteGroups.get(client);
+  if (!groups) {
+    groups = new Map();
+    quoteGroups.set(client, groups);
+  }
+  let subscribe = groups.get(key);
+  if (!subscribe) {
+    const currentGroups = groups;
+    subscribe = createQuoteGroup(client, sortedIds, () => currentGroups.delete(key));
+    groups.set(key, subscribe);
+  }
+  return subscribe(listener);
+}
+
 function useIntraday(ids: readonly string[], active: boolean) {
   const [history, setHistory] = useState<History>({}), [live, setLive] = useState<Live>({});
   const [start, setStart] = useState<number>(), [connected, setConnected] = useState<boolean>();
   const [loading, setLoading] = useState(true), [historyIssue, setHistoryIssue] = useState(""), [liveIssue, setLiveIssue] = useState("");
   const retryHistory = useRef<() => void>(() => {});
   const watching = useRef(active), syncPolling = useRef(() => {});
+  useEffect(() => { watching.current = active; syncPolling.current(); }, [active]);
   useEffect(() => {
     let connection: ReturnType<typeof acquireReader> | undefined;
     let disposed = false, revision: number | undefined, previousConnection: boolean | undefined;
     let previousAvailability: string | undefined;
-    let timer: ReturnType<typeof setTimeout>, historyRequest = 0;
-    let polling = false;
+    let stopQuotes: (() => void) | undefined, historyRequest = 0;
+    let retryQuotes: ReturnType<typeof setTimeout>;
     const canPoll = () => !disposed && watching.current && !document.hidden;
     const loadHistory = (refresh = false) => {
       if (!connection) return;
@@ -58,13 +115,11 @@ function useIntraday(ids: readonly string[], active: boolean) {
         if (!disposed && request === historyRequest) setLoading(false);
       });
     };
-    const poll = async () => {
-      if (!canPoll() || polling) return;
-      polling = true;
+    const receiveQuotes: QuoteListener = update => {
+      if (!canPoll()) return;
       try {
-        const { client } = connection ??= acquireReader();
-        const result = await client.call<LiveResponse>("ratioIntradayQuotes", { ids });
-        if (!canPoll()) return;
+        if ("error" in update) throw update.error;
+        const { result } = update;
         const switched = result.revision !== revision;
         const availability = result.available?.join("\u0000");
         if (switched) {
@@ -88,25 +143,35 @@ function useIntraday(ids: readonly string[], active: boolean) {
         previousConnection = result.connected;
         previousAvailability = availability;
       } catch (error) {
-        if (canPoll()) { setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false); }
-      } finally {
-        polling = false;
-        if (canPoll()) timer = setTimeout(() => void poll(), 2000);
+        setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false);
       }
     };
-    const visibilityChanged = () => { clearTimeout(timer); void poll(); };
+    const visibilityChanged = () => {
+      clearTimeout(retryQuotes);
+      if (!canPoll()) {
+        stopQuotes?.();
+        stopQuotes = undefined;
+      } else if (!stopQuotes) {
+        try {
+          connection ??= acquireReader();
+          stopQuotes = subscribeQuotes(connection.client, ids, receiveQuotes);
+        } catch (error) {
+          receiveQuotes({ error });
+          retryQuotes = setTimeout(visibilityChanged, 2000);
+        }
+      }
+    };
     retryHistory.current = () => { if (revision !== undefined) void loadHistory(true); };
     syncPolling.current = visibilityChanged;
     document.addEventListener("visibilitychange", visibilityChanged);
-    void poll();
+    visibilityChanged();
     return () => {
-      disposed = true; clearTimeout(timer); retryHistory.current = () => {};
+      disposed = true; clearTimeout(retryQuotes); stopQuotes?.(); retryHistory.current = () => {};
       document.removeEventListener("visibilitychange", visibilityChanged);
       syncPolling.current = () => {};
       connection?.release();
     };
   }, [ids]);
-  useEffect(() => { watching.current = active; syncPolling.current(); }, [active]);
   return { history, live, start, connected, loading, historyIssue, liveIssue, retry: () => retryHistory.current() };
 }
 
