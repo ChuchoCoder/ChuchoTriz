@@ -449,13 +449,13 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
                       <input type="number" min="1" step="1" value={preset.cantidad} inputMode="numeric" data-field="cantidad"
                         aria-label={`Cantidad del preset ${index + 1} de ${selected}`}
                         onChange={event => updatePreset(index, "cantidad", event.target.value)} />
-                      <div className="preset-display-modes" role="group" aria-label={`Modo del preset ${index + 1} de ${selected}`}>
-                        {([['all', 'Mostrar todo'], ['fixed', 'Fija'], ['random', 'Aleatoria'], ['add', 'Sumar']] as const).map(([mode, text]) =>
-                          <button type="button" key={mode} data-display-mode={mode} aria-pressed={active.mode === mode}
-                            onClick={() => changeDisplayMode(mode)}>{text}</button>)}
-                      </div>
-                      <div className="preset-display-value">
-                        {(active.mode === "fixed" || active.mode === "random") && <label><span>{active.mode === "random" ? "Divisor" : "Valor"}</span>
+                      <div className="preset-controls">
+                        <div className="preset-display-modes" role="group" aria-label={`Modo del preset ${index + 1} de ${selected}`}>
+                          {([['all', 'Mostrar todo'], ['fixed', 'Fija'], ['random', 'Aleatoria'], ['add', 'Sumar']] as const).map(([mode, text]) =>
+                            <button type="button" key={mode} data-display-mode={mode} aria-pressed={active.mode === mode}
+                              onClick={() => changeDisplayMode(mode)}>{text}</button>)}
+                        </div>
+                        {(active.mode === "fixed" || active.mode === "random") && <label className="preset-display-value"><span>{active.mode === "random" ? "Divisor" : "Valor"}</span>
                           <input type="number" min={active.mode === "random" ? 2 : 1} step="1" inputMode="numeric" data-field="mostrar"
                             value={active.mode === "random" ? active.divisor : active.fixed}
                             aria-label={`${active.mode === "random" ? "Divisor" : "Cantidad a mostrar"} del preset ${index + 1} de ${selected}`}

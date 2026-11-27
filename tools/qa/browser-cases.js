@@ -115,7 +115,35 @@ async (page, group) => {
     await mode.getByRole('button', { name: 'Mostrar todo', exact: true }).click();
     await add.click();
     equal(await add.getAttribute('aria-pressed'), 'true', 'Visual editor selects Sumar');
-    assert(await mode.evaluate(group => Array.from(group.querySelectorAll('button')).every(button => button.scrollWidth <= button.clientWidth + 1)), 'Mode labels fit the editor');
+    const editingLayout = () => mode.evaluate(group => {
+      const row = group.closest('.preset-row');
+      const quantity = row.querySelector('[data-field="cantidad"]').getBoundingClientRect();
+      const actions = row.querySelector('.preset-row-actions').getBoundingClientRect();
+      const value = row.querySelector('[data-field="mostrar"]')?.getBoundingClientRect();
+      const selection = group.getBoundingClientRect();
+      const edge = row.getBoundingClientRect().right;
+      const center = rect => rect.top + rect.height / 2;
+      const buttons = [...group.querySelectorAll('button')];
+      return {
+        oneRow: buttons.every(button => Math.abs(button.getBoundingClientRect().top - buttons[0].getBoundingClientRect().top) <= 1),
+        aligned: Math.abs(center(selection) - center(quantity)) <= 2 && Math.abs(center(actions) - center(quantity)) <= 2,
+        inside: [actions, selection, ...(value ? [value] : [])].every(rect => rect.right <= edge + 1) &&
+          buttons.every(button => button.scrollWidth <= button.clientWidth + 1),
+        valueAligned: !value || Math.abs(center(value) - center(quantity)) <= 2,
+      };
+    });
+    const wide = await editingLayout();
+    assert(wide.oneRow && wide.aligned && wide.inside, 'The four modes align with the quantity and actions');
+    await mode.getByRole('button', { name: 'Fija', exact: true }).click();
+    const fixed = await editingLayout();
+    assert(fixed.oneRow && fixed.aligned && fixed.inside && fixed.valueAligned, 'Fixed value fits on the same row');
+    const desktop = page.viewportSize();
+    await page.setViewportSize({ width: 390, height: 900 });
+    const narrow = await editingLayout();
+    assert(narrow.oneRow && narrow.inside, 'The narrow editor keeps the modes and value inside the row');
+    await page.setViewportSize(desktop);
+    await add.click();
+    pass('RG-01-editor-layout', 'Mode selector is horizontal on wide and narrow editors and aligned with the fields on desktop');
     await b('Guardar cambios').click();
     await page.getByText('Cambios guardados', { exact: false }).waitFor();
     await b('Volver a Matriz').click();
