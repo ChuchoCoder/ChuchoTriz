@@ -391,31 +391,25 @@
 #MiniOrderForm .ct-ticket-position-close svg { inline-size: 12px; block-size: 12px; }
 
 #MiniOrderForm .ct-ticket-position-show {
-  inline-size: 26px;
-  block-size: 26px;
-  flex: 0 0 auto;
-  border: 1px solid var(--modal-border-color, #62748a);
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 4px;
+  transform: translateY(-50%);
+  inline-size: 24px;
+  block-size: 24px;
+  max-block-size: 100%;
+  border: 0;
 }
 
-#MiniOrderForm .ct-ticket-position-show svg { inline-size: 16px; block-size: 16px; }
+#MiniOrderForm .ct-ticket-position-show svg { inline-size: 14px; block-size: 14px; }
 
 #MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-form-item-control-input-content:has(> .ct-ticket-position-show:not([hidden])) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-inline-size: 0;
+  position: relative;
 }
 
-#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])),
-#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])) .ant-input-number-input-wrap {
-  min-inline-size: 0;
-  flex: 1 1 0;
-}
-
-#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])) input {
-  inline-size: 100%;
-  min-inline-size: 0;
-  box-sizing: border-box;
+#MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])) .ant-input-number-input {
+  /* Matriz fixes the input padding even in the compact ticket. */
+  padding-inline-end: 32px !important;
 }
 
 #MiniOrderForm :is(.ct-ticket-position-fill, .ct-ticket-position-close, .ct-ticket-position-show):hover {
@@ -436,4 +430,7 @@
 @media (pointer: coarse) {
   #MiniOrderForm > .ct-ticket-position { padding-inline-end: 46px; }
   #MiniOrderForm :is(.ct-ticket-position-close, .ct-ticket-position-show) { inline-size: 44px; block-size: 44px; }
+  #MiniOrderForm .MiniOrderFormQuantity-amount-input .ant-input-number:has(+ .ct-ticket-position-show:not([hidden])) .ant-input-number-input {
+    padding-inline-end: 52px !important;
+  }
 }

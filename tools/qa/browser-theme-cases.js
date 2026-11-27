@@ -108,16 +108,28 @@ async (page, group) => {
     if (!stripBox || !closeBox || closeBox.y - stripBox.y > 4 || stripBox.x + stripBox.width - closeBox.x - closeBox.width > 4) {
       throw Error('Cruz fuera de la esquina del panel');
     }
+    const arrows = page.locator('#MiniOrderForm .DblArrowButton');
+    const [qtyBefore, arrowsBefore] = await Promise.all([qty.boundingBox(), arrows.boundingBox()]);
+    if (!qtyBefore || !arrowsBefore) throw Error('Faltan Cantidad o las flechas de Monto en el fixture');
     await close.press('Space');
     await eye.waitFor();
     await panel.waitFor({ state: 'hidden' });
     if (!await eye.evaluate(button => document.activeElement === button && button.matches(':focus-visible'))) throw Error('Foco perdido al ocultar');
     if (await qty.inputValue() !== '2500') throw Error('Ocultar alteró la cantidad');
-    const [eyeBox, qtyBox] = await Promise.all([eye.boundingBox(), qty.boundingBox()]);
-    if (!eyeBox || !qtyBox || eyeBox.x < qtyBox.x + qtyBox.width - 1 || Math.abs(eyeBox.y - qtyBox.y) > 8) {
-      throw Error('Ojo desalineado respecto de Cantidad');
+    const [eyeBox, qtyBox, arrowsBox] = await Promise.all([eye.boundingBox(), qty.boundingBox(), arrows.boundingBox()]);
+    const eyeKeepsClear = await eye.evaluate(button => {
+      const rect = button.getBoundingClientRect();
+      const input = button.previousElementSibling.querySelector('input');
+      const contentRight = input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight);
+      return getComputedStyle(button).borderRightWidth === '0px' && rect.left >= contentRight - 1 &&
+        button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    });
+    if (!eyeBox || !qtyBox || !arrowsBox || !eyeKeepsClear || Math.abs(qtyBox.width - qtyBefore.width) > 1 ||
+        Math.abs(arrowsBox.x - arrowsBefore.x) > 1 || eyeBox.x + eyeBox.width > arrowsBox.x - 4 ||
+        eyeBox.x + eyeBox.width > qtyBox.x + qtyBox.width || Math.abs(eyeBox.y + eyeBox.height / 2 - qtyBox.y - qtyBox.height / 2) > 2) {
+      throw Error('El ojo debe quedar dentro de Cantidad y separado del texto y las flechas');
     }
-    await contrast('TP-05', 'Ojo junto a Cantidad', eye.locator('svg'), { foreground: 'stroke', minimum: 3 });
+    await contrast('TP-05', 'Ojo integrado en Cantidad y separado de las flechas', eye.locator('svg'), { foreground: 'stroke', minimum: 3 });
     await eye.evaluate(button => button.click());
     if ((await page.evaluate(() => chrome.storage.local.get('TicketPositionVisible'))).TicketPositionVisible !== false) {
       throw Error('Un clic sintético cambió la preferencia persistida');
