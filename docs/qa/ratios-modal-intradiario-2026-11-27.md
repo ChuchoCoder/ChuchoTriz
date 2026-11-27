@@ -33,6 +33,12 @@ icono en las filas «5m» y «C». El recorrido comparó la posición horizontal
 de las acciones entre ambos tipos de fila. Pasaron los 58 casos en oscuro
 y los 58 en claro.
 
+## Icono del Book intradiario
+
+El icono del gráfico del Book se ve blanco sobre el encabezado azul.
+El grupo `theme-widgets` aprobó los 14 casos de cada tema. El icono
+tuvo un contraste de 10,73:1 en el fixture de ambos temas.
+
 ## Rendimiento
 
 El cambio agrega un botón por fila A/B. Las lecturas y el gráfico se inician
