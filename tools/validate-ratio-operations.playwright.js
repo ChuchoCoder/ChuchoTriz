@@ -823,11 +823,12 @@ async page => {
   });
   await page.getByRole('button', { name: 'Usar último C · 1.580,00', exact: true }).waitFor();
   await button('Usar último de A').click();
-  assert(await openingDate.inputValue() > openedMinute && await label('Precio C al abrir').inputValue() === '' &&
-    await label('Precio de entrada B').inputValue() === '', 'Advancing the live draft timestamp clears earlier copied prices');
+  await wait(previous => document.querySelector('.ro-entry-costs input[type="datetime-local"]')?.value > previous &&
+    document.querySelector('.ro-entry-reference input')?.value === '' &&
+    document.querySelector('[aria-label="Precio de entrada B"]')?.value === '', openedMinute);
   await lastC.click();
-  assert(await label('Precio C al abrir').inputValue() === '1580' && await label('Precio de entrada A').inputValue() !== '',
-    'New copies made in the same minute are retained');
+  await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1580' &&
+    (document.querySelector('[aria-label="Precio de entrada A"]')?.value ?? '') !== '');
   await page.clock.setFixedTime(new Date());
   await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
