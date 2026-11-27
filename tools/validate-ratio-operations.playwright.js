@@ -816,7 +816,8 @@ async page => {
   const openingDate = label('Fecha/hora de apertura · Argentina');
   const openedMinute = await openingDate.inputValue();
   await lastC.click();
-  await page.clock.setFixedTime(new Date(Date.now() + 120_000));
+  const browserNow = await page.evaluate(() => Date.now());
+  await page.clock.setFixedTime(new Date(browserNow + 120_000));
   await page.evaluate(() => {
     const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT');
     spot.md.lst = 1580; spot.md.seq++;
@@ -829,7 +830,7 @@ async page => {
   await lastC.click();
   await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1580' &&
     (document.querySelector('[aria-label="Precio de entrada A"]')?.value ?? '') !== '');
-  await page.clock.setFixedTime(new Date());
+  await page.clock.setFixedTime(new Date(browserNow));
   await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
     'Changing the opening date clears current market prefills');
