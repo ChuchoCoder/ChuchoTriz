@@ -34,18 +34,33 @@ async (page, group) => {
   if (group === 'opening') {
     const menu = page.getByRole('link', { name: 'Configuración (ChuchoTriz)' });
     const source = page.url();
+    const origin = new URL(source).origin;
     const destination = source + '#chuchotriz';
     equal(await menu.evaluate(link => link.href), destination, 'The menu links to ChuchoTriz on the current Matriz URL');
-    const [opened] = await Promise.all([
-      page.context().waitForEvent('page', { predicate: tab => tab.url() === destination, timeout: 6000 }),
-      menu.click({ button: 'middle' }),
-    ]);
+    const context = page.context();
+    const initialTabs = new Set(context.pages());
     let openedSession;
     try {
+      const [opened] = await Promise.all([
+        context.waitForEvent('page', {
+          predicate: async tab => tab.waitForURL(url => url.origin === origin, { waitUntil: 'commit', timeout: 6000 })
+            .then(() => true, () => false),
+          timeout: 6000,
+        }),
+        menu.click({ button: 'middle' }),
+      ]);
       opened.setDefaultTimeout(6000);
       await opened.bringToFront();
-      openedSession = await opened.context().newCDPSession(opened);
+      openedSession = await context.newCDPSession(opened);
       await openedSession.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+      const blocked = [];
+      await opened.route('**/*', route => {
+        const target = new URL(route.request().url()).origin;
+        if (target === origin) return route.continue();
+        blocked.push(target);
+        return route.abort();
+      });
+      await opened.routeWebSocket('**/*', socket => { blocked.push(new URL(socket.url()).origin); socket.close(); });
       await opened.waitForURL(destination);
       const panel = opened.getByRole('region', { name: 'Configuración de ChuchoTriz' });
       await panel.getByRole('button', { name: 'Ratios', exact: true, pressed: true }).waitFor();
@@ -56,11 +71,14 @@ async (page, group) => {
       await panel.getByRole('button', { name: 'Volver a Matriz' }).press('Escape');
       await opened.waitForURL(source);
       await panel.waitFor({ state: 'hidden' });
+      equal(blocked, [], 'The new tab makes only local fixture requests');
       equal(page.url(), source, 'The original tab keeps its URL');
       equal(await menu.getAttribute('aria-expanded'), 'false', 'The original tab stays on Matriz');
     } finally {
       await openedSession?.detach().catch(() => {});
-      await opened.close();
+      for (const tab of context.pages()) {
+        if (!initialTabs.has(tab) && new URL(tab.url()).origin === origin) await tab.close();
+      }
       await page.bringToFront();
     }
     pass('SM-01a', 'Middle click opens Ratios in a new tab, reload restores it and closing returns to Matriz');
