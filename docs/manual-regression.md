@@ -172,7 +172,7 @@ El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a C
 | SM-08, SM-09 | `reader-errors` | Reportes vacíos/fallidos, errores sin datos privados, cambio de cuenta y recuperación. |
 | RG-10 | `layout` | Geometría a 1024/1920, scroll, controles, teclado y devolución de foco. |
 | TH-01–TH-09, TH-15 | `theme-controls` | Contraste de presets en reposo y al pasar el mouse, mini formulario, Configuración, editor de presets, simulador, ejecuciones, Ratios y Opciones independiente. |
-| TH-10–TH-14, TH-16–TH-22 | `theme-widgets` | Contraste del widget Ratios y del Book intradiario, ubicación del gráfico, ancho reducido y redimensionamiento del widget. |
+| TH-10–TH-14, TH-16–TH-23 | `theme-widgets` | Contraste del widget Ratios y del Book intradiario, ubicación del gráfico, ancho reducido y redimensionamiento del widget. |
 | Cadena de opciones | `options-grid` | Densidad, geometría y scroll mientras cargan las cotizaciones. |
 | Ratios | `ratio-operations`, `ratios-widget`, `ratio-chart`, `ratio-futures`, `intraday` | Recorridos dedicados de regresión en ambos temas. |
 

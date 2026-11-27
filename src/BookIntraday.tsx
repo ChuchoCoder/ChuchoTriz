@@ -125,6 +125,8 @@ function Preview({ target, id, onEnter, onLeave }: {
   const { anchor, id: instrumentId, label } = target;
   const panel = useRef<HTMLElement>(null);
   const [series, setSeries] = useState<Series>(), [failed, setFailed] = useState(false);
+  const status = series?.points.length ? undefined
+    : failed ? "No se pudo cargar el gráfico." : series ? "Sin operaciones en la rueda de hoy." : "Cargando gráfico…";
   useEffect(() => {
     const reader = new MarketReader("ratios-reader.js");
     let disposed = false, refreshTimer: ReturnType<typeof setTimeout>;
@@ -152,6 +154,9 @@ function Preview({ target, id, onEnter, onLeave }: {
     const element = panel.current!;
     const native = anchor.matches(NATIVE_CHART_ICON);
     const widget = native ? null : anchor.closest(".SecurityCardWidget");
+    let naturalSize: DOMRect | undefined;
+    let fitted: { width: string; maxHeight: string; size: DOMRect } | undefined;
+    let placedSize: DOMRect | undefined;
     const position = () => {
       const rect = anchor.getBoundingClientRect();
       const gap = 5, inset = 8;
@@ -160,10 +165,13 @@ function Preview({ target, id, onEnter, onLeave }: {
       const below = (widgetRect?.bottom ?? rect.bottom) + gap;
       const aboveRoom = top - gap - inset;
       let sideLeft: number | undefined, alignAbove: boolean | undefined;
-      element.style.width = "";
-      element.style.maxHeight = "";
-      element.style.pointerEvents = "";
-      const naturalSize = widgetRect && element.getBoundingClientRect();
+      let widthRule = "", heightRule = "", pointerEvents = "";
+      let stackedRoom: number | undefined;
+      if (widgetRect && !naturalSize) {
+        element.style.width = "";
+        element.style.maxHeight = "";
+        naturalSize = element.getBoundingClientRect();
+      }
       const fitsAbove = naturalSize && naturalSize.height <= aboveRoom;
       if (fitsAbove) {
         alignAbove = true;
@@ -177,17 +185,32 @@ function Preview({ target, id, onEnter, onLeave }: {
         if (Math.max(rightRoom, leftRoom) >= minimumSideWidth) {
           const onRight = native ? rightRoom >= preferredWidth || rightRoom >= leftRoom : rightRoom >= minimumSideWidth;
           const width = Math.min(preferredWidth, onRight ? rightRoom : leftRoom);
-          if (!naturalSize || width < naturalSize.width) element.style.width = `${width}px`;
+          if (!naturalSize || width < naturalSize.width) widthRule = `${width}px`;
           sideLeft = onRight ? right + gap : left - gap - width;
         } else {
           const belowRoom = window.innerHeight - below - inset;
           alignAbove = aboveRoom > belowRoom;
-          element.style.maxHeight = `${Math.max(0, alignAbove ? aboveRoom : belowRoom)}px`;
+          stackedRoom = Math.max(0, alignAbove ? aboveRoom : belowRoom);
+          heightRule = `${stackedRoom}px`;
           // A stacked native preview must leave the surrounding rows' controls clickable.
-          if (native) element.style.pointerEvents = "none";
+          if (native) pointerEvents = "none";
         }
       }
-      const { width, height } = fitsAbove ? naturalSize : element.getBoundingClientRect();
+      element.style.width = widthRule;
+      element.style.maxHeight = heightRule;
+      element.style.pointerEvents = pointerEvents;
+      if (!widgetRect) {
+        placedSize = element.getBoundingClientRect();
+      } else if (!widthRule && !heightRule) {
+        placedSize = naturalSize!;
+      } else {
+        if (!fitted || fitted.width !== widthRule || fitted.maxHeight !== heightRule) {
+          fitted = { width: widthRule, maxHeight: heightRule, size: element.getBoundingClientRect() };
+        }
+        placedSize = fitted.size;
+      }
+      const { width, height } = placedSize;
+      element.style.visibility = widgetRect && stackedRoom !== undefined && height > stackedRoom ? "hidden" : "";
       const above = top - gap - height;
       const maxLeft = window.innerWidth - width - inset, maxTop = window.innerHeight - height - inset;
       const x = sideLeft ?? rect.right - width;
@@ -195,19 +218,27 @@ function Preview({ target, id, onEnter, onLeave }: {
       element.style.left = `${Math.max(inset, Math.min(x, maxLeft))}px`;
       element.style.top = `${Math.max(inset, Math.min(y, maxTop))}px`;
     };
+    const resize = () => {
+      naturalSize = fitted = undefined;
+      position();
+    };
     position();
-    const observer = new ResizeObserver(position);
+    const observer = new ResizeObserver(entries => {
+      const actual = entries.find(entry => entry.target === element)?.borderBoxSize[0];
+      if (widget && actual && placedSize && (actual.inlineSize !== placedSize.width || actual.blockSize !== placedSize.height)) resize();
+      else position();
+    });
     observer.observe(element);
     if (widget) observer.observe(widget);
-    window.addEventListener("resize", position);
+    window.addEventListener("resize", resize);
     window.addEventListener("scroll", position, true);
-    return () => { observer.disconnect(); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
-  }, [anchor]);
+    return () => { observer.disconnect(); window.removeEventListener("resize", resize); window.removeEventListener("scroll", position, true); };
+  }, [anchor, label, status]);
 
   return <aside ref={panel} id={id} className="ct-book-intraday" role="tooltip" onPointerEnter={onEnter} onPointerLeave={onLeave}>
     <strong>Intradiario · {label}</strong>
     {series?.points.length ? <Plot points={series.points} reference={series.reference} label={label} />
-      : <p role="status">{failed ? "No se pudo cargar el gráfico." : series ? "Sin operaciones en la rueda de hoy." : "Cargando gráfico…"}</p>}
+      : <p role="status">{status}</p>}
   </aside>;
 }
 

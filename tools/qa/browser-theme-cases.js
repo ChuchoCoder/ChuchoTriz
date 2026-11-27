@@ -185,7 +185,8 @@ async (page, group) => {
       Object.assign(header.parentElement.style, { position: 'absolute', top: '360px', left: '420px', width: '320px', height: '240px' });
       Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '32px' });
     });
-    await trigger.focus();
+    await page.locator('.SecurityCardWidget .NewWidgetHeader > a').focus();
+    await page.keyboard.press('Tab');
     const book = page.locator('.ct-book-intraday');
     await contrast('TH-12', 'Título del Book intradiario', book.locator('strong'));
     await contrast('TH-13', 'Etiqueta del eje del Book intradiario', book.locator('svg text').first(), { foreground: 'fill' });
@@ -228,6 +229,11 @@ async (page, group) => {
     await placement('TH-19', 'left', 'En el borde derecho, el gráfico aprovecha el espacio a la izquierda');
     await widget.evaluate(element => Object.assign(element.style, { left: '120px', width: '520px' }));
     await placement('TH-22', 'below', 'Sin espacio lateral, el gráfico queda debajo del libro completo');
+    await widget.evaluate(element => Object.assign(element.style, { top: '330px', height: '780px' }));
+    await book.waitFor({ state: 'hidden' });
+    await widget.evaluate(element => Object.assign(element.style, { top: '360px', height: '240px' }));
+    await placement('TH-23', 'below', 'El gráfico reaparece cuando vuelve a haber espacio fuera del libro');
+    await book.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await book.waitFor({ state: 'hidden' });
   } else {
