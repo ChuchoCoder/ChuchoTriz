@@ -29,6 +29,7 @@ async (page) => {
       securityStore.getSecurity = async id => { await quotes; return securities.get(id); };
     });
     await page.locator('.ct-free-settings-item').evaluate(link => link.click());
+    await page.getByRole('button', { name: 'Simulador de opciones', exact: true }).click();
     const initial = await geometry();
     releaseCatalog();
     const rows = chain.locator('tr[data-option-strike]');

@@ -14,7 +14,8 @@ async (sharedPage, { before, after }) => {
   };
   const tools = {
     presets: { trigger: '#MiniOrderForm .preset-settings-button', ready: 'input[role="searchbox"]:enabled' },
-    simulator: { trigger: '.ct-free-settings-item', ready: '.ct-opt-chain tbody tr td' },
+    menu: { trigger: startup.settings, ready: ':is(.ct-opt-chain tbody tr td, .ro-defaults:enabled)' },
+    simulator: { label: 'Simulador de opciones', ready: '.ct-opt-chain tbody tr td' },
     executions: { label: 'Operaciones de opciones', ready: '.ct-operations-group .ct-operations-copy-button:enabled' },
     ratios: { label: 'Ratios', ready: '.ro-defaults:enabled' },
   };
@@ -96,7 +97,7 @@ async (sharedPage, { before, after }) => {
     for (const [name, target] of Object.entries(tools)) {
       for (const variant of ['after', 'before', 'before', 'after', 'after', 'before']) {
         await navigate(variant);
-        if (name === 'ratios') {
+        if (name === 'ratios' || name === 'menu') {
           await page.evaluate(() => {
             // The Ratios reader requires the fixture's account and an instrument catalog.
             const store = window.mainStore.securityStore;

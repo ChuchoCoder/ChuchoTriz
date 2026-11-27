@@ -9,6 +9,7 @@ async (page, group) => {
   const equal = (actual, expected, message) => assert(JSON.stringify(actual) === JSON.stringify(expected), `${message}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
   const pass = (id, detail) => cases.push({ id, status: 'PASS', detail });
   const open = () => page.getByRole('link', { name: /Configuración/ }).click();
+  const openSimulator = async () => { await open(); await b('Simulador de opciones').click(); };
   const value = async (name, expected) => {
     try { await page.waitForFunction(({ name, expected }) => [...document.querySelectorAll('input')].some(e => e.getAttribute('aria-label') === name && e.value === expected), { name, expected }); }
     catch { throw Error(`${name}: expected ${expected}, got ${await label(name).inputValue()}`); }
@@ -31,13 +32,50 @@ async (page, group) => {
   };
   await reset();
   if (group === 'opening') {
+    const menu = page.getByRole('link', { name: 'Configuración (ChuchoTriz)' });
+    const source = page.url();
+    const destination = source + '#chuchotriz';
+    equal(await menu.evaluate(link => link.href), destination, 'The menu links to ChuchoTriz on the current Matriz URL');
+    const [opened] = await Promise.all([
+      page.context().waitForEvent('page', { predicate: tab => tab.url() === destination, timeout: 6000 }),
+      menu.click({ button: 'middle' }),
+    ]);
+    let openedSession;
+    try {
+      opened.setDefaultTimeout(6000);
+      await opened.bringToFront();
+      openedSession = await opened.context().newCDPSession(opened);
+      await openedSession.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+      await opened.waitForURL(destination);
+      const panel = opened.getByRole('region', { name: 'Configuración de ChuchoTriz' });
+      await panel.getByRole('button', { name: 'Ratios', exact: true, pressed: true }).waitFor();
+      const theme = await page.locator('html').evaluate(html => getComputedStyle(html).colorScheme);
+      await panel.and(opened.locator(`[data-color-scheme="${theme}"]`)).waitFor();
+      await opened.reload();
+      await panel.getByRole('button', { name: 'Ratios', exact: true, pressed: true }).waitFor();
+      await panel.getByRole('button', { name: 'Volver a Matriz' }).press('Escape');
+      await opened.waitForURL(source);
+      await panel.waitFor({ state: 'hidden' });
+      equal(page.url(), source, 'The original tab keeps its URL');
+      equal(await menu.getAttribute('aria-expanded'), 'false', 'The original tab stays on Matriz');
+    } finally {
+      await openedSession?.detach().catch(() => {});
+      await opened.close();
+      await page.bringToFront();
+    }
+    pass('SM-01a', 'Middle click opens Ratios in a new tab, reload restores it and closing returns to Matriz');
+
     for (let i = 0; i < 2; i++) {
-      await open();
+      if (i === 0) {
+        await menu.focus(); await page.keyboard.press('Enter');
+      } else await open();
+      await page.getByRole('button', { name: 'Ratios', exact: true, pressed: true }).waitFor();
       equal(await page.getByRole('region', { name: 'Configuración de ChuchoTriz', exact: true }).count(), 1, 'One panel');
       await b('Cantidades rápidas').click(); await b('Simulador de opciones').click();
       await b('Volver a Matriz').click();
+      assert(await menu.evaluate(link => link === document.activeElement), 'Closing returns focus to the ChuchoTriz menu');
     }
-    pass('SM-01', 'Open/close/reopen, one panel, tools coexist');
+    pass('SM-01', 'Keyboard and mouse entry select Ratios, tools coexist and closing restores focus');
   } else if (group === 'presets') {
     // This suite explicitly exercises opt-in autocomplete; new installations default to off.
     await page.evaluate(() => chrome.storage.local.set({ 'AutocompleteInstrument:AL30': true, 'AutocompleteInstrument:GD30': true }));
@@ -626,7 +664,7 @@ async (page, group) => {
     }
     pass('SM-11-empty', 'Empty ticket preserves the coordinates of the action buttons');
   } else if (group === 'quotes') {
-    await open();
+    await openSimulator();
     await page.evaluate(() => { const c = window.mainStore.securityStore.options.find(c => c.id === 'call-100'); c.md.ask = undefined; c.md.asz = undefined; c.md.lst = 9; c.md.seq++; });
     await page.waitForFunction(() => document.querySelector('[aria-label="Comprar DEMO CALL 100 en simulación"]')?.innerText.includes('—'));
     await selectCall(); equal(await b('Editar Precio pata 1').innerText(), '9', 'Missing ask uses last trade');
@@ -694,13 +732,13 @@ async (page, group) => {
     equal(await b('Editar VI pata 1').innerText(), '45,00', 'Move uses destination IV');
     pass('SM-04-drag', 'Native BID/ASK drag reprices the leg, handles crossed source and Escape, and rejects mismatched, missing or occupied targets');
   } else if (group === 'columns') {
-    await open(); await b('Configurar cadena de opciones').click();
+    await openSimulator(); await b('Configurar cadena de opciones').click();
     await page.getByRole('checkbox', { name: 'Volumen nominal', exact: true }).uncheck();
     await page.getByRole('checkbox', { name: 'Mid', exact: true }).check();
     await b('Mover Mid hacia el borde').click(); await b('Listo').click();
     const columns = () => page.locator('select[aria-label^="Cambiar columna"]').evaluateAll(es => es.map(e => e.value));
     const reloadColumns = async expected => {
-      await page.reload(); await open();
+      await page.reload(); await openSimulator();
       await page.waitForFunction(expected => {
         const values = [...document.querySelectorAll('select[aria-label^="Cambiar columna"]')].map(element => element.value);
         return JSON.stringify(values) === JSON.stringify(expected);
@@ -774,7 +812,7 @@ async (page, group) => {
     await metric('Extrínseco Bid DEMO CALL 100', '7,9'); await metric('Extrínseco Ask DEMO PUT 100', '8,1');
     pass('SM-05-extrinsic-freshness', 'Invalid own price/size hides only that side; disconnect clears metrics and reconnect restores them');
   } else if (group === 'tooltip') {
-    await open(); const trigger = b('VI 35,00 % · DEMO CALL 100');
+    await openSimulator(); const trigger = b('VI 35,00 % · DEMO CALL 100');
     await trigger.click();
     await page.getByRole('tooltip').getByText('Probabilidad teórica al vencimiento', { exact: true }).waitFor();
     const text = (await page.getByRole('tooltip').innerText()).replace(/\s/g, ' ');
@@ -789,7 +827,7 @@ async (page, group) => {
     pass('SM-06', 'IV tooltip values, Escape/outside dismissal, missing-IV state');
   } else if (group === 'preload') {
     for (const [side, verb, price] of [['buy', 'Comprar', '8.1'], ['sell', 'Vender', '7.9']]) {
-      await reset(); await open();
+      await reset(); await openSimulator();
       await b(`${verb} DEMO CALL 100 en simulación`).click();
       await b('Fijar 10 contratos').click();
       await b(`Cargar Op. · ${side === 'buy' ? 'compra' : 'venta'} de DEMO CALL 100 en el Mini Order Form`).click();
@@ -797,13 +835,13 @@ async (page, group) => {
       equal(await label('Instrumento').inputValue(), 'DEMO CALL 100', 'Native ticket instrument');
       await page.locator('#MiniOrderForm').getByRole('button', { name: 'Limpiar', exact: true }).click();
     }
-    await open(); await b('Editar Precio pata 1').click(); await label('Precio pata 1').fill('1'); await label('Precio pata 1').press('Enter');
+    await openSimulator(); await b('Editar Precio pata 1').click(); await label('Precio pata 1').fill('1'); await label('Precio pata 1').press('Enter');
     await b('Cargar venta de la pata 1 en el Mini Order Form').click();
     await page.waitForFunction(() => document.querySelector('#precio').value === '1' && document.querySelector('#cantidad').value === '10');
     await page.locator('#MiniOrderForm').getByRole('button', { name: 'Limpiar', exact: true }).click();
     pass('SM-10', 'BID/ASK preload quantity 10 and edited leg price; only fake ticket, cleared');
   } else if (group === 'position') {
-    await open(); await loadPosition();
+    await openSimulator(); await loadPosition();
     await value('Cantidad posición CALL 110', '−1');
     await value('Prima histórica CALL 100', '');
     await b('Cotizaciones').click(); await selectCall();
@@ -907,7 +945,7 @@ async (page, group) => {
     equal(await dateFormat.inputValue(), 'en-US', 'Date preference survives reload independently');
     pass('SM-09-format-storage', 'Legacy regional setting inherited and independent mixed preferences preserved across reload');
   } else if (group === 'analysis') {
-    await open(); await selectCall();
+    await openSimulator(); await selectCall();
     const outputs = () => page.locator('.ct-sim-inspect output').allTextContents();
     const before = await outputs(); await page.getByRole('tab', { name: 'Análisis', exact: true }).click();
     equal(await outputs(), before, 'Shared analysis results');
@@ -923,7 +961,7 @@ async (page, group) => {
     equal(await label('Tasa anual continua %').inputValue(), '30', 'Manual rate survives switching');
     pass('SM-07/RG-08', 'Shared views, 25 scenarios, expiry, zoom/fit and automatic/manual rate');
   } else if (group === 'oracle') {
-    await open(); await b('+ Pata manual').click();
+    await openSimulator(); await b('+ Pata manual').click();
     await edit('Precio pata 1', '8'); await edit('Strike pata 1', '100');
     await page.getByRole('tab', { name: 'Análisis', exact: true }).click();
     await page.getByText('Supuestos de valuación', { exact: true }).click();
@@ -935,7 +973,7 @@ async (page, group) => {
     for (const [price, expected] of [['90', 800], ['100', 800], ['110', -200]]) { await field('Precio del escenario', price); equal(await pnl(), expected, `Short call at ${price}`); }
     pass('RG-04', 'Independent manual call payoff oracle at 90/100/110, long and short');
   } else if (group === 'editing') {
-    await open(); await selectCall();
+    await openSimulator(); await selectCall();
     const quantities = await page.locator('.ct-sim-quantity-stepper .ct-sim-cell-value').allTextContents();
     const premium = await b('Editar Precio pata 1').innerText();
     await page.getByRole('tab', { name: 'Análisis', exact: true }).click();
@@ -950,7 +988,7 @@ async (page, group) => {
     await b('Quitar pata 1').click(); equal(await b('Quitar pata 1').count(), 0, 'Remove leg');
     pass('RG-03-editing', 'Per-leg IV changes only theoretical value; premium/quantity preserved; remove leg');
   } else if (group === 'accounting') {
-    await open(); await loadPosition();
+    await openSimulator(); await loadPosition();
     await field('Prima histórica CALL 100', '8'); await field('Prima histórica CALL 110', '6');
     await field('Costo promedio por nominal', '90'); await field('Gastos de la posición', '40'); await field('Resultado realizado neto', '200');
     await label('Incluir posición actual en Análisis').check(); equal(await pnl(), 160, 'Position expiry includes premiums/nominals/costs/realized');
@@ -959,12 +997,12 @@ async (page, group) => {
     await b('Cotizaciones').click(); await selectCall();
     await label('Incluir posición actual en Análisis').uncheck(); equal(await pnl(), -810, 'Adjustment alone excludes historical costs');
     await label('Incluir posición actual en Análisis').check(); equal(await pnl(), -650, 'Position plus adjustment without duplicate costs');
-    await page.reload(); await open(); await loadPosition();
+    await page.reload(); await openSimulator(); await loadPosition();
     await value('Prima histórica CALL 100', '8'); await value('Prima histórica CALL 110', '6');
     await value('Costo promedio por nominal', '90'); await value('Gastos de la posición', '40'); await value('Resultado realizado neto', '200');
     pass('RG-05', 'Independent total 160, edited nominals 1160, isolated adjustment -810, combined -650, saved accounting survives reload');
   } else if (group === 'scope') {
-    await open(); await loadPosition(); await field('Prima histórica CALL 100', '8');
+    await openSimulator(); await loadPosition(); await field('Prima histórica CALL 100', '8');
     await page.evaluate(() => { window.mainStore.portfolioStore.detailedPositionReport.types[0].securitiesDetailed[0].detailedPositions[0].totalCurrentSize = 3; });
     await reloadPosition(); await value('Cantidad posición CALL 100', '+3'); await value('Prima histórica CALL 100', '8');
     await b('Ver aviso de prima histórica CALL 100').click(); await b('Confirmar prima histórica CALL 100').click();
@@ -992,7 +1030,7 @@ async (page, group) => {
         { tradingSymbol: 'NEXT DEMO FIX call 100', totalCurrentSize: 4, totalCollateralSize: 0 },
       ] });
     });
-    await open(); await loadPosition(); await field('Prima histórica CALL 100', '8');
+    await openSimulator(); await loadPosition(); await field('Prima histórica CALL 100', '8');
     const expiries = await label('Vencimiento de opciones').evaluate(e => [...e.options].map(o => o.value).filter(Boolean));
     equal(expiries.length, 2, 'Two fixture maturities');
     await b('Nueva simulación').click(); await label('Vencimiento de opciones').selectOption(expiries[1]);
@@ -1002,7 +1040,7 @@ async (page, group) => {
     await value('Prima histórica CALL 100', '8');
     pass('RG-06-chain', 'Distinct expirations do not inherit premiums; returning restores original chain cost');
   } else if (group === 'roll') {
-    await open(); await loadPosition();
+    await openSimulator(); await loadPosition();
     await b('Rolar posición CALL 110').click(); await b('Rolar a 120').click(); await b('Usar mínimo sin débito').click();
     let dialog = page.getByRole('dialog');
     assert((await dialog.innerText()).includes('167,22 ARS'), 'Short roll net 167.22 with 0.2% fees');
@@ -1025,7 +1063,7 @@ async (page, group) => {
     await page.keyboard.press('Escape'); equal(await page.getByRole('dialog').count(), 0, 'Roll dialog Escape');
     pass('RG-07', 'Bought/sold rolls, min/max financing, fees 0.2/1%, two legs, unavailable liquidity and Escape');
   } else if (group === 'limits') {
-    await open(); await b('Elegir estrategia').click();
+    await openSimulator(); await b('Elegir estrategia').click();
     await page.locator('[data-family-name="butterfly"]').click();
     const preview = await label('Patas de la plantilla').innerText();
     for (const expected of ['Compra 1× DEMO CALL 90', 'Venta 2× DEMO CALL 100', 'Compra 1× DEMO CALL 110']) assert(preview.includes(expected), 'Butterfly preview ' + expected);
@@ -1060,7 +1098,7 @@ async (page, group) => {
     await reloadPosition(); await page.getByText('No hay posición abierta en esta cadena. Podés ingresar una posición manual.', { exact: true }).waitFor();
     pass('SM-08/SM-09-errors', 'Empty/error readers and stale-account clearing, sanitized failures and recovery');
   } else if (group === 'layout') {
-    await open(); await selectCall();
+    await openSimulator(); await selectCall();
     for (const width of [1024, 1920]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.waitForFunction(() => document.querySelector('.ct-opt-chain-grid')?.clientWidth > 0);

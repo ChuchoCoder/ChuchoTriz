@@ -435,6 +435,23 @@ it("keeps a newer external preference when an earlier save resolves late", async
   expect(current.amount.value).toBe("");
 });
 
+it("opens Ratios through the menu's direct link as a fresh page", async () => {
+  const initialUrl = location.href;
+  try {
+    history.replaceState(null, "", "/byma/lider?view=compact#chuchotriz");
+    document.body.innerHTML = '<nav class="DirectAccessBar"></nav>';
+    await boot();
+    const panel = document.querySelector<HTMLElement>("#ct-free-settings-panel");
+    expect(panel?.hidden).toBe(false);
+    expect(panel?.querySelector(".ct-tools-tabs button[aria-pressed=true]")?.textContent).toBe("Ratios");
+    await act(async () => { panel!.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); });
+    expect(panel!.hidden).toBe(true);
+    expect(location.pathname + location.search + location.hash).toBe("/byma/lider?view=compact");
+  } finally {
+    history.replaceState(null, "", initialUrl);
+  }
+});
+
 it("mounts Configuración in the left menu even before the order form exists", async () => {
   document.body.innerHTML = `
     <header class="HeaderDMA"><a class="NavItem selected" href="/byma" aria-current="page"><span>BYMA</span></a></header>
@@ -448,10 +465,26 @@ it("mounts Configuración in the left menu even before the order form exists", a
   await boot();
   const item = document.querySelector<HTMLAnchorElement>('.DirectAccessBar [aria-label="Configuración (ChuchoTriz)"]');
   expect(item, "Configuration must be reachable from Matriz's left menu").not.toBeNull();
+  expect(new URL(item!.href).hash).toBe("#chuchotriz");
+  for (const activate of [{ type: "auxclick", button: 1 }, { type: "click", button: 0, ctrlKey: true }]) {
+    // jsdom follows modified links in the current document. Inspect React's
+    // handling after it bubbles, then stop jsdom from following the link.
+    const afterReact = vi.fn((event: Event) => {
+      const prevented = event.defaultPrevented;
+      event.preventDefault();
+      return prevented;
+    });
+    window.addEventListener(activate.type, afterReact, { once: true });
+    const event = new MouseEvent(activate.type, { ...activate, bubbles: true, cancelable: true });
+    await act(async () => { item!.dispatchEvent(event); });
+    expect(afterReact).toHaveReturnedWith(false);
+    expect(item!.getAttribute("aria-expanded")).toBe("false");
+  }
   await act(async () => { item!.click(); });
   const panel = document.querySelector<HTMLElement>('[aria-label="Configuración de ChuchoTriz"]');
   expect(panel).not.toBeNull();
   expect(panel!.hidden).toBe(false);
+  expect(panel!.querySelector(".ct-tools-tabs button[aria-pressed=true]")?.textContent).toBe("Ratios");
   expect(panel!.dataset.colorScheme).toBe("light");
   hostBackground = "rgb(33, 41, 54)";
   await act(async () => {
@@ -479,6 +512,10 @@ it("mounts Configuración in the left menu even before the order form exists", a
   expect(panel!.style.right).toBe("368px");
   await act(async () => { drawer.className = "ToolContent slideOut"; await settleLayout(); });
   expect(panel!.style.right).toBe("40px");
+  await act(async () => {
+    Array.from(panel!.querySelectorAll<HTMLButtonElement>(".ct-tools-tabs button"))
+      .find(button => button.textContent === "Cantidades rápidas")!.click();
+  });
   expect(panel!.querySelector('[aria-label="Buscar instrumento por ticker"]')).not.toBeNull();
   await act(async () => { panel!.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); });
   expect(panel!.hidden).toBe(true);
@@ -491,6 +528,7 @@ it("mounts Configuración in the left menu even before the order form exists", a
   expect(computedStyle, "Hidden settings must not keep sampling market DOM updates").not.toHaveBeenCalled();
   await act(async () => { item!.click(); });
   expect(panel!.dataset.colorScheme).toBe("dark");
+  expect(panel!.querySelector(".ct-tools-tabs button[aria-pressed=true]")?.textContent).toBe("Ratios");
   await act(async () => { panel!.querySelector<HTMLButtonElement>('[aria-label="Volver a Matriz"]')!.click(); });
 
   const byma = document.querySelector<HTMLAnchorElement>('.HeaderDMA a[href="/byma"]')!;

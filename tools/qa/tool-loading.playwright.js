@@ -40,7 +40,7 @@ async page => {
     await ticket.locator('.ButtonPreset').first().waitFor();
     assert(!hasTools(), 'The ticket becomes ready without requesting a tool module');
     await openPresets();
-    assert(!hasTools(), 'The ticket shortcut opens presets without loading the default simulator or either operations tool');
+    assert(!hasTools(), 'The ticket shortcut opens presets without loading Ratios, the simulator, or options executions');
 
     const initialSheets = await page.evaluate(() => document.adoptedStyleSheets.length);
     let release;
@@ -74,9 +74,10 @@ async page => {
     await tab('Operaciones de opciones').click();
     await panel.getByRole('button', { name: 'Copiar Calls y Puts' }).waitFor();
     assert(count(operations) === 1 && !count(ratios), 'Options executions load on their own first visit');
-    await tab('Ratios').click();
+    await panel.getByRole('button', { name: 'Volver a Matriz' }).click();
+    await page.getByRole('link', { name: 'Configuración (ChuchoTriz)' }).click();
     await panel.locator('.ro-monitor-table').waitFor();
-    assert(count(ratios) === 1, 'Ratio operations load on their own first visit');
+    assert(count(ratios) === 1, 'The menu selects Ratios and loads it on its first visit');
     await tab('Simulador de opciones').click();
     await panel.locator('.ct-sim').waitFor();
     assert(count(simulator) === 1 && await page.evaluate(() => window.originalSimulatorPane === document.querySelector('.ct-sim')), 'Returning to the simulator reuses the module and preserves the mounted editor');
