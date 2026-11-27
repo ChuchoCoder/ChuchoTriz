@@ -82,9 +82,9 @@ async page => {
   await panel.getByRole('button', { name: 'Editar fechas', exact: true }).click();
   await since.fill(singleDay); await until.fill(singleDay);
   await panel.getByRole('button', { name: 'Aplicar', exact: true }).click();
-  await graph('ALUA/TXAR').locator('path[data-sigma="2"]').waitFor();
-  assert((await graph('ALUA/TXAR').locator('path[data-sigma]').evaluateAll(lines => lines.map(line => line.getAttribute('d'))))
-    .every(path => path.includes('H')), 'Moving bands remain visible in a one-close range');
+  await graph('ALUA/TXAR').locator('path[data-sigma="2"]').waitFor({ state: 'attached' });
+  const dayBands = await graph('ALUA/TXAR').locator('path[data-sigma]').evaluateAll(lines => lines.map(line => line.getTotalLength()));
+  assert(dayBands.length === 4 && dayBands.every(length => length > 0), 'Moving bands remain visible in a one-close range');
   await page.evaluate(() => {
     const store = window.mainStore.seriesStore, original = store.getDailySeries;
     window.ratiosFixture.makeDailySeriesSparse('PESOS - 7D-');

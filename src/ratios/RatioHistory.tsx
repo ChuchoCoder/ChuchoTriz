@@ -16,7 +16,7 @@ type PlotPoints = ReturnType<typeof historicalBands>;
 type HistoryReply = { key: string; history?: DailyHistory; error?: string };
 const limits = [-2, -1, 1, 2] as const;
 
-function plotGeometry(points: PlotPoints, range: DailyRange, width: number, height: number, percent: boolean) {
+export function plotGeometry(points: PlotPoints, range: DailyRange, width: number, height: number, percent: boolean) {
   const values = points.flatMap(({ value, band }) => [
     ...(value === undefined ? [] : [value]),
     ...(band ? [band.mean - 2 * band.sigma, band.mean + 2 * band.sigma] : []),
@@ -45,10 +45,17 @@ function plotGeometry(points: PlotPoints, range: DailyRange, width: number, heig
       return `${op}${x(point.day)},${y(value)}`;
     }).join("");
   };
+  const withBand = points.filter(point => point.band);
   const referencePath = (valueFor: (point: PlotPoints[number]) => number | undefined) => {
-    if (points.length !== 1) return path(valueFor);
-    const value = valueFor(points[0]);
-    return value === undefined ? "" : `M${left},${y(value)}H${right}`;
+    if (withBand.length !== 1) return path(valueFor);
+    const value = valueFor(withBand[0]);
+    if (value === undefined) return "";
+    const center = x(withBand[0].day);
+    // A single day gets the full plot width. Within a wider window, a short
+    // reference marks the only date with enough history for the bands.
+    const start = range.from === range.to ? left : Math.max(left, center - 16);
+    const end = range.from === range.to ? right : Math.min(right, center + 16);
+    return `M${start},${y(value)}H${end}`;
   };
   const axisDays = range.from === range.to ? [range.to] : [range.from, range.to];
   if (right - left > 155 && range.to - range.from > 2 * dayMilliseconds) {
@@ -152,8 +159,8 @@ export function RatioHistory({ pair, context, dashboardId, widgetId, visible, re
     const refresh = attempt > usedRetry.current;
     if (refresh) usedRetry.current = attempt;
     void read({ context, dashboardId, widgetId, pairId, from, to, refresh }).then(
-      history => { if (!cancelled) setResponse({ key: requestKey, history }); },
-      error => { if (!cancelled) setResponse({ key: requestKey, error: error instanceof Error ? error.message : "No se pudo cargar el histórico diario." }); },
+      history => { if (!cancelled && !document.hidden) setResponse({ key: requestKey, history }); },
+      error => { if (!cancelled && !document.hidden) setResponse({ key: requestKey, error: error instanceof Error ? error.message : "No se pudo cargar el histórico diario." }); },
     );
     return () => { cancelled = true; };
   }, [visible, pairId, context, dashboardId, widgetId, from, to, response?.key, requestKey, attempt, read]);
@@ -168,8 +175,8 @@ export function RatioHistory({ pair, context, dashboardId, widgetId, visible, re
     const refresh = attempt > usedOlderRetry.current;
     if (refresh) usedOlderRetry.current = attempt;
     void read({ context, dashboardId, widgetId, pairId, from, to, refresh, older: true }).then(
-      history => { if (!cancelled) setOlderResponse({ key: requestKey, history }); },
-      () => { if (!cancelled) setOlderResponse({ key: requestKey, error: "No se pudieron buscar cierres previos para las bandas móviles." }); },
+      history => { if (!cancelled && !document.hidden) setOlderResponse({ key: requestKey, history }); },
+      () => { if (!cancelled && !document.hidden) setOlderResponse({ key: requestKey, error: "No se pudieron buscar cierres previos para las bandas móviles." }); },
     );
     return () => { cancelled = true; };
   }, [visible, needsOlder, older, context, dashboardId, widgetId, pairId, from, to, requestKey, attempt, read]);

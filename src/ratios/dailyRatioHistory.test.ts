@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { plotGeometry } from "./RatioHistory";
 import { dailyRatioPoints, dayMilliseconds, historicalBands, lastClosedDay, monthRange, type DailyPoint } from "./dailyRatioHistory";
 
 const date = (day: number) => Date.UTC(2026, 0, day);
@@ -47,5 +48,16 @@ describe("histórico diario de Ratios", () => {
     expect(result[1].band?.mean).toBeCloseTo(10.25);
     expect(result[2].band?.mean).toBeCloseTo(11.30);
     expect(result[2].day - result[1].day).toBe(dayMilliseconds);
+  });
+
+  it("traza un segmento donde un único punto visible llega a tener bandas móviles", () => {
+    const points: DailyPoint[] = Array.from({ length: 21 }, (_, i) => row(i + 1, i + 2));
+    const visible = { from: date(20), to: date(21) };
+    const bands = historicalBands(points, visible, "moving");
+    expect(bands[0].band).toBeUndefined();
+    expect(bands[1].band?.sigma).toBeGreaterThan(0);
+    const plot = plotGeometry(bands, visible, 300, 128, false);
+    expect(plot.bands.every(line => line.path.startsWith("M") && line.path.endsWith(`H${plot.right}`))).toBe(true);
+    expect(plot.bands[0].path.startsWith(`M${plot.right - 16},`)).toBe(true);
   });
 });
