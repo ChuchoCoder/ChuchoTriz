@@ -99,6 +99,45 @@ function installMarketFixture(regression) {
     input.addEventListener('input', () => input.setAttribute('aria-valuenow', input.value.replace(',', '.')));
   }
   class FixturePositionReport {}
+  const draft = {
+    isQuantity: true,
+    security: { refData: { sizePrecision: 2 } },
+    quantity: undefined,
+    displayQty: undefined,
+    setQuantity(value) {
+      this.quantity = Math.floor(value * 100) / 100;
+      document.querySelector('#MiniOrderForm #cantidad').value = String(this.quantity).replace('.', ',');
+    },
+    setDisplayQuantity(value) {
+      this.displayQty = value;
+      const shown = document.querySelector('#MiniOrderForm #mostrar');
+      if (shown) shown.value = value == null ? '' : String(value);
+    },
+  };
+  for (const type of ['change', 'input']) {
+    document.addEventListener(type, event => {
+      if (event.target instanceof HTMLInputElement && event.target.matches('#MiniOrderForm #mostrar')) {
+        draft.setDisplayQuantity(event.target.value === '' ? null : Number(event.target.value));
+      }
+    });
+  }
+  window.ctAddPresetExpansion = () => {
+    const form = document.getElementById('MiniOrderForm');
+    const shown = form.querySelector('.amount-show__div');
+    const fields = shown.parentElement;
+    const toggle = document.createElement('span');
+    toggle.className = 'ExpandButton';
+    toggle.setAttribute('role', 'button');
+    toggle.setAttribute('aria-label', 'Expandir o contraer mini formulario');
+    toggle.textContent = '⌃';
+    toggle.addEventListener('click', () => {
+      if (form.classList.toggle('ExpandedForm')) {
+        fields.append(shown);
+        draft.setDisplayQuantity(draft.displayQty);
+      } else shown.remove();
+    });
+    form.prepend(toggle);
+  };
   const positionReport = Object.assign(new FixturePositionReport(), { lastCalculation: new Date(), types: [{ type: 'STOCK_OPTION_CALL', securitiesDetailed: [
     { detailedPositions: [{ tradingSymbol: `DEMO FIX call ${spot}`, totalCurrentSize: 2, totalCollateralSize: 0 }] },
     { detailedPositions: [{ tradingSymbol: `DEMO FIX call ${spot + step}`, totalCurrentSize: -1, totalCollateralSize: 0 }] },
@@ -123,7 +162,7 @@ function installMarketFixture(regression) {
       return Object.assign(this.detailedPositionReport, { types: positionReport.types, lastCalculation: new Date() });
     },
   };
-  window.mainStore = { orderEventStore: { getOrderEventsForAccountReport: async () => executions },
+  window.mainStore = { uiStore: { newOrderMiniPanel: draft }, orderEventStore: { getOrderEventsForAccountReport: async () => executions },
     securityStore: { options, underlyingsForMatrix: [underlying], findSecurityFromId: id => securities.get(id), getSecurity: async id => securities.get(id) },
     portfolioStore: Object.assign(Object.create(readNativePosition), { detailedPositionReport: positionReport }),
     dmaWebSocket: { addSubscription() {} }, profileStore: { activeAccount: 'DEMO-NO-BROKER' }, webSocketConnectionStatus: true };

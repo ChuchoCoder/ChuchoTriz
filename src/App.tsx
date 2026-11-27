@@ -127,7 +127,7 @@ function App({ session, autocomplete, openPresets }: {
   const settingsLabel = `Configurar cantidades rápidas de ${ticker}`;
   const presetControls = <div className="preset-panel-actions">
     <div className="instrument-autocomplete">
-      <label title={`Autocompletar para ${ticker} al seleccionar: usa el último preset elegido o el primero configurado.`}>
+      <label title={`Autocompletar para ${ticker}. Usa el último preset que reemplazó la cantidad o el primero de ese tipo.`}>
         <input type="checkbox" checked={autocompleteEnabled ?? false} disabled={autocompleteEnabled === undefined || saveStatus === "saving"}
           data-preset-focus="autocomplete" aria-label={`Autocompletar para ${ticker}`}
           onChange={event => { void saveAutocomplete(event.target.checked); }} />
@@ -145,7 +145,7 @@ function App({ session, autocomplete, openPresets }: {
   </div>;
 
   const renderPreset = ({ item, index }: { item: IInstrumentPreset; index: number }) => (
-    <button key={`${item.cantidad}/${item.mostrar}/${index}`} type="button" title={label(item)} data-preset-focus={`preset-${index}`}
+    <button key={`${item.sumar ? "+" : ""}${item.cantidad}/${item.mostrar}/${index}`} type="button" title={label(item)} data-preset-focus={`preset-${index}`}
       onClick={event => {
         event.currentTarget.closest<HTMLElement>(".preset-panel")?.hidePopover?.();
         session.choose(item);

@@ -28,7 +28,7 @@ simulados y sin conexión a un broker. La apariencia de Matriz puede variar.*
 | --- | --- |
 | **Presets por instrumento** | Tener cantidades distintas para cada ticker y aplicarlas con un clic. |
 | **Cantidad a mostrar** | Mostrar todo, fijar una cantidad visible o usar una regla aleatoria como `R5`. |
-| **Autocompletar opcional** | Reutilizar el último preset elegido o el primero configurado cuando Cantidad está vacía. |
+| **Autocompletar opcional** | Completar una cantidad vacía con el último preset de reemplazo elegido o el primero configurado. |
 | **Editor visual** | Buscar, agregar y quitar instrumentos; editar y reordenar presets con vista previa de los botones. |
 | **Modo RAW** | Editar todos los instrumentos como texto, con una línea por ticker. |
 | **Preferencias locales** | Guardar la configuración en el perfil de Chrome y actualizarla entre vistas. |
@@ -107,22 +107,19 @@ flowchart TD
     F --> G["Revisá y confirmá desde Matriz"]
 ```
 
-**Autocompletar** viene activado en una instalación nueva y puede desactivarse
-desde Configuración. Usa el último preset elegido para ese instrumento durante
-la sesión o, si todavía no elegiste uno, el primero de la lista.
+Al activar **Autocompletar** para un instrumento, se usa el último preset
+elegido que reemplaza el total o, si todavía no elegiste uno, el primero de ese
+tipo en la lista.
 **Limpiar** olvida esa última elección para el instrumento durante la sesión.
 
-El formulario se conserva contraído al iniciar y se expande al aplicar un
-preset, también mediante Autocompletar, para mostrar ambas cantidades.
-**Mostrar todo** completa Cantidad a mostrar con el total. Mientras ese modo siga
-activo, editar Cantidad actualiza también Cantidad a mostrar. Editar manualmente
-Cantidad a mostrar, elegir otro preset, cambiar de instrumento o pulsar Limpiar
-termina ese vínculo. Si contraés el formulario y luego editás el total en este
-modo, vuelve a expandirse para actualizar la cantidad visible.
+El formulario se expande automáticamente al aplicar un preset con cantidad
+visible fija o aleatoria, incluso mediante Autocompletar. **Mostrar todo**
+completa Cantidad y quita cualquier parcial anterior del borrador. El panel
+conserva su estado y, si está abierto, **Cantidad a mostrar** queda vacía.
 
-Esta representación evita que borrar un parcial termine en `displayQty:null`,
-rechazado por Matriz/ReMarkets. La validación en ReMarkets aceptó 100/100 como una
-orden sin iceberg; cero fue rechazado. Ver [diagnóstico y límites de validación](docs/diagnostico-displayqty.md).
+En **Configuración → Cantidades rápidas**, elegí **Sumar** en los presets que
+quieras agregar al total. Por ejemplo, pulsar **10k** y luego **+1k** deja 11k.
+El botón con `+` se aplica por clic y conserva la cantidad a mostrar que ya tenga el ticket.
 
 ## Posición en el ticket
 
@@ -171,9 +168,9 @@ botones en Matriz.
 
 ![Editor visual de ChuchoTriz con instrumentos, presets de AL30 y vista previa de botones](docs/images/01-presets-por-instrumento.png)
 
-- Hacé clic en una celda o en el lápiz para editar **Cantidad** y **A mostrar**.
+- Hacé clic en una celda o en el lápiz para editar **Cantidad** y **Modo**.
 - Usá las flechas de reordenamiento para cambiar la prioridad de los presets:
-  el primero se usa para autocompletar cuando no hay una elección anterior.
+  el primero que reemplaza el total se usa para autocompletar cuando no hay una elección anterior.
   El reordenamiento también puede hacerse con teclado.
 - Terminá la edición de una fila con **✓** o con **Enter** en un campo.
 - Pulsá **Guardar cambios** para guardar todos los presets. **Descartar cambios**
@@ -183,16 +180,14 @@ La extensión valida las cantidades y permite recuperar el borrador ante errores
 al guardar. Si otra vista actualiza las preferencias mientras editás, avisa del
 conflicto con los cambios pendientes.
 
-### Cantidad a mostrar: completa, fija o aleatoria
+### Modos de preset
 
 | Modo | Ejemplo en RAW | Resultado |
 | --- | --- | --- |
 | **Mostrar todo** | `100` o `100/0` | Cantidad total de 100, sin cantidad parcial. |
 | **Fija** | `100/20` | Cantidad total de 100 y cantidad a mostrar de 20. |
 | **Aleatoria** | `100000/R5` | Cantidad total de 100.000 y cantidad a mostrar entre 20.000 y 20.600. |
-
-En **A mostrar** podés ingresar un número fijo, `0` para mostrar todo o `Rn`,
-donde `n` es un divisor entero desde 2, como `R2`, `R3` o `R5`.
+| **Sumar** | `+1000` | Agrega 1.000 unidades al total del ticket y conserva la cantidad a mostrar. |
 
 <details>
 <summary>Ver la edición de una cantidad aleatoria</summary>
@@ -220,12 +215,11 @@ El selector **Visual / RAW** permite cambiar de editor conservando el borrador.
 RAW usa una línea por instrumento y cantidades enteras sin separadores:
 
 ```text
-AL30 100000/R5 50000/5000 100
+AL30 100000/R5 50000/5000 100 +1000
 GD30 200000/R4 50000/25000
 ```
 
-Por ejemplo, la primera línea configura tres botones para AL30: `100k/R5`,
-`50k/5k` y `100`.
+La primera línea configura los botones `100k/R5`, `50k/5k`, `100` y `+1k` para AL30.
 
 <details>
 <summary>Ver el editor RAW</summary>

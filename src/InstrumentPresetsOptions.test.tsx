@@ -111,6 +111,21 @@ afterEach(async () => {
 });
 
 describe("Opciones por instrumento", () => {
+  it("edits Sumar per preset and keeps it when switching through RAW and saving", async () => {
+    await chooseMode("add");
+    expect(chips()[0]).toBe("+200k");
+    expect(rowAt(1).querySelector('[data-field="mostrar"]')).toBeNull();
+    expect(rowAt(2).querySelector(".preset-first")).not.toBeNull();
+    await act(async () => button("RAW").click());
+    expect(rawEditor().value).toContain("AL30 +200000 100000/10000 50000/5000");
+    await act(async () => button("Visual").click());
+    expect(chips()[0]).toBe("+200k");
+    expect(rowAt(1).querySelector('button[aria-label="Editar modo Sumar del preset 1 de AL30"]')).not.toBeNull();
+    await act(async () => button("Guardar cambios").click());
+    expect(stored.InstrumentPresets.AL30[0]).toEqual({ cantidad: 200000, mostrar: 0, sumar: true });
+    expect(stored.InstrumentPresets.AL30[1]).toEqual(savedBook.AL30[1]);
+  });
+
   it("has no global autocomplete control and preserves ticker choices when saving and restoring presets", async () => {
     expect(container.querySelector('[name="autocompleteWithFirstPreset"]')).toBeNull();
     expect(container.textContent).not.toContain("Autocompletar al seleccionar");

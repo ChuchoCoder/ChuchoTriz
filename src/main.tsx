@@ -14,6 +14,16 @@ import BookIntraday from "./BookIntraday";
 
 focusCantidadAfterQuoteClick();
 
+const draftReady = typeof chrome.runtime?.getURL === "function" ? new Promise<void>(resolve => {
+  const script = document.createElement("script");
+  script.src = chrome.runtime.getURL("mini-order-draft.js");
+  script.onload = script.onerror = () => {
+    script.remove();
+    resolve();
+  };
+  document.documentElement.append(script);
+}) : Promise.resolve();
+
 if (typeof chrome.runtime?.getURL === "function") {
   const key = "TicketPositionVisible";
   const root = document.documentElement;
@@ -66,8 +76,8 @@ function openPresets(ticker: string, returnFocus: PresetSettingsRequest["returnF
   const sourceTicker = snapshot && presetTickerFor(snapshot.book, ticker);
   renderSettings({ ticker, sourceTicker, returnFocus });
 }
-// Read once; subsequent settings changes arrive through Chrome Storage.
-let storedSettings = instrumentPresetsRepository.readSettings();
+// Read once. Publish presets after the draft adapter has had a chance to register.
+let storedSettings = Promise.all([instrumentPresetsRepository.readSettings(), draftReady]).then(([settings]) => settings);
 let snapshot: StoredSettings | undefined;
 const settingsListeners = new Set<() => void>();
 const publishSettings = (settings: StoredSettings) => {

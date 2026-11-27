@@ -297,9 +297,11 @@ export const fallbackPresets: IInstrumentPreset[] = [
   { cantidad: 5000, mostrar: 2500 },
   { cantidad: 1000, mostrar: 250 },
   { cantidad: 100, mostrar: 25 },
+  { cantidad: 100, mostrar: 0, sumar: true },
+  { cantidad: 500, mostrar: 0, sumar: true },
 ];
 
-const PresetPattern = /^(\d+)(?:\/(\d+|R\d+))?$/i;
+const PresetPattern = /^(\+?)(\d+)(?:\/(\d+|R\d+))?$/i;
 
 // Gramática de Opciones, una línea por Ticker: "Ticker Cantidad/CantidadAMostrar Cantidad ..."
 // Las líneas con errores quedan fuera del Preset book
@@ -318,7 +320,7 @@ export function parse(text: string): { book: PresetBook; errors: ParseError[] } 
     const [word, ...values] = trimmed.split(/\s+/);
     // Matriz busca el Ticker en mayúsculas
     const ticker = word.toUpperCase();
-    if (/^[\d/]/.test(ticker)) {
+    if (/^[+\d/]/.test(ticker)) {
       errors.push({ line, message: `Falta el Ticker al principio de la línea, antes de "${word}"` });
       return;
     }
@@ -327,12 +329,12 @@ export function parse(text: string): { book: PresetBook; errors: ParseError[] } 
     const lineErrors: string[] = [];
     for (const value of values) {
       const match = PresetPattern.exec(value);
-      if (!match) {
-        lineErrors.push(`"${value}" no es un Preset; usar Cantidad, Cantidad/Cantidad_A_Mostrar o Cantidad/Rn con divisor entero desde 2`);
+      if (!match || (match[1] === "+" && match[3] !== undefined)) {
+        lineErrors.push(`"${value}" no es un Preset; usar Cantidad, +Cantidad, Cantidad/Cantidad_A_Mostrar o Cantidad/Rn con divisor entero desde 2`);
         continue;
       }
-      const cantidad = Number.parseInt(match[1]);
-      const display = match[2]?.toUpperCase();
+      const cantidad = Number.parseInt(match[2]);
+      const display = match[3]?.toUpperCase();
       const mostrar = display?.startsWith("R") ? `R${Number(display.slice(1))}` as const : Number(display ?? 0);
       const divisor = typeof mostrar === "string" ? Number(mostrar.slice(1)) : null;
       if (cantidad === 0) {
@@ -348,7 +350,7 @@ export function parse(text: string): { book: PresetBook; errors: ParseError[] } 
         lineErrors.push(`"${value}": la Cantidad a mostrar no puede ser mayor que la Cantidad`);
       }
       else {
-        presets.push({ cantidad, mostrar });
+        presets.push(match[1] === "+" ? { cantidad, mostrar: 0, sumar: true } : { cantidad, mostrar });
       }
     }
 
@@ -378,7 +380,7 @@ export function format(book: PresetBook): string {
   for (const ticker in book) {
     text += ticker;
     for (const preset of book[ticker]) {
-      text += " " + preset.cantidad;
+      text += (preset.sumar ? " +" : " ") + preset.cantidad;
       if (typeof preset.mostrar === "string" || preset.mostrar > 0) {
         text += "/" + preset.mostrar;
       }
@@ -416,6 +418,7 @@ export function presetsFor(book: PresetBook, ticker: string): IInstrumentPreset[
 
 // Texto del botón de un Preset, por ejemplo "10k/2.5k"
 export function label(preset: IInstrumentPreset): string {
+  if (preset.sumar) return "+" + quantityText(preset.cantidad);
   const display = typeof preset.mostrar === "string" ? preset.mostrar : preset.mostrar > 0 ? quantityText(preset.mostrar) : "";
   return quantityText(preset.cantidad) + (display ? "/" + display : "");
 }
