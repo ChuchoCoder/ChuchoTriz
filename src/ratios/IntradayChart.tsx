@@ -2,9 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import ToolbarIcon from "../ToolbarIcon";
-import { calculateRatio, pairKey, pairLabel, ratioLabel, type RatioPair } from "./model";
+import { calculateRatio, pairKey, pairLabel, ratioLabel, type RatioFormat, type RatioPair } from "./model";
 
-export type IntradayPair = Pick<RatioPair, "a" | "b" | "c" | "cDivisor">;
+export type IntradayPair = Pick<RatioPair, "a" | "b" | "c" | "cDivisor" | "format">;
 type View = "ratio" | "comparison" | "spread" | "dollar-spread";
 interface Point { at: number; value: number; provisional?: true }
 type History = Record<string, { points: Point[]; issue?: string }>;
@@ -216,8 +216,8 @@ export function intradayPoints(pair: IntradayPair, history: History, live: Live 
 type ChartValue = Exclude<keyof ReturnType<typeof intradayPoints>[number], "at">;
 type Line = { key: ChartValue; label: string };
 const percentage = new Intl.NumberFormat("es-AR", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-function display(value: number | undefined, percent: boolean) {
-  return value === undefined ? "—" : percent ? percentage.format(value / 100) : ratioLabel(value);
+function display(value: number | undefined, key: ChartValue, ratioFormat?: RatioFormat) {
+  return key === "spread" && value !== undefined ? percentage.format(value / 100) : ratioLabel(value, key === "ratio" ? ratioFormat : undefined);
 }
 
 function chartScale(values: number[], top: number, bottom: number) {
@@ -232,8 +232,8 @@ function chartScale(values: number[], top: number, bottom: number) {
 // The SVG axis text uses 10px type. Allow six pixels per character plus the label gap.
 const axisWidth = (labels: string[]) => labels.length ? Math.max(...labels.map(label => label.length)) * 6 + 10 : 6;
 
-function Plot({ rows, lines, dual, label }: {
-  rows: ReturnType<typeof intradayPoints>; lines: Line[]; dual: boolean; label: string;
+function Plot({ rows, lines, dual, label, ratioFormat }: {
+  rows: ReturnType<typeof intradayPoints>; lines: Line[]; dual: boolean; label: string; ratioFormat?: RatioFormat;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 448, height: 195 });
@@ -254,15 +254,17 @@ function Plot({ rows, lines, dual, label }: {
   const onRight = dual ? lines.filter(line => line.key !== "spread") : lines;
   const mainScale = chartScale(rows.flatMap(row => onRight.flatMap(line => row[line.key] ?? [])), top, bottom);
   const spreadScale = dual ? chartScale(rows.flatMap(row => row.spread ?? []), top, bottom) : mainScale;
-  const precision = Math.min(6, Math.max(2, Math.ceil(-Math.log10((spreadScale.max - spreadScale.min) / 3))));
+  const percentRatio = ratioFormat === "percent";
+  const percentSpan = percentRatio ? (mainScale.max - mainScale.min) * 100 : spreadScale.max - spreadScale.min;
+  const precision = Math.min(6, Math.max(2, Math.ceil(-Math.log10(percentSpan / 3))));
   const percentAxis = precision === 2 ? percentage : new Intl.NumberFormat("es-AR", { style: "percent", minimumFractionDigits: precision, maximumFractionDigits: precision });
   const ticks = [0, 1, 2, 3].map(tick => {
     const value = mainScale.min + (mainScale.max - mainScale.min) * tick / 3;
     const spread = spreadScale.min + (spreadScale.max - spreadScale.min) * tick / 3;
-    return { y: mainScale.y(value), numeric: ratioLabel(value), percent: percentAxis.format(spread / 100) };
+    return { y: mainScale.y(value), main: percentRatio ? percentAxis.format(value - 1) : ratioLabel(value), percent: percentAxis.format(spread / 100) };
   });
   const left = axisWidth(hasSpread ? ticks.map(tick => tick.percent) : []);
-  const right = Math.max(left + 12, width - axisWidth(spreadOnly ? [] : ticks.map(tick => tick.numeric)));
+  const right = Math.max(left + 12, width - axisWidth(spreadOnly ? [] : ticks.map(tick => tick.main)));
   const from = rows[0].at, to = Math.max(rows[rows.length - 1].at, from + INTERVAL);
   const x = (at: number) => left + (right - left) * (at - from) / (to - from);
   return <div className="ct-intraday-plot" ref={container}>
@@ -280,8 +282,8 @@ function Plot({ rows, lines, dual, label }: {
         const step = event.key === "ArrowLeft" ? -1 : 1;
         setIndex(previous => Math.max(0, Math.min(rows.length - 1, (previous ?? rows.length - 1) + step)));
       }}>
-      {ticks.map(({ y, numeric, percent }, index) => <g key={index}><path className="ct-intraday-grid" d={`M${left},${y}H${right}`} />
-        {!spreadOnly && <text className="ct-intraday-axis-right" x={right + 4} y={y} dominantBaseline="middle">{numeric}</text>}
+      {ticks.map(({ y, main, percent }, index) => <g key={index}><path className="ct-intraday-grid" d={`M${left},${y}H${right}`} />
+        {!spreadOnly && <text className="ct-intraday-axis-right" x={right + 4} y={y} dominantBaseline="middle">{main}</text>}
         {hasSpread && <text className="ct-intraday-axis-left" x={left - 4} y={y} textAnchor="end" dominantBaseline="middle">{percent}</text>}
       </g>)}
       {(rows.length === 1 ? [from] : [from, bucket((from + to) / 2), to]).filter((at, i, ticks) => ticks.indexOf(at) === i).map(at =>
@@ -305,7 +307,7 @@ function Plot({ rows, lines, dual, label }: {
       {active && <path className="ct-intraday-cursor" d={`M${x(active.at)},${top}V${bottom}`} />}
     </svg>
     {active && <div className="ct-intraday-tooltip" role="status">
-      <strong>{time.format(active.at)}</strong>{lines.map(line => <span key={line.key}>{line.label} {display(active[line.key], line.key === "spread")}</span>)}
+      <strong>{time.format(active.at)}</strong>{lines.map(line => <span key={line.key}>{line.label} {display(active[line.key], line.key, ratioFormat)}</span>)}
     </div>}
   </div>;
 }
@@ -319,6 +321,7 @@ export function IntradayChart({ pair, view = "ratio", defaultToToday = false, ac
   const points = useMemo(() => intradayPoints(pair, market.history, market.live),
     [a, b, c, pair.cDivisor, market.history, market.live]);
   const ratio = pairLabel({ a: pair.a, b: pair.b });
+  const ratioFormat = view === "ratio" ? pair.format : undefined;
   const reference = pair.c ? `${pair.c.symbol}${pair.cDivisor ? ` ÷ ${pair.cDivisor}` : ""}` : "Referencia C";
   const lines: Line[] = view === "spread" ? [{ key: "spread", label: `Brecha vs ${reference}` }]
     : [{ key: "ratio", label: ratio }, ...(view === "comparison" ? [{ key: "reference" as const, label: reference }]
@@ -344,7 +347,7 @@ export function IntradayChart({ pair, view = "ratio", defaultToToday = false, ac
       {lines.map(line => {
         const last = rows.findLast(row => row[line.key] !== undefined);
         return <span key={line.key} className={`ct-intraday-line-${line.key}`} title={last && time.format(last.at)}>
-          <i aria-hidden="true" />{line.label} <strong>{display(last?.[line.key], line.key === "spread")}</strong>
+          <i aria-hidden="true" />{line.label} <strong>{display(last?.[line.key], line.key, ratioFormat)}</strong>
         </span>;
       })}
       {defaultToToday || dates.length > 1 ? <label className="ct-intraday-session"><span>Rueda</span>
@@ -356,7 +359,7 @@ export function IntradayChart({ pair, view = "ratio", defaultToToday = false, ac
         </select>
       </label> : <time>{date.format(activeDay)}</time>}
     </div>
-    {rows.length > 0 ? <Plot key={`${view}-${activeDay}`} rows={rows} lines={plotLines} dual={dual} label={description} />
+    {rows.length > 0 ? <Plot key={`${view}-${activeDay}`} rows={rows} lines={plotLines} dual={dual} label={description} ratioFormat={ratioFormat} />
       : <p className="ct-intraday-empty" role="status">{market.loading ? "Cargando histórico…" : "Sin cotizaciones coincidentes para esta rueda."}</p>}
     {(view === "comparison" || view === "dollar-spread") && rows.length > 0 && !hasComparison && <small>El ratio y la referencia aún no coinciden en un intervalo de 5 min en esta rueda.</small>}
     {!market.loading && (market.historyIssue || historyIssues.length > 0) && <p className="ct-intraday-status" role="status">
@@ -367,7 +370,7 @@ export function IntradayChart({ pair, view = "ratio", defaultToToday = false, ac
   </div>;
 }
 
-function ReferenceDialog({ pair, close }: { pair: IntradayPair; close(): void }) {
+function IntradayDialog({ pair, close }: { pair: IntradayPair; close(): void }) {
   const dialog = useRef<HTMLDialogElement>(null), heading = useId();
   const [view, setView] = useState<"comparison" | "spread">("comparison");
   useEffect(() => {
@@ -375,27 +378,28 @@ function ReferenceDialog({ pair, close }: { pair: IntradayPair; close(): void })
     element?.showModal();
     return () => { element?.close(); };
   }, []);
-  return createPortal(<dialog ref={dialog} className="ct-intraday-dialog" aria-labelledby={heading}
+  return createPortal(<dialog ref={dialog} className="ct-intraday-dialog" aria-labelledby={heading} onClick={event => event.stopPropagation()}
     onCancel={event => { event.preventDefault(); close(); }}>
-    <header><h2 id={heading}>{pairLabel(pair)}</h2><button type="button" aria-label="Cerrar gráfico de referencia" onClick={close}>×</button></header>
-    <div className="ct-intraday-views" role="group" aria-label="Vista intradiaria">
+    <header><h2 id={heading}>{pairLabel(pair)}</h2><button type="button" aria-label="Cerrar gráfico intradiario" onClick={close}>×</button></header>
+    {pair.c && <div className="ct-intraday-views" role="group" aria-label="Vista intradiaria">
       <button type="button" aria-pressed={view === "comparison"} onClick={() => setView("comparison")}>Comparación</button>
       <button type="button" aria-pressed={view === "spread"} onClick={() => setView("spread")}>Brecha %</button>
-    </div>
-    <IntradayChart key={pairKey(pair)} pair={pair} view={view} />
+    </div>}
+    <IntradayChart key={pairKey(pair)} pair={pair} view={pair.c ? view : "ratio"} />
   </dialog>, document.body);
 }
 
-export function ReferenceChartButton({ pair }: { pair: IntradayPair }) {
+export function IntradayChartButton({ pair }: { pair: IntradayPair }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
-  if (!pair.c) return null;
+  const label = pairLabel({ a: pair.a, b: pair.b });
   return <>
-    <button type="button" ref={trigger} className="ct-reference-chart-button" aria-haspopup="dialog"
-      aria-label={`Comparar ${pairLabel({ a: pair.a, b: pair.b })} con ${pair.c.symbol}`} title="Comparación y brecha intradiarias con Referencia C"
+    <button type="button" ref={trigger} className="ct-intraday-chart-button" aria-haspopup="dialog"
+      aria-label={pair.c ? `Comparar ${label} con ${pair.c.symbol}` : `Ver intradiario de ${label}`}
+      title={pair.c ? "Comparación y brecha intradiarias con Referencia C" : "Gráfico intradiario en intervalos de 5 minutos"}
       onMouseDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setOpen(true); }}>
-      <ToolbarIcon name="analysis" /><span aria-hidden="true">C</span>
+      <ToolbarIcon name="analysis" /><span aria-hidden="true">{pair.c ? "C" : "5m"}</span>
     </button>
-    {open && <ReferenceDialog pair={pair} close={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />}
+    {open && <IntradayDialog pair={pair} close={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />}
   </>;
 }

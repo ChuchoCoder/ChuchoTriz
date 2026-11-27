@@ -115,6 +115,35 @@ async (page, screenshots) => {
   await stalePair.getByRole('button', { name: 'Cancelar', exact: true }).click();
 
   await idle(); await button('RATIOS · CHUCHOTRIZ').click(); await idle();
+  const simpleRatioButton = button('Ver intradiario de BMA/GGAL');
+  const simpleRatioRow = page.locator('.ct-ratios-widget tr').filter({ has: simpleRatioButton });
+  const savedRatio = '9,09%';
+  await valueIs(simpleRatioRow.locator('.ct-ratios-value'), savedRatio, 'The default BMA/GGAL row uses percentage format');
+  await simpleRatioButton.press('Enter');
+  const simpleRatioDialog = page.getByRole('dialog', { name: 'BMA/GGAL', exact: true });
+  const simpleRatioPlot = simpleRatioDialog.getByRole('img', { name: 'Gráfico intradiario de BMA/GGAL' });
+  await simpleRatioPlot.waitFor();
+  await valueIs(simpleRatioDialog.locator('.ct-intraday-line-ratio strong'), savedRatio, 'The A/B modal opens its own series in the saved row format');
+  assert(await simpleRatioDialog.locator('svg g .ct-intraday-line').count() === 1 &&
+    !await simpleRatioDialog.getByRole('group', { name: 'Vista intradiaria' }).count(), 'The A/B modal shows the ratio series alone');
+  const axisLabels = await simpleRatioPlot.locator('.ct-intraday-axis-right').allTextContents();
+  assert(axisLabels.length > 0 && axisLabels.every(label => label.endsWith('%')), 'The A/B chart axis uses the saved percentage units');
+  await simpleRatioPlot.press('ArrowRight');
+  await simpleRatioDialog.locator('.ct-intraday-tooltip').getByText(`BMA/GGAL ${savedRatio}`, { exact: true }).waitFor();
+  const visibleFocus = locator => locator.evaluate(element => {
+    const style = getComputedStyle(element);
+    return element.matches(':focus-visible') && style.outlineStyle === 'solid' &&
+      parseFloat(style.outlineWidth) >= 1 && style.outlineColor === style.color;
+  });
+  assert(await visibleFocus(simpleRatioPlot), 'The chart uses the theme foreground for visible keyboard focus');
+  await screenshot('simple-ratio', simpleRatioDialog);
+  await simpleRatioPlot.click();
+  await simpleRatioDialog.getByRole('button', { name: 'Cerrar gráfico intradiario' }).press('Enter');
+  await simpleRatioDialog.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Ver intradiario de BMA/GGAL');
+  assert(await visibleFocus(simpleRatioButton), 'The A/B shortcut restores visible keyboard focus with the theme foreground');
+  assert(!await page.locator('.ct-ratio-history').count(), 'The modal returns focus without selecting daily history in the widget');
+
   await button('Editar MEP AL30 vs DLR/SPOT').click();
   const editor = page.locator('.ct-ratios-editor');
   const reference = editor.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial' });

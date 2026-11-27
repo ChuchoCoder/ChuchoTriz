@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { MarketReader } from "../optionsSimulator/market";
 import { containsChangedElements, observePageStructure } from "../pageStructure";
 import ToolbarIcon from "../ToolbarIcon";
-import { IntradayChart, ReferenceChartButton } from "./IntradayChart";
+import { IntradayChart, IntradayChartButton } from "./IntradayChart";
 import { RatioChartLink } from "./RatioChart";
 import { RatioHistory } from "./RatioHistory";
 import type { DailyHistory, ReadDailyHistory } from "./dailyRatioHistory";
@@ -325,7 +325,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy, visible, readHi
             </td>
             <td className="ct-ratios-actions">
               <RatioChartLink pair={pair} />
-              <ReferenceChartButton pair={pair} />
+              <IntradayChartButton pair={pair} />
               <button type="button" aria-label={`Editar ${label}`} title="Editar par" disabled={busy} onClick={() => begin(pair)}>✎</button>
               <button type="button" aria-label={`Invertir ${label}`} title={pair.c ? "Comparación (A/B)/C; editá la fórmula para cambiar el sentido" : "Invertir A/B"} disabled={busy || !!pair.c} onClick={() => void savePairs(cfg.pairs.map(p => p.id === pair.id ? { ...p, a: p.b, b: p.a } : p))}>⇄</button>
               <button type="button" aria-label={`Eliminar ${label}`} title="Eliminar ratio" disabled={busy} onClick={() => void savePairs(cfg.pairs.filter(p => p.id !== pair.id))}>×</button>

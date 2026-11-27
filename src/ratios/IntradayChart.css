@@ -95,7 +95,7 @@
 .ct-intraday-body small { padding-inline: 4px; }
 .ct-intraday-widget .ct-intraday-settings-error { padding-inline: 10px; margin: 4px 0; }
 
-button.ct-reference-chart-button {
+button.ct-intraday-chart-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -111,8 +111,8 @@ button.ct-reference-chart-button {
   vertical-align: middle;
 }
 
-button.ct-reference-chart-button:hover { background: #8190a52b; }
-.ct-reference-chart-button span { font: 700 10px/1 Arial, sans-serif; }
+button.ct-intraday-chart-button:hover { background: #8190a52b; }
+.ct-intraday-chart-button span { font: 700 10px/1 Arial, sans-serif; }
 .ct-intraday-dialog {
   box-sizing: border-box;
   width: min(680px, calc(100vw - 24px));
@@ -143,3 +143,5 @@ button.ct-reference-chart-button:hover { background: #8190a52b; }
 .ct-intraday-views button[aria-pressed=true] { background: #1378aa; border-color: #1378aa; color: white; }
 .ct-intraday-dialog button:focus-visible, .ct-intraday-body svg:focus-visible,
 .ct-intraday-session select:focus-visible { outline: 2px solid #4bb9ec; outline-offset: 1px; }
+.ct-ratios .ct-intraday-chart-button:focus-visible,
+.ct-intraday-dialog :is(button, svg, select):focus-visible { outline-color: currentColor; }
