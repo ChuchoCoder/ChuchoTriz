@@ -831,16 +831,23 @@ async page => {
     const grid = panel.parentElement;
     const [a, b] = [...grid.querySelectorAll(':scope > .ro-leg')].map(leg => leg.getBoundingClientRect());
     const c = panel.getBoundingClientRect();
+    const data = grid.querySelector(':scope > .ro-entry-costs');
+    const d = data.getBoundingClientRect();
+    const sameRow = (x, y) => Math.abs(x.top - y.top) < 2;
     return {
-      beside: a.right <= b.left && b.right <= c.left && Math.abs(a.top - c.top) < 2 && Math.abs(b.top - c.top) < 2,
-      after: c.top >= Math.max(a.bottom, b.bottom),
+      four: a.right <= b.left && b.right <= c.left && c.right <= d.left && sameRow(a, b) && sameRow(b, c) && sameRow(c, d),
+      two: c.top >= Math.max(a.bottom, b.bottom) && c.right <= d.left && sameRow(c, d),
+      stack: c.top >= Math.max(a.bottom, b.bottom) && d.top >= c.bottom,
+      inlineControls: !!data.querySelector('[type="submit"]') &&
+        [...grid.querySelectorAll(':scope > .ro-leg')].every(leg => !!leg.querySelector('.ro-sizing-leg input')),
     };
   });
-  assert((await placement()).beside, 'Reference C lines up next to A and B on desktop');
+  const desktop = await placement();
+  assert(desktop.four && desktop.inlineControls, 'A, B, C and data align in four columns with costs and submission inside their cards');
   await page.setViewportSize({ width: 1024, height: 950 });
-  assert((await placement()).after, 'At intermediate widths Reference C follows the two legs');
+  assert((await placement()).two, 'At intermediate widths the four cards form two rows');
   await page.setViewportSize({ width: 760, height: 950 });
-  assert((await placement()).after, 'At narrow widths the three cards stack in order');
+  assert((await placement()).stack, 'At narrow widths the four cards stack in order');
   await entryC.focus();
   await page.keyboard.press('Tab');
   assert(await label('Objetivo de brecha (%)').evaluate(el => document.activeElement === el && el.matches(':focus-visible')),
@@ -924,7 +931,7 @@ async page => {
   await click(button('Registrar cierre'));
   await reviewWaitHistory(future.id, [[50, 10], [50, 10], [1, 1]]);
   await history.getByText('Brecha de cierre · 0,00%', { exact: true }).waitFor();
-  checks.push('Reference C aligns with A/B on desktop, fits narrow screens with keyboard focus and supports independent future closes');
+  checks.push('Four opening cards align on desktop, reflow with keyboard focus and support independent future closes');
   await click(button('1 · Monitor')); await click(button('Quitar par MEP AL30 vs (DLR/DIC26 ÷ 100)'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));

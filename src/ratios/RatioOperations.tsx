@@ -524,6 +524,10 @@ export default function RatioOperations({ active }: { active: boolean }) {
         onChoose={(side, level) => setDraft(p => ({ ...p, [priceKey]: input(level.price), [sourceKey]: side }))} />
       <div className="ro-leg-footer"><small>{instrument ? `${instrumentKind(instrument.cfi)} · ${currencyLabel(instrument.currency)} · ${instrument.amountFactor === .01 ? "precio por 100 nominales" : `monto = cantidad × precio × ${numberLabel(numeric(draft[factorKey]))}`}` : "Seleccioná el instrumento"}<br />Última operación: {tradeLabel(quote?.tradedAt)}</small></div>
       {instrument && (!instrument.amountFactor || !instrument.quantityStep) && <div className="ro-manual-units"><label>Factor monetario por unidad<input type="number" min="0" step="any" value={draft[factorKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [factorKey]: e.target.value }))} /></label><label>Lote mínimo<input type="number" min="1" step="1" value={draft[stepKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [stepKey]: e.target.value }))} /></label></div>}
+      {ref && <div className="ro-leg-sizing">
+        {sizing(key)}
+        {!first && <small>{quantityHint}</small>}
+      </div>}
     </section>;
   }
 
@@ -536,6 +540,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
       <span>Monto {key.toUpperCase()}<strong>{money(first ? qa * pa * fa : qb * pb * fb, instrument?.currency || "")}</strong></span>
     </div>;
   }
+
+  const quantityHint = draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales."
+    : mixed ? "B copia los nominales de A, respetando el lote de ambas patas."
+      : "B se ajusta al lote más cercano para igualar montos.";
+  const entryActions = <div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro local de las patas ingresadas. Verificá las ejecuciones y tenencias en tu cuenta.</small></div>;
 
   return <section className="ct-ratio-ops" aria-label="Operaciones de ratios">
     <header className="ro-heading"><h2>Ratios · Long / Short</h2><small>Registro manual local por cuenta y sitio. No envía órdenes.</small></header>
@@ -598,28 +607,24 @@ export default function RatioOperations({ active }: { active: boolean }) {
         {leg("a")}{leg("b")}
         {ref && <section className="ro-entry-reference" aria-labelledby="ro-reference-title">
           <h4 id="ro-reference-title">Referencia C · {ref.instrument.symbol}{ref.divisor ? " ÷ 100" : ""}</h4>
-          <div className="ro-reference-groups">
-            <div className="ro-close-leg">
-              <div className="ro-close-fields">
-                <label>Precio C al abrir<input type="number" step="any" min={Number.MIN_VALUE} required value={ref.price} disabled={!available}
-                  onChange={e => changeReference({ price: e.target.value, copiedPrice: false })} /></label>
-                <button type="button" disabled={!available || draft.explicitDate || !market.context?.connected || !!openReferenceQuote?.issue || !openReferenceQuote?.last}
-                  onClick={() => changeReference({ price: formatOptionInput(openReferenceQuote!.last!, 21), copiedPrice: true })}>Usar último C · {numberLabel(openReferenceQuote?.last)}</button>
-              </div>
-              <small>{draft.explicitDate ? "Ingresá los precios de la fecha elegida. " : ""}Ingresá el precio original de C. La brecha aplica el divisor guardado.</small>
-              <div>Brecha de entrada · <output>{ratioLabel(spreadAt(pa, pb, Number(ref.price), ref.divisor), "percent")}</output></div>
-              <div>Brecha de mercado · <output>{ratioLabel(marketSpread, "percent")}</output></div>
-            </div>
-            <div className="ro-close-leg">
-              <div className="ro-close-fields">
-                <label>Objetivo de brecha (%)<input type="number" step="any" value={ref.goal} disabled={!available}
-                  onChange={e => changeReference({ goal: e.target.value })} /></label>
-                <label>Condición de brecha<select aria-label="Condición de brecha" value={ref.comparison} disabled={!available}
-                  onChange={e => changeReference({ comparison: e.target.value === "above" ? "above" : "below" })}>
-                  <option value="below">Menor o igual (≤)</option><option value="above">Mayor o igual (≥)</option>
-                </select></label>
-              </div>
-            </div>
+          <div className="ro-close-fields">
+            <label>Precio C al abrir<input type="number" step="any" min={Number.MIN_VALUE} required value={ref.price} disabled={!available}
+              onChange={e => changeReference({ price: e.target.value, copiedPrice: false })} /></label>
+            <button type="button" disabled={!available || draft.explicitDate || !market.context?.connected || !!openReferenceQuote?.issue || !openReferenceQuote?.last}
+              onClick={() => changeReference({ price: formatOptionInput(openReferenceQuote!.last!, 21), copiedPrice: true })}>Usar último C · {numberLabel(openReferenceQuote?.last)}</button>
+          </div>
+          {(draft.explicitDate || ref.divisor) && <small>{draft.explicitDate ? "Ingresá los precios de la fecha elegida. " : ""}{ref.divisor ? "C se ingresa antes de dividir por 100." : ""}</small>}
+          <dl className="ro-reference-spreads">
+            <div><dt>Brecha de entrada</dt><dd><output>{ratioLabel(spreadAt(pa, pb, Number(ref.price), ref.divisor), "percent")}</output></dd></div>
+            <div><dt>Brecha de mercado</dt><dd><output>{ratioLabel(marketSpread, "percent")}</output></dd></div>
+          </dl>
+          <div className="ro-close-fields">
+            <label>Objetivo de brecha (%)<input type="number" step="any" value={ref.goal} disabled={!available}
+              onChange={e => changeReference({ goal: e.target.value })} /></label>
+            <label>Condición de brecha<select aria-label="Condición de brecha" value={ref.comparison} disabled={!available}
+              onChange={e => changeReference({ comparison: e.target.value === "above" ? "above" : "below" })}>
+              <option value="below">Menor o igual (≤)</option><option value="above">Mayor o igual (≥)</option>
+            </select></label>
           </div>
           {canTradeReference(ref.instrument) && <div className="ro-close-leg">
             <label className="ro-compare"><input type="checkbox" checked={ref.future} disabled={!available || partiallyClosed}
@@ -643,14 +648,17 @@ export default function RatioOperations({ active }: { active: boolean }) {
             </>}
           </div>}
         </section>}
-        <aside className="ro-entry-costs"><label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
+        <aside className="ro-entry-costs" aria-labelledby={ref ? "ro-entry-data-title" : undefined}>
+          {ref && <h4 id="ro-entry-data-title">Datos de la operación</h4>}
+          <label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
           <label>Fecha/hora de apertura · Argentina<input type="datetime-local" value={draft.at} max={dateInput()} disabled={!available} required onChange={e => changeEntryDate(e.target.value)} /></label>
           <label>Ratio objetivo {ref ? "A/B " : ""}{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(%)" : "(número)"} · opcional<input aria-label="Ratio objetivo" type="number" step="any" value={draft.target} disabled={!available} onChange={e => setDraft(p => ({ ...p, target: e.target.value }))} /></label><small>{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(A/B − 1) × 100. Ej.: 1,065 → 6,50%." : "Cociente A/B sin conversiones."} {draft.direction === 1 ? "Objetivo al alza (≥)." : "Objetivo a la baja (≤)."}</small>
           {mixed && <small>{draft.preservedB !== undefined ? "Cantidad B histórica conservada hasta cambiar A." : "Distinta moneda: B copia los nominales de A."} El P&L se mantiene separado por moneda.</small>}
+          {ref && entryActions}
         </aside>
-        <div className="ro-sizing">{sizing("a")}{sizing("b")}<small>{draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales." : mixed ? "B copia exactamente los nominales de A. La cantidad debe respetar los lotes de ambas patas." : "B se ajusta al lote más cercano con los precios elegidos para igualar montos."} DDMM y factores quedan guardados en cada pata.</small></div>
+        {!ref && <div className="ro-sizing">{sizing("a")}{sizing("b")}<small>{quantityHint} DDMM y factores quedan guardados en cada pata.</small></div>}
       </div>
-      <div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro local de las patas ingresadas. Verificá las ejecuciones y tenencias en tu cuenta.</small></div>
+      {!ref && entryActions}
     </form>}
     {view === "operations" && <div className={`ro-operations-grid${op ? "" : " no-detail"}`}>
       <div><div className="ro-grid-tools"><GridColumnPicker label="Operaciones abiertas" columns={operationColumns} preferences={operationPreferences} /><small>Arrastrá ⠿ para mover · con foco, usá ↑/↓</small><button type="button" className="ro-manual-order" disabled={!operationsSort} onClick={() => changeGridSort("operations")}>Orden manual</button>
