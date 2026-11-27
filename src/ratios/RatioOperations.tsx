@@ -731,7 +731,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
           </div>
           {referenceOnlyAtClose && <button type="button" disabled={!available || !!closeInput?.at || !market.context?.connected || !!closeReferenceQuote?.issue || !closeReferenceQuote?.last}
             onClick={() => changeCloseInput({ reference: { value: formatOptionInput(closeReferenceQuote!.last!, 21), fromMarket: true } })}>Usar último C · {numberLabel(closeReferenceQuote?.last)}</button>}
-          <small id="ro-close-help">{independentQuantities ? "Ingresá las cantidades ejecutadas. Dejá en blanco las patas que siguen abiertas." :
+          <small id="ro-close-help">{independentQuantities ? "Registrá A y B juntas mientras ambas tengan saldo. C se puede cerrar por separado." :
             "Ingresá la cantidad de una pata. Las demás conservan la proporción abierta, al lote más cercano."}</small>
           {closeIssue && <p className="ro-close-issue" role="alert">{closeIssue}</p>}
           <div className="ro-close-actions">

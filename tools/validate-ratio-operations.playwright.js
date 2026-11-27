@@ -899,6 +899,17 @@ async page => {
   const separateClose = (await book()).operations.at(-1);
   assert(separateClose.legs[2].exits[1].price === 159000 && separateClose.legs[2].exits[1].at === '2026-01-05T15:00:00.000Z',
     'Independent C close records its own execution and timestamp');
+  await label('Ingresar cantidades por pata').check();
+  await label('Fecha/hora del cierre · Argentina').fill('2026-01-05T13:00');
+  await label('Precio cierre A').fill('80000'); await label('Precio cierre B').fill('50');
+  await label('Cantidad cierre A').fill('10');
+  assert(await button('Registrar cierre').isDisabled(), 'A and B remain paired when each has an open balance');
+  await label('Cantidad cierre B').fill('10');
+  assert(await button('Registrar cierre').isDisabled(), 'The paired exit requires a benchmark when C is already flat');
+  await label('Precio C al cerrar').fill('160000');
+  await click(button('Registrar cierre'));
+  await reviewWaitHistory(future.id, [[50, 10], [50, 10], [1, 1]]);
+  await history.getByText('Brecha de cierre · 0,00%', { exact: true }).waitFor();
   checks.push('Historical quote controls and keyboard focus work at tablet width, and a future can close independently of A/B');
   await click(button('1 · Monitor')); await click(button('Quitar par MEP AL30 vs (DLR/DIC26 ÷ 100)'));
   await page.reload({ waitUntil: 'domcontentloaded' });

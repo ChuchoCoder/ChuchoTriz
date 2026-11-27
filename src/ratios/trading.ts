@@ -212,6 +212,10 @@ export function closeOperationByQuantity(o: RatioOperation, leg: TradingLegIndex
 }
 export function validateIndependentClose(o: RatioOperation, quantities: number[]): void {
   if (!o.legs[2] || quantities.length !== o.legs.length || !quantities.some(q => q > 0)) throw Error("Ingresá la cantidad de al menos una pata.");
+  const [a, b] = o.legs;
+  if (remaining(a) && remaining(b) && Boolean(quantities[0]) !== Boolean(quantities[1])) {
+    throw Error("Registrá A y B en el mismo cierre mientras ambas patas tengan saldo.");
+  }
   o.legs.forEach((leg, i) => {
     const q = quantities[i];
     if (q !== 0 && (!quantity(q) || q % leg.step !== 0 || q > remaining(leg))) {
@@ -223,7 +227,7 @@ export function closeOperationIndependently(o: RatioOperation, quantities: numbe
   validateIndependentClose(o, quantities);
   return recordClose(o, quantities, prices, at, referencePrice);
 }
-export const needsCloseReference = (o: RatioOperation, amounts: number[]) => !!o.reference && !amounts[2];
+export const needsCloseReference = (o: RatioOperation, amounts: number[]) => !!o.reference && amounts[0] > 0 && amounts[1] > 0 && !amounts[2];
 function recordClose(o: RatioOperation, quantities: number[], prices: number[], at: string, referencePrice?: number): RatioOperation {
   if (prices.length !== o.legs.length || quantities.some((q, i) => q > 0 && !positive(prices[i]))) throw Error("Revisá los precios de cierre.");
   const referenceLeg = needsCloseReference(o, quantities) ? quantities.findIndex(q => q > 0) : -1;

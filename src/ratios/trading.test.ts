@@ -346,6 +346,7 @@ it("records exits of the futures leg and the A/B legs on different dates", () =>
   o.reference = { instrument: c, entry: 2 };
   o.legs = [o.legs[0], o.legs[1], { instrument: c, side: -1, quantity: 1, entry: 2, factor: 1000, step: 1, ddmm: 0, exits: [] }];
   expect(() => closeOperationIndependently(o, [0, 0, 2], [0, 0, 1.99], exitAt)).toThrow(/remanente/);
+  expect(() => closeOperationIndependently(o, [25, 0, 0], [103, 0, 0], exitAt)).toThrow(/A y B/);
   const first = closeOperationIndependently(o, [25, 50, 0], [103, 51, 0], exitAt, 2.02);
   expect(first.legs.map(remaining)).toEqual([75, 150, 1]);
   expect(closeMetrics(first, recordedCloses(first)[0]).priceC).toBe(2.02);
