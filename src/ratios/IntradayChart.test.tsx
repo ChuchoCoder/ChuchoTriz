@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { IntradayChart, intradayPoints, ReferenceChartButton } from "./IntradayChart";
+import { IntradayChart, IntradayChartButton, intradayPoints } from "./IntradayChart";
 import type { RatioInstrument } from "./model";
 
 const call = vi.fn(), dispose = vi.fn();
@@ -39,7 +39,7 @@ it("uses the last sample in each five-minute interval, scales C, and preserves g
   expect(intradayPoints(pair, differentMinute)[0].spread).toBeCloseTo(33.333333);
 });
 
-it("opens both intraday views from the row with its exact instruments and divisor", async () => {
+it("opens the intraday view for A/B and the comparison and spread views for A/B with C", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const prototype = HTMLDialogElement.prototype;
   const showModal = Object.getOwnPropertyDescriptor(prototype, "showModal");
@@ -52,9 +52,20 @@ it("opens both intraday views from the row with its exact instruments and diviso
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<><ReferenceChartButton pair={{ a, b }} /><ReferenceChartButton pair={pair} /></>));
-    expect(host.querySelectorAll("button")).toHaveLength(1);
-    await act(async () => host.querySelector("button")!.click());
+    await act(async () => root.render(<><IntradayChartButton pair={{ a, b }} /><IntradayChartButton pair={pair} /></>));
+    expect(call).not.toHaveBeenCalled();
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Ver intradiario de MEP AL30"]')!.click());
+    const simpleDialog = document.querySelector("dialog[open]")!;
+    expect(call).toHaveBeenCalledWith("ratioIntradayHistory", { ids: ["a", "b"], refresh: false });
+    expect(simpleDialog.querySelector(".ct-intraday-views")).toBeNull();
+    expect(simpleDialog.querySelector(".ct-intraday-line-ratio strong")?.textContent).toBe("1.640,00");
+    await act(async () => simpleDialog.querySelector("button")!.click());
+    expect(document.querySelector("dialog")).toBeNull();
+    expect(dispose).toHaveBeenCalledOnce();
+    call.mockClear();
+    dispose.mockClear();
+
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Comparar MEP AL30 con D30N6"]')!.click());
     const dialog = document.querySelector("dialog[open]")!;
     expect(call).toHaveBeenCalledWith("ratioIntradayHistory", { ids: ["a", "b", "c"], refresh: false });
     expect(dialog.querySelector(".ct-intraday-legend")?.textContent).toContain("D30N6 ÷ 100");

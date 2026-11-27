@@ -228,8 +228,12 @@ async (page, group) => {
     await trigger.evaluate(element => {
       const header = element.closest('.NewWidgetHeader');
       Object.assign(header.parentElement.style, { position: 'absolute', top: '360px', left: '420px', width: '320px', height: '240px' });
-      Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '32px' });
+      Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '32px', backgroundColor: '#114068' });
+      element.parentElement.style.color = '#1890ff';
     });
+    const icon = await contrast('TH-24', 'Icono del gráfico intradiario en el encabezado del Book', trigger.locator('svg path'),
+      { foreground: 'stroke', minimum: 3 });
+    if (icon.text.some(channel => channel !== 255)) throw Error('El icono del encabezado del Book debe verse blanco');
     await page.locator('.SecurityCardWidget .NewWidgetHeader > a').focus();
     await page.keyboard.press('Tab');
     const book = page.locator('.ct-book-intraday');
