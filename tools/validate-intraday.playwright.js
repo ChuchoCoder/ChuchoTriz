@@ -119,6 +119,14 @@ async (page, screenshots) => {
   const simpleRatioRow = page.locator('.ct-ratios-widget tr').filter({ has: simpleRatioButton });
   const savedRatio = '9,09%';
   await valueIs(simpleRatioRow.locator('.ct-ratios-value'), savedRatio, 'The default BMA/GGAL row uses percentage format');
+  const referenceRatioRow = page.locator('.ct-ratios-widget tr').filter({ has: button('Comparar MEP AL30 con DLR/SPOT') });
+  const actionPositions = row => row.locator('.ct-ratios-actions').evaluate(cell =>
+    [...cell.querySelectorAll(':scope > a, :scope > button, .ct-intraday-chart-button > svg')]
+      .map(action => action.getBoundingClientRect().left));
+  const [simpleActions, referenceActions] = await Promise.all([actionPositions(simpleRatioRow), actionPositions(referenceRatioRow)]);
+  assert(simpleActions.length === 6 && simpleActions.every((left, index) => Math.abs(left - referenceActions[index]) < 0.5),
+    'Widget actions and chart icons share columns across A/B and Referencia C rows');
+
   await simpleRatioButton.press('Enter');
   const simpleRatioDialog = page.getByRole('dialog', { name: 'BMA/GGAL', exact: true });
   const simpleRatioPlot = simpleRatioDialog.getByRole('img', { name: 'Gráfico intradiario de BMA/GGAL' });

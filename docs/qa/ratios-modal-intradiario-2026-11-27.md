@@ -26,6 +26,13 @@ repetir ese grupo pasaron los 12 casos entre ambos temas. El caso
 de Tenencia del instrumento agotó la misma espera de visibilidad en
 ambos temas sobre el candidato y sobre `main`.
 
+## Alineación de los iconos
+
+El acceso intradiario reserva el mismo ancho y la misma posición del
+icono en las filas «5m» y «C». El recorrido comparó la posición horizontal
+de las acciones entre ambos tipos de fila. Pasaron los 58 casos en oscuro
+y los 58 en claro.
+
 ## Rendimiento
 
 El cambio agrega un botón por fila A/B. Las lecturas y el gráfico se inician
