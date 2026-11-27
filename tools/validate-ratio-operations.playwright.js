@@ -815,13 +815,28 @@ async page => {
   assert((await closeRows.first().innerText()).includes('Ratio de cierre'), 'Common ratios show the ratio calculated from the historical closing prices');
 
   await click(button('1 · Monitor'));
-  await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
   const lastC = page.getByRole('button', { name: /^Usar último C/ });
   const openingDate = label('Fecha/hora de apertura · Argentina');
-  const openedMinute = await openingDate.inputValue();
-  await lastC.click();
-  const browserNow = await page.evaluate(() => Date.now());
-  await page.clock.setFixedTime(new Date(browserNow + 120_000));
+  const originalDate = await page.evaluateHandle(() => window.Date);
+  let openedMinute;
+  try {
+    // Seed an older draft in this fixture so the next price copy moves it to the current minute.
+    await page.evaluate(NativeDate => {
+      const draftTime = NativeDate.now() - 120_000;
+      window.Date = new Proxy(NativeDate, {
+        construct(target, args, newTarget) {
+          return Reflect.construct(target, args.length ? args : [draftTime], newTarget);
+        },
+      });
+    }, originalDate);
+    await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
+    await lastC.click();
+    await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1572.5');
+    openedMinute = await openingDate.inputValue();
+  } finally {
+    try { await page.evaluate(NativeDate => { window.Date = NativeDate; }, originalDate); }
+    finally { await originalDate.dispose(); }
+  }
   await page.evaluate(() => {
     const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT');
     spot.md.lst = 1580; spot.md.seq++;
@@ -834,7 +849,6 @@ async page => {
   await lastC.click();
   await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1580' &&
     (document.querySelector('[aria-label="Precio de entrada A"]')?.value ?? '') !== '');
-  await page.clock.setFixedTime(new Date(browserNow));
   await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
     'Changing the opening date clears current market prefills');
