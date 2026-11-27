@@ -149,6 +149,8 @@ Para medir la carga inicial de las herramientas, usá el mismo envoltorio con `t
 
 El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a Cantidades rápidas quedan disponibles antes de pedir las herramientas. También cubre la primera visita, la reapertura del simulador, el contraste y el foco durante la carga y el uso del ticket después de un fallo de descarga.
 
+El grupo `widget-startup` mide cuándo aparecen los widgets guardados de Ratios y Dólar intradiario si el tablero tarda en iniciar o si su configuración llega después de su ID. También comprueba que el reintento rápido venza, que un espacio guardado recortado no mantenga la lectura activa y que las lecturas se detengan al ocultar los widgets o pasar a un tablero sin ellos.
+
 ## Cobertura automática y comprobaciones humanas
 
 | Casos de la guía | Grupo de navegador | Cobertura reproducible |
@@ -157,7 +159,7 @@ El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a C
 | SM-02, SM-03, SM-02-shortcut, RG-01 | `presets` | RAW válido/inválido, guardado/recarga, cantidad fija/aleatoria, último preset, Limpiar, reemplazo de formulario y foco tras cotización. El engranaje abre la configuración que usa el ticket, conserva el borrador y devuelve el foco al cerrar. |
 | AC-01–AC-08 | `autocomplete` | Default apagado, presets manuales, elección exacta por ticker/plazos, persistencia, ajuste global ausente y clave antigua ignorada, preferencias por instrumento conservadas al guardar presets, eventos externos, errores/reintentos, guardados demorados, remount, teclado y geometría a 1024/1440/1920. |
 | SM-11, SM-11-labels, SM-11-column, SM-11-menu, SM-11-long-labels, SM-11-autocomplete, SM-11-empty | `mini-layout` | Los presets usan las filas disponibles a la izquierda de las acciones, sin scroll en el mini formulario. Los que no entran y los de etiqueta larga se leen completos en el menú. Autocompletar ocupa su propia fila arriba cuando los controles no entran juntos y hay altura disponible. Si cambia la distribución, se mantienen el foco y el estado de guardado de Autocompletar. Verifica la altura nativa y la posición estable de las acciones al cambiar de instrumento y con el ticket vacío. |
-| TP-01–TP-12 | `ticket-position` | Tenencia y proyecciones CI/24 h, contraste de compra y venta, cruz y ojo alineados, foco por teclado, cantidad conservada, suspensión de consultas y persistencia tras recargar. Consulta pendiente, error, demora, garantía, garantía sin verificar y tenencia cero. |
+| TP-01–TP-13 | `ticket-position` | Tenencia y proyecciones CI/24 h, contraste de compra y venta, cruz y ojo alineados, foco por teclado, cantidad conservada, suspensión de consultas y persistencia tras recargar. Consulta pendiente, error, demora, garantía, garantía sin verificar y tenencia cero. Carga disponible con un cálculo del día de más de cinco minutos y su hora en el tooltip. |
 | SM-04 | `quotes` | Calls/puts, selección y deselección, último operado como respaldo, prima ausente y bloqueo de precarga sin punta. |
 | SM-04-drag | `quotes` | Arrastre nativo en ambos sentidos, nueva prima y VI, origen cruzado, Escape y rechazo de destinos ocupados, sin punta o de otro tipo o lado. |
 | SM-05 | `columns` | Ocultar/mostrar/reordenar, persistencia, encabezados simétricos y columnas fijas. Extrínseco Bid/Ask: selección e intercambio, calls/puts ATM/ITM/OTM, puntas independientes, ceros/negativos, VI ausente, precio/tamaño inválidos y desconexión/recuperación. |

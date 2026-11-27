@@ -262,17 +262,32 @@ it("recovers on a second detached read even if the first has not settled", async
   expect(row(1)[1]).toBe("10");
 });
 
-it("shows the last same-day calculation while withholding a stale fill and rejecting future reports", async () => {
+it("offers the full quantity from a same-day calculation older than five minutes", async () => {
   vi.setSystemTime(new Date("2026-11-26T15:00:00-03:00"));
   portfolio.detailedPositionReport = withRows(holding(al30, 0, 80));
-  read().lastCalculation = new Date(Date.now() - 6 * 60_000);
+  const calculation = new Date(Date.now() - 30 * 60_000);
+  read().lastCalculation = calculation;
   new Function(script)();
   await wait();
   expect(row(1)[1]).toBe("80");
-  expect(panel().querySelector("[role=status]")?.textContent).toContain("Último cálculo de Matriz");
-  expect(button().hidden).toBe(true);
+  expect(button().hidden).toBe(false);
+  expect(button().textContent).toBe("Usar 80");
+  expect(panel().querySelector("[role=status]")).toHaveProperty("hidden", true);
+  expect(panel().querySelector(".ct-ticket-position-projection")).toHaveProperty("title", expect.stringContaining("Último cálculo de Matriz"));
+
+  portfolio.detailedPositionReport = withRows(holding(al30, 0, 60));
+  read().lastCalculation = calculation;
+  button().click();
+  await wait();
+  expect(qty().value).toBe("60");
+  expect(reportRequest).toHaveBeenCalledTimes(2);
+});
+
+it("rejects future broker calculations beyond the clock tolerance", async () => {
+  vi.setSystemTime(new Date("2026-11-26T15:00:00-03:00"));
+  portfolio.detailedPositionReport = withRows(holding(al30, 0, 80));
   read().lastCalculation = new Date(Date.now() + 60_000);
-  select(al30Ci);
+  new Function(script)();
   await wait();
   expect(panel().textContent).toContain("Posición no disponible");
 });

@@ -138,9 +138,8 @@ y completa el campo según el último cálculo de Matriz para ese plazo.
 En CI usa el saldo liquidado y descuenta el saldo
 negativo pendiente a 24 h. En 24 h suma ambos plazos. La orden se confirma desde
 los controles habituales de Matriz. El botón requiere información de garantía
-verificada y un cálculo de Matriz de hasta cinco minutos. Si el último cálculo
-del día es anterior, la franja muestra su hora junto a los saldos. Los plazos se
-interpretan con la fecha de Buenos Aires.
+verificada y un cálculo del día según la fecha de Buenos Aires. La fecha y hora
+del cálculo se pueden consultar sobre la tabla.
 
 La **×** de la esquina superior derecha oculta la franja y pausa las consultas.
 El ojo junto a **Cantidad** vuelve a mostrarla y consulta el saldo del ticket.

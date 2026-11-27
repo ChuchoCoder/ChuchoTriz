@@ -18,6 +18,8 @@ const widgetSelector = "[data-ct-ratios-slot]";
 const savedWidgetSelector = '[class*="DashboardGridItem-ChuchoTrizRatiosWidget"], [class*="DashboardGridItem-ChuchoTrizIntradayDollarWidget"]';
 const nativeStructure = [dashboardSelector, ".GridLayout", ".DashboardGridItem", menuSelector, "#ToolPanel", ".ToolContent", drawerHeaderSelector].join(", ");
 const discoveryDelays = [250, 750, 2000];
+const savedWidgetRetryInterval = 250;
+const savedWidgetRetryWindow = 8000;
 
 type WidgetSize = { width: number; height: number };
 type ResizeSpace = { right: number; neighbors: { left: number; top: number; right: number; bottom: number }[] };
@@ -431,44 +433,64 @@ export default function RatiosDashboard() {
     if (typeof globalThis.chrome?.runtime?.getURL !== "function") return;
     const menus = new Map<Element, HTMLElement>(), widgets = new Map<HTMLElement, HTMLElement>();
     const menuVisibility = new Map<Element, boolean>();
-    const visible = new Set<Element>();
+    const widgetVisibility = new Map<HTMLElement, boolean | undefined>();
+    let savedWidgets = new Set<HTMLElement>();
     let slots = new Map<string, HTMLElement>();
     let drawerHeaders: Element[] = [];
     let closed = false, inScope = false, running = false, queued = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let retry = 0, retryDelay: number | undefined;
+    let discovery: "dashboard" | "slots" | undefined;
+    let savedWidgetRetryUntil: number | undefined;
+    let lastDashboardId: RatiosState["dashboardId"];
 
     const isVisible = (id: string) => {
       const host = slots.get(id)?.parentElement;
-      return host?.isConnected && visible.has(host);
+      return host?.isConnected && widgetVisibility.get(host) === true;
     };
     const shouldPoll = () => current.current.widgets.some(({ config }) => config.pairs.length > 0 && isVisible(config.id)) ||
       // A visible legacy dollar widget can resolve its legs after the security list arrives.
       current.current.dollarWidgets?.some(({ config }) => isVisible(config.id));
+    const isPendingWidget = (host: HTMLElement) => host.isConnected && !host.dataset.ctRatiosSlot;
+    const hasPendingVisibleWidget = () => [...savedWidgets].some(host =>
+      widgetVisibility.get(host) === true && isPendingWidget(host));
+    const discoveryDelay = () => {
+      if (!discovery) return;
+      if (hasPendingVisibleWidget()) {
+        savedWidgetRetryUntil ??= performance.now() + savedWidgetRetryWindow;
+        if (performance.now() + savedWidgetRetryInterval <= savedWidgetRetryUntil) return savedWidgetRetryInterval;
+      }
+      // A valid dashboard can have a stale native slot. Stop looking once the startup window ends.
+      if (discovery === "slots") return;
+      if (retryDelay !== undefined) return retryDelay;
+      const hasVisibleMenu = [...menus.keys()].some(parent => menuVisibility.get(parent) ?? parent.getClientRects().length > 0);
+      if (hasVisibleMenu || [...savedWidgets].some(host => widgetVisibility.get(host) === true)) return 5000;
+    };
     const schedule = () => {
       clearTimeout(timer);
       if (closed || pending.current) return;
       if (!inScope) {
+        savedWidgetRetryUntil = undefined;
+        lastDashboardId = undefined;
+        discovery = undefined;
         reader.current?.dispose(); reader.current = null;
         if (current.current !== emptyState) publish(emptyState);
         return;
       }
       if (document.hidden || running) return;
-      const delay = queued ? 0 : retryDelay ?? (shouldPoll() ? 1500 : undefined);
+      const delay = queued ? 0 : discoveryDelay() ?? (shouldPoll() ? 1500 : undefined);
       if (delay !== undefined) timer = setTimeout(() => void refresh(), delay);
     };
     const requestRefresh = () => { queued = true; retry = 0; retryDelay = undefined; schedule(); };
-    const retryDiscovery = () => {
+    const retryDashboard = () => {
+      discovery = "dashboard";
       retryDelay = discoveryDelays.at(retry++);
-      if (retryDelay !== undefined) return;
-      // Slow startup can outlast the initial burst. Keep looking while a menu or a saved widget needs its first state.
-      const hasVisibleMenu = [...menus.keys()].some(parent => menuVisibility.get(parent) ?? parent.getClientRects().length > 0);
-      if (hasVisibleMenu || document.querySelector(savedWidgetSelector)) retryDelay = 5000;
     };
     const refresh = async () => {
       if (closed || !inScope || document.hidden || running || pending.current) return;
       queued = false;
       retryDelay = undefined;
+      discovery = undefined;
       running = true;
       const client = reader.current ??= new MarketReader("ratios-reader.js");
       const version = commandVersion.current;
@@ -477,15 +499,23 @@ export default function RatiosDashboard() {
         const visibleWidgetIds = [...slots.keys()].filter(isVisible);
         const next = await client.call<RatiosState>("ratiosState", { visibleWidgetIds });
         if (isCurrent()) {
+          if (next.dashboardId && next.dashboardId !== lastDashboardId) {
+            if (lastDashboardId) savedWidgetRetryUntil = undefined;
+            lastDashboardId = next.dashboardId;
+          }
           publish(next);
-          // The native shell may mount before its dashboard store has hydrated.
-          if (!next.dashboardId && document.querySelector(dashboardSelector)) retryDiscovery();
-          else retry = 0;
+          // The native shell can precede both the store and its saved layout.
+          if (!next.dashboardId && document.querySelector(dashboardSelector)) retryDashboard();
+          else if (next.dashboardId && [...savedWidgets].some(isPendingWidget)) discovery = "slots";
+          else {
+            retry = 0;
+            savedWidgetRetryUntil = undefined;
+          }
         }
       } catch (error) {
         if (isCurrent()) {
           publish({ ...current.current, canAdd: false, quotes: {}, issue: error instanceof Error ? error.message : "Ratios no disponible." });
-          if (!shouldPoll()) retryDiscovery();
+          if (!shouldPoll() || hasPendingVisibleWidget()) retryDashboard();
         }
       } finally {
         running = false;
@@ -494,20 +524,23 @@ export default function RatiosDashboard() {
     };
     const intersection = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(entries => {
       let revealed = false;
-      for (const { target, isIntersecting } of entries) {
+      for (const { target, isIntersecting, intersectionRatio } of entries) {
         if (menus.has(target)) {
           revealed ||= isIntersecting && menuVisibility.get(target) === false;
           menuVisibility.set(target, isIntersecting);
           continue;
         }
-        if (isIntersecting && widgets.has(target as HTMLElement)) {
-          revealed ||= !visible.has(target);
-          visible.add(target);
-        } else visible.delete(target);
+        const host = target as HTMLElement;
+        if (!widgetVisibility.has(host)) continue;
+        const previous = widgetVisibility.get(host);
+        const shown = isIntersecting && intersectionRatio > 0;
+        if (shown && previous === false && savedWidgets.has(host) && isPendingWidget(host)) savedWidgetRetryUntil = undefined;
+        revealed ||= shown && (previous === false || (previous === undefined && widgets.has(host)));
+        widgetVisibility.set(host, shown);
       }
       showLocations();
       if (revealed) requestRefresh(); else schedule();
-    });
+    }, { threshold: [0, Number.EPSILON] });
 
     const reconcileMenus = () => {
       const lists = [...document.querySelectorAll(menuSelector)];
@@ -533,17 +566,28 @@ export default function RatiosDashboard() {
     };
     const reconcileWidgets = () => {
       const parents = new Set(document.querySelectorAll<HTMLElement>(widgetSelector));
-      for (const [parent, slot] of widgets) if (!parents.has(parent)) {
-        intersection?.unobserve(parent); visible.delete(parent); slot.remove(); widgets.delete(parent);
+      savedWidgets = new Set(document.querySelectorAll<HTMLElement>(savedWidgetSelector));
+      const observed = new Set([...savedWidgets, ...parents]);
+      for (const host of widgetVisibility.keys()) if (!observed.has(host)) {
+        intersection?.unobserve(host); widgetVisibility.delete(host);
       }
+      for (const host of observed) if (!widgetVisibility.has(host)) {
+        widgetVisibility.set(host, intersection ? undefined : true);
+        intersection?.observe(host);
+      }
+      for (const [parent, slot] of widgets) if (!parents.has(parent)) {
+        slot.remove(); widgets.delete(parent);
+      }
+      let attachedVisible = false;
       for (const parent of parents) if (!widgets.get(parent)?.isConnected) {
-        if (intersection) intersection.observe(parent); else visible.add(parent);
         const slot = document.createElement("div"); slot.className = "ct-ratios-root"; parent.append(slot); widgets.set(parent, slot);
+        attachedVisible ||= widgetVisibility.get(parent) === true;
       }
       slots = new Map([...widgets].map(([parent, slot]) => [parent.dataset.ctRatiosSlot!, slot]));
+      return attachedVisible;
     };
     const showLocations = () => {
-      const visibleIds = new Set([...widgets].flatMap(([host]) => visible.has(host) ? [host.dataset.ctRatiosSlot!] : []));
+      const visibleIds = new Set([...widgets].flatMap(([host]) => widgetVisibility.get(host) ? [host.dataset.ctRatiosSlot!] : []));
       const next = { menus: [...menus.values()], widgets: slots, visible: visibleIds };
       setLocations(previous => previous.menus.length === next.menus.length && previous.menus.every((slot, index) => slot === next.menus[index]) &&
         previous.widgets.size === next.widgets.size && [...previous.widgets].every(([id, slot]) => next.widgets.get(id) === slot) &&
@@ -562,7 +606,10 @@ export default function RatiosDashboard() {
     const stop = observePageStructure(({ elements, ratioSlotChanged }) => {
       if (containsChangedElements(elements, nativeStructure)) discover();
       else if (ratioSlotChanged || containsChangedElements(elements, widgetSelector) || displaced(menus) || displaced(widgets)) {
-        reconcileMenus(); reconcileWidgets(); showLocations(); schedule();
+        reconcileMenus();
+        const attachedVisible = reconcileWidgets();
+        showLocations();
+        if (attachedVisible) requestRefresh(); else schedule();
       }
     });
     const visibilityChanged = () => { if (document.hidden) schedule(); else discover(); };
@@ -571,6 +618,7 @@ export default function RatiosDashboard() {
     const navigated = () => {
       if (path === location.pathname) return;
       path = location.pathname;
+      savedWidgetRetryUntil = undefined;
       discover();
     };
     resume.current = discover => { if (discover) requestRefresh(); else schedule(); };

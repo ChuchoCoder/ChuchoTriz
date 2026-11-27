@@ -8,7 +8,6 @@
   const refreshMs = 20_000;
   const requestTimeoutMs = 10_000;
   const maxPendingReads = 2;
-  const maxFillAgeMs = 5 * 60_000;
   const clockSkewMs = 30_000;
   const format = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 8 });
   const timeZone = "America/Argentina/Buenos_Aires";
@@ -16,7 +15,6 @@
   const reportDay = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeZone });
   const isCurrentReport = (time, now) => Number.isFinite(time) && time > 0 &&
     time <= now + clockSkewMs && reportDay.format(time) === reportDay.format(now);
-  const isRecentReport = time => Date.now() - time <= maxFillAgeMs;
   // Equivalencias no triviales de Resources/Defaults/dollar_cable_equivalences.json (ChuchoBot Premium).
   const equivalents = new Map([
     ["AEC2O", ["AEC2D", "AEC2C"]], ["AER1O", ["AER1D", "AER1C"]],
@@ -174,9 +172,9 @@
     };
   }
 
-  function usableQuantity(ticket, position, reportedAt) {
+  function usableQuantity(ticket, position) {
     const { quantity, security } = ticket;
-    if (!position || !isRecentReport(reportedAt) || position.collateral !== "clear" || quantity.disabled || quantity.readOnly) return;
+    if (!position || position.collateral !== "clear" || quantity.disabled || quantity.readOnly) return;
     const { sellable } = position;
     const max = Number(quantity.getAttribute("aria-valuemax") ?? Number.MAX_SAFE_INTEGER);
     const precision = security.refData?.sizePrecision ?? 0;
@@ -216,12 +214,10 @@
       return;
     }
     const reportLabel = `Último cálculo de Matriz: ${reportTime.format(snapshot.reportedAt)}`;
-    const notices = [];
-    if (!isRecentReport(snapshot.reportedAt)) notices.push(reportLabel);
-    if (position.collateral === "pledged") notices.push("Incluye garantía");
-    if (position.collateral === "unknown" && position.sellable > 0) notices.push("Garantía sin verificar");
-    status.hidden = notices.length === 0;
-    text(status, notices.join(" · "));
+    const notice = position.collateral === "pledged" ? "Incluye garantía" :
+      position.collateral === "unknown" && position.sellable > 0 ? "Garantía sin verificar" : "";
+    status.hidden = !notice;
+    text(status, notice);
     table.hidden = false;
     table.title = reportLabel;
     text(orderTerm, term === "CI" ? "Orden en CI" : "Orden a 24 h");
@@ -234,7 +230,7 @@
       text(row.cells[2], amount && validQuantity(buy) ? format.format(buy) : "—");
       text(row.cells[3], amount && validQuantity(sell) ? format.format(sell) : "—");
     }
-    const quantity = usableQuantity(ticket, position, snapshot.reportedAt);
+    const quantity = usableQuantity(ticket, position);
     fill.hidden = quantity === undefined;
     const filling = fillRequest?.selection === selection;
     fill.setAttribute("aria-disabled", String(filling));
@@ -278,7 +274,7 @@
     fill.addEventListener("click", async event => {
       const ticket = readTicket(form);
       if (event.currentTarget !== fill || !isVisible() || !ticket || fillRequest || currentForm() !== form || !sameTicket(ticket, selection) ||
-          (!inFlight && pendingReads >= maxPendingReads) || usableQuantity(ticket, currentPosition(), snapshot?.reportedAt) === undefined) return;
+          (!inFlight && pendingReads >= maxPendingReads) || usableQuantity(ticket, currentPosition()) === undefined) return;
       const { quantity } = ticket;
       const request = { selection, quantity, value: quantity.value };
       fillRequest = request;
@@ -288,7 +284,7 @@
         const current = readTicket(currentForm());
         if (!isVisible() || fillRequest !== request || request.selection !== selection || !sameTicket(current, ticket) ||
             current.quantity !== quantity || quantity.value !== request.value) return;
-        const nominal = usableQuantity(current, currentPosition(), snapshot?.reportedAt);
+        const nominal = usableQuantity(current, currentPosition());
         if (nominal === undefined) return;
         const value = nominal.toLocaleString("es-AR", { useGrouping: false, maximumFractionDigits: 8 });
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(quantity, value);
