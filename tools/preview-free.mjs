@@ -152,8 +152,11 @@ function installMarketFixture(regression) {
       instrument.parentElement.classList.add('SearchSecurity');
       instrument.setAttribute('role', 'combobox');
       const wrap = quantity.parentElement;
-      wrap.insertAdjacentHTML('beforebegin', '<div class="ant-form-item-control-input-content" style="width:140px"><div class="ant-input-number"></div></div>');
+      wrap.insertAdjacentHTML('beforebegin', '<div class="ant-form-item-control-input-content" style="width:140px"><div class="ant-input-number" style="width:100%"></div></div>');
       wrap.previousElementSibling.firstElementChild.append(wrap);
+      quantity.classList.add('ant-input-number-input');
+      Object.assign(quantity.style, { width: '100%', height: '28px', boxSizing: 'border-box' });
+      quantity.closest('.MiniOrderFormQuantity-amount-input').insertAdjacentHTML('afterend', '<span class="DblArrowButton" style="align-self:end">↔</span>');
     }
     const security = ticketReport.series[term === 'CI' ? 0 : 1];
     quantity.__reactProps$fixture = { security };

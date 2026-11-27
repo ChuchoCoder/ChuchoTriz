@@ -67,16 +67,23 @@ async (page, group) => {
     await page.goto(new URL('/index.html', page.url()).href, { waitUntil: 'domcontentloaded' });
     await contrast('TH-09', 'Título de Opciones independiente', page.locator('.options-heading h1'));
   } else if (group === 'ticket-position') {
-    await page.clock.install({ time: new Date('2026-11-27T14:00:00-03:00') });
-    await page.reload();
-    await page.evaluate(() => {
+    // Simulate the broker timestamp inside the fixture. The Playwright clock affects the shared browser context.
+    const olderReport = await page.evaluate(() => {
       const portfolio = Object.getPrototypeOf(window.mainStore.portfolioStore);
       const read = portfolio.getDetailedPositionReport;
+      const timeZone = 'America/Argentina/Buenos_Aires';
+      const day = new Intl.DateTimeFormat('es-AR', { timeZone, dateStyle: 'short' });
+      const now = Date.now();
+      const today = day.format(now);
+      const earlier = [30 * 60_000, 5 * 60_000 + 1000].map(age => now - age).find(time => day.format(time) === today);
+      if (earlier === undefined) return null;
       portfolio.getDetailedPositionReport = async function (...args) {
         const report = await read.apply(this, args);
-        report.lastCalculation = new Date('2026-11-27T13:30:00-03:00');
+        if (day.format(Date.now()) === today) report.lastCalculation = new Date(earlier);
         return report;
       };
+      const reportTime = new Intl.DateTimeFormat('es-AR', { timeZone, dateStyle: 'short', timeStyle: 'short' });
+      return { today, age: now - earlier, tooltip: `Último cálculo de Matriz: ${reportTime.format(earlier)}` };
     });
     const panel = page.getByRole('region', { name: 'Tenencia del instrumento', exact: true });
     const close = page.getByRole('button', { name: 'Ocultar tenencia', exact: true });
@@ -92,10 +99,19 @@ async (page, group) => {
     await qty.fill('2500');
     await expectRows(['CI', '12.500', '15.000', '10.000'], ['24 h', '10.000', '12.500', '7.500']);
     await panel.getByRole('button', { name: /^Usar 10\.000/ }).waitFor();
-    if (await panel.getByRole('status').isVisible() || !(await panel.locator('.ct-ticket-position-projection').getAttribute('title'))?.includes('Último cálculo de Matriz')) {
+    const tooltip = await panel.locator('.ct-ticket-position-projection').getAttribute('title');
+    if (await panel.getByRole('status').isVisible() || !tooltip?.startsWith('Último cálculo de Matriz: ')) {
       throw Error('La fecha debe quedar en el tooltip sin ocultar Usar');
     }
-    cases.push({ id: 'TP-13', status: 'PASS', detail: 'Cálculo del día con 30 minutos de antigüedad: el botón sigue disponible y la hora queda en el tooltip' });
+    const currentDay = await page.evaluate(() => new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short',
+    }).format(new Date()));
+    if (olderReport?.today === currentDay) {
+      if (tooltip !== olderReport.tooltip) throw Error('El tooltip debe mostrar la hora del cálculo simulado');
+      const minutes = Math.floor(olderReport.age / 60_000);
+      const seconds = (olderReport.age % 60_000) / 1000;
+      cases.push({ id: 'TP-13', status: 'PASS', detail: `Cálculo del día con ${minutes} min y ${seconds} s de antigüedad: Usar disponible y hora exacta en el tooltip` });
+    }
     const buy = await contrast('TP-01', 'Columna Si comprás', panel.locator('thead .ct-buy'));
     const sell = await contrast('TP-02', 'Columna Si vendés', panel.locator('thead .ct-sell'));
     if (buy.ratio === sell.ratio) throw Error('Compra y venta deben usar colores distintos');
@@ -108,16 +124,28 @@ async (page, group) => {
     if (!stripBox || !closeBox || closeBox.y - stripBox.y > 4 || stripBox.x + stripBox.width - closeBox.x - closeBox.width > 4) {
       throw Error('Cruz fuera de la esquina del panel');
     }
+    const arrows = page.locator('#MiniOrderForm .DblArrowButton');
+    const [qtyBefore, arrowsBefore] = await Promise.all([qty.boundingBox(), arrows.boundingBox()]);
+    if (!qtyBefore || !arrowsBefore) throw Error('Faltan Cantidad o las flechas de Monto en el fixture');
     await close.press('Space');
     await eye.waitFor();
     await panel.waitFor({ state: 'hidden' });
     if (!await eye.evaluate(button => document.activeElement === button && button.matches(':focus-visible'))) throw Error('Foco perdido al ocultar');
     if (await qty.inputValue() !== '2500') throw Error('Ocultar alteró la cantidad');
-    const [eyeBox, qtyBox] = await Promise.all([eye.boundingBox(), qty.boundingBox()]);
-    if (!eyeBox || !qtyBox || eyeBox.x < qtyBox.x + qtyBox.width - 1 || Math.abs(eyeBox.y - qtyBox.y) > 8) {
-      throw Error('Ojo desalineado respecto de Cantidad');
+    const [eyeBox, qtyBox, arrowsBox] = await Promise.all([eye.boundingBox(), qty.boundingBox(), arrows.boundingBox()]);
+    const eyeKeepsClear = await eye.evaluate(button => {
+      const rect = button.getBoundingClientRect();
+      const input = button.previousElementSibling.querySelector('input');
+      const contentRight = input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight);
+      return getComputedStyle(button).borderRightWidth === '0px' && rect.left >= contentRight - 1 &&
+        button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    });
+    if (!eyeBox || !qtyBox || !arrowsBox || !eyeKeepsClear || Math.abs(qtyBox.width - qtyBefore.width) > 1 ||
+        Math.abs(arrowsBox.x - arrowsBefore.x) > 1 || eyeBox.x + eyeBox.width > arrowsBox.x - 4 ||
+        eyeBox.x + eyeBox.width > qtyBox.x + qtyBox.width || Math.abs(eyeBox.y + eyeBox.height / 2 - qtyBox.y - qtyBox.height / 2) > 2) {
+      throw Error('El ojo debe quedar dentro de Cantidad y separado del texto y las flechas');
     }
-    await contrast('TP-05', 'Ojo junto a Cantidad', eye.locator('svg'), { foreground: 'stroke', minimum: 3 });
+    await contrast('TP-05', 'Ojo integrado en Cantidad y separado de las flechas', eye.locator('svg'), { foreground: 'stroke', minimum: 3 });
     await eye.evaluate(button => button.click());
     if ((await page.evaluate(() => chrome.storage.local.get('TicketPositionVisible'))).TicketPositionVisible !== false) {
       throw Error('Un clic sintético cambió la preferencia persistida');
