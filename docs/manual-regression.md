@@ -16,8 +16,8 @@ Para **futuros como referencia C**, ejecutar además
 `node tools/ratios-fixture.mjs`, con el MCP compartido. Verifica selección de
 DLR/NOV26 en el widget y DLR/DIC26 en Monitor, cálculo sin multiplicador de
 contrato, persistencia tras recarga, actualización y ausencia de precio,
-restricción a monitor y gráfico de C en su panel numérico propio, con las velas
-de cinco minutos arriba y A/B abajo. Usar sólo la página loopback con datos
+apertura habilitada para A/B y gráfico de C en su panel numérico propio, con
+las velas de cinco minutos arriba y A/B abajo. Usar sólo la página loopback con datos
 sintéticos, nunca el broker.
 
 Para el tab **Ratios**, ejecutá además
@@ -36,6 +36,10 @@ remanentes históricos desparejos, una pata ya cerrada, doble click y conflictos
 de revisión o cambio de cuenta mientras el cierre espera el lock de guardado.
 Incluye lotes mayores a 1: para un lote de 10, 100 y 110 deben ser válidos,
 105 inválido, y una apertura con 110 debe poder guardarse y eliminarse.
+La regresión cubre carga manual de C con fecha histórica, objetivos A/B y
+brecha independientes, corrección de C al cerrar, el divisor C/100, cierres independientes de futuros
+y el ratio de cierre de un par común. En ambos temas se comprueban el ajuste y
+el foco por teclado de los campos nuevos en ancho reducido.
 En Matriz instalada, comprobar selección, precios nativos y tasas por CFI, sin
 alterar cotizaciones ni enviar órdenes. Registrar qué parte fue simulada y cuál
 se observó en el broker.

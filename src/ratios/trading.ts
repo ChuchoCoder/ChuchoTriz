@@ -1,4 +1,4 @@
-import { pairKey, ratioLabel, tickerKey, type RatioInstrument, type RatioReference } from "./model";
+import { calculateRatio, pairKey, ratioLabel, referenceCQuote, tickerKey, type RatioInstrument, type RatioReference } from "./model";
 import { formatOptionInput } from "../optionsSimulator/format";
 
 export interface TradingInstrument extends RatioInstrument {
@@ -14,18 +14,28 @@ export interface TradingQuote {
   tradedAt?: number; amountFactor?: number; issue?: string; reference?: number; referenceDate?: string;
 }
 export interface TradingPair extends RatioReference { id: string; a: TradingInstrument; b: TradingInstrument; c?: TradingInstrument }
-export interface RatioExit { quantity: number; price: number; at: string; closeId?: string }
+export interface RatioExit { quantity: number; price: number; at: string; closeId?: string; referencePrice?: number }
+export type TradingLegIndex = 0 | 1 | 2;
+export const tradingLegNames = ["A", "B", "C"] as const;
 export interface TradingLeg {
   instrument: TradingInstrument; side: 1 | -1; quantity: number; entry: number;
   factor: number; step: number; ddmm: number; exits: RatioExit[];
 }
+type TradingLegs = [TradingLeg, TradingLeg] | [TradingLeg, TradingLeg, TradingLeg];
+export interface OperationReference {
+  instrument: TradingInstrument;
+  divisor?: 100;
+  entry: number;
+  goal?: { value: number; comparison: "above" | "below" };
+}
 export interface RatioOperation {
   id: string; openedAt: string; direction: 1 | -1; commission: number;
   fx: number; // Retained for compatibility with historical records; sizing no longer converts currencies.
-  targetRatio: number | null; legs: [TradingLeg, TradingLeg];
+  targetRatio: number | null; legs: TradingLegs; reference?: OperationReference;
 }
-export interface TradingBook { schema: 1 | 2 | 3; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
-export function tradingBookSchema(watch: readonly TradingPair[]): TradingBook["schema"] {
+export interface TradingBook { schema: 1 | 2 | 3 | 4; revision: string; watchDefaults?: 1; watch: TradingPair[]; operations: RatioOperation[] }
+export function tradingBookSchema(watch: readonly TradingPair[], operations: readonly RatioOperation[] = []): TradingBook["schema"] {
+  if (operations.some(o => o.reference)) return 4;
   return watch.some(p => p.cDivisor) ? 3 : watch.some(p => p.c) ? 2 : 1;
 }
 export function invertWatchPair(book: TradingBook, id: string): TradingBook {
@@ -42,6 +52,8 @@ export const DEFAULT_WATCH_PAIRS = [ ["AL30", "AL30D"], ["AL30", "AL30C"], ["AL3
   ["AL30", "AL30D", "DLR/SPOT"], ["AL30", "AL30C", "DLR/SPOT"] ] as const;
 export const isRateInstrument = (i: Pick<TradingInstrument, "cfi">) => i.cfi === "RPXXXX";
 export const isMonitorOnly = (i: TradingInstrument) => isRateInstrument(i) || i.monitorOnly === true || i.id === "rx_DDF_DLR_SPOT";
+export const canTradeReference = (i: TradingInstrument) => i.market === "rx" && i.settlement === "Futuro" &&
+  i.quantityUnit === "contratos" && (i.cfi === "FXXXSX" || i.cfi === "FXXXXX") && i.id !== "rx_DDF_DLR_SPOT";
 export async function resolveDefaultWatch(search: (query: string) => Promise<TradingInstrument[]>) {
   const symbols = [...new Set(DEFAULT_WATCH_PAIRS.flat())], instruments = new Map<string, TradingInstrument>();
   await Promise.all(symbols.map(async symbol => {
@@ -63,7 +75,7 @@ export function applyDefaultWatch(book: TradingBook, pairs: TradingPair[], resto
   const watch = [...book.watch];
   for (const p of pairs) if (!watch.some(existing => pairKey(existing) === pairKey(p))) watch.push(p);
   if (watch.length > MAX_WATCH) throw Error("El monitor no tiene espacio para los pares predeterminados. Quitá un par y volvé a intentarlo.");
-  return { ...book, schema: tradingBookSchema(watch), watch, watchDefaults: 1 };
+  return { ...book, schema: tradingBookSchema(watch, book.operations), watch, watchDefaults: 1 };
 }
 const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -93,6 +105,19 @@ export function parseGoal(value: string, a: RatioInstrument, b: RatioInstrument)
   if (!positive(raw)) throw Error("El objetivo debe ser un ratio positivo; en porcentaje debe superar −100%.");
   return raw;
 }
+export function parseSpreadGoal(value: string, comparison: "above" | "below"): OperationReference["goal"] {
+  if (value.trim() === "") return undefined;
+  const raw = 1 + Number(value.replace(",", ".")) / 100;
+  if (!positive(raw)) throw Error("El objetivo de brecha debe superar −100%.");
+  return { value: raw, comparison };
+}
+export const spreadGoalInput = (goal: OperationReference["goal"]) => goal ? String(Number(((goal.value - 1) * 100).toFixed(10))) : "";
+export function spreadGoalReached(goal: OperationReference["goal"], spread?: number) {
+  if (!goal || !positive(spread)) return false;
+  const delta = spread - goal.value;
+  return Math.abs(delta) <= 2 * Number.EPSILON * Math.max(spread, goal.value) ||
+    (goal.comparison === "above" ? delta > 0 : delta < 0);
+}
 export const goalReached = (o: RatioOperation, raw: number | undefined) => o.targetRatio !== null && positive(raw) && (o.direction === 1 ? raw >= o.targetRatio : raw <= o.targetRatio);
 export const closedQuantity = (l: TradingLeg) => l.exits.reduce((n, e) => n + e.quantity, 0);
 export const remaining = (l: TradingLeg) => l.quantity - closedQuantity(l);
@@ -105,11 +130,24 @@ export function counterpart(qa: number, pa: number, pb: number, fa: number, fb: 
 }
 export function validateOperation(o: RatioOperation): void {
   if (!text(o?.id) || !date(o.openedAt) || Date.parse(o.openedAt) > Date.now() || ![1, -1].includes(o.direction) || !rate(o.commission) || !positive(o.fx) ||
-    o.targetRatio !== null && !positive(o.targetRatio) || !Array.isArray(o.legs) || o.legs.length !== 2 || o.legs[0]?.instrument?.id === o.legs[1]?.instrument?.id) throw Error("Operación de ratio inválida.");
+    o.targetRatio !== null && !positive(o.targetRatio) || !Array.isArray(o.legs) || ![2, 3].includes(o.legs.length) ||
+    new Set(o.legs.map(l => l?.instrument?.id)).size !== o.legs.length) throw Error("Operación de ratio inválida.");
+  const reference = o.reference, future = o.legs[2];
+  if (reference !== undefined && (!validInstrument(reference?.instrument) || !positive(reference.entry) ||
+    reference.divisor !== undefined && reference.divisor !== 100 ||
+    reference.goal !== undefined && (!positive(reference.goal?.value) || !["above", "below"].includes(reference.goal.comparison)))) {
+    throw Error("Revisá el precio y el objetivo de la referencia C.");
+  }
+  if (o.legs.length === 3 && (!validInstrument(future?.instrument) || !canTradeReference(future.instrument) ||
+    future.instrument.id !== reference?.instrument.id || future.entry !== reference.entry ||
+    future.instrument.currency !== reference.instrument.currency)) throw Error("Revisá el contrato de la pata C.");
   const closeTimes = new Map<string, string>();
+  const closeReferences = new Set<string>();
+  const contractCloses = new Set<string>();
   o.legs.forEach((l, index) => {
-    if (!validInstrument(l?.instrument) || l.side !== (index === 0 ? o.direction : -o.direction) || !quantity(l.quantity) || !quantity(l.step) || l.quantity % l.step !== 0 ||
-      isMonitorOnly(l.instrument) || !positive(l.entry) || !positive(l.factor) || !rate(l.ddmm) || l.quantity * l.entry * l.factor > 1e15 || !Array.isArray(l.exits) || l.exits.length > 1000) throw Error("Revisá precios, factores, lotes, cantidades y DDMM de ambas patas. Las tasas TNA y referencias sólo se monitorean.");
+    if (validInstrument(l?.instrument) && index < 2 && isMonitorOnly(l.instrument)) throw Error("Las tasas TNA y referencias sólo se monitorean en A y B.");
+    if (!validInstrument(l?.instrument) || (index === 2 ? ![1, -1].includes(l.side) : l.side !== (index === 0 ? o.direction : -o.direction)) || !quantity(l.quantity) || !quantity(l.step) || l.quantity % l.step !== 0 ||
+      !positive(l.entry) || !positive(l.factor) || !rate(l.ddmm) || l.quantity * l.entry * l.factor > 1e15 || !Array.isArray(l.exits) || l.exits.length > 1000) throw Error("Revisá precios, factores, lotes, cantidades y DDMM de las patas registradas.");
     let at = Date.parse(o.openedAt);
     const closeIds = new Set<string>();
     for (const e of l.exits) {
@@ -118,54 +156,99 @@ export function validateOperation(o: RatioOperation): void {
         if (!text(e.closeId) || closeIds.has(e.closeId) || (closeTimes.get(e.closeId) ?? e.at) !== e.at) throw Error("Los cierres registrados son inválidos.");
         closeIds.add(e.closeId);
         closeTimes.set(e.closeId, e.at);
+        if (index === 2) contractCloses.add(e.closeId);
+      }
+      if (e.referencePrice !== undefined) {
+        if (!reference || index === 2 || !e.closeId || closeReferences.has(e.closeId) || !positive(e.referencePrice)) {
+          throw Error("El precio de referencia C del cierre es inválido.");
+        }
+        closeReferences.add(e.closeId);
       }
       at = Date.parse(e.at);
     }
     if (closedQuantity(l) > l.quantity) throw Error("La cantidad total no puede ser menor que la cantidad ya cerrada.");
   });
+  if ([...closeReferences].some(id => contractCloses.has(id))) throw Error("El cierre tiene dos precios para C.");
 }
 export function correctOperation(previous: RatioOperation, next: RatioOperation): RatioOperation {
   if (isClosed(previous) || next.id !== previous.id) throw Error("Sólo se puede editar una operación abierta.");
-  if (previous.legs.some(l => l.exits.length) && (previous.direction !== next.direction || previous.legs.some((l, i) =>
-    l.instrument.id !== next.legs[i].instrument.id || l.factor !== next.legs[i].factor || l.step !== next.legs[i].step))) throw Error("Con cierres registrados se conservan instrumentos, sentido y unidades de cotización.");
-  const result: RatioOperation = { ...next, legs: next.legs.map((l, i) => ({ ...l, exits: structuredClone(previous.legs[i].exits) })) as RatioOperation["legs"] };
-  validateOperation(result); return result;
+  if (previous.legs.some(l => l.exits.length) && (previous.legs.length !== next.legs.length ||
+    previous.legs.some((l, i) => {
+      const leg = next.legs[i];
+      return l.instrument.id !== leg?.instrument.id || l.side !== leg.side || l.factor !== leg.factor || l.step !== leg.step;
+    }) || previous.reference?.instrument.id !== next.reference?.instrument.id || previous.reference?.divisor !== next.reference?.divisor)) {
+    throw Error("Con cierres registrados se conservan instrumentos, sentido y unidades de cotización.");
+  }
+  const result: RatioOperation = { ...next, legs: next.legs.map((l, i) => ({ ...l, exits: structuredClone(previous.legs[i]?.exits ?? []) })) as TradingLegs };
+  validateOperation(result);
+  preservePairedFutureCloses(previous, result);
+  return result;
 }
-export function closeOperation(o: RatioOperation, fraction: number, prices: [number, number], at: string): RatioOperation {
-  if (isClosed(o) || ![.25, .5, 1].includes(fraction) || !prices.every(positive)) throw Error("Revisá los dos precios de cierre.");
-  const quantities = o.legs.map(l => {
-    const q = fraction === 1 ? remaining(l) : Math.floor(remaining(l) * fraction / l.step) * l.step;
-    if (q <= 0 && fraction !== 1) throw Error("El cierre parcial debe alcanzar al menos un lote de cada pata.");
+export function closeOperation(o: RatioOperation, fraction: number, prices: number[], at: string, referencePrice?: number): RatioOperation {
+  if (isClosed(o) || ![.25, .5, 1].includes(fraction)) throw Error("Revisá la proporción del cierre.");
+  const quantities = o.legs.map((l, index) => {
+    const balance = remaining(l);
+    const q = fraction === 1 ? balance : Math.floor(balance * fraction / l.step) * l.step;
+    if (q <= 0 && fraction !== 1 && (index !== 2 || balance > 0)) throw Error("El cierre parcial debe alcanzar al menos un lote de cada pata abierta.");
     return q;
-  }) as [number, number];
-  return recordClose(o, quantities, prices, at);
+  });
+  return recordClose(o, quantities, prices, at, referencePrice);
 }
 /** Preserve the open quantities' proportion, independently of currency or current prices. */
-export function partialCloseQuantities(o: RatioOperation, leg: 0 | 1, amount: number): [number, number] {
+export function partialCloseQuantities(o: RatioOperation, leg: TradingLegIndex, amount: number): number[] {
   validateOperation(o);
-  if (![0, 1].includes(leg) || isClosed(o)) throw Error("La operación ya está cerrada o la pata no es válida.");
-  const source = o.legs[leg], other = o.legs[1 - leg], rest = remaining(source), otherRest = remaining(other);
-  if (!quantity(amount) || amount % source.step !== 0) throw Error(`Ingresá una cantidad positiva, múltiplo de ${source.step}, en la pata ${leg === 0 ? "A" : "B"}.`);
+  const source = o.legs[leg];
+  if (!source || isClosed(o)) throw Error("La operación ya está cerrada o la pata no es válida.");
+  const rest = remaining(source);
+  if (!quantity(amount) || amount % source.step !== 0) throw Error(`Ingresá una cantidad positiva, múltiplo de ${source.step}, en la pata ${tradingLegNames[leg]}.`);
   if (amount > rest) throw Error("La cantidad a cerrar supera el remanente de esa pata.");
-  const calculated = amount === rest ? otherRest : Math.round((amount / rest) * (otherRest / other.step)) * other.step;
-  if (otherRest > 0 && calculated === 0) throw Error("El cierre debe alcanzar al menos un lote de la otra pata.");
-  return leg === 0 ? [amount, calculated] : [calculated, amount];
+  return o.legs.map((other, i) => {
+    if (i === leg) return amount;
+    const otherRest = remaining(other);
+    const calculated = amount === rest ? otherRest : Math.round((amount / rest) * (otherRest / other.step)) * other.step;
+    if (otherRest > 0 && calculated === 0) throw Error("El cierre debe alcanzar al menos un lote de cada pata abierta.");
+    return calculated;
+  });
 }
-export function closeOperationByQuantity(o: RatioOperation, leg: 0 | 1, amount: number, prices: [number, number], at: string): RatioOperation {
-  return recordClose(o, partialCloseQuantities(o, leg, amount), prices, at);
+export function closeOperationByQuantity(o: RatioOperation, leg: TradingLegIndex, amount: number, prices: number[], at: string, referencePrice?: number): RatioOperation {
+  return recordClose(o, partialCloseQuantities(o, leg, amount), prices, at, referencePrice);
 }
-function recordClose(o: RatioOperation, quantities: [number, number], prices: [number, number], at: string): RatioOperation {
-  if (!prices.every(positive)) throw Error("Revisá los dos precios de cierre.");
+export function validateIndependentClose(o: RatioOperation, quantities: number[]): void {
+  if (!o.legs[2] || quantities.length !== o.legs.length || !quantities.some(q => q > 0)) throw Error("Ingresá la cantidad de al menos una pata.");
+  const [a, b] = o.legs;
+  if (remaining(a) && remaining(b) && Boolean(quantities[0]) !== Boolean(quantities[1])) {
+    throw Error("Registrá A y B en el mismo cierre mientras ambas patas tengan saldo.");
+  }
+  o.legs.forEach((leg, i) => {
+    const q = quantities[i];
+    if (q !== 0 && (!quantity(q) || q % leg.step !== 0 || q > remaining(leg))) {
+      throw Error(`Revisá la cantidad de la pata ${tradingLegNames[i]}. Debe respetar el lote de ${leg.step} y su remanente.`);
+    }
+  });
+}
+export function closeOperationIndependently(o: RatioOperation, quantities: number[], prices: number[], at: string, referencePrice?: number) {
+  validateIndependentClose(o, quantities);
+  return recordClose(o, quantities, prices, at, referencePrice);
+}
+export const needsCloseReference = (o: RatioOperation, amounts: number[]) => !!o.reference && amounts[0] > 0 && amounts[1] > 0 && !amounts[2];
+function recordClose(o: RatioOperation, quantities: number[], prices: number[], at: string, referencePrice?: number): RatioOperation {
+  if (prices.length !== o.legs.length || quantities.some((q, i) => q > 0 && !positive(prices[i]))) throw Error("Revisá los precios de cierre.");
+  const referenceLeg = needsCloseReference(o, quantities) ? quantities.findIndex(q => q > 0) : -1;
+  if (referenceLeg !== -1 && !positive(referencePrice)) throw Error("Ingresá el precio de referencia C al cierre.");
   const closeId = crypto.randomUUID();
   const legs = o.legs.map((l, i) => {
     const q = quantities[i];
     if (q === 0) return l;
-    return { ...l, exits: [...l.exits, { quantity: q, price: prices[i], at, closeId }] };
-  }) as RatioOperation["legs"];
-  const result = { ...o, legs }; validateOperation(result); return result;
+    const exit = { quantity: q, price: prices[i], at, closeId, ...(i === referenceLeg ? { referencePrice } : {}) };
+    return { ...l, exits: [...l.exits, exit].sort((a, b) => a.at.localeCompare(b.at)) };
+  }) as TradingLegs;
+  const result = { ...o, legs };
+  validateOperation(result);
+  preservePairedFutureCloses(o, result);
+  return result;
 }
 
-interface RecordedCloseLeg extends RatioExit { index: number; leg: 0 | 1 }
+interface RecordedCloseLeg extends RatioExit { index: number; leg: TradingLegIndex }
 export interface RecordedClose {
   key: string;
   at: string;
@@ -174,55 +257,85 @@ export interface RecordedClose {
 
 export function recordedCloses(o: RatioOperation): RecordedClose[] {
   const grouped = new Map<string, RecordedClose>();
-  for (const leg of [0, 1] as const) {
-    o.legs[leg].exits.forEach((exit, index) => {
+  o.legs.forEach((position, index) => {
+    const leg = index as TradingLegIndex;
+    position.exits.forEach((exit, index) => {
       const key = exit.closeId ? `id:${exit.closeId}` : `time:${exit.at}`;
       const group = grouped.get(key) ?? { key, at: exit.at, entries: [] };
       group.entries.push({ ...exit, index, leg });
       grouped.set(key, group);
     });
-  }
+  });
   return [...grouped.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).flatMap(group => {
     const { at, entries } = group;
-    if (entries.length === 1 || entries.length === 2 && entries[0].leg !== entries[1].leg) return [group];
+    if (new Set(entries.map(entry => entry.leg)).size === entries.length) return [group];
     // A legacy timestamp shared by several exits cannot identify their pairings.
     return entries.map(entry => ({ key: `legacy:${at}:${entry.leg}:${entry.index}`, at, entries: [entry] }));
   });
 }
 
+function unpairedFutureCloses(o: RatioOperation) {
+  const invalid: string[] = [];
+  if (!o.legs[2]) return invalid;
+  let openA = o.legs[0].quantity, openB = o.legs[1].quantity;
+  const closes = recordedCloses(o).sort((a, b) => a.at.localeCompare(b.at));
+  for (const close of closes) {
+    const quantityA = close.entries.find(entry => entry.leg === 0)?.quantity ?? 0;
+    const quantityB = close.entries.find(entry => entry.leg === 1)?.quantity ?? 0;
+    if (openA > 0 && openB > 0 && !!quantityA !== !!quantityB) invalid.push(close.key);
+    openA -= quantityA;
+    openB -= quantityB;
+  }
+  return invalid;
+}
+
+function preservePairedFutureCloses(previous: RatioOperation, next: RatioOperation) {
+  const invalid = unpairedFutureCloses(next);
+  if (!invalid.length) return;
+  const existing = new Set(unpairedFutureCloses(previous));
+  if (invalid.some(key => !existing.has(key))) {
+    throw Error("Registrá A y B juntas si ambas tenían saldo en la fecha del cierre. Revisá los cierres posteriores.");
+  }
+}
+
 export type CloseCorrection = Pick<RatioExit, "quantity" | "price">;
 
-export function reviseRecordedClose(o: RatioOperation, key: string, corrections: CloseCorrection[] | null): RatioOperation {
+export function reviseRecordedClose(o: RatioOperation, key: string, corrections: CloseCorrection[] | null, referencePrice?: number): RatioOperation {
   const close = recordedCloses(o).find(item => item.key === key);
   if (!close) throw Error("El cierre ya no está en el historial.");
   if (corrections && corrections.length !== close.entries.length) throw Error("Completá los datos de cada pata del cierre.");
   const legs: RatioOperation["legs"] = [...o.legs];
   close.entries.forEach(({ leg, index }, i) => {
-    const exits = [...legs[leg].exits];
+    const position = legs[leg]!;
+    const exits = [...position.exits];
     if (corrections) {
       const { quantity: amount, price } = corrections[i];
-      if (!quantity(amount) || amount % legs[leg].step !== 0 || !positive(price)) {
-        throw Error(`Revisá el precio y la cantidad de ${legs[leg].instrument.symbol}. La cantidad debe respetar el lote de ${legs[leg].step}.`);
+      if (!quantity(amount) || amount % position.step !== 0 || !positive(price)) {
+        throw Error(`Revisá el precio y la cantidad de ${position.instrument.symbol}. La cantidad debe respetar el lote de ${position.step}.`);
       }
-      if (amount > remaining(legs[leg]) + exits[index].quantity) {
-        throw Error(`La cantidad de ${legs[leg].instrument.symbol} supera el saldo disponible para corregir este cierre.`);
+      if (amount > remaining(position) + exits[index].quantity) {
+        throw Error(`La cantidad de ${position.instrument.symbol} supera el saldo disponible para corregir este cierre.`);
       }
-      exits[index] = { ...exits[index], quantity: amount, price };
+      const previous = exits[index];
+      if (previous.referencePrice !== undefined && referencePrice !== undefined && !positive(referencePrice)) throw Error("Ingresá un precio válido para C.");
+      exits[index] = { ...previous, quantity: amount, price,
+        ...(previous.referencePrice !== undefined && referencePrice !== undefined ? { referencePrice } : {}) };
     } else {
       exits.splice(index, 1);
     }
-    legs[leg] = { ...legs[leg], exits };
+    legs[leg] = { ...position, exits };
   });
   // After deleting from an ambiguous legacy group, keep the remaining exits
   // distinct even if only one per leg now shares the same timestamp.
   if (!corrections && close.key.startsWith("legacy:")) {
-    for (const leg of [0, 1] as const) {
-      legs[leg] = { ...legs[leg], exits: legs[leg].exits.map(exit =>
+    legs.forEach((position, index) => {
+      legs[index] = { ...position, exits: position.exits.map(exit =>
         !exit.closeId && exit.at === close.at ? { ...exit, closeId: crypto.randomUUID() } : exit) };
-    }
+    });
   }
   const result = { ...o, legs };
   validateOperation(result);
+  preservePairedFutureCloses(o, result);
   return result;
 }
 
@@ -261,6 +374,21 @@ export function currentRatio(o: RatioOperation, quotes: Record<string, TradingQu
   const a = quotes[o.legs[0].instrument.id], b = quotes[o.legs[1].instrument.id];
   return !a?.issue && !b?.issue && positive(a?.last) && positive(b?.last) ? a.last / b.last : undefined;
 }
+export function spreadAt(priceA?: number, priceB?: number, priceC?: number, divisor?: 100) {
+  if (!positive(priceA) || !positive(priceB) || !positive(priceC)) return undefined;
+  return calculateRatio({ last: priceA }, { last: priceB }, { last: priceC / (divisor ?? 1) }).ratio;
+}
+export function currentSpread(o: RatioOperation, quotes: Record<string, TradingQuote>): number | undefined {
+  if (!o.reference) return;
+  const c = referenceCQuote(quotes, { c: o.reference.instrument, cDivisor: o.reference.divisor });
+  return calculateRatio(quotes[o.legs[0].instrument.id], quotes[o.legs[1].instrument.id], c).ratio;
+}
+export function closeMetrics(o: RatioOperation, close: RecordedClose) {
+  const a = close.entries.find(entry => entry.leg === 0)?.price, b = close.entries.find(entry => entry.leg === 1)?.price;
+  const priceC = close.entries.find(entry => entry.leg === 2)?.price ?? close.entries.find(entry => entry.referencePrice !== undefined)?.referencePrice;
+  const ratio = positive(a) && positive(b) ? a / b : undefined;
+  return { priceC, ratio: positive(ratio) ? ratio : undefined, spread: spreadAt(a, b, priceC, o.reference?.divisor) };
+}
 export function dailyPriceChange(quote?: TradingQuote): number | undefined {
   if (quote?.issue || !positive(quote?.last) || !positive(quote?.reference)) return;
   const change = (quote.last / quote.reference - 1) * 100;
@@ -280,12 +408,13 @@ export function validInstrument(value: unknown): value is TradingInstrument {
 export function validateBook(value: unknown): TradingBook {
   if (!value || typeof value !== "object") throw Error("Registro de ratios inválido; no se reemplazó el guardado.");
   const b = value as TradingBook;
-  if (![1, 2, 3].includes(b.schema) || b.watchDefaults !== undefined && b.watchDefaults !== 1 || typeof b.revision !== "string" || b.revision.length > 80 || !Array.isArray(b.watch) || b.watch.length > MAX_WATCH ||
+  if (![1, 2, 3, 4].includes(b.schema) || b.watchDefaults !== undefined && b.watchDefaults !== 1 || typeof b.revision !== "string" || b.revision.length > 80 || !Array.isArray(b.watch) || b.watch.length > MAX_WATCH ||
     !Array.isArray(b.operations) || b.operations.length > MAX_OPERATIONS || new Set(b.operations.map(o => o?.id)).size !== b.operations.length ||
     new Set(b.watch.map(p => p?.id)).size !== b.watch.length ||
     b.watch.some(p => !text(p?.id) || !validInstrument(p.a) || !validInstrument(p.b) || p.a.id === p.b.id ||
       p.c !== undefined && (b.schema < 2 || !validInstrument(p.c)) ||
-      p.cDivisor !== undefined && (b.schema !== 3 || !p.c || p.cDivisor !== 100)) ||
+      p.cDivisor !== undefined && (b.schema < 3 || !p.c || p.cDivisor !== 100)) ||
     new Set(b.watch.map(pairKey)).size !== b.watch.length) throw Error("Registro de ratios inválido; no se reemplazó el guardado.");
+  if (b.schema < 4 && b.operations.some(o => o?.reference !== undefined)) throw Error("El registro de ratios con referencia C necesita el esquema 4.");
   b.operations.forEach(validateOperation); return b;
 }

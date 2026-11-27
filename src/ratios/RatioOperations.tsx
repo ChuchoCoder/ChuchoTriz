@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { InstrumentPicker } from "./RatiosDashboard";
 import RatioOrderBook from "./RatioOrderBook";
 import RatioCloseHistory from "./RatioCloseHistory";
@@ -11,9 +11,9 @@ import { OptionQuoteValue } from "../optionsSimulator/OptionQuoteValue";
 import { numeric } from "../optionsSimulator/model";
 import { useRatioMarket } from "./tradingMarket";
 import { readTradingBook, saveTradingBook, tradingStorageKey } from "./tradingStorage";
-import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, partialCloseQuantities, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
-  goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, quoteUnitChanged, remaining, sameCurrency,
-  reviseRecordedClose, validateBook, validateOperation, type CloseCorrection, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair, type TradingQuote } from "./trading";
+import { applyDefaultWatch, bestBookPrice, closeOperation, closeOperationByQuantity, closeOperationIndependently, needsCloseReference, partialCloseQuantities, validateIndependentClose, closedQuantity, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, invertWatchPair, isMonitorOnly, isRateInstrument, resolveDefaultWatch,
+  canTradeReference, closeMetrics, currentSpread, goalReached, instrumentKind, isClosed, MAX_OPERATIONS, MAX_WATCH, operationPnl, pairRatioLabel, parseGoal, quoteUnitChanged, remaining, sameCurrency,
+  parseSpreadGoal, recordedCloses, reviseRecordedClose, spreadAt, spreadGoalInput, spreadGoalReached, tradingLegNames, validateBook, validateOperation, type CloseCorrection, type OperationReference, type TradingLegIndex, type RatioOperation, type TradingBook, type TradingInstrument, type TradingLeg, type TradingPair, type TradingQuote } from "./trading";
 import styles from "./RatioOperations.css?inline";
 import { installToolStyles } from "../toolStyles";
 
@@ -22,17 +22,47 @@ installToolStyles(styles);
 type View = "monitor" | "opening" | "operations";
 type GridKind = "watch" | "operations";
 interface GridDrag { kind: GridKind; scope: string; revision: string; ids: string[]; from: string }
-interface CloseDraft { id: string; snapshot: string; leg: 0 | 1; value: string }
-interface ClosePriceDraft { key: string; prices: [string?, string?] }
+interface CloseDraft { id: string; snapshot: string; leg: TradingLegIndex; value: string }
+interface ClosePrice { value: string; fromMarket?: boolean }
+interface ClosePriceDraft { key: string; prices: (ClosePrice | undefined)[]; reference?: ClosePrice; at?: string; independentQuantities?: string[] }
 type BookSide = "bid" | "ask";
 type Source = "last" | BookSide | "manual" | "saved" | `pending-${BookSide}`;
 interface Draft {
   a?: TradingInstrument; b?: TradingInstrument; pa: string; pb: string; qa: string; fa: string; fb: string; sa: string; sb: string;
   ddmma: string; ddmmb: string; commission: string; preservedB?: number; target: string; at: string; direction: 1 | -1; sourceA: Source; sourceB: Source;
+  reference?: ReferenceDraft;
+  explicitDate?: boolean;
+}
+interface ReferenceDraft {
+  instrument: TradingInstrument; divisor?: 100; price: string; copiedPrice?: boolean; goal: string; comparison: "above" | "below";
+  future: boolean; side: 1 | -1; quantity: string; factor: string; step: string; ddmm: string;
+}
+function referenceDraft(instrument: TradingInstrument, divisor?: 100, saved?: OperationReference, future?: TradingLeg): ReferenceDraft {
+  return {
+    instrument, divisor, price: saved ? formatOptionInput(saved.entry, 21) : "", goal: spreadGoalInput(saved?.goal),
+    comparison: saved?.goal?.comparison ?? "below", future: !!future, side: future?.side ?? 1,
+    quantity: future ? String(future.quantity) : "", factor: future ? formatOptionInput(future.factor, 21) : "",
+    step: String(future?.step ?? 1), ddmm: future ? formatOptionInput(future.ddmm, 21) : "",
+  };
 }
 const dateInput = (iso = new Date().toISOString()) => new Date(iso).toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 16).replace(" ", "T");
 const emptyDraft = (): Draft => ({ pa: "", pb: "", qa: "100", fa: "", fb: "", sa: "1", sb: "1", ddmma: "", ddmmb: "", commission: "0", target: "", at: dateInput(), direction: 1, sourceA: "last", sourceB: "last" });
 const input = (n?: number) => n === undefined ? "" : formatOptionInput(n);
+function withMarketEntry(previous: Draft, change: Partial<Draft>, copiedC = false): Draft {
+  const next = { ...previous, ...change };
+  if (!next.reference || previous.explicitDate || !(change.pa || change.pb || copiedC)) return next;
+  const at = dateInput();
+  if (at === previous.at) return next;
+  // Keep the manually entered prices and require a new copy for the other live quotes.
+  if (!("pa" in change) && previous.pa && previous.sourceA !== "manual" && previous.sourceA !== "saved") {
+    next.pa = ""; next.sourceA = "manual";
+  }
+  if (!("pb" in change) && previous.pb && previous.sourceB !== "manual" && previous.sourceB !== "saved") {
+    next.pb = ""; next.sourceB = "manual";
+  }
+  if (!copiedC && next.reference.copiedPrice) next.reference = { ...next.reference, price: "", copiedPrice: false };
+  return { ...next, at };
+}
 const entrySourceLabels = { last: "mercado", bid: "Compra", ask: "Venta", manual: "manual", saved: "registrado" } as const;
 function resolveEntryPrice(price: string, source: Source, quote?: TradingQuote): { price: string; source: Source } {
   if (source === "last" && !price) return { price: input(quote?.last), source };
@@ -44,6 +74,20 @@ function resolveEntryPrice(price: string, source: Source, quote?: TradingQuote):
 }
 const signed = (n?: number) => n === undefined ? "" : n > 0 ? "ro-up" : n < 0 ? "ro-down" : "";
 const money = (n: number | undefined, c: string) => `${currencyLabel(c)} ${n === undefined || !Number.isFinite(n) ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const positiveInput = (value: string) => {
+  const number = Number(value);
+  return number > 0 && Number.isFinite(number);
+};
+const operationPair = (o: RatioOperation) => ({ a: o.legs[0].instrument, b: o.legs[1].instrument, c: o.reference?.instrument, cDivisor: o.reference?.divisor });
+function lastPairedCloseMetrics(o: RatioOperation) {
+  const closes = recordedCloses(o), latest = closes.find(close => close.entries.some(e => e.leg === 0) && close.entries.some(e => e.leg === 1));
+  if (!latest) return undefined;
+  // Multiple fills recorded in the same minute keep their insertion order within A.
+  const last = closes.findLast(close => close.at === latest.at && close.entries.some(e => e.leg === 0) && close.entries.some(e => e.leg === 1)) ?? latest;
+  return { at: last.at, ...closeMetrics(o, last) };
+}
+const operationQuoteTime = (o: RatioOperation, quotes: Record<string, TradingQuote>) =>
+  isClosed(o) ? undefined : ratioUpdatedAt(quotes[o.legs[0].instrument.id], quotes[o.legs[1].instrument.id], referenceCQuote(quotes, operationPair(o)));
 const operationStatus = (o: RatioOperation) => isClosed(o) ? "Cerrada" : o.legs.some(l => l.exits.length) ? "Parcial" : "Abierta";
 const dailyLabel = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }) + "%";
 
@@ -69,8 +113,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const [dropTarget, setDropTarget] = useState<string>();
   const pending = useRef(false), current = useRef({ session, active }); current.current = { session, active };
   const book = session?.book ?? emptyBook();
-  const ids = [...book.watch.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])]), ...book.operations.filter(o => !isClosed(o)).flatMap(o => o.legs.map(l => l.instrument.id)),
-    ...(draft.a ? [draft.a.id] : []), ...(draft.b ? [draft.b.id] : [])];
+  const closedMetrics = useMemo(() => new Map(book.operations.filter(isClosed).map(o => [o.id, lastPairedCloseMetrics(o)])), [book.operations]);
+  const ids = [...book.watch.flatMap(p => [p.a.id, p.b.id, ...(p.c ? [p.c.id] : [])]), ...book.operations.filter(o => !isClosed(o)).flatMap(o => [...o.legs.map(l => l.instrument.id), ...(o.reference && !o.legs[2] ? [o.reference.instrument.id] : [])]),
+    ...(draft.a ? [draft.a.id] : []), ...(draft.b ? [draft.b.id] : []), ...(draft.reference ? [draft.reference.instrument.id] : [])];
   const market = useRatioMarket(active, ids, session?.scope), scope = market.context?.storageScope;
   const marketRef = useRef(market); marketRef.current = market;
   const ready = active && !!scope && session?.scope === scope && !session.error;
@@ -80,18 +125,20 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const edited = ready && edit ? book.operations.find(o => o.id === edit.id) : undefined;
   const partiallyClosed = !!edited?.legs.some(l => l.exits.length);
   const quotes = market.quotes;
-  const closePriceKey = op ? JSON.stringify([scope, op.id, op.direction, op.legs.map(leg => [leg.instrument.id, leg.factor])]) : "";
-  const closePriceOverrides = closePriceDraft?.key === closePriceKey ? closePriceDraft.prices : [];
+  const closePriceKey = useMemo(() => {
+    if (!op) return "";
+    return JSON.stringify(op.reference ? [scope, op] : [scope, op.id, op.direction, op.legs.map(leg => [leg.instrument.id, leg.factor])]);
+  }, [op, scope]);
+  const closeInput = closePriceDraft?.key === closePriceKey ? closePriceDraft : undefined;
+  const closeReferenceQuote = op?.reference && quotes[op.reference.instrument.id];
   const closeQuotes = op?.legs.map(leg => {
     const quote = quotes[leg.instrument.id];
     const issue = !market.context?.connected ? "Mercado desconectado." : quote?.issue ||
       (quoteUnitChanged(quote, leg.factor) ? "Cambió la unidad de cotización." : undefined);
     return { quote: issue ? undefined : quote, issue };
   });
-  const closePrices: [string, string] = [
-    closePriceOverrides[0] ?? input(closeQuotes?.[0].quote?.last),
-    closePriceOverrides[1] ?? input(closeQuotes?.[1].quote?.last),
-  ];
+  const closePrices = closeQuotes?.map(({ quote }, i) => closeInput?.prices[i]?.value ?? (i === 2 || closeInput?.at ? "" : input(quote?.last))) ?? [];
+  const closeReferencePrice = closeInput?.reference?.value ?? "";
   const monitorPreferences = useGridColumns(ready ? scope : undefined, "monitor", monitorColumns);
   const operationPreferences = useGridColumns(ready ? scope : undefined, "operations", operationColumns);
   const showMonitor = monitorPreferences.has, showOperation = operationPreferences.has;
@@ -132,8 +179,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setDraft(previous => {
       const a = resolveEntryPrice(previous.pa, previous.sourceA, quotes[previous.a?.id || ""]);
       const b = resolveEntryPrice(previous.pb, previous.sourceB, quotes[previous.b?.id || ""]);
-      return a.price === previous.pa && b.price === previous.pb && a.source === previous.sourceA && b.source === previous.sourceB
-        ? previous : { ...previous, pa: a.price, pb: b.price, sourceA: a.source, sourceB: b.source };
+      const changeA = a.price !== previous.pa || a.source !== previous.sourceA;
+      const changeB = b.price !== previous.pb || b.source !== previous.sourceB;
+      return changeA || changeB ? withMarketEntry(previous, {
+        ...(changeA ? { pa: a.price, sourceA: a.source } : {}),
+        ...(changeB ? { pb: b.price, sourceB: b.source } : {}),
+      }) : previous;
     });
   }, [quotes]);
 
@@ -215,9 +266,10 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setDraft(previous => {
       if (!instrument) return { ...previous, [key]: undefined, preservedB: undefined };
       const first = key === "a", changed = previous[key]?.id !== instrument.id;
-      return { ...previous, [key]: instrument, preservedB: undefined, [first ? "pa" : "pb"]: input(quotes[instrument.id]?.last),
+      return withMarketEntry(previous, { [key]: instrument, preservedB: undefined, [first ? "pa" : "pb"]: previous.explicitDate ? "" : input(quotes[instrument.id]?.last),
         [first ? "fa" : "fb"]: input(instrument.amountFactor), [first ? "sa" : "sb"]: input(instrument.quantityStep),
-        [first ? "ddmma" : "ddmmb"]: input(defaultMarketRights(instrument)), [first ? "sourceA" : "sourceB"]: "last", target: changed ? "" : previous.target };
+        [first ? "ddmma" : "ddmmb"]: input(defaultMarketRights(instrument)), [first ? "sourceA" : "sourceB"]: previous.explicitDate ? "manual" : "last", target: changed ? "" : previous.target,
+        reference: changed && previous.reference ? { ...previous.reference, goal: "" } : previous.reference });
     });
   }
   function entryPrices(direction: Draft["direction"], a?: TradingInstrument, b?: TradingInstrument, waitForQuotes = false) {
@@ -228,11 +280,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
       sourceB: waitForQuotes && !quoteB ? `pending-${sideB}` : sideB,
     } satisfies Pick<Draft, "direction" | "pa" | "pb" | "sourceA" | "sourceB">;
   }
-  function begin(a: TradingInstrument, b: TradingInstrument) {
+  function begin({ a, b, c, cDivisor }: TradingPair) {
     if (isMonitorOnly(a) || isMonitorOnly(b)) { setIssue("Las cauciones y referencias sólo se monitorean."); return; }
     const initial = emptyDraft(), step = a.quantityStep ?? 1;
     const prices = entryPrices(initial.direction, a, b, market.context?.connected);
-    setEdit(undefined); setDraft({ ...initial, ...prices, a, b, qa: String(Math.ceil(100 / step) * step),
+    setEdit(undefined); setDraft({ ...initial, ...prices, a, b, reference: c ? referenceDraft(c, cDivisor) : undefined, qa: String(Math.ceil(100 / step) * step),
       fa: input(a.amountFactor), fb: input(b.amountFactor), sa: input(a.quantityStep), sb: input(b.quantityStep), ddmma: input(defaultMarketRights(a)), ddmmb: input(defaultMarketRights(b)) });
     setPickerSession(n => n + 1); setView("opening"); setIssue(""); setNotice("");
   }
@@ -241,7 +293,9 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setDraft({ a: o.legs[0].instrument, b: o.legs[1].instrument, pa: input(o.legs[0].entry), pb: input(o.legs[1].entry), qa: input(o.legs[0].quantity),
       fa: input(o.legs[0].factor), fb: input(o.legs[1].factor), sa: input(o.legs[0].step), sb: input(o.legs[1].step), ddmma: input(o.legs[0].ddmm), ddmmb: input(o.legs[1].ddmm),
       commission: input(o.commission), preservedB: !sameCurrency(o.legs[0].instrument, o.legs[1].instrument) && o.legs[0].quantity !== o.legs[1].quantity ? o.legs[1].quantity : undefined,
-      target: goalInput(o), at: dateInput(o.openedAt), direction: o.direction, sourceA: "saved", sourceB: "saved" });
+      target: goalInput(o), at: dateInput(o.openedAt), direction: o.direction, sourceA: "saved", sourceB: "saved",
+      reference: o.reference && referenceDraft(o.reference.instrument, o.reference.divisor, o.reference, o.legs[2]),
+      explicitDate: !!o.reference || dateInput(o.openedAt) !== dateInput() });
     setPickerSession(n => n + 1); setView("opening"); setIssue(""); setNotice("");
   }
   const pa = numeric(draft.pa), pb = numeric(draft.pb), qa = numeric(draft.qa), fa = numeric(draft.fa), fb = numeric(draft.fb), sa = numeric(draft.sa), sb = numeric(draft.sb);
@@ -250,6 +304,17 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const marketRatio = !edit && draft.a && draft.b ? calculateRatio(quotes[draft.a.id], quotes[draft.b.id]) : undefined;
   const formRatio = edit && pa > 0 && pb > 0 ? pa / pb : marketRatio?.ratio;
   const formRatioLabel = edit ? "Ratio de apertura" : "Ratio de mercado A/B";
+  const ref = draft.reference;
+  const openReferenceQuote = ref && quotes[ref.instrument.id];
+  const marketSpread = ref && draft.a && draft.b
+    ? calculateRatio(quotes[draft.a.id], quotes[draft.b.id], referenceCQuote(quotes, { c: ref.instrument, cDivisor: ref.divisor })).ratio : undefined;
+  function changeReference(change: Partial<ReferenceDraft>) {
+    setDraft(previous => {
+      if (!previous.reference) return previous;
+      const reference = { ...previous.reference, ...change };
+      return change.copiedPrice ? withMarketEntry(previous, { reference }, true) : { ...previous, reference };
+    });
+  }
   const missingEntrySides = view === "opening" ? [
     { price: draft.pa, source: draft.sourceA, symbol: draft.a?.symbol || "A" },
     { price: draft.pb, source: draft.sourceB, symbol: draft.b?.symbol || "B" },
@@ -261,9 +326,22 @@ export default function RatioOperations({ active }: { active: boolean }) {
 
   function selectDirection(direction: 1 | -1) {
     if (!available || partiallyClosed) return;
-    const prices = entryPrices(direction, draft.a, draft.b);
-    setDraft(previous => ({ ...previous, ...prices }));
+    setDraft(previous => previous.explicitDate ? { ...previous, direction }
+      : withMarketEntry(previous, entryPrices(direction, previous.a, previous.b)));
     setIssue("");
+  }
+
+  function changeEntryDate(at: string) {
+    setDraft(previous => {
+      const keepA = previous.sourceA === "manual" || previous.sourceA === "saved";
+      const keepB = previous.sourceB === "manual" || previous.sourceB === "saved";
+      return {
+        ...previous, at, explicitDate: true,
+        pa: keepA ? previous.pa : "", sourceA: keepA ? previous.sourceA : "manual",
+        pb: keepB ? previous.pb : "", sourceB: keepB ? previous.sourceB : "manual",
+        reference: previous.reference?.copiedPrice ? { ...previous.reference, price: "", copiedPrice: false } : previous.reference,
+      };
+    });
   }
 
   async function saveEntry() {
@@ -276,6 +354,19 @@ export default function RatioOperations({ active }: { active: boolean }) {
         quantity: i === 0 ? qa : qb, entry: i === 0 ? pa : pb, factor: i === 0 ? fa : fb, step: i === 0 ? sa : sb, ddmm: numeric(i === 0 ? draft.ddmma : draft.ddmmb), exits: [] });
       let next: RatioOperation = { id: edit?.id ?? crypto.randomUUID(), openedAt, direction: draft.direction, commission: numeric(draft.commission), fx: edited?.fx ?? 1,
         targetRatio, legs: [makeLeg(a, 0), makeLeg(b, 1)] };
+      if (ref) {
+        if (!positiveInput(ref.price)) throw Error("Ingresá el precio de C al momento de la apertura.");
+        const goal = edited?.reference?.goal;
+        const savedGoal = goal && ref.goal === spreadGoalInput(goal) && ref.comparison === goal.comparison ? goal : parseSpreadGoal(ref.goal, ref.comparison);
+        next.reference = { instrument: ref.instrument, divisor: ref.divisor, entry: Number(ref.price), goal: savedGoal };
+        if (ref.future) {
+          if (ref.ddmm.trim() === "") throw Error("Ingresá los DDMM del contrato C, o 0 si no corresponden.");
+          next.legs = [next.legs[0], next.legs[1], {
+            instrument: ref.instrument, side: ref.side, quantity: Number(ref.quantity), entry: next.reference.entry,
+            factor: Number(ref.factor), step: Number(ref.step), ddmm: Number(ref.ddmm), exits: [],
+          }];
+        }
+      }
       validateOperation(next);
       const wasEdit = !!edit;
       const ok = await commit(base => {
@@ -306,44 +397,69 @@ export default function RatioOperations({ active }: { active: boolean }) {
     });
     if (ok) { setSelected(d.op.id); setDeleted(undefined); setNotice("Registro restaurado."); }
   }
-  let closeQuantities: [number, number] | undefined, closeIssue: string | undefined;
-  if (op && closeDraft?.id === op.id && closeDraft.value.trim()) {
+  let closeQuantities: number[] | undefined, closeIssue: string | undefined;
+  const independentQuantities = closeInput?.independentQuantities;
+  if (op && independentQuantities?.some(value => value?.trim())) {
+    try {
+      const amounts = op.legs.map((_, index) => Number(independentQuantities[index] || 0));
+      validateIndependentClose(op, amounts);
+      closeQuantities = amounts;
+    } catch (error) { closeIssue = error instanceof Error ? error.message : "Revisá las cantidades de cierre."; }
+  } else if (op && !independentQuantities && closeDraft?.id === op.id && closeDraft.value.trim()) {
     try {
       if (closeDraft.snapshot !== JSON.stringify(op)) throw Error("La operación cambió. Volvé a ingresar la cantidad para revisar el cierre.");
       closeQuantities = partialCloseQuantities(op, closeDraft.leg, numeric(closeDraft.value));
     } catch (error) { closeIssue = error instanceof Error ? error.message : "Revisá las cantidades de cierre."; }
   }
-  function setClosePrice(leg: number, value: string) {
-    setClosePriceDraft(previous => {
-      const prices = previous?.key === closePriceKey ? previous.prices : [];
-      return { key: closePriceKey, prices: leg === 0 ? [value, prices[1]] : [prices[0], value] };
+  function changeCloseInput(change: Partial<Omit<ClosePriceDraft, "key">>) {
+    setClosePriceDraft(previous => ({ ...(previous?.key === closePriceKey ? previous : { key: closePriceKey, prices: [] }), ...change }));
+  }
+  function setClosePrice(leg: number, value: string, fromMarket = false) {
+    const prices = [...(closeInput?.prices ?? [])];
+    prices[leg] = { value, fromMarket };
+    changeCloseInput({ prices });
+  }
+  function changeCloseDate(at: string) {
+    changeCloseInput({
+      at, prices: (closeInput?.prices ?? []).map(price => price?.fromMarket ? undefined : price),
+      reference: closeInput?.reference?.fromMarket ? undefined : closeInput?.reference,
     });
   }
+  const allOpenAmounts = op?.legs.map(remaining) ?? [];
+  const amountsToClose = closeQuantities ?? allOpenAmounts;
+  const referenceOnlyAtClose = !!op && needsCloseReference(op, amountsToClose);
+  const closeHasPrices = amountsToClose.every((amount, i) => amount === 0 || positiveInput(closePrices[i])) &&
+    (!referenceOnlyAtClose || positiveInput(closeReferencePrice));
   async function registerClose(fraction?: number) {
     if (!op) return;
-    if (fraction === undefined && (!closeDraft || !closeQuantities || closeIssue)) { setIssue(closeIssue || "Ingresá una cantidad válida para el cierre."); return; }
+    if (fraction === undefined && (!closeQuantities || closeIssue)) { setIssue(closeIssue || "Ingresá una cantidad válida para el cierre."); return; }
     const snapshot = JSON.stringify(op);
     const ok = await commit(base => {
       const latest = base.operations.find(o => o.id === op.id);
       if (!latest || JSON.stringify(latest) !== snapshot) throw Error("La operación cambió; revisá sus cantidades antes de registrar el cierre.");
-      const prices = closePrices.map(numeric) as [number, number], at = new Date().toISOString();
-      const next = fraction === undefined ? closeOperationByQuantity(latest, closeDraft!.leg, numeric(closeDraft!.value), prices, at) : closeOperation(latest, fraction, prices, at);
+      const prices = closePrices.map(Number);
+      const at = closeInput?.at ? new Date(closeInput.at + ":00-03:00").toISOString() : new Date().toISOString();
+      const referencePrice = referenceOnlyAtClose ? Number(closeReferencePrice) : undefined;
+      const next = fraction !== undefined ? closeOperation(latest, fraction, prices, at, referencePrice)
+        : independentQuantities ? closeOperationIndependently(latest, closeQuantities!, prices, at, referencePrice)
+          : closeOperationByQuantity(latest, closeDraft!.leg, numeric(closeDraft!.value), prices, at, referencePrice);
       return { ...base, operations: base.operations.map(o => o.id === latest.id ? next : o) };
     });
-    if (ok) { setCloseDraft(undefined); setAll(true); setNotice("Cierre registrado localmente con los precios ingresados."); }
+    if (ok) { setCloseDraft(undefined); setClosePriceDraft(undefined); setAll(true); setNotice("Cierre registrado localmente con los precios ingresados."); }
   }
-  async function changeRecordedClose(key: string, snapshot: string, corrections: CloseCorrection[] | null) {
+  async function changeRecordedClose(key: string, snapshot: string, corrections: CloseCorrection[] | null, referencePrice?: number) {
     if (!op) return false;
     let closed = false;
     const ok = await commit(base => {
       const latest = base.operations.find(o => o.id === op.id);
       if (!latest || JSON.stringify(latest) !== snapshot) throw Error("La operación cambió. Volvé a seleccionar el cierre para revisar los datos.");
-      const next = reviseRecordedClose(latest, key, corrections);
+      const next = reviseRecordedClose(latest, key, corrections, referencePrice);
       closed = isClosed(next);
       return { ...base, operations: base.operations.map(o => o.id === next.id ? next : o) };
     });
     if (ok) {
       setCloseDraft(undefined);
+      setClosePriceDraft(undefined);
       if (closed) setAll(true);
       setNotice(corrections ? "Cierre actualizado." : "Cierre eliminado del registro local.");
     }
@@ -351,9 +467,36 @@ export default function RatioOperations({ active }: { active: boolean }) {
   }
   const pnlLines = (o: RatioOperation, field: "realized" | "pending" | "net" | "gross" | "commission" | "ddmm") => operationPnl(o, quotes).map(p =>
     <span key={p.currency} className={field === "commission" || field === "ddmm" ? "" : signed(p[field])} title={p.issue}>{money(p[field], p.currency)}</span>);
-  const goalText = (o: RatioOperation) => o.targetRatio === null ? "Sin objetivo de ratio" : `Objetivo: ${pairRatioLabel(o.targetRatio, o.legs[0].instrument, o.legs[1].instrument)}${isClosed(o) ? "" : goalReached(o, currentRatio(o, quotes)) ? " · alcanzado" : " · pendiente"}`;
+  function operationMetrics(o: RatioOperation) {
+    const closed = isClosed(o), closing = closedMetrics.get(o.id);
+    const ratio = closed ? closing?.ratio : currentRatio(o, quotes);
+    const spread = closed ? closing?.spread : currentSpread(o, quotes);
+    return { closed, closing, ratio, spread, ratioReached: !closed && goalReached(o, ratio),
+      spreadReached: !closed && spreadGoalReached(o.reference?.goal, spread) };
+  }
+  function operationGoals(o: RatioOperation, metrics: ReturnType<typeof operationMetrics>, compact = false) {
+    const Tag = compact ? "small" : "p";
+    const goal = o.reference?.goal;
+    const [a, b] = o.legs;
+    const ratioText = o.targetRatio === null ? "Sin objetivo de ratio"
+      : `Objetivo${o.reference ? " A/B" : ""}: ${pairRatioLabel(o.targetRatio, a.instrument, b.instrument)}${metrics.closed ? "" : metrics.ratioReached ? " · alcanzado" : " · pendiente"}`;
+    const spreadStatus = metrics.closed ? "" : metrics.spread === undefined ? " · sin cotización" : metrics.spreadReached ? " · alcanzado" : " · pendiente";
+    return <>
+      <Tag className={metrics.ratioReached ? "ro-up" : ""}>{ratioText}</Tag>
+      {goal && <Tag className={metrics.spreadReached ? "ro-up" : ""}>Objetivo de brecha {goal.comparison === "above" ? "≥" : "≤"} {ratioLabel(goal.value, "percent")}{spreadStatus}</Tag>}
+    </>;
+  }
+  function ratioSummary(o: RatioOperation, { closed, closing, ratio, spread }: ReturnType<typeof operationMetrics>) {
+    const [a, b] = o.legs;
+    const reference = o.reference;
+    return <>
+      <span title={closed ? `A/B de entrada y último cierre con ambas patas · ${tradeLabel(closing ? Date.parse(closing.at) : undefined)}` : "A/B de entrada y actual"}>{pairRatioLabel(a.entry / b.entry, a.instrument, b.instrument)} → {pairRatioLabel(ratio, a.instrument, b.instrument)}</span>
+      {reference && <small>Brecha {closed ? "de entrada → último cierre A/B" : "de entrada → actual"} · {ratioLabel(spreadAt(a.entry, b.entry, reference.entry, reference.divisor), "percent")} → {ratioLabel(spread, "percent")}</small>}
+    </>;
+  }
+  const selectedMetrics = op && operationMetrics(op);
   const selectedPnl = op ? operationPnl(op, quotes) : [];
-  const bothLegsOpen = op?.legs.every(leg => remaining(leg) > 0);
+  const bothPairedLegsOpen = op && remaining(op.legs[0]) > 0 && remaining(op.legs[1]) > 0;
   const shownRatio = (raw: number | undefined, percent: boolean) => raw === undefined ? undefined : percent ? (raw - 1) * 100 : raw;
   const monitorRows = projectGrid(book.watch, "watch", monitorSort, (pair, column) => {
     if (column === "pair") return pairLabel(pair);
@@ -368,11 +511,15 @@ export default function RatioOperations({ active }: { active: boolean }) {
   const pnlCurrencies = [...new Set(book.operations.flatMap(o => o.legs.map(l => l.instrument.currency)))].sort();
   const sortCurrency = pnlCurrencies.includes(pnlCurrency) ? pnlCurrency : pnlCurrencies[0] || "ARS";
   const operationsRows = projectGrid(book.operations.filter(o => all || !isClosed(o)), "operations", operationsSort, (operation, column) => {
-    if (column === "pair") return `${operation.legs[0].instrument.symbol}/${operation.legs[1].instrument.symbol}`;
+    if (column === "pair") return operation.reference ? pairLabel(operationPair(operation)) : operation.legs.map(l => l.instrument.symbol).join("/");
     if (column === "status") return operationStatus(operation);
     if (column === "quantity") return remaining(operation.legs[0]);
-    if (column === "updated") return ratioUpdatedAt(quotes[operation.legs[0].instrument.id], quotes[operation.legs[1].instrument.id]);
-    if (column === "ratio") return shownRatio(currentRatio(operation, quotes), sameCurrency(operation.legs[0].instrument, operation.legs[1].instrument));
+    const [a, b] = operation.legs;
+    if (column === "updated") return operationQuoteTime(operation, quotes);
+    if (column === "ratio") {
+      const value = isClosed(operation) ? closedMetrics.get(operation.id)?.ratio : currentRatio(operation, quotes);
+      return shownRatio(value, sameCurrency(a.instrument, b.instrument));
+    }
     if (column === "realized" || column === "pending" || column === "net") return operationPnl(operation, quotes).find(p => p.currency === sortCurrency)?.[column];
     return undefined;
   });
@@ -389,17 +536,21 @@ export default function RatioOperations({ active }: { active: boolean }) {
     const last = quote?.issue ? undefined : quote?.last, priceChange = dailyPriceChange(quote);
     return <section className="ro-leg" aria-label={`Pata ${key.toUpperCase()}`} key={key}>
       <header><div className="ro-leg-header-identity"><strong className="ro-leg-title">{instrument?.symbol || `Instrumento ${key.toUpperCase()}`}</strong><small className="ro-leg-label">Pata {key.toUpperCase()}</small><span className={`ro-chip ${side === 1 ? "buy" : "sell"}`}>{side === 1 ? "Compra · Long" : "Venta · Short"}</span></div>
-        <div className="ro-leg-header-quote"><button type="button" className="ro-header-last" disabled={!available || last === undefined} title="Usar este precio de mercado" aria-label={`Usar último de ${key.toUpperCase()}`} onClick={() => { if (last !== undefined) setDraft(p => ({ ...p, [priceKey]: input(last), [sourceKey]: "last" })); }}><OptionQuoteValue key={instrument?.id || key} value={last} formatValue={numberLabel} /></button>
+        <div className="ro-leg-header-quote"><button type="button" className="ro-header-last" disabled={!available || draft.explicitDate || last === undefined} title={draft.explicitDate ? "Ingresá el precio histórico" : "Usar este precio de mercado"} aria-label={`Usar último de ${key.toUpperCase()}`} onClick={() => { if (last !== undefined) setDraft(p => withMarketEntry(p, { [priceKey]: input(last), [sourceKey]: "last" })); }}><OptionQuoteValue key={instrument?.id || key} value={last} formatValue={numberLabel} /></button>
           <span className={signed(priceChange)} aria-label={`Variación diaria de ${key.toUpperCase()}`} title={priceChange === undefined ? quote?.issue || "Sin referencia diaria del instrumento" : "(Precio actual / referencia diaria − 1) × 100"}>{priceChange === undefined ? "—" : dailyLabel(priceChange)}</span></div>
         <small className="ro-leg-header-note">{!first ? draft.preservedB !== undefined ? "Cantidad registrada" : "Cantidad automática" : ""}</small></header>
       <div className="ro-entry-fields"><div className="ro-leg-instrument"><InstrumentPicker key={`${pickerSession}-${key}`} label={`Instrumento ${key.toUpperCase()}`} value={instrument} onChange={i => selectInstrument(key, i as TradingInstrument | undefined)} search={priceSearch} disabled={!available || partiallyClosed} /></div>
         <label><span title={`Precio de entrada ${key.toUpperCase()}`}>Precio de entrada {key.toUpperCase()}</span><input aria-label={`Precio de entrada ${key.toUpperCase()}`} type="number" min="0" step="any" value={draft[priceKey]} disabled={!available} onChange={e => setDraft(p => ({ ...p, [priceKey]: e.target.value, [sourceKey]: "manual" }))} required /><small className="ro-price-source">{source === "pending-bid" || source === "pending-ask" ? "Esperando mejor punta…" : `Precio elegido: ${entrySourceLabels[source]}`}</small></label>
         <label><span title={`${edit ? "Cantidad total" : "Cantidad"} ${key.toUpperCase()} · ${instrument?.quantityUnit || "unidades"}`}>{edit ? "Cantidad total" : "Cantidad"} {key.toUpperCase()} · {instrument?.quantityUnit || "unidades"}</span><input aria-label={`Cantidad ${key.toUpperCase()}`} type="number" min={first && Number.isFinite(sa) && sa > 0 ? sa : 1} step={first && Number.isFinite(sa) && sa > 0 ? sa : 1} value={first ? draft.qa : Number.isFinite(qb) ? qb : ""} readOnly={!first} disabled={!available}
           onChange={e => setDraft(p => ({ ...p, qa: e.target.value, preservedB: undefined }))} /></label></div>
-      <RatioOrderBook leg={first ? "A" : "B"} quote={quote} selectedPrice={selectedPrice} selectedSide={source === "bid" || source === "ask" ? source : undefined} disabled={!available}
-        onChoose={(side, level) => setDraft(p => ({ ...p, [priceKey]: input(level.price), [sourceKey]: side }))} />
+      <RatioOrderBook leg={first ? "A" : "B"} quote={quote} selectedPrice={selectedPrice} selectedSide={source === "bid" || source === "ask" ? source : undefined} disabled={!available || !!draft.explicitDate}
+        onChoose={(side, level) => setDraft(p => withMarketEntry(p, { [priceKey]: input(level.price), [sourceKey]: side }))} />
       <div className="ro-leg-footer"><small>{instrument ? `${instrumentKind(instrument.cfi)} · ${currencyLabel(instrument.currency)} · ${instrument.amountFactor === .01 ? "precio por 100 nominales" : `monto = cantidad × precio × ${numberLabel(numeric(draft[factorKey]))}`}` : "Seleccioná el instrumento"}<br />Última operación: {tradeLabel(quote?.tradedAt)}</small></div>
       {instrument && (!instrument.amountFactor || !instrument.quantityStep) && <div className="ro-manual-units"><label>Factor monetario por unidad<input type="number" min="0" step="any" value={draft[factorKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [factorKey]: e.target.value }))} /></label><label>Lote mínimo<input type="number" min="1" step="1" value={draft[stepKey]} disabled={!available || partiallyClosed} required onChange={e => setDraft(p => ({ ...p, [stepKey]: e.target.value }))} /></label></div>}
+      {ref && <div className="ro-leg-sizing">
+        {sizing(key)}
+        {!first && <small>{quantityHint}</small>}
+      </div>}
     </section>;
   }
 
@@ -412,6 +563,11 @@ export default function RatioOperations({ active }: { active: boolean }) {
       <span>Monto {key.toUpperCase()}<strong>{money(first ? qa * pa * fa : qb * pb * fb, instrument?.currency || "")}</strong></span>
     </div>;
   }
+
+  const quantityHint = draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales."
+    : mixed ? "B copia los nominales de A, respetando el lote de ambas patas."
+      : "B se ajusta al lote más cercano para igualar montos.";
+  const entryActions = <div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro local de las patas ingresadas. Verificá las ejecuciones y tenencias en tu cuenta.</small></div>;
 
   return <section className="ct-ratio-ops" aria-label="Operaciones de ratios">
     <header className="ro-heading"><h2>Ratios · Long / Short</h2><small>Registro manual local por cuenta y sitio. No envía órdenes.</small></header>
@@ -444,7 +600,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
       <div className="ro-table-wrap ro-grid-wrap ro-monitor-wrap"><table className="ro-monitor-table"><thead><tr>{monitorHeader("Par A/B", "pair")}{monitorColumns.map(([column, label]) => showMonitor(column) && (column !== "c" || hasReference) && <GridSortHeader key={column} label={label} column={column} sort={monitorSort} disabled={!ready} onSort={key => changeGridSort("watch", key)} />)}<th scope="col">Acciones</th></tr></thead><tbody>{ready && monitorRows.map(p => {
         const label = pairLabel(p);
         const rate = isRateInstrument(p.a) || isRateInstrument(p.b);
-        const monitorOnly = !!p.c || isMonitorOnly(p.a) || isMonitorOnly(p.b);
+        const monitorOnly = isMonitorOnly(p.a) || isMonitorOnly(p.b);
         const a = quotes[p.a.id], b = quotes[p.b.id], c = referenceCQuote(quotes, p);
         const result = calculateRatio(a, b, c), reference = referenceCFormula(p.cDivisor), updatedAt = ratioUpdatedAt(a, b, c);
         return <tr key={p.id} data-row-id={p.id} {...rowDrop("watch", p.id)} className={dropTarget === `watch:${p.id}` ? "ro-drop-target" : gridDrag?.from === p.id ? "ro-dragging" : undefined}><td><div className="ro-pair-cell">{rowHandle("watch", p.id, `par ${label}`, monitorRowIds)}<div><strong title={`${p.a.symbol}/${p.b.symbol}`}>{label}</strong><small>{currencyLabel(p.a.currency)} / {currencyLabel(p.b.currency)}{p.c ? ` · brecha (A/B ÷ ${reference} − 1) × 100` : rate ? " · tasas TNA" : ""}</small></div></div></td>
@@ -457,7 +613,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
           <td><div className="ro-actions">
             <RatioChartLink pair={p} />
             <ReferenceChartButton pair={p} />
-            <button type="button" className="ro-monitor-operation" disabled={!available || monitorOnly} title={monitorOnly ? "Las referencias, tasas y comparaciones de tres cotizaciones sólo se monitorean." : undefined} onClick={() => begin(p.a, p.b)}>{monitorOnly ? "Sólo monitor" : "Abrir operación"}</button>
+            <button type="button" className="ro-monitor-operation" disabled={!available || monitorOnly} title={monitorOnly ? "A y B deben admitir el registro de una posición." : undefined} onClick={() => begin(p)}>{monitorOnly ? "Sólo monitor" : "Abrir operación"}</button>
             <button type="button" disabled={!available || !!p.c} aria-label={`Invertir ${label}`} title={p.c ? "Comparación (A/B)/C; agregá otra fórmula para cambiar el sentido" : "Invertir A/B"} onClick={() => void commit(base => invertWatchPair(base, p.id))}>⇄</button>
             <button type="button" disabled={!available} aria-label={`Quitar par ${label}`} onClick={() => void commit(base => ({ ...base, watch: base.watch.filter(x => x.id !== p.id) }))}>×</button>
           </div></td></tr>;
@@ -466,36 +622,88 @@ export default function RatioOperations({ active }: { active: boolean }) {
     </div>}
     {view === "opening" && <form aria-label={edit ? "Editar operación de ratio" : "Abrir operación de ratio"} onSubmit={e => { e.preventDefault(); void saveEntry(); }}>
       {edit && <p className="ro-notice">Las cantidades son totales de apertura. Los cierres registrados se conservan; corregir precios o gastos recalcula el resultado.</p>}
-      <div className="ro-entry-grid"><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => selectDirection(1)}>Long {draft.a?.symbol || "A"} / Short {draft.b?.symbol || "B"}</button>
+      <div className={ref ? "ro-entry-grid ro-entry-grid-with-reference" : "ro-entry-grid"}><div className="ro-direction"><button type="button" aria-pressed={draft.direction === 1} disabled={!available || partiallyClosed} onClick={() => selectDirection(1)}>Long {draft.a?.symbol || "A"} / Short {draft.b?.symbol || "B"}</button>
         <div className="ro-opening-ratio" title={edit ? undefined : marketRatio?.issue || "Calculado con el último precio de A y de B, igual que en el Monitor."}>
           <small>{formRatioLabel}</small><output aria-label={formRatioLabel} aria-live={edit ? undefined : "off"}>{draft.a && draft.b ? pairRatioLabel(formRatio, draft.a, draft.b) : "—"}</output>
         </div>
         <button type="button" aria-pressed={draft.direction === -1} disabled={!available || partiallyClosed} onClick={() => selectDirection(-1)}>Long {draft.b?.symbol || "B"} / Short {draft.a?.symbol || "A"}</button></div>
         {leg("a")}{leg("b")}
-        <aside className="ro-entry-costs"><label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
-          <label>Fecha/hora de apertura · Argentina<input type="datetime-local" value={draft.at} max={dateInput()} disabled={!available} required onChange={e => setDraft(p => ({ ...p, at: e.target.value }))} /></label>
-          <label>Ratio objetivo {draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(%)" : "(número)"} · opcional<input aria-label="Ratio objetivo" type="number" step="any" value={draft.target} disabled={!available} onChange={e => setDraft(p => ({ ...p, target: e.target.value }))} /></label><small>{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(A/B − 1) × 100. Ej.: 1,065 → 6,50%." : "Cociente A/B sin conversiones."} {draft.direction === 1 ? "Objetivo al alza (≥)." : "Objetivo a la baja (≤)."}</small>
+        {ref && <section className="ro-entry-reference" aria-labelledby="ro-reference-title">
+          <h4 id="ro-reference-title">Referencia C · {ref.instrument.symbol}{ref.divisor ? " ÷ 100" : ""}</h4>
+          <div className="ro-close-fields">
+            <label>Precio C al abrir<input type="number" step="any" min={Number.MIN_VALUE} required value={ref.price} disabled={!available}
+              onChange={e => changeReference({ price: e.target.value, copiedPrice: false })} /></label>
+            <button type="button" disabled={!available || draft.explicitDate || !market.context?.connected || !!openReferenceQuote?.issue || !openReferenceQuote?.last}
+              onClick={() => changeReference({ price: formatOptionInput(openReferenceQuote!.last!, 21), copiedPrice: true })}>Usar último C · {numberLabel(openReferenceQuote?.last)}</button>
+          </div>
+          {(draft.explicitDate || ref.divisor) && <small>{draft.explicitDate ? "Ingresá los precios de la fecha elegida. " : ""}{ref.divisor ? "C se ingresa antes de dividir por 100." : ""}</small>}
+          <dl className="ro-reference-spreads">
+            <div><dt>Brecha de entrada</dt><dd><output>{ratioLabel(spreadAt(pa, pb, Number(ref.price), ref.divisor), "percent")}</output></dd></div>
+            <div><dt>Brecha de mercado</dt><dd><output>{ratioLabel(marketSpread, "percent")}</output></dd></div>
+          </dl>
+          <div className="ro-close-fields">
+            <label>Objetivo de brecha (%)<input type="number" step="any" value={ref.goal} disabled={!available}
+              onChange={e => changeReference({ goal: e.target.value })} /></label>
+            <label>Condición de brecha<select aria-label="Condición de brecha" value={ref.comparison} disabled={!available}
+              onChange={e => changeReference({ comparison: e.target.value === "above" ? "above" : "below" })}>
+              <option value="below">Menor o igual (≤)</option><option value="above">Mayor o igual (≥)</option>
+            </select></label>
+          </div>
+          {canTradeReference(ref.instrument) && <div className="ro-close-leg">
+            <label className="ro-compare"><input type="checkbox" checked={ref.future} disabled={!available || partiallyClosed}
+              onChange={e => changeReference({ future: e.target.checked })} />Registrar C como tercera pata</label>
+            {ref.future && <>
+              <div className="ro-close-fields">
+                <label>Sentido C<select aria-label="Sentido C" value={ref.side} disabled={!available || partiallyClosed}
+                  onChange={e => changeReference({ side: e.target.value === "1" ? 1 : -1 })}>
+                  <option value={1}>Long</option><option value={-1}>Short</option>
+                </select></label>
+                <label>Contratos C<input type="number" step="1" min="1" value={ref.quantity} required disabled={!available}
+                  onChange={e => changeReference({ quantity: e.target.value })} /></label>
+                <label>Factor monetario C<input type="number" step="any" min={Number.MIN_VALUE} value={ref.factor} required disabled={!available || partiallyClosed}
+                  onChange={e => changeReference({ factor: e.target.value })} /></label>
+                <label>Lote mínimo C<input type="number" step="1" min="1" value={ref.step} required disabled={!available || partiallyClosed}
+                  onChange={e => changeReference({ step: e.target.value })} /></label>
+                <label>DDMM C (%)<input type="number" step="any" min="0" max="100" value={ref.ddmm} required disabled={!available}
+                  onChange={e => changeReference({ ddmm: e.target.value })} /></label>
+              </div>
+              <small>Resultado bruto del futuro = contratos × variación de precio × factor monetario, según el sentido.</small>
+            </>}
+          </div>}
+        </section>}
+        <aside className="ro-entry-costs" aria-labelledby={ref ? "ro-entry-data-title" : undefined}>
+          {ref && <h4 id="ro-entry-data-title">Datos de la operación</h4>}
+          <label>Comisión % · compra y venta<input aria-label="Comisión %" type="number" min="0" max="100" step="any" value={draft.commission} disabled={!available} required onChange={e => setDraft(p => ({ ...p, commission: e.target.value }))} /></label><small>Un único porcentaje en cada compra y venta, al abrir y cerrar.</small>
+          <label>Fecha/hora de apertura · Argentina<input type="datetime-local" value={draft.at} max={dateInput()} disabled={!available} required onChange={e => changeEntryDate(e.target.value)} /></label>
+          <label>Ratio objetivo {ref ? "A/B " : ""}{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(%)" : "(número)"} · opcional<input aria-label="Ratio objetivo" type="number" step="any" value={draft.target} disabled={!available} onChange={e => setDraft(p => ({ ...p, target: e.target.value }))} /></label><small>{draft.a && draft.b && sameCurrency(draft.a, draft.b) ? "(A/B − 1) × 100. Ej.: 1,065 → 6,50%." : "Cociente A/B sin conversiones."} {draft.direction === 1 ? "Objetivo al alza (≥)." : "Objetivo a la baja (≤)."}</small>
           {mixed && <small>{draft.preservedB !== undefined ? "Cantidad B histórica conservada hasta cambiar A." : "Distinta moneda: B copia los nominales de A."} El P&L se mantiene separado por moneda.</small>}
+          {ref && entryActions}
         </aside>
-        <div className="ro-sizing">{sizing("a")}{sizing("b")}<small>{draft.preservedB !== undefined ? "Se conserva la cantidad B registrada. Cambiar A sincroniza ambos nominales." : mixed ? "B copia exactamente los nominales de A. La cantidad debe respetar los lotes de ambas patas." : "B se ajusta al lote más cercano con los precios elegidos para igualar montos."} DDMM y factores quedan guardados en cada pata.</small></div>
-      </div><div className="ro-entry-footer"><button className="ro-primary" type="submit" disabled={!available}>{busy ? "Guardando…" : edit ? "Guardar cambios" : "Abrir operación"}</button><button type="button" disabled={busy} onClick={() => { const wasEdit = !!edit; setEdit(undefined); setDraft(emptyDraft()); setView(wasEdit ? "operations" : "monitor"); setIssue(""); setPickerSession(n => n + 1); }}>{edit ? "Cancelar edición" : "Volver al monitor"}</button><small>Registro de ambas patas; no comprueba tenencia, préstamo de títulos ni ejecución del broker.</small></div>
+        {!ref && <div className="ro-sizing">{sizing("a")}{sizing("b")}<small>{quantityHint} DDMM y factores quedan guardados en cada pata.</small></div>}
+      </div>
+      {!ref && entryActions}
     </form>}
     {view === "operations" && <div className={`ro-operations-grid${op ? "" : " no-detail"}`}>
       <div><div className="ro-grid-tools"><GridColumnPicker label="Operaciones abiertas" columns={operationColumns} preferences={operationPreferences} /><small>Arrastrá ⠿ para mover · con foco, usá ↑/↓</small><button type="button" className="ro-manual-order" disabled={!operationsSort} onClick={() => changeGridSort("operations")}>Orden manual</button>
         {pnlCurrencies.length > 1 && <label className="ro-sort-currency">P&amp;L en <select aria-label="Moneda para ordenar P&L" value={sortCurrency} onChange={event => { gridSortVersion.current.operations++; setPnlCurrency(event.target.value); }}>{pnlCurrencies.map(currency => <option key={currency} value={currency}>{currencyLabel(currency)}</option>)}</select></label>}
         <div className="ro-filters"><button type="button" aria-pressed={!all} onClick={() => { setAll(false); if (op && isClosed(op)) setSelected(undefined); }}>Abiertas</button><button type="button" aria-pressed={all} onClick={() => setAll(true)}>Todas</button></div></div>
-        <div className="ro-table-wrap ro-grid-wrap"><table className="ro-operations-table"><thead><tr>{operationsHeader("Par / sentido", "pair")}{operationsHeader("Estado", "status")}{operationColumns.map(([column, label]) => showOperation(column) && <GridSortHeader key={column} label={label} column={column} sort={operationsSort} disabled={!ready} description={column === "quantity" ? "Ordenar por la cantidad abierta de A" : ["realized", "pending", "net"].includes(column) ? `Ordenar importes en ${currencyLabel(sortCurrency)}; sin valor al final` : undefined} onSort={key => changeGridSort("operations", key)} />)}<th scope="col">Acciones</th></tr></thead><tbody>{ready && operationsRows.map(o => <tr key={o.id} data-row-id={o.id} {...rowDrop("operations", o.id)} onClick={event => { if (!(event.target as Element).closest("button,input,select,a")) setSelected(o.id); }} className={[selected === o.id ? "ro-selected" : "", dropTarget === `operations:${o.id}` ? "ro-drop-target" : gridDrag?.from === o.id ? "ro-dragging" : ""].filter(Boolean).join(" ")}>
-          <td><div className="ro-pair-cell">{rowHandle("operations", o.id, `operación ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`, operationsRowIds)}<div><div className="ro-pair-chips" aria-label={`Par ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`}>{o.legs.map(l => <span key={l.instrument.id} className={`ro-chip ${l.side === 1 ? "buy" : "sell"}`}><strong>{l.instrument.symbol}</strong><span>{l.side === 1 ? "Long" : "Short"}</span></span>)}</div></div></div></td><td className="ro-state">{operationStatus(o)}</td>{showOperation("quantity") && <td>{o.legs.map(l => numberLabel(remaining(l))).join(" / ")}</td>}
-          {showOperation("ratio") && <td>{pairRatioLabel(o.legs[0].entry / o.legs[1].entry, o.legs[0].instrument, o.legs[1].instrument)} → {pairRatioLabel(currentRatio(o, quotes), o.legs[0].instrument, o.legs[1].instrument)}<small className={goalReached(o, currentRatio(o, quotes)) ? "ro-up" : ""}>{goalText(o)}</small></td>}
-          {(["realized", "pending", "net"] as const).map(field => showOperation(field) && <td key={field}>{pnlLines(o, field)}</td>)}{showOperation("updated") && <td className="ro-updated" title={`Hora de mercado del último precio A/B: ${tradeLabel(ratioUpdatedAt(quotes[o.legs[0].instrument.id], quotes[o.legs[1].instrument.id]))}`}>{ratioTimeLabel(ratioUpdatedAt(quotes[o.legs[0].instrument.id], quotes[o.legs[1].instrument.id]))}</td>}<td><div className="ro-actions"><RatioChartLink pair={{ a: o.legs[0].instrument, b: o.legs[1].instrument }} /><button type="button" className="ro-action-icon" aria-label="Detalle" title="Ver detalle" onClick={() => { setSelected(o.id); setIssue(""); }}><GridActionIcon action="detail" /></button>{!isClosed(o) && <button type="button" className="ro-action-icon" aria-label="Editar" title="Editar operación" disabled={!available} onClick={() => beginEdit(o)}><GridActionIcon action="edit" /></button>}<button type="button" className="ro-action-icon ro-danger" aria-label="Eliminar" title="Eliminar operación" disabled={!available} onClick={() => void remove(o)}><GridActionIcon action="delete" /></button></div></td>
-        </tr>)}</tbody></table></div>
+        <div className="ro-table-wrap ro-grid-wrap"><table className="ro-operations-table"><thead><tr>{operationsHeader("Par / sentido", "pair")}{operationsHeader("Estado", "status")}{operationColumns.map(([column, label]) => showOperation(column) && <GridSortHeader key={column} label={label} column={column} sort={operationsSort} disabled={!ready} description={column === "quantity" ? "Ordenar por la cantidad abierta de A" : ["realized", "pending", "net"].includes(column) ? `Ordenar importes en ${currencyLabel(sortCurrency)}; sin valor al final` : undefined} onSort={key => changeGridSort("operations", key)} />)}<th scope="col">Acciones</th></tr></thead><tbody>{ready && operationsRows.map(o => {
+          const metrics = showOperation("ratio") ? operationMetrics(o) : undefined;
+          const updatedAt = showOperation("updated") ? operationQuoteTime(o, quotes) : undefined;
+          return <tr key={o.id} data-row-id={o.id} {...rowDrop("operations", o.id)} onClick={event => { if (!(event.target as Element).closest("button,input,select,a")) setSelected(o.id); }} className={[selected === o.id ? "ro-selected" : "", dropTarget === `operations:${o.id}` ? "ro-drop-target" : gridDrag?.from === o.id ? "ro-dragging" : ""].filter(Boolean).join(" ")}>
+          <td><div className="ro-pair-cell">{rowHandle("operations", o.id, `operación ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`, operationsRowIds)}<div><div className="ro-pair-chips" aria-label={`Par ${o.legs[0].instrument.symbol}/${o.legs[1].instrument.symbol}`}>{o.legs.map(l => <span key={l.instrument.id} className={`ro-chip ${l.side === 1 ? "buy" : "sell"}`}><strong>{l.instrument.symbol}</strong><span>{l.side === 1 ? "Long" : "Short"}</span></span>)}</div>{o.reference && <small>vs {o.reference.instrument.symbol}{o.reference.divisor ? " ÷ 100" : ""}</small>}</div></div></td><td className="ro-state">{operationStatus(o)}</td>{showOperation("quantity") && <td>{o.legs.map(l => numberLabel(remaining(l))).join(" / ")}</td>}
+          {metrics && <td>{ratioSummary(o, metrics)}{operationGoals(o, metrics, true)}</td>}
+          {(["realized", "pending", "net"] as const).map(field => showOperation(field) && <td key={field}>{pnlLines(o, field)}</td>)}{showOperation("updated") && <td className="ro-updated" title={`Hora de mercado del ratio: ${tradeLabel(updatedAt)}`}>{ratioTimeLabel(updatedAt)}</td>}<td><div className="ro-actions"><RatioChartLink pair={operationPair(o)} />{o.reference && <ReferenceChartButton pair={operationPair(o)} />}<button type="button" className="ro-action-icon" aria-label="Detalle" title="Ver detalle" onClick={() => { setSelected(o.id); setIssue(""); }}><GridActionIcon action="detail" /></button>{!isClosed(o) && <button type="button" className="ro-action-icon" aria-label="Editar" title="Editar operación" disabled={!available} onClick={() => beginEdit(o)}><GridActionIcon action="edit" /></button>}<button type="button" className="ro-action-icon ro-danger" aria-label="Eliminar" title="Eliminar operación" disabled={!available} onClick={() => void remove(o)}><GridActionIcon action="delete" /></button></div></td>
+        </tr>; })}</tbody></table></div>
         {ready && !book.operations.some(o => all || !isClosed(o)) && <p className="ro-empty">Sin operaciones en esta vista. Elegí un par en el Monitor y registrá su apertura.</p>}
       </div>
-      {op && <aside className="ro-detail">
+      {op && selectedMetrics && <aside className="ro-detail">
         <header className="ro-detail-heading">
-          <h3>{op.legs[0].instrument.symbol}/{op.legs[1].instrument.symbol}</h3>
+          <h3>{op.reference ? pairLabel(operationPair(op)) : `${op.legs[0].instrument.symbol}/${op.legs[1].instrument.symbol}`}</h3>
           <small>{new Date(op.openedAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hourCycle: "h23" })}</small>
-          <p className={goalReached(op, currentRatio(op, quotes)) ? "ro-up" : ""}>{goalText(op)}</p>
+          {operationGoals(op, selectedMetrics)}
+          <div className="ro-detail-ratio" aria-label="Ratio de la operación">{ratioSummary(op, selectedMetrics)}</div>
+          {op.reference && <small>C de entrada · {numberLabel(op.reference.entry)}{op.reference.divisor ? " (precio antes de dividir por 100)" : ""}</small>}
         </header>
         <div className="ro-detail-summary">
           <div className="ro-pnl-lines">{([ ["gross", "Resultado bruto"], ["commission", "Comisión · apertura + cierre"], ["ddmm", "DDMM · apertura + cierre"], ["net", "Neto al desarme"], ["realized", "Realizado neto"], ["pending", "Remanente neto"] ] as const).map(([field, label]) => <div key={field}><span>{label}</span><strong>{pnlLines(op, field)}</strong></div>)}</div>
@@ -503,8 +711,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
         </div>
         {selectedPnl.some(p => p.issue) && <p className="ro-issue">{selectedPnl.find(p => p.issue)?.issue}</p>}
         {closeQuotes && !isClosed(op) && <section className="ro-close-form" aria-labelledby="ro-close-title"><h4 id="ro-close-title">Registrar cierre</h4>
+          {op.legs[2] && <label className="ro-compare"><input type="checkbox" checked={!!independentQuantities} disabled={!available} onChange={e => {
+            changeCloseInput({ independentQuantities: e.target.checked ? [] : undefined });
+            setCloseDraft(undefined);
+          }} />Ingresar cantidades por pata</label>}
           <div className="ro-close-legs">{op.legs.map((leg, i) => {
-            const name = i === 0 ? "A" : "B";
+            const name = tradingLegNames[i];
             const open = remaining(leg);
             const { quote, issue: quoteIssue } = closeQuotes[i];
             const bookSide = leg.side === 1 ? "Compra" : "Venta";
@@ -513,10 +725,20 @@ export default function RatioOperations({ active }: { active: boolean }) {
             return <div key={leg.instrument.id} className="ro-close-leg">
               <div className="ro-close-fields">
                 <label><span title={leg.instrument.symbol}>Precio cierre {name} · {leg.instrument.symbol}</span>
-                  <input aria-label={`Precio cierre ${name}`} type="number" min="0" step="any" value={closePrices[i]} disabled={!available} onChange={e => setClosePrice(i, e.target.value)} />
+                  <input aria-label={`Precio cierre ${name}`} type="number" min="0" step="any" value={closePrices[i]} disabled={!available || !open} onChange={e => setClosePrice(i, e.target.value)} />
                 </label>
                 <label className="ro-close-quantity"><span title={leg.instrument.quantityUnit}>Cantidad · {leg.instrument.quantityUnit}</span>
-                  <input aria-label={`Cantidad cierre ${name}`} aria-describedby="ro-close-help" type="number" min={leg.step} max={open} step={leg.step} value={closeDraft?.id === op.id && closeDraft.leg === i ? closeDraft.value : input(closeQuantities?.[i])} className={closeQuantities && closeDraft?.leg !== i ? "ro-calculated" : undefined} disabled={!available || open === 0} onChange={e => { setIssue(""); setCloseDraft({ id: op.id, snapshot: JSON.stringify(op), leg: i as 0 | 1, value: e.target.value }); }} />
+                  <input aria-label={`Cantidad cierre ${name}`} aria-describedby="ro-close-help" type="number" min={independentQuantities ? 0 : leg.step} max={open} step={leg.step}
+                    value={independentQuantities ? independentQuantities[i] ?? "" : closeDraft?.id === op.id && closeDraft.leg === i ? closeDraft.value : input(closeQuantities?.[i])}
+                    className={!independentQuantities && closeQuantities && closeDraft?.leg !== i ? "ro-calculated" : undefined} disabled={!available || open === 0}
+                    onChange={e => {
+                      setIssue("");
+                      if (independentQuantities) {
+                        const quantities = [...independentQuantities];
+                        quantities[i] = e.target.value;
+                        changeCloseInput({ independentQuantities: quantities });
+                      } else setCloseDraft({ id: op.id, snapshot: JSON.stringify(op), leg: i as TradingLegIndex, value: e.target.value });
+                    }} />
                 </label>
               </div>
               <div className="ro-close-quotes" role="group" aria-label={`Cotizaciones de ${leg.instrument.symbol} para el cierre`}>
@@ -524,23 +746,33 @@ export default function RatioOperations({ active }: { active: boolean }) {
                   className={label === bookSide && price !== undefined ? "ro-close-book-side" : undefined}
                   title={price === undefined ? quoteIssue || "Sin precio publicado" : label === bookSide ? bookHint : label === "Último" ? tradeLabel(quote?.tradedAt) : undefined}
                   aria-label={`Usar ${label} para el cierre ${name}: ${numberLabel(price)}`}
-                  disabled={!available || price === undefined}
-                  onClick={() => setClosePrice(i, input(price))}>
+                  disabled={!available || !open || !!closeInput?.at || price === undefined}
+                  onClick={() => setClosePrice(i, input(price), true)}>
                   <span>{label}</span><OptionQuoteValue value={price} formatValue={numberLabel} />
                 </button>)}
               </div>
               <small className="ro-close-balance">Abiertos: {numberLabel(open)}{closeQuantities && <> · Luego: {numberLabel(open - closeQuantities[i])}</>}</small>
             </div>;
           })}</div>
-          <small id="ro-close-help">Ingresá la cantidad en A o B. La otra conserva la proporción abierta, al lote más cercano.</small>
+          <div className="ro-close-fields">
+            <label>Fecha/hora del cierre · Argentina<input type="datetime-local" min={dateInput(op.openedAt)} max={dateInput()} value={closeInput?.at ?? ""}
+              disabled={!available} onChange={e => changeCloseDate(e.target.value)} /></label>
+            {referenceOnlyAtClose && <label>Precio C al cerrar<input type="number" step="any" min={Number.MIN_VALUE} value={closeReferencePrice}
+              disabled={!available} onChange={e => changeCloseInput({ reference: { value: e.target.value } })} /></label>}
+          </div>
+          {referenceOnlyAtClose && <button type="button" disabled={!available || !!closeInput?.at || !market.context?.connected || !!closeReferenceQuote?.issue || !closeReferenceQuote?.last}
+            onClick={() => changeCloseInput({ reference: { value: formatOptionInput(closeReferenceQuote!.last!, 21), fromMarket: true } })}>Usar último C · {numberLabel(closeReferenceQuote?.last)}</button>}
+          <small id="ro-close-help">{independentQuantities ? "Registrá A y B juntas mientras ambas tengan saldo. C se puede cerrar por separado." :
+            "Ingresá la cantidad de una pata. Las demás conservan la proporción abierta, al lote más cercano."}</small>
           {closeIssue && <p className="ro-close-issue" role="alert">{closeIssue}</p>}
           <div className="ro-close-actions">
-            <button type="button" className="ro-primary ro-register-close" disabled={!available || !closeQuantities || !closePrices.every(p => numeric(p) > 0 && Number.isFinite(numeric(p)))} onClick={() => void registerClose()}>Registrar cierre</button>
-            <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available || f < 1 && !bothLegsOpen}
-              title={f < 1 && !bothLegsOpen ? "Ingresá una cantidad para cerrar una sola pata." : undefined}
-              onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div>
+            <button type="button" className="ro-primary ro-register-close" disabled={!available || !closeQuantities || !closeHasPrices} onClick={() => void registerClose()}>Registrar cierre</button>
+            {!independentQuantities && <div className="ro-actions">{[.25, .5, 1].map(f => <button key={f} type="button" disabled={!available || !closeHasPrices || f < 1 && !bothPairedLegsOpen}
+              title={f < 1 && !bothPairedLegsOpen ? "Ingresá una cantidad para cerrar una sola pata." : undefined}
+              onClick={() => void registerClose(f)}>{f === 1 ? "Cerrar todo" : `Cerrar ${f * 100}%`}</button>)}</div>}
           </div>
-          <small>Los accesos de porcentaje cierran esa parte del remanente. Podés ingresar los precios reales del cierre.</small>
+          <small>{closeInput?.at ? "Ingresá los precios ejecutados en la fecha elegida." :
+            "Si dejás la fecha vacía, se registra con la hora actual."}</small>
         </section>}
 
         <RatioCloseHistory key={`${scope}:${op.id}`} operation={op} available={available} onChange={changeRecordedClose} />

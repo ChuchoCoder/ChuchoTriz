@@ -93,7 +93,7 @@ export function pairKey(p: { a: { id: string }; b: { id: string }; c?: { id: str
 }
 export function marketLabel(value: string) { return ({ bm: "BYMA", rx: "A3" } as Record<string, string>)[value] || value || "S/D"; }
 export function currencyLabel(value: string) { return value === "EXT" ? "USD C" : value || "S/D"; }
-export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)}${i.id === "rx_DDF_DLR_SPOT" ? " · Dólar oficial · sólo monitor" : i.monitorOnly && i.settlement === "Futuro" ? " · Futuro · sólo monitor" : ""}`; }
+export function instrumentDetail(i: RatioInstrument) { return `${marketLabel(i.market)} · ${currencyLabel(i.currency)}${i.id === "rx_DDF_DLR_SPOT" ? " · Dólar oficial · sólo monitor" : i.monitorOnly && i.settlement === "Futuro" ? " · Futuro · referencia" : ""}`; }
 export function tickerKey(value: string) { return value.replace(/\(\s*CI\s*\)/gi, " CI ").trim().replace(/\s+/g, " ").toLocaleUpperCase(); }
 export function exactTickerMatches(query: string, options: readonly RatioInstrument[]) {
   const key = tickerKey(query);
