@@ -339,6 +339,25 @@ algún par con esa referencia. Ocultar una columna no cambia la fórmula, las
 cotizaciones utilizadas ni la variación diaria. El menú se cierra con Escape,
 con otro clic en el engranaje o al pulsar fuera.
 
+### Histórico diario
+
+Seleccioná una fila o enfocá el nombre del par y pulsá Enter. El gráfico
+aparece a la derecha de la tabla. En un widget angosto aparece debajo.
+El selector **Rango** abre en **3 meses** y admite **1, 6, 12 meses** o
+un intervalo de fechas de hasta 12 meses. Al pasar a otra fila se mantienen
+el rango y el tipo de bandas mientras el panel está abierto.
+
+- **Estáticas** usa la media y el desvío estándar de los cierres coincidentes
+  del rango visible. **Móviles** usa los 20 cierres coincidentes anteriores a
+  cada punto. Si hace falta, busca cierres hasta un año antes del inicio del rango.
+- **±1σ** se dibuja en verde con línea discontinua y **±2σ** en amarillo
+  con línea punteada, con los colores del simulador de Opciones.
+- Cada día usa los cierres de la misma rueda para las especies exactas A/B
+  y C si corresponde. Se respetan el divisor de C y el formato de la fila.
+  La rueda en curso queda fuera de las estadísticas. Los días hábiles del rango
+  con algún cierre ausente se muestran como huecos.
+  La disponibilidad de las series depende del broker.
+
 ## Agregar y editar pares
 
 Cada widget nuevo comienza, en este orden, con MEP AL30, CCL AL30,

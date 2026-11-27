@@ -80,6 +80,95 @@ test('a stalled native series times out and can be retried without changing acco
   assert.equal(recovered.revision, stuck.revision);
 });
 
+test('reads closed daily bars by exact widget pair, follows nextTime and reuses instrument history', async () => {
+  const day = 86400000, to = Date.UTC(2026, 10, 26), from = to - 10 * day;
+  const f = fixture(class extends Date { static now() { return to + day + 9 * 3600000; } });
+  const requested = [];
+  f.ms.seriesStore = { async getDailySeries(id, start, end) {
+    requested.push({ id, start, end });
+    if (end < to / 1000) return { series: [{ date: new Date(to - 4 * day).toISOString(), close: 100 }] };
+    return { nextTime: id === 'a' ? (to - 4 * day) / 1000 : new Date(to - 4 * day).toISOString(), series: [
+      { date: new Date(to + day).toISOString(), close: 987 },
+      { date: new Date(to + 3600000 * 12).toISOString(), close: 121 },
+      { date: new Date(to - 2 * day).toISOString(), close: 119 },
+      { date: new Date(to - 3 * day).toISOString(), close: null },
+    ] };
+  } };
+  await f.add();
+  const widget = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: widget.id, pairId: widget.pairs[0].id, from, to };
+  const answer = await f.request('ratioDailyHistory', params);
+  assert.equal(answer.error, undefined);
+  assert.deepEqual(Object.keys(answer.result), ['a', 'b']);
+  assert.deepEqual(answer.result.a.points, [{ day: to - 4 * day, value: 100 }, { day: to - 2 * day, value: 119 }, { day: to, value: 121 }]);
+  assert.equal(requested.length, 4);
+  assert.equal(requested[0].start, (from - 90 * day) / 1000);
+  assert.equal(requested[0].end, (to + day) / 1000 - 1);
+  assert.equal(requested[2].end, (to - 3 * day) / 1000 - 1);
+  await f.request('ratioDailyHistory', { ...params, pairId: widget.pairs[1].id });
+  assert.deepEqual(requested.slice(4).map(call => call.id), ['c', 'c']);
+  for (const invalid of [{ to: to + day }, { from: to - 367 * day }, { from: from + 1 }, { pairId: 'missing' }]) {
+    assert.ok((await f.request('ratioDailyHistory', { ...params, ...invalid })).error);
+  }
+  assert.equal(requested.length, 6);
+  await f.request('ratioDailyHistory', { ...params, older: true });
+  assert.deepEqual(requested.slice(6), ['a', 'b'].map(id => ({
+    id, start: (from - 365 * day) / 1000, end: (from - 90 * day) / 1000 - 1,
+  })));
+});
+
+test('rejects a daily result across account changes and reloads after reconnecting', async () => {
+  const day = 86400000, to = Date.UTC(2026, 10, 26), from = to - 7 * day;
+  const f = fixture(class extends Date { static now() { return to + 2 * day; } });
+  const calls = [];
+  let switched = false, fail = true;
+  f.ms.seriesStore = { async getDailySeries(id) {
+    calls.push(id);
+    if (id === 'a' && !switched) {
+      switched = true;
+      f.ms.profileStore.activeAccount = 'other';
+    }
+    if (id === 'b' && fail) throw { response: { status: 401 } };
+    return { series: [{ date: new Date(to).toISOString(), close: 42 }] };
+  } };
+  await f.add();
+  const widget = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: widget.id, pairId: widget.pairs[0].id, from, to };
+  assert.match((await f.request('ratioDailyHistory', params)).error, /Cambió el dashboard/);
+  const after = { ...params, ...await f.args() };
+  assert.equal((await f.request('ratioDailyHistory', after)).result.b.issue, 'Histórico diario no disponible (HTTP 401)');
+  assert.deepEqual(calls, ['a', 'a', 'b'], 'The second leg is suppressed when the context changes');
+  fail = false;
+  f.ms.dmaWebSocket = { addSubscription() {} };
+  assert.equal((await f.request('ratioDailyHistory', { ...params, ...await f.args() })).result.b.points[0].value, 42);
+  assert.deepEqual(calls, ['a', 'a', 'b', 'a', 'b'], 'A new connection does not reuse a cached authentication error');
+});
+
+test('pauses daily pagination while hidden and does not cache the interrupted window', async () => {
+  const day = 86400000, to = Date.UTC(2026, 10, 26), from = to - 7 * day;
+  const f = fixture(class extends Date { static now() { return to + 2 * day; } });
+  let calls = 0, resume;
+  const held = new Promise(resolve => { resume = resolve; });
+  f.ms.seriesStore = { async getDailySeries(id, start, end) {
+    if (++calls <= 2) await held;
+    if (end < to / 1000) return { series: [{ date: new Date(to - day).toISOString(), close: 40 }] };
+    return { nextTime: (to - day) / 1000, series: [{ date: new Date(to).toISOString(), close: 42 }] };
+  } };
+  await f.add();
+  const widget = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: widget.id, pairId: widget.pairs[0].id, from, to };
+  const request = f.request('ratioDailyHistory', params);
+  assert.equal(calls, 2);
+  f.document.hidden = true;
+  resume();
+  assert.match((await request).result.a.issue, /pausada/);
+  assert.equal(calls, 2);
+  f.document.hidden = false;
+  const recovered = await f.request('ratioDailyHistory', params);
+  assert.deepEqual(recovered.result.b.points.map(point => point.value), [40, 42]);
+  assert.equal(calls, 6);
+});
+
 test('book previews use the native today series for the exact instrument and reuse it while updating the latest trade', async () => {
   const f = fixture();
   const calendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' });
