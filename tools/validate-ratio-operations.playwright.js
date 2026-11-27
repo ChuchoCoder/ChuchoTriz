@@ -874,11 +874,17 @@ async page => {
     const c = panel.getBoundingClientRect();
     const data = grid.querySelector(':scope > .ro-entry-costs');
     const d = data.getBoundingClientRect();
+    const directions = grid.querySelector('.ro-direction');
+    const [longAButton, ratio, longBButton] = [...directions.children].map(el => el.getBoundingClientRect());
+    const right = Math.max(a.right, b.right);
+    const aligned = (x, y) => Math.abs(x - y) < 2;
     const sameRow = (x, y) => Math.abs(x.top - y.top) < 2;
     return {
       four: a.right <= b.left && b.right <= c.left && c.right <= d.left && sameRow(a, b) && sameRow(b, c) && sameRow(c, d),
       two: c.top >= Math.max(a.bottom, b.bottom) && c.right <= d.left && sameRow(c, d),
       stack: c.top >= Math.max(a.bottom, b.bottom) && d.top >= c.bottom,
+      directionsAligned: aligned(longAButton.left, a.left) && aligned(longBButton.right, right) &&
+        aligned(ratio.left + ratio.width / 2, (a.left + right) / 2),
       inlineControls: !!data.querySelector('[type="submit"]') &&
         [...grid.querySelectorAll(':scope > .ro-leg')].every(leg => {
           const amount = leg.querySelector('.ro-sizing-leg strong');
@@ -888,10 +894,13 @@ async page => {
   });
   const desktop = await placement();
   assert(desktop.four && desktop.inlineControls, 'A, B, C and data align in four columns with costs and submission inside their cards');
+  assert(desktop.directionsAligned, 'Long/Short buttons span A and B with the ratio centered at desktop width');
   await page.setViewportSize({ width: 1024, height: 950 });
-  assert((await placement()).two, 'At intermediate widths the four cards form two rows');
+  const intermediate = await placement();
+  assert(intermediate.two && intermediate.directionsAligned, 'At intermediate widths the cards form two rows and Long/Short spans A and B');
   await page.setViewportSize({ width: 760, height: 950 });
-  assert((await placement()).stack, 'At narrow widths the four cards stack in order');
+  const narrow = await placement();
+  assert(narrow.stack && narrow.directionsAligned, 'At narrow widths the cards stack in order and Long/Short fits above A');
   await entryC.focus();
   await page.keyboard.press('Tab');
   assert(await label('Objetivo de brecha (%)').evaluate(el => document.activeElement === el && el.matches(':focus-visible')),
