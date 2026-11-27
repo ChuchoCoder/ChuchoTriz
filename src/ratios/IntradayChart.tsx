@@ -28,18 +28,68 @@ function acquireReader() {
   return { client, release() { if (--subscribers === 0) { client.dispose(); reader = undefined; } } };
 }
 
+type QuoteUpdate = { result: LiveResponse } | { error: unknown };
+type QuoteListener = (update: QuoteUpdate) => void;
+type QuoteGroup = (listener: QuoteListener) => () => void;
+const quoteGroups = new Map<string, QuoteGroup>();
+
+function createQuoteGroup(key: string, ids: string[]): QuoteGroup {
+  const connection = acquireReader(), listeners = new Set<QuoteListener>();
+  let timer: ReturnType<typeof setTimeout>, reading = false, generation = 0;
+  const closeIfIdle = () => {
+    if (reading || listeners.size) return;
+    quoteGroups.delete(key);
+    connection.release();
+  };
+  async function poll() {
+    if (reading || !listeners.size || document.hidden) return;
+    reading = true;
+    const round = generation;
+    const update = await connection.client.call<LiveResponse>("ratioIntradayQuotes", { ids }).then(
+      result => ({ result }), error => ({ error }),
+    );
+    // A group that was entirely hidden must refresh before publishing again.
+    if (round === generation) listeners.forEach(listener => listener(update));
+    reading = false;
+    if (!listeners.size) closeIfIdle();
+    else if (round !== generation) void poll();
+    else timer = setTimeout(() => void poll(), 2000);
+  }
+  return listener => {
+    listeners.add(listener);
+    clearTimeout(timer);
+    void poll();
+    return () => {
+      if (!listeners.delete(listener) || listeners.size) return;
+      generation++;
+      clearTimeout(timer);
+      closeIfIdle();
+    };
+  };
+}
+
+function subscribeQuotes(ids: readonly string[], listener: QuoteListener) {
+  const sortedIds = [...ids].sort(), key = JSON.stringify(sortedIds);
+  let subscribe = quoteGroups.get(key);
+  if (!subscribe) {
+    subscribe = createQuoteGroup(key, sortedIds);
+    quoteGroups.set(key, subscribe);
+  }
+  return subscribe(listener);
+}
+
 function useIntraday(ids: readonly string[], active: boolean) {
   const [history, setHistory] = useState<History>({}), [live, setLive] = useState<Live>({});
   const [start, setStart] = useState<number>(), [connected, setConnected] = useState<boolean>();
   const [loading, setLoading] = useState(true), [historyIssue, setHistoryIssue] = useState(""), [liveIssue, setLiveIssue] = useState("");
   const retryHistory = useRef<() => void>(() => {});
   const watching = useRef(active), syncPolling = useRef(() => {});
+  useEffect(() => { watching.current = active; syncPolling.current(); }, [active]);
   useEffect(() => {
     let connection: ReturnType<typeof acquireReader> | undefined;
     let disposed = false, revision: number | undefined, previousConnection: boolean | undefined;
     let previousAvailability: string | undefined;
-    let timer: ReturnType<typeof setTimeout>, historyRequest = 0;
-    let polling = false;
+    let stopQuotes: (() => void) | undefined, historyRequest = 0;
     const canPoll = () => !disposed && watching.current && !document.hidden;
     const loadHistory = (refresh = false) => {
       if (!connection) return;
@@ -58,13 +108,11 @@ function useIntraday(ids: readonly string[], active: boolean) {
         if (!disposed && request === historyRequest) setLoading(false);
       });
     };
-    const poll = async () => {
-      if (!canPoll() || polling) return;
-      polling = true;
+    const receiveQuotes: QuoteListener = update => {
+      if (!canPoll()) return;
       try {
-        const { client } = connection ??= acquireReader();
-        const result = await client.call<LiveResponse>("ratioIntradayQuotes", { ids });
-        if (!canPoll()) return;
+        if ("error" in update) throw update.error;
+        const { result } = update;
         const switched = result.revision !== revision;
         const availability = result.available?.join("\u0000");
         if (switched) {
@@ -88,25 +136,29 @@ function useIntraday(ids: readonly string[], active: boolean) {
         previousConnection = result.connected;
         previousAvailability = availability;
       } catch (error) {
-        if (canPoll()) { setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false); }
-      } finally {
-        polling = false;
-        if (canPoll()) timer = setTimeout(() => void poll(), 2000);
+        setConnected(undefined); setLiveIssue(error instanceof Error ? error.message : "Datos en vivo no disponibles."); setLoading(false);
       }
     };
-    const visibilityChanged = () => { clearTimeout(timer); void poll(); };
+    const visibilityChanged = () => {
+      if (!canPoll()) {
+        stopQuotes?.();
+        stopQuotes = undefined;
+      } else if (!stopQuotes) {
+        connection ??= acquireReader();
+        stopQuotes = subscribeQuotes(ids, receiveQuotes);
+      }
+    };
     retryHistory.current = () => { if (revision !== undefined) void loadHistory(true); };
     syncPolling.current = visibilityChanged;
     document.addEventListener("visibilitychange", visibilityChanged);
-    void poll();
+    visibilityChanged();
     return () => {
-      disposed = true; clearTimeout(timer); retryHistory.current = () => {};
+      disposed = true; stopQuotes?.(); retryHistory.current = () => {};
       document.removeEventListener("visibilitychange", visibilityChanged);
       syncPolling.current = () => {};
       connection?.release();
     };
   }, [ids]);
-  useEffect(() => { watching.current = active; syncPolling.current(); }, [active]);
   return { history, live, start, connected, loading, historyIssue, liveIssue, retry: () => retryHistory.current() };
 }
 
