@@ -813,11 +813,21 @@ async page => {
   await click(button('1 · Monitor'));
   await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
   const lastC = page.getByRole('button', { name: /^Usar último C/ });
-  const openedMinute = await label('Fecha/hora de apertura · Argentina').inputValue();
-  await page.clock.setFixedTime(new Date(Date.now() + 120_000));
+  const openingDate = label('Fecha/hora de apertura · Argentina');
+  const openedMinute = await openingDate.inputValue();
   await lastC.click();
-  assert(await label('Fecha/hora de apertura · Argentina').inputValue() > openedMinute,
-    'Copying a later market C updates the live draft timestamp');
+  await page.clock.setFixedTime(new Date(Date.now() + 120_000));
+  await page.evaluate(() => {
+    const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT');
+    spot.md.lst = 1580; spot.md.seq++;
+  });
+  await page.getByRole('button', { name: 'Usar último C · 1.580,00', exact: true }).waitFor();
+  await button('Usar último de A').click();
+  assert(await openingDate.inputValue() > openedMinute && await label('Precio C al abrir').inputValue() === '' &&
+    await label('Precio de entrada B').inputValue() === '', 'Advancing the live draft timestamp clears earlier copied prices');
+  await lastC.click();
+  assert(await label('Precio C al abrir').inputValue() === '1580' && await label('Precio de entrada A').inputValue() !== '',
+    'New copies made in the same minute are retained');
   await page.clock.setFixedTime(new Date());
   await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',

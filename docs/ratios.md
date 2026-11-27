@@ -148,7 +148,9 @@ selección queda guardada al recargar.
 Desde **Configuración → Ratios → Monitor**, pulsá **Abrir operación** en la fila
 con C. La apertura conserva los instrumentos y el divisor seleccionados.
 Ingresá **Precio C al abrir** con la cotización de la fecha y hora de apertura.
-Para una operación del momento, podés copiar **Usar último C**. Al elegir una fecha
+Para una operación del momento, podés copiar **Usar último C**. Al copiar una
+cotización en un minuto posterior, la apertura toma la hora nueva y pide
+volver a elegir los precios de mercado copiados antes. Al elegir una fecha
 de apertura o cierre, se cargan los precios manualmente. Escribí siempre
 el precio original de C. La brecha de entrada usa los precios A y B registrados
 y el precio de C ingresado. El objetivo de A/B y el de brecha son independientes.

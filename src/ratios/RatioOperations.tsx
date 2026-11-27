@@ -48,8 +48,20 @@ function referenceDraft(instrument: TradingInstrument, divisor?: 100, saved?: Op
 const dateInput = (iso = new Date().toISOString()) => new Date(iso).toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 16).replace(" ", "T");
 const emptyDraft = (): Draft => ({ pa: "", pb: "", qa: "100", fa: "", fb: "", sa: "1", sb: "1", ddmma: "", ddmmb: "", commission: "0", target: "", at: dateInput(), direction: 1, sourceA: "last", sourceB: "last" });
 const input = (n?: number) => n === undefined ? "" : formatOptionInput(n);
-function withMarketEntry(previous: Draft, change: Partial<Draft>): Draft {
-  return { ...previous, ...change, at: previous.reference && !previous.explicitDate ? dateInput() : previous.at };
+function withMarketEntry(previous: Draft, change: Partial<Draft>, copiedC = false): Draft {
+  const next = { ...previous, ...change };
+  if (!next.reference || previous.explicitDate || !(change.pa || change.pb || copiedC)) return next;
+  const at = dateInput();
+  if (at === previous.at) return next;
+  // Keep the manually entered prices and require a new copy for the other live quotes.
+  if (!("pa" in change) && previous.pa && previous.sourceA !== "manual" && previous.sourceA !== "saved") {
+    next.pa = ""; next.sourceA = "manual";
+  }
+  if (!("pb" in change) && previous.pb && previous.sourceB !== "manual" && previous.sourceB !== "saved") {
+    next.pb = ""; next.sourceB = "manual";
+  }
+  if (!copiedC && next.reference.copiedPrice) next.reference = { ...next.reference, price: "", copiedPrice: false };
+  return { ...next, at };
 }
 const entrySourceLabels = { last: "mercado", bid: "Compra", ask: "Venta", manual: "manual", saved: "registrado" } as const;
 function resolveEntryPrice(price: string, source: Source, quote?: TradingQuote): { price: string; source: Source } {
@@ -167,8 +179,12 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setDraft(previous => {
       const a = resolveEntryPrice(previous.pa, previous.sourceA, quotes[previous.a?.id || ""]);
       const b = resolveEntryPrice(previous.pb, previous.sourceB, quotes[previous.b?.id || ""]);
-      return a.price === previous.pa && b.price === previous.pb && a.source === previous.sourceA && b.source === previous.sourceB
-        ? previous : withMarketEntry(previous, { pa: a.price, pb: b.price, sourceA: a.source, sourceB: b.source });
+      const changeA = a.price !== previous.pa || a.source !== previous.sourceA;
+      const changeB = b.price !== previous.pb || b.source !== previous.sourceB;
+      return changeA || changeB ? withMarketEntry(previous, {
+        ...(changeA ? { pa: a.price, sourceA: a.source } : {}),
+        ...(changeB ? { pb: b.price, sourceB: b.source } : {}),
+      }) : previous;
     });
   }, [quotes]);
 
@@ -296,7 +312,7 @@ export default function RatioOperations({ active }: { active: boolean }) {
     setDraft(previous => {
       if (!previous.reference) return previous;
       const reference = { ...previous.reference, ...change };
-      return change.copiedPrice ? withMarketEntry(previous, { reference }) : { ...previous, reference };
+      return change.copiedPrice ? withMarketEntry(previous, { reference }, true) : { ...previous, reference };
     });
   }
   const missingEntrySides = view === "opening" ? [
