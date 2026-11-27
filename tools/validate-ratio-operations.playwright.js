@@ -826,7 +826,21 @@ async page => {
   assert(await entryC.inputValue() === '' && await label('Registrar C como tercera pata').count() === 0, 'Spot C requires an explicit quote and is a benchmark');
   await click(button('Abrir operación'));
   assert(await entryC.isVisible(), 'Entry with a missing C is blocked');
+  const referencePanel = page.getByRole('region', { name: /^Referencia C/ });
+  const placement = () => referencePanel.evaluate(panel => {
+    const grid = panel.parentElement;
+    const [a, b] = [...grid.querySelectorAll(':scope > .ro-leg')].map(leg => leg.getBoundingClientRect());
+    const c = panel.getBoundingClientRect();
+    return {
+      beside: a.right <= b.left && b.right <= c.left && Math.abs(a.top - c.top) < 2 && Math.abs(b.top - c.top) < 2,
+      after: c.top >= Math.max(a.bottom, b.bottom),
+    };
+  });
+  assert((await placement()).beside, 'Reference C lines up next to A and B on desktop');
+  await page.setViewportSize({ width: 1024, height: 950 });
+  assert((await placement()).after, 'At intermediate widths Reference C follows the two legs');
   await page.setViewportSize({ width: 760, height: 950 });
+  assert((await placement()).after, 'At narrow widths the three cards stack in order');
   await entryC.focus();
   await page.keyboard.press('Tab');
   assert(await label('Objetivo de brecha (%)').evaluate(el => document.activeElement === el && el.matches(':focus-visible')),
@@ -839,7 +853,7 @@ async page => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await entryC.fill('1572.5'); await label('Ratio objetivo').fill('1800');
   await label('Objetivo de brecha (%)').fill('1');
-  assert(await page.locator('#ro-reference-title ~ .ro-close-legs output').first().innerText() === '1,75%', 'Entry spread uses the manual C');
+  assert(await referencePanel.locator('output').first().innerText() === '1,75%', 'Entry spread uses the manual C');
   await click(button('Abrir operación')); await button('Registrar cierre').waitFor();
   const spotOp = (await book()).operations.at(-1);
   assert(spotOp.legs.length === 2 && spotOp.reference.entry === 1572.5 && spotOp.reference.goal.comparison === 'below' &&
@@ -910,7 +924,7 @@ async page => {
   await click(button('Registrar cierre'));
   await reviewWaitHistory(future.id, [[50, 10], [50, 10], [1, 1]]);
   await history.getByText('Brecha de cierre · 0,00%', { exact: true }).waitFor();
-  checks.push('Historical quote controls and keyboard focus work at tablet width, and a future can close independently of A/B');
+  checks.push('Reference C aligns with A/B on desktop, fits narrow screens with keyboard focus and supports independent future closes');
   await click(button('1 · Monitor')); await click(button('Quitar par MEP AL30 vs (DLR/DIC26 ÷ 100)'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));
