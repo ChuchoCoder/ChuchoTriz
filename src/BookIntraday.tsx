@@ -151,33 +151,34 @@ function Preview({ target, id, onEnter, onLeave }: {
   useLayoutEffect(() => {
     const element = panel.current!;
     const native = anchor.matches(NATIVE_CHART_ICON);
-    const header = native ? null : chartContainer(anchor);
+    const widget = native ? null : anchor.closest(".SecurityCardWidget");
     const position = () => {
       const rect = anchor.getBoundingClientRect();
       const gap = 5, inset = 8;
-      const widget = header?.getBoundingClientRect();
-      const top = widget?.top ?? rect.top;
-      const below = (widget?.bottom ?? rect.bottom) + gap;
+      const widgetRect = widget?.getBoundingClientRect();
+      const top = widgetRect?.top ?? rect.top;
+      const below = (widgetRect?.bottom ?? rect.bottom) + gap;
       const aboveRoom = top - gap - inset;
-      let side: number | undefined, alignAbove: boolean | undefined;
+      let sideLeft: number | undefined, alignAbove: boolean | undefined;
       element.style.width = "";
       element.style.maxHeight = "";
       element.style.pointerEvents = "";
-      const naturalSize = widget && element.getBoundingClientRect();
+      const naturalSize = widgetRect && element.getBoundingClientRect();
       const fitsAbove = naturalSize && naturalSize.height <= aboveRoom;
       if (fitsAbove) {
         alignAbove = true;
-      } else if (native || widget) {
+      } else if (native || widgetRect) {
         const favorite = native ? anchor.closest(".ActionCell")?.querySelector(".FavoriteButton")?.getBoundingClientRect() : undefined;
-        const left = widget?.left ?? (favorite?.width ? Math.min(rect.left, favorite.left) : rect.left);
-        const right = widget?.right ?? (favorite?.width ? Math.max(rect.right, favorite.right) : rect.right);
+        const left = widgetRect?.left ?? (favorite?.width ? Math.min(rect.left, favorite.left) : rect.left);
+        const right = widgetRect?.right ?? (favorite?.width ? Math.max(rect.right, favorite.right) : rect.right);
         const rightRoom = window.innerWidth - right - gap - inset, leftRoom = left - gap - inset;
-        const preferredWidth = 354, minimumSideWidth = 180;
+        // Keep the widget's scaled axis labels legible at the narrowest side placement.
+        const preferredWidth = 354, minimumSideWidth = widgetRect ? 270 : 180;
         if (Math.max(rightRoom, leftRoom) >= minimumSideWidth) {
           const onRight = native ? rightRoom >= preferredWidth || rightRoom >= leftRoom : rightRoom >= minimumSideWidth;
           const width = Math.min(preferredWidth, onRight ? rightRoom : leftRoom);
           if (!naturalSize || width < naturalSize.width) element.style.width = `${width}px`;
-          side = onRight ? right + gap : left - gap - width;
+          sideLeft = onRight ? right + gap : left - gap - width;
         } else {
           const belowRoom = window.innerHeight - below - inset;
           alignAbove = aboveRoom > belowRoom;
@@ -189,14 +190,15 @@ function Preview({ target, id, onEnter, onLeave }: {
       const { width, height } = fitsAbove ? naturalSize : element.getBoundingClientRect();
       const above = top - gap - height;
       const maxLeft = window.innerWidth - width - inset, maxTop = window.innerHeight - height - inset;
-      const x = side ?? rect.right - width;
-      const y = side !== undefined ? rect.top : (alignAbove ?? (below > maxTop)) ? above : below;
+      const x = sideLeft ?? rect.right - width;
+      const y = sideLeft !== undefined ? rect.top : (alignAbove ?? (below > maxTop)) ? above : below;
       element.style.left = `${Math.max(inset, Math.min(x, maxLeft))}px`;
       element.style.top = `${Math.max(inset, Math.min(y, maxTop))}px`;
     };
     position();
     const observer = new ResizeObserver(position);
     observer.observe(element);
+    if (widget) observer.observe(widget);
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
     return () => { observer.disconnect(); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };

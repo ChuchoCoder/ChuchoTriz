@@ -182,7 +182,7 @@ async (page, group) => {
     const trigger = page.getByRole('button', { name: 'Gráfico intradiario de AL30' });
     await trigger.evaluate(element => {
       const header = element.closest('.NewWidgetHeader');
-      Object.assign(header.parentElement.style, { position: 'absolute', top: '360px', left: '420px', width: '320px' });
+      Object.assign(header.parentElement.style, { position: 'absolute', top: '360px', left: '420px', width: '320px', height: '240px' });
       Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '32px' });
     });
     await trigger.focus();
@@ -194,24 +194,40 @@ async (page, group) => {
       { foreground: 'stroke', minimum: 3, state: 'attached' });
     const placement = async (id, side, detail) => {
       await page.waitForFunction(side => {
-        const title = document.querySelector('.SecurityCardWidget .NewWidgetHeader').getBoundingClientRect();
+        const widget = document.querySelector('.SecurityCardWidget').getBoundingClientRect();
         const preview = document.querySelector('.ct-book-intraday');
         const plot = preview?.querySelector('svg')?.getBoundingClientRect();
         if (!plot) return false;
         const { left, top, right, bottom } = preview.getBoundingClientRect();
         if (left < 0 || top < 0 || right > innerWidth || bottom > innerHeight || plot.bottom > bottom) return false;
-        if (side === 'above') return bottom < title.top;
-        return side === 'right' ? left > title.right : right < title.left;
+        if (side === 'above') return bottom < widget.top;
+        if (side === 'below') return top > widget.bottom;
+        return side === 'right' ? left > widget.right : right < widget.left;
       }, side, { timeout: 3000 }).catch(error => { throw Error(`${detail}. ${error.message}`); });
       cases.push({ id, status: 'PASS', detail });
     };
     await placement('TH-16', 'above', 'El gráfico del widget abre arriba si entra completo');
     await page.evaluate(() => window.scrollTo(0, 320));
     await placement('TH-17', 'right', 'El gráfico pasa a la derecha cuando falta espacio arriba');
-    await page.setViewportSize({ width: 990, height: 800 });
+    const widget = page.locator('.SecurityCardWidget');
+    await widget.evaluate(element => { element.style.width = '450px'; });
+    await placement('TH-20', 'right', 'El gráfico sigue al widget cuando cambia su ancho');
+    await widget.evaluate(element => { element.style.width = '320px'; });
+    await page.setViewportSize({ width: 1024, height: 800 });
     await placement('TH-18', 'right', 'El gráfico se ajusta al ancho disponible a la derecha');
+    const labels = await book.locator('svg text').evaluateAll(labels => labels.map(label => {
+      const bounds = label.getBoundingClientRect(), plot = label.ownerSVGElement.getBoundingClientRect();
+      const fontSize = parseFloat(getComputedStyle(label).fontSize) * label.getScreenCTM().a;
+      return bounds.left >= plot.left && bounds.right <= plot.right && bounds.top >= plot.top && bounds.bottom <= plot.bottom && fontSize >= 8;
+    }));
+    if (!labels.length || labels.some(visible => !visible) || !await trigger.evaluate(element => element === document.activeElement)) {
+      throw Error('El gráfico compacto debe conservar las etiquetas dentro del eje y el foco en el botón');
+    }
+    await contrast('TH-21', 'Etiqueta del eje del Book en ancho reducido', book.locator('svg text').first(), { foreground: 'fill' });
     await page.setViewportSize({ width: 760, height: 800 });
     await placement('TH-19', 'left', 'En el borde derecho, el gráfico aprovecha el espacio a la izquierda');
+    await widget.evaluate(element => Object.assign(element.style, { left: '120px', width: '520px' }));
+    await placement('TH-22', 'below', 'Sin espacio lateral, el gráfico queda debajo del libro completo');
     await page.keyboard.press('Escape');
     await book.waitFor({ state: 'hidden' });
   } else {
