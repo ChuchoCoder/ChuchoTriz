@@ -73,9 +73,25 @@ function install() {
   const moveReferenceTick = () => { securities.find(s => s.id === refId).md.lstdStr = new Date(historyEnd - 45 * 60000).toISOString(); };
   if (lagged) moveReferenceTick();
   const seriesCounts = {}, failedSeries = new Set();
+  const dailySeriesCalls = [], failedDailySeries = new Set(), sparseDailySeries = new Set();
+  const dayMs = 86400000;
+  async function getDailySeries(id, from, to) {
+    dailySeriesCalls.push({ id, from, to });
+    if (failedDailySeries.has(id)) throw { response: { status: 401 } };
+    const instrument = securities.find(s => s.id === id);
+    const series = [];
+    for (let day = from * 1000; day <= to * 1000; day += dayMs) {
+      const date = new Date(day), i = day / dayMs;
+      if (!date.getUTCDay() || date.getUTCDay() === 6 || id === 'AL30D-2' && i % 9 === 0 || sparseDailySeries.has(id) && i % 6 !== 0) continue;
+      const phase = instrument.symbolStr.charCodeAt(instrument.symbolStr.length - 1);
+      const close = instrument.md.refp * (1 + 0.018 * Math.sin(i * 0.14 + phase) + 0.006 * Math.cos(i * 0.7 + phase));
+      series.push({ date, close });
+    }
+    return { series };
+  }
   window.mainStore = { dashboardStore: ds, securityStore: { securities, getSecurity: async id => securities.find(s => s.id === id) },
     profileStore: { activeAccount: 'SYNTHETIC' }, webSocketConnectionStatus: true, dmaWebSocket: { addSubscription() {} },
-    seriesStore: { getIntradayTodaySeries(id) { return this.getIntradaySeries(id, sessionStart / 1000, Date.now() / 1000); },
+    seriesStore: { getDailySeries, getIntradayTodaySeries(id) { return this.getIntradaySeries(id, sessionStart / 1000, Date.now() / 1000); },
       async getIntradaySeries(id, from, to) {
       seriesCounts[id] = (seriesCounts[id] || 0) + 1;
       if (failedSeries.has(id)) throw { response: { status: 401 } };
@@ -95,6 +111,9 @@ function install() {
     price(id, value) { const s = securities.find(s => s.id === id); s.md.lst = value; s.md.seq++; },
     connected(value) { window.mainStore.webSocketConnectionStatus = value; },
     seriesCounts,
+    dailySeriesCalls,
+    failDailySeries(id, value) { if (value) failedDailySeries.add(id); else failedDailySeries.delete(id); },
+    makeDailySeriesSparse(id) { sparseDailySeries.add(id); },
     failSeries(id, value) { if (value) failedSeries.add(id); else failedSeries.delete(id); },
     useEarlierReference() {
       lagged = true; sessionStorage.setItem('ct-reference-history-lag', '1'); moveReferenceTick();

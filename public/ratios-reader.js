@@ -15,6 +15,8 @@
   const intradayDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" });
   const intradayHistory = new Map(), bookHistory = new Map(), intradaySubscriptions = new Set(), intradaySequences = new Map();
   let intradayScope, intradayConnection, intradayRevision = 0;
+  const dailyHistory = new Map(), DAILY_LOOKBACK = 90 * DAY, DAILY_MAX_LOOKBACK = 365 * DAY, DAILY_MAX_RANGE = 366 * DAY;
+  let dailyScope;
   const finite = n => typeof n === "number" && Number.isFinite(n);
   const short = (s, limit = 240) => typeof s === "string" && s.length > 0 && s.length <= limit && !/[\u0000-\u001f\u007f]/.test(s);
   const clean = (s, limit = 100) => typeof s === "string" ? s.slice(0, limit) : "";
@@ -141,6 +143,93 @@
   function timestamp(raw) {
     const value = raw instanceof Date ? raw.getTime() : typeof raw === "string" ? Date.parse(raw) : NaN;
     return finite(value) && value <= Date.now() ? value : undefined;
+  }
+  function dailyDate(raw) {
+    const at = timestamp(raw);
+    // Matriz's daily bars are labeled at UTC midnight. Other timestamps
+    // identify the Argentina market day in which the trade took place.
+    return at === undefined || at % DAY === 0 ? at : Date.parse(intradayDate.format(at));
+  }
+  function dailyMarket(c) {
+    const today = Date.parse(intradayDate.format(Date.now()));
+    const store = c.ms.seriesStore;
+    const scope = [c.ms, c.ss, c.ms.profileStore?.activeAccount, store, today];
+    if (!dailyScope || scope.some((value, i) => value !== dailyScope[i])) {
+      dailyScope = scope;
+      dailyHistory.clear();
+    }
+    return { store, today, scope: dailyScope };
+  }
+  function readDailySeries(store, id, from, to, refresh) {
+    const key = JSON.stringify([id, from, to]);
+    const cached = dailyHistory.get(key);
+    if (cached && (cached.pending || !refresh && cached.until > Date.now())) return cached.result;
+    const entry = { pending: true, until: 0 };
+    const found = new Map();
+    let timer, expired = false;
+    const query = async () => {
+      if (typeof store?.getDailySeries !== "function") return "Matriz no ofrece cierres diarios";
+      let end = to;
+      for (let page = 0; page < 4; page++) {
+        const response = await store.getDailySeries(id, from / 1000, (end + DAY) / 1000 - 1);
+        if (expired) return;
+        if (!Array.isArray(response?.series)) return "Respuesta de cierres diarios inválida";
+        let earliest;
+        for (const point of response.series) {
+          const day = dailyDate(point?.date);
+          if (day === undefined || day < from || day > end) continue;
+          earliest = Math.min(day, earliest ?? day);
+          if (finite(point.close) && !found.has(day)) found.set(day, point.close);
+        }
+        const next = dailyDate(response.nextTime);
+        if (next === undefined || next < from || next > end) return;
+        end = Math.min(next, (earliest ?? end) - DAY);
+        if (end < from) return;
+      }
+      return "Matriz devolvió un histórico diario incompleto";
+    };
+    const timeout = new Promise(resolve => {
+      timer = setTimeout(() => { expired = true; resolve("Matriz no respondió a tiempo al pedir los cierres diarios"); }, 17000);
+    });
+    entry.result = Promise.race([query(), timeout]).catch(error => {
+      const status = error?.response?.status ?? error?.status;
+      return Number.isInteger(status) ? `Histórico diario no disponible (HTTP ${status})` : "No se pudo cargar el histórico diario";
+    }).then(issue => {
+      const points = [...found].sort((a, b) => a[0] - b[0]).map(([day, value]) => ({ day, value }));
+      entry.until = Date.now() + (issue || !points.length ? 30000 : 300000);
+      return { points, ...(issue ? { issue } : {}) };
+    }).finally(() => { clearTimeout(timer); entry.pending = false; });
+    if (dailyHistory.size >= 120) dailyHistory.delete(dailyHistory.keys().next().value);
+    dailyHistory.set(key, entry);
+    return entry.result;
+  }
+  function dailyInstruments(c, params) {
+    const d = selected(c, params);
+    if (!short(params.widgetId) || !short(params.pairId)) throw Error("Fila de Ratios inválida.");
+    const widget = d.layout.find(w => ownConfig(w)?.id === params.widgetId);
+    const pair = widget && configOf(widget).pairs.find(item => item.id === params.pairId);
+    if (!pair) throw Error("La fila de Ratios ya no está disponible.");
+    return [...new Set([pair.a.id, pair.b.id, ...(pair.c ? [pair.c.id] : [])])];
+  }
+  async function ratioDailyHistory(c, params) {
+    const ids = dailyInstruments(c, params);
+    const { store, today, scope } = dailyMarket(c);
+    const { from, to } = params;
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from % DAY || to % DAY ||
+      from < DAILY_LOOKBACK || to >= today || from > to || to - from > DAILY_MAX_RANGE) throw Error("Rango de cierres diarios inválido.");
+    const older = params.older === true;
+    const start = older ? Math.max(0, from - DAILY_MAX_LOOKBACK) : from - DAILY_LOOKBACK;
+    const end = older ? from - DAILY_LOOKBACK - DAY : to;
+    if (end < start) return Object.fromEntries(ids.map(id => [id, { points: [] }]));
+    const entries = await Promise.all(ids.map(id => c.ss.securities.some(s => s?.id === id && instrument(s))
+      ? readDailySeries(store, id, start, end, params.refresh === true)
+      : { points: [], issue: "Instrumento no disponible en el catálogo" }));
+    const latest = context();
+    const currentIds = dailyInstruments(latest, params);
+    if (dailyMarket(latest).scope !== scope || currentIds.length !== ids.length || currentIds.some((id, index) => id !== ids[index])) {
+      throw Error("Cambió la fila o el contexto de mercado. Volvé a cargar el histórico.");
+    }
+    return Object.fromEntries(ids.map((id, index) => [id, entries[index]]));
   }
   function currentMarketData(sec, lastSequence) {
     const md = sec.md || {}, seq = md.seq;
@@ -500,6 +589,7 @@
         return;
       }
       const c = context();
+      if (msg.method === "ratioDailyHistory") { reply({ result: await ratioDailyHistory(c, params) }); return; }
       if (msg.method === "ratiosSearch") {
         selected(c, params);
         if (typeof params.query !== "string" || params.query.length > 60) throw Error("Búsqueda inválida.");

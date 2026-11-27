@@ -5,6 +5,8 @@ import { containsChangedElements, observePageStructure } from "../pageStructure"
 import ToolbarIcon from "../ToolbarIcon";
 import { IntradayChart, ReferenceChartButton } from "./IntradayChart";
 import { RatioChartLink } from "./RatioChart";
+import { RatioHistory } from "./RatioHistory";
+import type { DailyHistory, ReadDailyHistory } from "./dailyRatioHistory";
 import { calculateRatio, defaultRatioColumns, defaultRatioFormat, emptyState, exactTickerMatches, instrumentDetail, numberLabel, pairKey, pairLabel, ratioLabel, referenceCFormula, referenceCQuote, tickerKey, tradeLabel, type DollarWidgetState, type RatioColumns, type RatioFormat, type RatioInstrument, type RatioPair, type RatioReference, type RatiosState, type RatioWidgetState } from "./model";
 
 type Mutation = "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit";
@@ -224,7 +226,9 @@ function ColumnOptions({ visible, busy, onChange }: { visible: RatioColumns; bus
   </>;
 }
 
-function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: RatioWidgetState; snapshot: RatiosState; command: Command; search: Search; busy: boolean }) {
+function RatiosWidget({ widget, snapshot, command, search, busy, visible, readHistory }: {
+  widget: RatioWidgetState; snapshot: RatiosState; command: Command; search: Search; busy: boolean; visible: boolean; readHistory: ReadDailyHistory;
+}) {
   const cfg = widget.config;
   const columns = widget.columns?.visible ?? defaultRatioColumns;
   const showReference = columns.referenceC && cfg.pairs.some(p => p.c);
@@ -237,6 +241,10 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
   const format = formatOverride ?? (compare ? "percent" : defaultRatioFormat(a, b));
   const referenceFormula = referenceCFormula(divideCBy100 ? 100 : undefined);
   const [issue, setIssue] = useState("");
+  const [selectedPairId, setSelectedPairId] = useState<string>();
+  const selectedPair = cfg.pairs.find(pair => pair.id === selectedPairId);
+  const selectedButton = useRef<HTMLButtonElement>(null);
+  const closeHistory = () => { selectedButton.current?.focus(); setSelectedPairId(undefined); };
   const root = useRef<HTMLElement>(null);
   const revision = useRef(cfg.revision);
   useEffect(() => { if (!editing) revision.current = cfg.revision; }, [cfg.revision, editing]);
@@ -287,6 +295,7 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         </div>
       </form>}
       {(issue || snapshot.issue || widget.issue) && <p className="ct-ratios-issue" role="status">{issue || snapshot.issue || widget.issue}</p>}
+      <div className={selectedPair ? "ct-ratios-workspace ct-ratios-workspace--history" : "ct-ratios-workspace"}>
       <div className="ct-ratios-table-wrap"><table>
         <thead><tr><th>Par A/B</th>{columns.lastA && <th>Último A</th>}{columns.lastB && <th>Último B</th>}{showReference && <th>Referencia C</th>}<th>Ratio</th><th title="Comparación con el ratio de las referencias diarias de Matriz">Var. diaria</th><th><span className="ct-ratios-sr">Acciones</span><ColumnOptions visible={columns} busy={busy} onChange={visible => { void run("ratiosColumns", { columnsRevision: widget.columns?.revision ?? 0, columns: visible }); }} /></th></tr></thead>
         <tbody>{cfg.pairs.map(pair => {
@@ -297,8 +306,14 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
           const changeClass = change === undefined ? undefined : change > 0 ? "ct-ratios-up" : change < 0 ? "ct-ratios-down" : "ct-ratios-flat";
           const age = Math.max(qa?.tradedAt === undefined ? 0 : Date.now() - qa.tradedAt, qb?.tradedAt === undefined ? 0 : Date.now() - qb.tradedAt, qc?.tradedAt === undefined ? 0 : Date.now() - qc.tradedAt);
           const clock = `A: ${tradeLabel(qa?.tradedAt)} · B: ${tradeLabel(qb?.tradedAt)}${pair.c ? ` · C: ${tradeLabel(qc?.tradedAt)}` : ""}`;
-          return <tr key={pair.id}>
-            <td className="ct-ratios-pair" title={`A: ${pair.a.symbol} · ${instrumentDetail(pair.a)} · B: ${pair.b.symbol} · ${instrumentDetail(pair.b)}\n${clock}`}><strong>{label}</strong>
+          const selected = pair === selectedPair;
+          return <tr key={pair.id} data-selected={selected || undefined} onClick={event => {
+            if (event.target instanceof Element && !event.target.closest(".ct-ratios-actions, button")) setSelectedPairId(pair.id);
+          }}>
+            <td className="ct-ratios-pair" title={`A: ${pair.a.symbol} · ${instrumentDetail(pair.a)} · B: ${pair.b.symbol} · ${instrumentDetail(pair.b)}\n${clock}`}><strong>
+              <button type="button" className="ct-ratio-history-select" ref={selected ? selectedButton : undefined} aria-pressed={selected}
+                title={`Ver histórico de ${label}`} onClick={() => setSelectedPairId(pair.id)}>{label}</button>
+            </strong>
               {age > 15 * 60 * 1000 && <span className="ct-ratios-old" role="img" aria-label="Última operación antigua" title={clock}>◷</span>}
             </td>
             {columns.lastA && <td className={qa?.last === undefined ? undefined : "ct-ratios-quote"} title={`Última operación A: ${tradeLabel(qa?.tradedAt)}`}>{numberLabel(qa?.last)}</td>}
@@ -319,6 +334,9 @@ function RatiosWidget({ widget, snapshot, command, search, busy }: { widget: Rat
         })}</tbody>
       </table>
       {!cfg.pairs.length && !editing && <button type="button" className="ct-ratios-empty" onClick={() => begin()}>Agregá tu primer ratio</button>}
+      </div>
+      {selectedPair && <RatioHistory pair={selectedPair} context={snapshot.context} dashboardId={snapshot.dashboardId} widgetId={cfg.id}
+        visible={visible} read={readHistory} onClose={closeHistory} />}
       </div>
     </div>
     <WidgetResizeHandle root={root} width={widget.width} height={widget.height} label="Redimensionar Ratios" busy={busy}
@@ -660,6 +678,10 @@ export default function RatiosDashboard() {
       throw error;
     }
   }, []);
+  const readHistory = useCallback<ReadDailyHistory>(params => {
+    const client = reader.current;
+    return client ? client.call<DailyHistory>("ratioDailyHistory", params) : Promise.reject(Error("La lectura de Ratios se cerró."));
+  }, []);
   function addWidget(method: "ratiosAdd" | "dollarAdd", slot: HTMLElement) {
     setMenuIssue("");
     void command(method).then(() => {
@@ -681,7 +703,8 @@ export default function RatiosDashboard() {
     </>, slot, `menu-${index}`))}
     {snapshot.widgets.map(widget => {
       const slot = locations.widgets.get(widget.config.id);
-      return slot ? createPortal(<RatiosWidget widget={widget} snapshot={snapshot} command={command} search={search} busy={busy} />, slot, widget.config.id) : null;
+      return slot ? createPortal(<RatiosWidget widget={widget} snapshot={snapshot} command={command} search={search} busy={busy}
+        visible={locations.visible.has(widget.config.id)} readHistory={readHistory} />, slot, widget.config.id) : null;
     })}
     {snapshot.dollarWidgets?.map(widget => {
       const slot = locations.widgets.get(widget.config.id);
