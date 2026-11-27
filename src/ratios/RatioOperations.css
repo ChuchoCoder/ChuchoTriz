@@ -195,7 +195,6 @@
 .ro-entry-grid-with-reference{
   grid-template-columns:repeat(2,minmax(0,1.24fr)) repeat(2,minmax(0,.84fr));
 }
-.ro-entry-grid-with-reference>.ro-direction{width:min(100%,680px)}
 .ro-entry-grid-with-reference>:is(.ro-entry-reference,.ro-entry-costs){
   min-width:0;display:grid;gap:8px;padding:10px;border:1px solid var(--ro-line);border-radius:5px;grid-row:2;
 }
