@@ -815,26 +815,46 @@ async page => {
   assert((await closeRows.first().innerText()).includes('Ratio de cierre'), 'Common ratios show the ratio calculated from the historical closing prices');
 
   await click(button('1 · Monitor'));
-  await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
   const lastC = page.getByRole('button', { name: /^Usar último C/ });
   const openingDate = label('Fecha/hora de apertura · Argentina');
-  const openedMinute = await openingDate.inputValue();
-  await lastC.click();
-  const browserNow = await page.evaluate(() => Date.now());
-  await page.clock.setFixedTime(new Date(browserNow + 120_000));
-  await page.evaluate(() => {
-    const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT');
-    spot.md.lst = 1580; spot.md.seq++;
+  // Keep both opening minutes deterministic in this fixture while the shared clock advances.
+  const fixtureDate = await page.evaluateHandle(() => {
+    const NativeDate = window.Date;
+    const currentTime = NativeDate.now();
+    let draftTime = currentTime - 120_000;
+    window.Date = new Proxy(NativeDate, {
+      construct(target, args, newTarget) {
+        return Reflect.construct(target, args.length ? args : [draftTime], newTarget);
+      },
+    });
+    return {
+      advanceMinute() { draftTime = currentTime; },
+      restore() { window.Date = NativeDate; },
+    };
   });
-  await page.getByRole('button', { name: 'Usar último C · 1.580,00', exact: true }).waitFor();
-  await button('Usar último de A').click();
-  await wait(previous => document.querySelector('.ro-entry-costs input[type="datetime-local"]')?.value > previous &&
-    document.querySelector('.ro-entry-reference input')?.value === '' &&
-    document.querySelector('[aria-label="Precio de entrada B"]')?.value === '', openedMinute);
-  await lastC.click();
-  await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1580' &&
-    (document.querySelector('[aria-label="Precio de entrada A"]')?.value ?? '') !== '');
-  await page.clock.setFixedTime(new Date(browserNow));
+  try {
+    await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
+    await lastC.click();
+    await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1572.5' &&
+      Boolean(document.querySelector('[aria-label="Precio de entrada B"]')?.value));
+    const openedMinute = await openingDate.inputValue();
+    await fixtureDate.evaluate(clock => clock.advanceMinute());
+    await page.evaluate(() => {
+      const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT');
+      spot.md.lst = 1580; spot.md.seq++;
+    });
+    await page.getByRole('button', { name: 'Usar último C · 1.580,00', exact: true }).waitFor();
+    await button('Usar último de A').click();
+    await wait(previous => document.querySelector('.ro-entry-costs input[type="datetime-local"]')?.value > previous &&
+      document.querySelector('.ro-entry-reference input')?.value === '' &&
+      document.querySelector('[aria-label="Precio de entrada B"]')?.value === '', openedMinute);
+    await lastC.click();
+    await wait(() => document.querySelector('.ro-entry-reference input')?.value === '1580' &&
+      Boolean(document.querySelector('[aria-label="Precio de entrada A"]')?.value));
+  } finally {
+    try { await fixtureDate.evaluate(clock => clock.restore()); }
+    finally { await fixtureDate.dispose(); }
+  }
   await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
     'Changing the opening date clears current market prefills');
