@@ -45,6 +45,11 @@ function plotGeometry(points: PlotPoints, range: DailyRange, width: number, heig
       return `${op}${x(point.day)},${y(value)}`;
     }).join("");
   };
+  const referencePath = (valueFor: (point: PlotPoints[number]) => number | undefined) => {
+    if (points.length !== 1) return path(valueFor);
+    const value = valueFor(points[0]);
+    return value === undefined ? "" : `M${left},${y(value)}H${right}`;
+  };
   const axisDays = range.from === range.to ? [range.to] : [range.from, range.to];
   if (right - left > 155 && range.to - range.from > 2 * dayMilliseconds) {
     axisDays.splice(1, 0, Math.round((range.from + range.to) / (2 * dayMilliseconds)) * dayMilliseconds);
@@ -52,8 +57,8 @@ function plotGeometry(points: PlotPoints, range: DailyRange, width: number, heig
   return {
     top, bottom, left, right, x, y, axisDays, labels,
     actual: path(point => point.value),
-    mean: path(point => point.band?.mean),
-    bands: limits.map(sigma => ({ sigma, path: path(point => point.band && point.band.mean + sigma * point.band.sigma) })),
+    mean: referencePath(point => point.band?.mean),
+    bands: limits.map(sigma => ({ sigma, path: referencePath(point => point.band && point.band.mean + sigma * point.band.sigma) })),
   };
 }
 
@@ -142,7 +147,7 @@ export function RatioHistory({ pair, context, dashboardId, widgetId, visible, re
   const history = response?.key === requestKey ? response.history : undefined;
   const error = response?.key === requestKey ? response.error : undefined;
   useEffect(() => {
-    if (!visible || !dashboardId || response?.key === requestKey) return;
+    if (!visible || document.hidden || !dashboardId || response?.key === requestKey) return;
     let cancelled = false;
     const refresh = attempt > usedRetry.current;
     if (refresh) usedRetry.current = attempt;
@@ -152,12 +157,13 @@ export function RatioHistory({ pair, context, dashboardId, widgetId, visible, re
     );
     return () => { cancelled = true; };
   }, [visible, pairId, context, dashboardId, widgetId, from, to, response?.key, requestKey, attempt, read]);
-  const aligned = useMemo(() => history ? dailyRatioPoints({ a, b, c, cDivisor, format }, history) : [], [history, a, b, c, cDivisor, format]);
+  const aligned = useMemo(() => history ? dailyRatioPoints({ a, b, c, cDivisor, format }, history, range) : [],
+    [history, a, b, c, cDivisor, format, range]);
   const needsOlder = useMemo(() => mode === "moving" && aligned.some(point => point.day >= from && point.value !== undefined) &&
     aligned.filter(point => point.day < from && point.value !== undefined).length < movingCloseCount, [mode, aligned, from]);
   const older = olderResponse?.key === requestKey ? olderResponse : undefined;
   useEffect(() => {
-    if (!visible || !dashboardId || !needsOlder || older) return;
+    if (!visible || document.hidden || !dashboardId || !needsOlder || older) return;
     let cancelled = false;
     const refresh = attempt > usedOlderRetry.current;
     if (refresh) usedOlderRetry.current = attempt;

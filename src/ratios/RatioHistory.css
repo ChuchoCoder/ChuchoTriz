@@ -1,3 +1,5 @@
+@import "../deviationColors.css";
+
 .ct-ratios-workspace {
   display: flex;
   flex: 1;
@@ -26,9 +28,6 @@
 }
 .ct-ratio-history-select:hover { text-decoration: underline; }
 .ct-ratio-history {
-  /* Same two theme palettes and dash patterns as the Options simulator. */
-  --ratio-sigma-one: #83d9a8;
-  --ratio-sigma-two: #f0ce70;
   --ratio-history-grid: color-mix(in srgb, currentColor 24%, transparent);
   min-width: 0;
   min-height: 0;
@@ -40,10 +39,6 @@
   overflow: auto;
   overscroll-behavior: contain;
   font-variant-numeric: tabular-nums;
-}
-:is(html, body)[data-theme="dma_day"] .ct-ratio-history {
-  --ratio-sigma-one: #246346;
-  --ratio-sigma-two: #785b07;
 }
 .ct-ratio-history > header {
   display: flex;
@@ -84,8 +79,8 @@
 .ct-ratio-history-legend i { width: 14px; }
 .ct-ratio-history-legend .ct-ratio-history-line { border-top: 2px solid currentColor; }
 .ct-ratio-history-legend .ct-ratio-history-mean { border-top: 1px dashed currentColor; opacity: .65; }
-.ct-ratio-history-legend .ct-ratio-history-sigma-1 { border-top: 2px dashed var(--ratio-sigma-one); }
-.ct-ratio-history-legend .ct-ratio-history-sigma-2 { border-top: 2px dotted var(--ratio-sigma-two); }
+.ct-ratio-history-legend .ct-ratio-history-sigma-1 { border-top: 2px dashed var(--ct-sigma-one); }
+.ct-ratio-history-legend .ct-ratio-history-sigma-2 { border-top: 2px dotted var(--ct-sigma-two); }
 .ct-ratio-history-plot { min-height: 88px; flex: 1 0 88px; position: relative; }
 .ct-ratio-history-plot svg { display: block; position: absolute; width: 100%; height: 100%; touch-action: pan-y; }
 .ct-ratio-history-plot svg:focus-visible { outline: 2px solid #039be5; outline-offset: -2px; }
@@ -95,8 +90,8 @@
 .ct-ratio-history-grid { stroke: var(--ratio-history-grid); }
 .ct-ratio-history-plot .ct-ratio-history-line { stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
 .ct-ratio-history-plot .ct-ratio-history-mean { stroke: currentColor; stroke-dasharray: 4 4; opacity: .55; }
-.ct-ratio-history-plot .ct-ratio-history-sigma-1 { stroke: var(--ratio-sigma-one); stroke-dasharray: 6 4; }
-.ct-ratio-history-plot .ct-ratio-history-sigma-2 { stroke: var(--ratio-sigma-two); stroke-dasharray: 2 4; }
+.ct-ratio-history-plot .ct-ratio-history-sigma-1 { stroke: var(--ct-sigma-one); stroke-dasharray: var(--ct-sigma-one-dash); }
+.ct-ratio-history-plot .ct-ratio-history-sigma-2 { stroke: var(--ct-sigma-two); stroke-dasharray: var(--ct-sigma-two-dash); }
 .ct-ratio-history-cursor { stroke: currentColor; stroke-dasharray: 3 3; opacity: .6; }
 .ct-ratio-history-summary, .ct-ratio-history-point, .ct-ratio-history-status { margin: 0; font-size: 11px; }
 .ct-ratio-history-status { overflow-wrap: anywhere; }

@@ -1,0 +1,11 @@
+:where(.ct-sim, .ct-ratio-history) {
+  --ct-sigma-one: #83d9a8;
+  --ct-sigma-two: #f0ce70;
+  --ct-sigma-one-dash: 6 4;
+  --ct-sigma-two-dash: 2 4;
+}
+
+:where(.ct-free-settings-panel[data-color-scheme="light"] .ct-sim, :is(html, body)[data-theme="dma_day"] .ct-ratio-history) {
+  --ct-sigma-one: #246346;
+  --ct-sigma-two: #785b07;
+}

@@ -87,7 +87,7 @@ test('reads closed daily bars by exact widget pair, follows nextTime and reuses 
   f.ms.seriesStore = { async getDailySeries(id, start, end) {
     requested.push({ id, start, end });
     if (end < to / 1000) return { series: [{ date: new Date(to - 4 * day).toISOString(), close: 100 }] };
-    return { nextTime: new Date(to - 4 * day).toISOString(), series: [
+    return { nextTime: id === 'a' ? (to - 4 * day) / 1000 : new Date(to - 4 * day).toISOString(), series: [
       { date: new Date(to + day).toISOString(), close: 987 },
       { date: new Date(to + 3600000 * 12).toISOString(), close: 121 },
       { date: new Date(to - 2 * day).toISOString(), close: 119 },
@@ -117,17 +117,18 @@ test('reads closed daily bars by exact widget pair, follows nextTime and reuses 
   })));
 });
 
-test('rejects a daily result across account changes and retries HTTP failures', async () => {
+test('rejects a daily result across account changes and reloads after reconnecting', async () => {
   const day = 86400000, to = Date.UTC(2026, 10, 26), from = to - 7 * day;
   const f = fixture(class extends Date { static now() { return to + 2 * day; } });
-  let calls = 0, switched = false;
+  const calls = [];
+  let switched = false, fail = true;
   f.ms.seriesStore = { async getDailySeries(id) {
-    calls++;
+    calls.push(id);
     if (id === 'a' && !switched) {
       switched = true;
       f.ms.profileStore.activeAccount = 'other';
     }
-    if (id === 'b' && calls === 4) throw { response: { status: 401 } };
+    if (id === 'b' && fail) throw { response: { status: 401 } };
     return { series: [{ date: new Date(to).toISOString(), close: 42 }] };
   } };
   await f.add();
@@ -136,8 +137,35 @@ test('rejects a daily result across account changes and retries HTTP failures', 
   assert.match((await f.request('ratioDailyHistory', params)).error, /Cambió el dashboard/);
   const after = { ...params, ...await f.args() };
   assert.equal((await f.request('ratioDailyHistory', after)).result.b.issue, 'Histórico diario no disponible (HTTP 401)');
-  assert.equal(calls, 4);
-  assert.equal((await f.request('ratioDailyHistory', { ...after, refresh: true })).result.b.points[0].value, 42);
+  assert.deepEqual(calls, ['a', 'a', 'b'], 'The second leg is suppressed when the context changes');
+  fail = false;
+  f.ms.dmaWebSocket = { addSubscription() {} };
+  assert.equal((await f.request('ratioDailyHistory', { ...params, ...await f.args() })).result.b.points[0].value, 42);
+  assert.deepEqual(calls, ['a', 'a', 'b', 'a', 'b'], 'A new connection does not reuse a cached authentication error');
+});
+
+test('pauses daily pagination while hidden and does not cache the interrupted window', async () => {
+  const day = 86400000, to = Date.UTC(2026, 10, 26), from = to - 7 * day;
+  const f = fixture(class extends Date { static now() { return to + 2 * day; } });
+  let calls = 0, resume;
+  const held = new Promise(resolve => { resume = resolve; });
+  f.ms.seriesStore = { async getDailySeries(id, start, end) {
+    if (++calls <= 2) await held;
+    if (end < to / 1000) return { series: [{ date: new Date(to - day).toISOString(), close: 40 }] };
+    return { nextTime: (to - day) / 1000, series: [{ date: new Date(to).toISOString(), close: 42 }] };
+  } };
+  await f.add();
+  const widget = (await f.state()).widgets[0].config;
+  const params = { ...await f.args(), widgetId: widget.id, pairId: widget.pairs[0].id, from, to };
+  const request = f.request('ratioDailyHistory', params);
+  assert.equal(calls, 2);
+  f.document.hidden = true;
+  resume();
+  assert.match((await request).result.a.issue, /pausada/);
+  assert.equal(calls, 2);
+  f.document.hidden = false;
+  const recovered = await f.request('ratioDailyHistory', params);
+  assert.deepEqual(recovered.result.b.points.map(point => point.value), [40, 42]);
   assert.equal(calls, 6);
 });
 

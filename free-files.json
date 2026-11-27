@@ -85,6 +85,7 @@
   "src/InstrumentPresetsSettings.test.ts",
   "src/InstrumentPresetsSettings.ts",
   "src/main.css",
+  "src/deviationColors.css",
   "src/main.test.tsx",
   "src/main.tsx",
   "src/Matriz.test.ts",

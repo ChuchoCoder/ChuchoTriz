@@ -447,6 +447,7 @@ export default function RatiosDashboard() {
     setSnapshot(next);
   }, []);
   const [locations, setLocations] = useState({ menus: [] as HTMLElement[], widgets: new Map<string, HTMLElement>(), visible: new Set<string>() });
+  const [pageVisible, setPageVisible] = useState(() => !document.hidden);
   useEffect(() => {
     if (typeof globalThis.chrome?.runtime?.getURL !== "function") return;
     const menus = new Map<Element, HTMLElement>(), widgets = new Map<HTMLElement, HTMLElement>();
@@ -630,7 +631,10 @@ export default function RatiosDashboard() {
         if (attachedVisible) requestRefresh(); else schedule();
       }
     });
-    const visibilityChanged = () => { if (document.hidden) schedule(); else discover(); };
+    const visibilityChanged = () => {
+      setPageVisible(!document.hidden);
+      if (document.hidden) schedule(); else discover();
+    };
     const navigation = (window as Window & { navigation?: EventTarget }).navigation;
     let path = location.pathname;
     const navigated = () => {
@@ -704,7 +708,7 @@ export default function RatiosDashboard() {
     {snapshot.widgets.map(widget => {
       const slot = locations.widgets.get(widget.config.id);
       return slot ? createPortal(<RatiosWidget widget={widget} snapshot={snapshot} command={command} search={search} busy={busy}
-        visible={locations.visible.has(widget.config.id)} readHistory={readHistory} />, slot, widget.config.id) : null;
+        visible={pageVisible && locations.visible.has(widget.config.id)} readHistory={readHistory} />, slot, widget.config.id) : null;
     })}
     {snapshot.dollarWidgets?.map(widget => {
       const slot = locations.widgets.get(widget.config.id);

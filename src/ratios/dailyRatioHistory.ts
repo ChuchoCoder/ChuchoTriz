@@ -29,12 +29,12 @@ export function monthRange(to: number, months: number): DailyRange {
   return { from: end.getTime(), to };
 }
 
-export function dailyRatioPoints(pair: HistoryPair, history: DailyHistory) {
+export function dailyRatioPoints(pair: HistoryPair, history: DailyHistory, range?: DailyRange) {
   const closes = (id: string) => new Map((history[id]?.points ?? []).map(point => [point.day, point.value]));
   const a = closes(pair.a), b = closes(pair.b), c = pair.c ? closes(pair.c) : undefined;
   const days = new Set([...a.keys(), ...b.keys(), ...(c?.keys() ?? [])]);
-  if (!days.size) return [];
-  const first = Math.min(...days), last = Math.max(...days);
+  if (!days.size && !range) return [];
+  const first = Math.min(range?.from ?? Infinity, ...days), last = Math.max(range?.to ?? -Infinity, ...days);
   const points: DailyPoint[] = [];
   // A weekday with no published closes is a gap (including holidays).
   // Weekend dates appear only if a native series actually supplied a bar.

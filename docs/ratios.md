@@ -354,8 +354,8 @@ el rango y el tipo de bandas mientras el panel está abierto.
   con línea punteada, con los colores del simulador de Opciones.
 - Cada día usa los cierres de la misma rueda para las especies exactas A/B
   y C si corresponde. Se respetan el divisor de C y el formato de la fila.
-  La rueda en curso queda fuera de las estadísticas. Los días hábiles entre
-  observaciones con algún cierre ausente se muestran como huecos.
+  La rueda en curso queda fuera de las estadísticas. Los días hábiles del rango
+  con algún cierre ausente se muestran como huecos.
   La disponibilidad de las series depende del broker.
 
 ## Agregar y editar pares

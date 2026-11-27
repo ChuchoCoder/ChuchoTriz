@@ -1,3 +1,5 @@
+@import "../deviationColors.css";
+
 .ct-sim { --sim-bg: #151d2b; --sim-card: #202b3d; --sim-field: #131c2b; --sim-text: #e8edf6; --sim-muted: #b1bfd2; --sim-border: #64748b; --sim-accent: #c8a9ff; --sim-theory: #69d9ed; --sim-profit: #81e1b6; --sim-loss: #ffa4af; box-sizing: border-box; padding: 8px 12px; background: var(--sim-bg); color: var(--sim-text); font: 14px/1.45 "Lato", system-ui, sans-serif; overflow-y: auto; overscroll-behavior: contain; min-width: 0; color-scheme: dark; }
 .ct-sim *, .ct-sim *::before, .ct-sim *::after { box-sizing: border-box; }
 .ct-tools-embedded .ct-sim { display: flex; flex: 1; flex-direction: column; min-height: 0; scrollbar-gutter: stable; }
@@ -280,14 +282,14 @@
 .ct-sim-legend i { display: inline-block; width: 22px; height: 0; }
 .ct-sim-legend .ct-sim-expiry-key, .ct-sim-legend .ct-sim-theory-key { height: 3px; background: linear-gradient(90deg, var(--sim-loss) 50%, var(--sim-profit) 50%); }
 .ct-sim-theory-key { mask-image: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 8px); }
-.ct-sim { --sim-sigma-one: #83d9a8; --sim-sigma-two: #f0ce70; }
+.ct-sim { --sim-sigma-one: var(--ct-sigma-one); --sim-sigma-two: var(--ct-sigma-two); }
 .ct-sim-sigma-one-key { border-top: 2px dashed var(--sim-sigma-one); }
 .ct-sim-sigma-two-key { border-top: 2px dotted var(--sim-sigma-two); }
 .ct-sim-sigma-1 { color: var(--sim-sigma-one); }
 .ct-sim-sigma-2 { color: var(--sim-sigma-two); }
 .ct-sim-sigma line { stroke: currentColor; stroke-width: 1; opacity: .7; }
-.ct-sim-sigma-1 line { stroke-dasharray: 6 4; }
-.ct-sim-sigma-2 line { stroke-dasharray: 2 4; }
+.ct-sim-sigma-1 line { stroke-dasharray: var(--ct-sigma-one-dash); }
+.ct-sim-sigma-2 line { stroke-dasharray: var(--ct-sigma-two-dash); }
 .ct-sim-chart .ct-sim-sigma text { fill: currentColor; font-size: 10px; font-weight: 700; paint-order: stroke; stroke: var(--sim-card); stroke-width: 3px; }
 .ct-sim-deviations { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 2px 0 6px; color: var(--sim-muted); font-size: 10px; }
 .ct-sim-chart { display: block; width: 100%; height: auto; margin: 6px 0 4px; overflow: visible; cursor: crosshair; }
@@ -306,7 +308,7 @@
 .ct-sim-assumptions { color: var(--sim-muted); font-size: 12px; }
 .ct-sim-assumptions summary { color: var(--sim-text); cursor: pointer; }
 .ct-sim-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.ct-free-settings-panel[data-color-scheme="light"] .ct-sim { color-scheme: light; --sim-bg: #f3f5fa; --sim-card: #ffffff; --sim-field: #f5f7fb; --sim-text: #202b3d; --sim-muted: #46546b; --sim-border: #7b879b; --sim-accent: #53298e; --sim-theory: #005b75; --sim-profit: #075d36; --sim-loss: #a21834; --sim-sigma-one: #246346; --sim-sigma-two: #785b07; }
+.ct-free-settings-panel[data-color-scheme="light"] .ct-sim { color-scheme: light; --sim-bg: #f3f5fa; --sim-card: #ffffff; --sim-field: #f5f7fb; --sim-text: #202b3d; --sim-muted: #46546b; --sim-border: #7b879b; --sim-accent: #53298e; --sim-theory: #005b75; --sim-profit: #075d36; --sim-loss: #a21834; }
 .ct-free-settings-panel[data-color-scheme="light"] .ct-sim-scenario-results { --sim-table-header: #d6e6fb; --sim-table-body: #f8faff; --sim-band-spot: #cde2fd; --sim-band-green: #bce6cc; --sim-band-yellow: #fbe29e; --sim-band-red: #f5bdca; }
 @container (max-width: 1050px) {
   .ct-sim-market-layout { grid-template-columns: 1fr; }

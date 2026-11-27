@@ -78,6 +78,37 @@ async page => {
   const older = (await requests()).slice(beforeOlder);
   assert(older.length === 2 && older.every(call => call.to < Date.parse(start) / 1000 - 90 * 86400),
     'Sparse moving bands look farther back and use 20 prior coincident closes');
+  const singleDay = await point.getAttribute('datetime');
+  await panel.getByRole('button', { name: 'Editar fechas', exact: true }).click();
+  await since.fill(singleDay); await until.fill(singleDay);
+  await panel.getByRole('button', { name: 'Aplicar', exact: true }).click();
+  await graph('ALUA/TXAR').locator('path[data-sigma="2"]').waitFor();
+  assert((await graph('ALUA/TXAR').locator('path[data-sigma]').evaluateAll(lines => lines.map(line => line.getAttribute('d'))))
+    .every(path => path.includes('H')), 'Moving bands remain visible in a one-close range');
+  await page.evaluate(() => {
+    const store = window.mainStore.seriesStore, original = store.getDailySeries;
+    window.ratiosFixture.makeDailySeriesSparse('PESOS - 7D-');
+    const hold = new Promise(resolve => { window.ratiosFixture.releaseDaily = resolve; });
+    store.getDailySeries = async function (id, from, to) {
+      const answer = await original.call(this, id, from, to);
+      if (id.startsWith('PESOS')) await hold;
+      return answer;
+    };
+  });
+  const beforeHidden = (await requests()).length;
+  await rowButton('PESOS - 7D/PESOS - 1D').click();
+  await page.waitForFunction(count => window.ratiosFixture.dailySeriesCalls.length >= count + 2, beforeHidden);
+  const movingBaseline = (await requests()).length;
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.ratiosFixture.releaseDaily();
+  });
+  await page.waitForTimeout(350);
+  assert((await requests()).length === movingBaseline, 'A delayed response cannot start the moving lookback while the tab is hidden');
+  await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
+  await panel.getByText('Bandas de los 20 cierres coincidentes previos.', { exact: true }).waitFor();
+  assert((await requests()).length > movingBaseline, 'An unfinished lookback resumes when the tab is shown');
   const resize = widget.getByRole('button', { name: 'Redimensionar Ratios' });
   for (let step = 0; step < 3; step++) {
     await resize.press('ArrowLeft');
@@ -86,7 +117,7 @@ async page => {
   const narrowTable = await widget.locator('.ct-ratios-table-wrap').boundingBox(), narrowPanel = await panel.boundingBox();
   assert(narrowPanel.y >= narrowTable.y + narrowTable.height - 1, 'Narrow widgets put the chart below the table without resizing automatically');
   await panel.getByRole('button', { name: 'Cerrar histórico de Ratios' }).click();
-  assert(!await panel.count() && await rowButton('ALUA/TXAR').evaluate(node => document.activeElement === node),
+  assert(!await panel.count() && await rowButton('PESOS - 7D/PESOS - 1D').evaluate(node => document.activeElement === node),
     'Closing history restores table width and focus to the selected row');
   return { count: checks.length, checks };
 };

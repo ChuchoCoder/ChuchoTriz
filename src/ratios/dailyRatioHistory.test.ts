@@ -33,10 +33,10 @@ describe("histórico diario de Ratios", () => {
     expect(historicalBands(points, { from: date(2), to: date(2) }, "static")[0].band).toBeUndefined();
   });
 
-  it("marca como hueco una fecha hábil omitida por todas las patas pero conserva el fin de semana", () => {
+  it("marca como huecos los extremos y los días hábiles omitidos por todas las patas", () => {
     const bars = [row(2, 15), row(6, 30)];
-    expect(dailyRatioPoints({ a: "a", b: "b" }, { a: { points: bars }, b: { points: bars } })).toEqual([
-      row(2, 1), { day: date(5), value: undefined }, row(6, 1),
+    expect(dailyRatioPoints({ a: "a", b: "b" }, { a: { points: bars }, b: { points: bars } }, { from: date(1), to: date(7) })).toEqual([
+      { day: date(1), value: undefined }, row(2, 1), { day: date(5), value: undefined }, row(6, 1), { day: date(7), value: undefined },
     ]);
   });
 

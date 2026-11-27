@@ -145,32 +145,37 @@
     return finite(value) && value <= Date.now() ? value : undefined;
   }
   function dailyDate(raw) {
-    const at = timestamp(raw);
+    const at = typeof raw === "number" && Number.isSafeInteger(raw) ? (raw < 100000000000 ? raw * 1000 : raw) : timestamp(raw);
+    if (!finite(at) || at < 0 || at > Date.now()) return;
     // Matriz's daily bars are labeled at UTC midnight. Other timestamps
     // identify the Argentina market day in which the trade took place.
-    return at === undefined || at % DAY === 0 ? at : Date.parse(intradayDate.format(at));
+    return at % DAY === 0 ? at : Date.parse(intradayDate.format(at));
   }
   function dailyMarket(c) {
     const today = Date.parse(intradayDate.format(Date.now()));
     const store = c.ms.seriesStore;
-    const scope = [c.ms, c.ss, c.ms.profileStore?.activeAccount, store, today];
+    const scope = [c.revision, store, today];
     if (!dailyScope || scope.some((value, i) => value !== dailyScope[i])) {
       dailyScope = scope;
       dailyHistory.clear();
     }
     return { store, today, scope: dailyScope };
   }
-  function readDailySeries(store, id, from, to, refresh) {
+  function readDailySeries({ store, scope }, id, from, to, refresh) {
     const key = JSON.stringify([id, from, to]);
     const cached = dailyHistory.get(key);
     if (cached && (cached.pending || !refresh && cached.until > Date.now())) return cached.result;
     const entry = { pending: true, until: 0 };
     const found = new Map();
-    let timer, expired = false;
+    let timer, expired = false, paused = false;
     const query = async () => {
       if (typeof store?.getDailySeries !== "function") return "Matriz no ofrece cierres diarios";
       let end = to;
       for (let page = 0; page < 4; page++) {
+        if (document.hidden || dailyMarket(context()).scope !== scope) {
+          paused = true;
+          return "Lectura de cierres diarios pausada";
+        }
         const response = await store.getDailySeries(id, from / 1000, (end + DAY) / 1000 - 1);
         if (expired) return;
         if (!Array.isArray(response?.series)) return "Respuesta de cierres diarios inválida";
@@ -196,11 +201,13 @@
       return Number.isInteger(status) ? `Histórico diario no disponible (HTTP ${status})` : "No se pudo cargar el histórico diario";
     }).then(issue => {
       const points = [...found].sort((a, b) => a[0] - b[0]).map(([day, value]) => ({ day, value }));
-      entry.until = Date.now() + (issue || !points.length ? 30000 : 300000);
+      entry.until = paused ? 0 : Date.now() + (issue || !points.length ? 30000 : 300000);
       return { points, ...(issue ? { issue } : {}) };
     }).finally(() => { clearTimeout(timer); entry.pending = false; });
-    if (dailyHistory.size >= 120) dailyHistory.delete(dailyHistory.keys().next().value);
-    dailyHistory.set(key, entry);
+    if (dailyScope === scope) {
+      if (dailyHistory.size >= 120) dailyHistory.delete(dailyHistory.keys().next().value);
+      dailyHistory.set(key, entry);
+    }
     return entry.result;
   }
   function dailyInstruments(c, params) {
@@ -213,7 +220,8 @@
   }
   async function ratioDailyHistory(c, params) {
     const ids = dailyInstruments(c, params);
-    const { store, today, scope } = dailyMarket(c);
+    const market = dailyMarket(c);
+    const { today, scope } = market;
     const { from, to } = params;
     if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from % DAY || to % DAY ||
       from < DAILY_LOOKBACK || to >= today || from > to || to - from > DAILY_MAX_RANGE) throw Error("Rango de cierres diarios inválido.");
@@ -222,7 +230,7 @@
     const end = older ? from - DAILY_LOOKBACK - DAY : to;
     if (end < start) return Object.fromEntries(ids.map(id => [id, { points: [] }]));
     const entries = await Promise.all(ids.map(id => c.ss.securities.some(s => s?.id === id && instrument(s))
-      ? readDailySeries(store, id, start, end, params.refresh === true)
+      ? readDailySeries(market, id, start, end, params.refresh === true)
       : { points: [], issue: "Instrumento no disponible en el catálogo" }));
     const latest = context();
     const currentIds = dailyInstruments(latest, params);
