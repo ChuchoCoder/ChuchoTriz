@@ -47,9 +47,9 @@ export class MarketReader {
   };
   constructor(private resource: "options-market-reader.js" | "options-position-reader.js" | "options-executions-reader.js" | "ratios-reader.js" | "ratio-operations-reader.js" | "ratio-chart-reader.js" = "options-market-reader.js") {
     this.channel = `chuchotriz-${resource}-${crypto.randomUUID()}`;
-    window.addEventListener("message", this.receive);
     this.script.dataset.channel = this.channel;
     this.script.src = chrome.runtime.getURL(resource);
+    window.addEventListener("message", this.receive);
     this.ready = new Promise((resolve, reject) => {
       this.releaseReady = resolve;
       this.script.onload = () => {
@@ -60,9 +60,9 @@ export class MarketReader {
     });
     document.documentElement.append(this.script);
   }
-  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit" | "bookIntraday" | "ratioIntradayHistory" | "ratioIntradayQuotes" | "ratioContext" | "ratioSearch" | "ratioQuotes" | "ratioChart" | "verifyExecutionContext", params = {}): Promise<T> {
+  async call<T>(method: "catalog" | "snapshot" | "caucion" | "positions" | "verifyPositionContext" | "executions" | "ratiosState" | "ratiosSearch" | "ratiosAdd" | "ratiosEdit" | "ratiosRemove" | "ratiosResize" | "ratiosColumns" | "dollarAdd" | "dollarEdit" | "bookIntraday" | "ratioIntradayHistory" | "ratioIntradayQuotes" | "ratioContext" | "ratioSearch" | "ratioQuotes" | "ratioChart" | "verifyExecutionContext", params = {}, canDispatch?: () => boolean): Promise<T> {
     await this.ready;
-    if (this.disposed) throw Error("Lectura cerrada.");
+    if (this.disposed || canDispatch?.() === false) throw Error("Lectura cerrada.");
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
       const timer = setTimeout(() => {

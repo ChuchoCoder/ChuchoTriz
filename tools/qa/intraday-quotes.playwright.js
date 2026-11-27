@@ -4,13 +4,16 @@ async page => {
   const checks = [];
   const assert = (ok, detail) => { if (!ok) throw Error(detail); checks.push(detail); };
   await page.setViewportSize({ width: 1440, height: 1600 });
-  await page.evaluate(() => {
+  const recordQuotes = () => {
     window.intradayQuoteRequests = [];
     window.addEventListener('message', event => {
       if (event.source === window && event.origin === location.origin && event.data?.kind === 'request' &&
-          event.data.method === 'ratioIntradayQuotes') window.intradayQuoteRequests.push([...event.data.params.ids].sort());
+          event.data.method === 'ratioIntradayQuotes') {
+        window.intradayQuoteRequests.push({ ids: [...event.data.params.ids].sort(), at: performance.now() });
+      }
     });
-  });
+  };
+  await page.evaluate(recordQuotes);
   const add = page.getByRole('button', { name: 'DÓLAR INTRADIARIO · CHUCHOTRIZ', exact: true });
   const widgets = page.locator('.ct-intraday-widget');
   const legend = widgets.locator('.ct-intraday-legend strong');
@@ -28,6 +31,23 @@ async page => {
   const total = await readsDuring(5400);
   assert(total >= 2 && total <= 4, 'Four identical charts share one poll every two seconds (' + total + ' reads)');
 
+  const beforeToggling = await countReads();
+  await page.waitForFunction(count => window.intradayQuoteRequests.length > count, beforeToggling);
+  const lastWidget = widgets.last();
+  const setLastVisible = visible => lastWidget.evaluate((widget, shown) => {
+    widget.closest('[data-ct-ratios-slot]').style.display = shown ? '' : 'none';
+  }, visible);
+  for (let n = 0; n < 3; n++) {
+    await setLastVisible(false);
+    await page.waitForTimeout(160);
+    await setLastVisible(true);
+    await page.waitForTimeout(160);
+  }
+  await page.waitForFunction(count => window.intradayQuoteRequests.length >= count + 2, beforeToggling);
+  const gaps = await page.evaluate(count => window.intradayQuoteRequests.slice(count + 1).map(({ at }, index) =>
+    at - window.intradayQuoteRequests[count + index].at), beforeToggling);
+  assert(gaps.every(gap => gap >= 1800), 'Revealing one chart does not restart a group that is already polling');
+
   await page.evaluate(() => { document.querySelector('.GridLayout').style.display = 'none'; });
   await page.waitForTimeout(400);
   assert(await readsDuring(4500) === 0, 'Hiding every chart stops the shared quote poll');
@@ -41,7 +61,6 @@ async page => {
   });
   checks.push('All four charts show the latest market price on returning to view');
 
-  const lastWidget = widgets.last();
   await lastWidget.getByRole('button', { name: 'Configurar instrumentos A y B', exact: true }).click();
   const editor = lastWidget.getByRole('form', { name: 'Instrumentos del dólar intradiario', exact: true });
   const input = editor.getByRole('combobox', { name: 'Instrumento B', exact: true });
@@ -52,8 +71,48 @@ async page => {
   await lastWidget.getByRole('img', { name: 'Gráfico intradiario de CCL AL30' }).waitFor();
   await page.evaluate(() => window.intradayQuoteRequests.splice(0));
   await page.waitForFunction(() => ['AL30D-2', 'AL30C-2'].every(id =>
-    window.intradayQuoteRequests.some(ids => ids.length === 2 && ids.includes('AL30-2') && ids.includes(id))));
+    window.intradayQuoteRequests.some(({ ids }) => ids.length === 2 && ids.includes('AL30-2') && ids.includes(id))));
   assert((await legend.allTextContents()).filter(value => value === '1.420,00').length === 3,
     'Changing one chart keeps the other quotes intact and starts a separate group');
+
+  await page.addInitScript(recordQuotes);
+  await page.addInitScript(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+    let readerLoads = 0;
+    Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+      ...descriptor,
+      set(value) {
+        // Give the chart reader a separate URL so it cannot reuse the dashboard script response.
+        const delay = value.endsWith('/ratios-reader.js') && ++readerLoads === 2;
+        descriptor.set.call(this, delay ? value + '?chart=delayed' : value);
+      },
+    });
+  });
+  let release;
+  const beforeChartReader = new Promise(resolve => { release = resolve; });
+  const readerUrl = /\/ratios-reader\.js\?chart=delayed$/;
+  const delayChartReader = async route => {
+    await beforeChartReader;
+    await route.continue();
+  };
+  await page.route(readerUrl, delayChartReader);
+  try {
+    const chartRequested = page.waitForRequest(readerUrl);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await chartRequested;
+    await page.evaluate(() => { document.querySelector('.GridLayout').style.display = 'none'; });
+    await page.waitForTimeout(400);
+    const chartLoaded = page.waitForResponse(readerUrl);
+    release();
+    await chartLoaded;
+    await page.waitForTimeout(2500);
+    assert(await countReads() === 0, 'A reader that finishes loading after all charts hide sends no quotes');
+  } finally {
+    release();
+    await page.unroute(readerUrl, delayChartReader);
+  }
+  await page.evaluate(() => { document.querySelector('.GridLayout').style.display = ''; });
+  await page.waitForFunction(() => document.querySelectorAll('.ct-intraday-widget svg[role="img"]').length === 4);
+  checks.push('The delayed reader resumes every chart when it returns to view');
   return { checks };
 }

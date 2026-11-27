@@ -31,36 +31,36 @@ function acquireReader() {
 type QuoteUpdate = { result: LiveResponse } | { error: unknown };
 type QuoteListener = (update: QuoteUpdate) => void;
 type QuoteGroup = (listener: QuoteListener) => () => void;
-const quoteGroups = new Map<string, QuoteGroup>();
+const quoteGroups = new WeakMap<MarketReader, Map<string, QuoteGroup>>();
 
-function createQuoteGroup(key: string, ids: string[]): QuoteGroup {
-  const connection = acquireReader(), listeners = new Set<QuoteListener>();
+function createQuoteGroup(client: MarketReader, ids: string[], onIdle: () => void): QuoteGroup {
+  const listeners = new Set<QuoteListener>();
   let timer: ReturnType<typeof setTimeout>, reading = false, generation = 0;
   const closeIfIdle = () => {
-    if (reading || listeners.size) return;
-    quoteGroups.delete(key);
-    connection.release();
+    if (!reading && !listeners.size) onIdle();
   };
   async function poll() {
     if (reading || !listeners.size || document.hidden) return;
     reading = true;
     const round = generation;
-    const update = await connection.client.call<LiveResponse>("ratioIntradayQuotes", { ids }).then(
-      result => ({ result }), error => ({ error }),
-    );
-    // A group that was entirely hidden must refresh before publishing again.
-    if (round === generation) listeners.forEach(listener => listener(update));
+    const recipients = [...listeners];
+    const current = () => round === generation && listeners.size > 0 && !document.hidden;
+    const update = await client.call<LiveResponse>("ratioIntradayQuotes", { ids }, current)
+      .then(result => ({ result }), error => ({ error }));
+    // A newly visible chart gets a round started while it was subscribed.
+    if (current()) for (const listener of recipients) if (listeners.has(listener)) listener(update);
     reading = false;
     if (!listeners.size) closeIfIdle();
     else if (round !== generation) void poll();
     else timer = setTimeout(() => void poll(), 2000);
   }
   return listener => {
-    listeners.add(listener);
-    clearTimeout(timer);
-    void poll();
+    // Give each registration its own identity when a chart leaves and rejoins.
+    const receive: QuoteListener = update => listener(update);
+    listeners.add(receive);
+    if (listeners.size === 1) void poll();
     return () => {
-      if (!listeners.delete(listener) || listeners.size) return;
+      if (!listeners.delete(receive) || listeners.size) return;
       generation++;
       clearTimeout(timer);
       closeIfIdle();
@@ -68,12 +68,18 @@ function createQuoteGroup(key: string, ids: string[]): QuoteGroup {
   };
 }
 
-function subscribeQuotes(ids: readonly string[], listener: QuoteListener) {
+function subscribeQuotes(client: MarketReader, ids: readonly string[], listener: QuoteListener) {
   const sortedIds = [...ids].sort(), key = JSON.stringify(sortedIds);
-  let subscribe = quoteGroups.get(key);
+  let groups = quoteGroups.get(client);
+  if (!groups) {
+    groups = new Map();
+    quoteGroups.set(client, groups);
+  }
+  let subscribe = groups.get(key);
   if (!subscribe) {
-    subscribe = createQuoteGroup(key, sortedIds);
-    quoteGroups.set(key, subscribe);
+    const currentGroups = groups;
+    subscribe = createQuoteGroup(client, sortedIds, () => currentGroups.delete(key));
+    groups.set(key, subscribe);
   }
   return subscribe(listener);
 }
@@ -90,6 +96,7 @@ function useIntraday(ids: readonly string[], active: boolean) {
     let disposed = false, revision: number | undefined, previousConnection: boolean | undefined;
     let previousAvailability: string | undefined;
     let stopQuotes: (() => void) | undefined, historyRequest = 0;
+    let retryQuotes: ReturnType<typeof setTimeout>;
     const canPoll = () => !disposed && watching.current && !document.hidden;
     const loadHistory = (refresh = false) => {
       if (!connection) return;
@@ -140,12 +147,18 @@ function useIntraday(ids: readonly string[], active: boolean) {
       }
     };
     const visibilityChanged = () => {
+      clearTimeout(retryQuotes);
       if (!canPoll()) {
         stopQuotes?.();
         stopQuotes = undefined;
       } else if (!stopQuotes) {
-        connection ??= acquireReader();
-        stopQuotes = subscribeQuotes(ids, receiveQuotes);
+        try {
+          connection ??= acquireReader();
+          stopQuotes = subscribeQuotes(connection.client, ids, receiveQuotes);
+        } catch (error) {
+          receiveQuotes({ error });
+          retryQuotes = setTimeout(visibilityChanged, 2000);
+        }
       }
     };
     retryHistory.current = () => { if (revision !== undefined) void loadHistory(true); };
@@ -153,7 +166,7 @@ function useIntraday(ids: readonly string[], active: boolean) {
     document.addEventListener("visibilitychange", visibilityChanged);
     visibilityChanged();
     return () => {
-      disposed = true; stopQuotes?.(); retryHistory.current = () => {};
+      disposed = true; clearTimeout(retryQuotes); stopQuotes?.(); retryHistory.current = () => {};
       document.removeEventListener("visibilitychange", visibilityChanged);
       syncPolling.current = () => {};
       connection?.release();
