@@ -818,13 +818,25 @@ async page => {
   assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
     'Changing the opening date clears current market prefills');
   await click(button('Long AL30 / Short AL30D'));
-  assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
-    'Selecting direction on a historical date leaves prices blank');
+  assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '' &&
+    await lastC.isDisabled() && await button('Usar último de A').isDisabled() && await button('Usar Venta nivel 1 de A').isDisabled(),
+    'Historical dates prevent prefilling or copying present-market prices');
   await label('Precio de entrada A').fill('80000'); await label('Precio de entrada B').fill('50');
   const entryC = label('Precio C al abrir');
   assert(await entryC.inputValue() === '' && await label('Registrar C como tercera pata').count() === 0, 'Spot C requires an explicit quote and is a benchmark');
   await click(button('Abrir operación'));
   assert(await entryC.isVisible(), 'Entry with a missing C is blocked');
+  await page.setViewportSize({ width: 760, height: 950 });
+  await entryC.focus();
+  await page.keyboard.press('Tab');
+  assert(await label('Objetivo de brecha (%)').evaluate(el => document.activeElement === el && el.matches(':focus-visible')),
+    'Keyboard reaches the spread target with visible focus at tablet width');
+  assert(await entryC.evaluate(el => {
+    const field = el.getBoundingClientRect(), area = el.closest('section').getBoundingClientRect(), style = getComputedStyle(el);
+    return field.width > 40 && field.left >= area.left && field.right <= area.right &&
+      field.right <= innerWidth && style.color !== style.backgroundColor;
+  }), 'Historical C price remains legible and fits at tablet width');
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await entryC.fill('1572.5'); await label('Ratio objetivo').fill('1800');
   await label('Objetivo de brecha (%)').fill('1');
   assert(await page.locator('#ro-reference-title ~ .ro-close-legs output').first().innerText() === '1,75%', 'Entry spread uses the manual C');
@@ -837,7 +849,10 @@ async page => {
   await page.evaluate(() => { const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); spot.md.lst = 1600; spot.md.seq++; });
   await page.getByText('Objetivo de brecha ≤ 1,00% · alcanzado', { exact: true }).last().waitFor();
   assert(await page.locator('.ro-detail .ro-pnl-lines').innerText() === pnlBeforeReferenceMove, 'A change in spot alone can reach the spread goal while leaving P&L identical');
+  await lastC.click();
   await label('Fecha/hora del cierre · Argentina').fill('2026-01-05T10:00');
+  assert(await lastC.isDisabled() && await closeQuote('Último', 'A').isDisabled() &&
+    await label('Precio C al cerrar').inputValue() === '', 'Historical close requires its own C and disables market quote copying');
   await label('Precio cierre A').fill('79000'); await label('Precio cierre B').fill('50');
   assert(await button('Cerrar todo').isDisabled(), 'Missing closing C blocks saving a close');
   await label('Precio C al cerrar').fill('1580');
@@ -873,6 +888,18 @@ async page => {
   assert(await label('Cantidad cierre A').inputValue() === '50' && await label('Cantidad cierre B').inputValue() === '50', 'A/B close in proportion to the manually selected number of contracts');
   await click(button('Registrar cierre')); await history.getByText('Brecha de cierre · 1,27%', { exact: true }).waitFor();
   assert((await book()).operations.at(-1).legs[2].exits[0].quantity === 1, 'Partial closing quantities include C');
+  await label('Ingresar cantidades por pata').check();
+  await label('Fecha/hora del cierre · Argentina').fill('2026-01-05T12:00');
+  await label('Precio cierre C').fill('159000');
+  await label('Cantidad cierre C').fill('1');
+  assert(await label('Cantidad cierre A').inputValue() === '' && await label('Cantidad cierre B').inputValue() === '',
+    'Independent mode leaves A and B amounts blank when only C closes');
+  await click(button('Registrar cierre'));
+  await reviewWaitHistory(future.id, [[50], [50], [1, 1]]);
+  const separateClose = (await book()).operations.at(-1);
+  assert(separateClose.legs[2].exits[1].price === 159000 && separateClose.legs[2].exits[1].at === '2026-01-05T15:00:00.000Z',
+    'Independent C close records its own execution and timestamp');
+  checks.push('Historical quote controls and keyboard focus work at tablet width, and a future can close independently of A/B');
   await click(button('1 · Monitor')); await click(button('Quitar par MEP AL30 vs (DLR/DIC26 ÷ 100)'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));

@@ -112,8 +112,12 @@ export function parseSpreadGoal(value: string, comparison: "above" | "below"): O
   return { value: raw, comparison };
 }
 export const spreadGoalInput = (goal: OperationReference["goal"]) => goal ? String(Number(((goal.value - 1) * 100).toFixed(10))) : "";
-export const spreadGoalReached = (goal: OperationReference["goal"], spread?: number) =>
-  !!goal && positive(spread) && (goal.comparison === "above" ? spread >= goal.value : spread <= goal.value);
+export function spreadGoalReached(goal: OperationReference["goal"], spread?: number) {
+  if (!goal || !positive(spread)) return false;
+  const delta = spread - goal.value;
+  return Math.abs(delta) <= 2 * Number.EPSILON * Math.max(spread, goal.value) ||
+    (goal.comparison === "above" ? delta > 0 : delta < 0);
+}
 export const goalReached = (o: RatioOperation, raw: number | undefined) => o.targetRatio !== null && positive(raw) && (o.direction === 1 ? raw >= o.targetRatio : raw <= o.targetRatio);
 export const closedQuantity = (l: TradingLeg) => l.exits.reduce((n, e) => n + e.quantity, 0);
 export const remaining = (l: TradingLeg) => l.quantity - closedQuantity(l);
@@ -206,9 +210,23 @@ export function partialCloseQuantities(o: RatioOperation, leg: TradingLegIndex, 
 export function closeOperationByQuantity(o: RatioOperation, leg: TradingLegIndex, amount: number, prices: number[], at: string, referencePrice?: number): RatioOperation {
   return recordClose(o, partialCloseQuantities(o, leg, amount), prices, at, referencePrice);
 }
+export function validateIndependentClose(o: RatioOperation, quantities: number[]): void {
+  if (!o.legs[2] || quantities.length !== o.legs.length || !quantities.some(q => q > 0)) throw Error("Ingresá la cantidad de al menos una pata.");
+  o.legs.forEach((leg, i) => {
+    const q = quantities[i];
+    if (q !== 0 && (!quantity(q) || q % leg.step !== 0 || q > remaining(leg))) {
+      throw Error(`Revisá la cantidad de la pata ${tradingLegNames[i]}. Debe respetar el lote de ${leg.step} y su remanente.`);
+    }
+  });
+}
+export function closeOperationIndependently(o: RatioOperation, quantities: number[], prices: number[], at: string, referencePrice?: number) {
+  validateIndependentClose(o, quantities);
+  return recordClose(o, quantities, prices, at, referencePrice);
+}
+export const needsCloseReference = (o: RatioOperation, amounts: number[]) => !!o.reference && !amounts[2];
 function recordClose(o: RatioOperation, quantities: number[], prices: number[], at: string, referencePrice?: number): RatioOperation {
   if (prices.length !== o.legs.length || quantities.some((q, i) => q > 0 && !positive(prices[i]))) throw Error("Revisá los precios de cierre.");
-  const referenceLeg = o.reference && !quantities[2] ? quantities.findIndex(q => q > 0) : -1;
+  const referenceLeg = needsCloseReference(o, quantities) ? quantities.findIndex(q => q > 0) : -1;
   if (referenceLeg !== -1 && !positive(referencePrice)) throw Error("Ingresá el precio de referencia C al cierre.");
   const closeId = crypto.randomUUID();
   const legs = o.legs.map((l, i) => {

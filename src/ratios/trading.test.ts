@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { applyDefaultWatch, bestBookPrice, DEFAULT_WATCH_PAIRS, resolveDefaultWatch, closeOperation, closeOperationByQuantity, partialCloseQuantities, correctOperation, counterpart, currentRatio, dailyPriceChange, defaultMarketRights, emptyBook, goalInput, goalReached, invertWatchPair, isClosed, operationPnl, pairRatioLabel, parseGoal, validateBook, validateOperation, type RatioOperation, type TradingInstrument } from "./trading";
 import { calculateRatio, instrumentDetail, pairLabel } from "./model";
-import { canTradeReference, closeMetrics, currentSpread, isMonitorOnly, parseSpreadGoal, recordedCloses, remaining, reviseRecordedClose, spreadAt, spreadGoalReached, tradingBookSchema } from "./trading";
+import { canTradeReference, closeMetrics, closeOperationIndependently, currentSpread, isMonitorOnly, parseSpreadGoal, recordedCloses, remaining, reviseRecordedClose, spreadAt, spreadGoalReached, tradingBookSchema } from "./trading";
 
 const instrument = (id: string, currency = "ARS"): TradingInstrument => ({ id, symbol: id, market: "bm", currency, settlement: "2", cfi: "ESXXXX", amountFactor: 1, quantityStep: 1, quantityUnit: "nominales" });
 const defaultInstrument = (symbol: string): TradingInstrument => symbol === "DLR/SPOT" ? { ...instrument("rx_DDF_DLR_SPOT"), symbol, market: "rx", settlement: "Referencia", cfi: "MRIXXX", monitorOnly: true } : instrument(symbol, symbol === "AL30D" ? "USD" : symbol === "AL30C" ? "EXT" : "ARS");
@@ -331,4 +331,25 @@ it("calculates a plain closing ratio from recorded prices rather than market pri
   expect(closeMetrics(closed, close)).toEqual({ priceC: undefined, ratio: 3, spread: undefined });
   const edited = reviseRecordedClose(closed, close.key, [{ quantity: 100, price: 110 }, { quantity: 200, price: 40 }]);
   expect(closeMetrics(edited, recordedCloses(edited)[0]).ratio).toBe(2.75);
+});
+
+it("reaches an inclusive spread objective at a floating-point boundary", () => {
+  const below = parseSpreadGoal("-5", "below");
+  expect(spreadGoalReached(below, spreadAt(71250.95, 50, 1500))).toBe(false);
+  expect(spreadGoalReached(below, spreadAt(71250.95, 50, 1500.02))).toBe(true);
+  expect(spreadGoalReached(parseSpreadGoal("6.5", "above"), 1.0649999999999997)).toBe(true);
+});
+
+it("records exits of the futures leg and the A/B legs on different dates", () => {
+  const o = operation();
+  const c: TradingInstrument = { ...instrument("DIC26"), market: "rx", settlement: "Futuro", cfi: "FXXXXX", quantityUnit: "contratos", monitorOnly: true };
+  o.reference = { instrument: c, entry: 2 };
+  o.legs = [o.legs[0], o.legs[1], { instrument: c, side: -1, quantity: 1, entry: 2, factor: 1000, step: 1, ddmm: 0, exits: [] }];
+  expect(() => closeOperationIndependently(o, [0, 0, 2], [0, 0, 1.99], exitAt)).toThrow(/remanente/);
+  const first = closeOperationIndependently(o, [25, 50, 0], [103, 51, 0], exitAt, 2.02);
+  expect(first.legs.map(remaining)).toEqual([75, 150, 1]);
+  expect(closeMetrics(first, recordedCloses(first)[0]).priceC).toBe(2.02);
+  const second = closeOperationIndependently(first, [0, 0, 1], [0, 0, 1.99], "2026-01-03T13:00:00.000Z");
+  expect(second.legs.map(remaining)).toEqual([75, 150, 0]);
+  expect(recordedCloses(second)[0].entries.map(e => e.leg)).toEqual([2]);
 });

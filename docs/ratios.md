@@ -85,7 +85,9 @@ el contrato en el panel de Referencia C, entre las velas de A y el indicador
 A/B. Al abrir desde una fila con C futuro, **Registrar C como tercera pata**
 permite incluir la posición localmente. Ingresá el sentido, los contratos, el
 lote, el factor monetario y los DDMM. El factor multiplica el resultado en la
-moneda del contrato. La opción **Dividir Referencia C por 100** se aplica
+moneda del contrato. En el cierre podés marcar **Ingresar cantidades por pata**
+para registrar ejecuciones por separado. Escribí las cantidades ejecutadas y
+dejá en blanco las patas que siguen abiertas. La opción **Dividir Referencia C por 100** se aplica
 exclusivamente a la brecha.
 
 ## Referencias cotizadas por 100 nominales
@@ -144,7 +146,8 @@ selección queda guardada al recargar.
 Desde **Configuración → Ratios → Monitor**, pulsá **Abrir operación** en la fila
 con C. La apertura conserva los instrumentos y el divisor seleccionados.
 Ingresá **Precio C al abrir** con la cotización de la fecha y hora de apertura.
-Para una operación del momento, podés copiar **Usar último C**. Escribí siempre
+Para una operación del momento, podés copiar **Usar último C**. Al elegir una fecha
+de apertura o cierre, se cargan los precios manualmente. Escribí siempre
 el precio original de C. La brecha de entrada usa los precios A y B registrados
 y el precio de C ingresado. El objetivo de A/B y el de brecha son independientes.
 Para la brecha podés elegir **Menor o igual** o **Mayor o igual**.
