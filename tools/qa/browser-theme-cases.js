@@ -179,13 +179,39 @@ async (page, group) => {
     await page.getByRole('button', { name: 'RATIOS · CHUCHOTRIZ', exact: true }).click();
     await contrast('TH-10', 'Cabecera del widget Ratios', page.locator('.ct-ratios th').first());
     await contrast('TH-11', 'Valor de un ratio del dashboard', page.locator('.ct-ratios .ct-ratios-value').first());
-    await page.getByRole('button', { name: 'Gráfico intradiario de AL30' }).focus();
+    const trigger = page.getByRole('button', { name: 'Gráfico intradiario de AL30' });
+    await trigger.evaluate(element => {
+      const header = element.closest('.NewWidgetHeader');
+      Object.assign(header.parentElement.style, { position: 'absolute', top: '360px', left: '420px', width: '320px' });
+      Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '32px' });
+    });
+    await trigger.focus();
     const book = page.locator('.ct-book-intraday');
     await contrast('TH-12', 'Título del Book intradiario', book.locator('strong'));
     await contrast('TH-13', 'Etiqueta del eje del Book intradiario', book.locator('svg text').first(), { foreground: 'fill' });
     // The SVG is visible even when a single trade gives the polyline a zero-height box.
     await contrast('TH-14', 'Línea de precio del Book intradiario', book.locator('.ct-book-intraday-line'),
       { foreground: 'stroke', minimum: 3, state: 'attached' });
+    const placement = async (id, side, detail) => {
+      await page.waitForFunction(side => {
+        const title = document.querySelector('.SecurityCardWidget .NewWidgetHeader').getBoundingClientRect();
+        const preview = document.querySelector('.ct-book-intraday');
+        const plot = preview?.querySelector('svg')?.getBoundingClientRect();
+        if (!plot) return false;
+        const { left, top, right, bottom } = preview.getBoundingClientRect();
+        if (left < 0 || top < 0 || right > innerWidth || bottom > innerHeight || plot.bottom > bottom) return false;
+        if (side === 'above') return bottom < title.top;
+        return side === 'right' ? left > title.right : right < title.left;
+      }, side, { timeout: 3000 }).catch(error => { throw Error(`${detail}. ${error.message}`); });
+      cases.push({ id, status: 'PASS', detail });
+    };
+    await placement('TH-16', 'above', 'El gráfico del widget abre arriba si entra completo');
+    await page.evaluate(() => window.scrollTo(0, 320));
+    await placement('TH-17', 'right', 'El gráfico pasa a la derecha cuando falta espacio arriba');
+    await page.setViewportSize({ width: 990, height: 800 });
+    await placement('TH-18', 'right', 'El gráfico se ajusta al ancho disponible a la derecha');
+    await page.setViewportSize({ width: 760, height: 800 });
+    await placement('TH-19', 'left', 'En el borde derecho, el gráfico aprovecha el espacio a la izquierda');
     await page.keyboard.press('Escape');
     await book.waitFor({ state: 'hidden' });
   } else {

@@ -150,34 +150,44 @@ function Preview({ target, id, onEnter, onLeave }: {
 
   useLayoutEffect(() => {
     const element = panel.current!;
+    const native = anchor.matches(NATIVE_CHART_ICON);
+    const header = native ? null : chartContainer(anchor);
     const position = () => {
       const rect = anchor.getBoundingClientRect();
       const gap = 5, inset = 8;
-      const below = rect.bottom + gap;
+      const widget = header?.getBoundingClientRect();
+      const top = widget?.top ?? rect.top;
+      const below = (widget?.bottom ?? rect.bottom) + gap;
+      const aboveRoom = top - gap - inset;
       let side: number | undefined, alignAbove: boolean | undefined;
       element.style.width = "";
       element.style.maxHeight = "";
       element.style.pointerEvents = "";
-      if (anchor.matches(NATIVE_CHART_ICON)) {
-        const favorite = anchor.closest(".ActionCell")?.querySelector(".FavoriteButton")?.getBoundingClientRect();
-        const controlsLeft = favorite?.width ? Math.min(rect.left, favorite.left) : rect.left;
-        const controlsRight = favorite?.width ? Math.max(rect.right, favorite.right) : rect.right;
-        const rightRoom = window.innerWidth - controlsRight - gap - inset, leftRoom = controlsLeft - gap - inset;
-        if (Math.max(rightRoom, leftRoom) >= 180) {
-          const onRight = rightRoom >= 354 || rightRoom >= leftRoom;
-          const width = Math.min(354, onRight ? rightRoom : leftRoom);
-          element.style.width = `${width}px`;
-          side = onRight ? controlsRight + gap : controlsLeft - gap - width;
+      const naturalSize = widget && element.getBoundingClientRect();
+      const fitsAbove = naturalSize && naturalSize.height <= aboveRoom;
+      if (fitsAbove) {
+        alignAbove = true;
+      } else if (native || widget) {
+        const favorite = native ? anchor.closest(".ActionCell")?.querySelector(".FavoriteButton")?.getBoundingClientRect() : undefined;
+        const left = widget?.left ?? (favorite?.width ? Math.min(rect.left, favorite.left) : rect.left);
+        const right = widget?.right ?? (favorite?.width ? Math.max(rect.right, favorite.right) : rect.right);
+        const rightRoom = window.innerWidth - right - gap - inset, leftRoom = left - gap - inset;
+        const preferredWidth = 354, minimumSideWidth = 180;
+        if (Math.max(rightRoom, leftRoom) >= minimumSideWidth) {
+          const onRight = native ? rightRoom >= preferredWidth || rightRoom >= leftRoom : rightRoom >= minimumSideWidth;
+          const width = Math.min(preferredWidth, onRight ? rightRoom : leftRoom);
+          if (!naturalSize || width < naturalSize.width) element.style.width = `${width}px`;
+          side = onRight ? right + gap : left - gap - width;
         } else {
-          const belowRoom = window.innerHeight - below - inset, aboveRoom = rect.top - gap - inset;
+          const belowRoom = window.innerHeight - below - inset;
           alignAbove = aboveRoom > belowRoom;
           element.style.maxHeight = `${Math.max(0, alignAbove ? aboveRoom : belowRoom)}px`;
-          // A stacked preview must leave the surrounding rows' controls clickable.
-          element.style.pointerEvents = "none";
+          // A stacked native preview must leave the surrounding rows' controls clickable.
+          if (native) element.style.pointerEvents = "none";
         }
       }
-      const { width, height } = element.getBoundingClientRect();
-      const above = rect.top - gap - height;
+      const { width, height } = fitsAbove ? naturalSize : element.getBoundingClientRect();
+      const above = top - gap - height;
       const maxLeft = window.innerWidth - width - inset, maxTop = window.innerHeight - height - inset;
       const x = side ?? rect.right - width;
       const y = side !== undefined ? rect.top : (alignAbove ?? (below > maxTop)) ? above : below;
