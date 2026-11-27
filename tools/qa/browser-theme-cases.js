@@ -71,16 +71,19 @@ async (page, group) => {
     const olderReport = await page.evaluate(() => {
       const portfolio = Object.getPrototypeOf(window.mainStore.portfolioStore);
       const read = portfolio.getDetailedPositionReport;
-      const day = new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short' });
-      const now = new Date();
-      const earlier = new Date(now.getTime() - 30 * 60_000);
-      const sameDay = day.format(earlier) === day.format(now);
+      const timeZone = 'America/Argentina/Buenos_Aires';
+      const day = new Intl.DateTimeFormat('es-AR', { timeZone, dateStyle: 'short' });
+      const now = Date.now();
+      const today = day.format(now);
+      const earlier = [30 * 60_000, 5 * 60_000 + 1000].map(age => now - age).find(time => day.format(time) === today);
+      if (earlier === undefined) return null;
       portfolio.getDetailedPositionReport = async function (...args) {
         const report = await read.apply(this, args);
-        if (sameDay && day.format(earlier) === day.format(new Date())) report.lastCalculation = earlier;
+        if (day.format(Date.now()) === today) report.lastCalculation = new Date(earlier);
         return report;
       };
-      return sameDay;
+      const reportTime = new Intl.DateTimeFormat('es-AR', { timeZone, dateStyle: 'short', timeStyle: 'short' });
+      return { today, age: now - earlier, tooltip: `Último cálculo de Matriz: ${reportTime.format(earlier)}` };
     });
     const panel = page.getByRole('region', { name: 'Tenencia del instrumento', exact: true });
     const close = page.getByRole('button', { name: 'Ocultar tenencia', exact: true });
@@ -96,10 +99,19 @@ async (page, group) => {
     await qty.fill('2500');
     await expectRows(['CI', '12.500', '15.000', '10.000'], ['24 h', '10.000', '12.500', '7.500']);
     await panel.getByRole('button', { name: /^Usar 10\.000/ }).waitFor();
-    if (await panel.getByRole('status').isVisible() || !(await panel.locator('.ct-ticket-position-projection').getAttribute('title'))?.includes('Último cálculo de Matriz')) {
+    const tooltip = await panel.locator('.ct-ticket-position-projection').getAttribute('title');
+    if (await panel.getByRole('status').isVisible() || !tooltip?.startsWith('Último cálculo de Matriz: ')) {
       throw Error('La fecha debe quedar en el tooltip sin ocultar Usar');
     }
-    cases.push({ id: 'TP-13', status: 'PASS', detail: `${olderReport ? 'Cálculo del día con 30 minutos de antigüedad' : 'Cálculo del día'}: el botón está disponible y la hora queda en el tooltip` });
+    const currentDay = await page.evaluate(() => new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short',
+    }).format(new Date()));
+    if (olderReport?.today === currentDay) {
+      if (tooltip !== olderReport.tooltip) throw Error('El tooltip debe mostrar la hora del cálculo simulado');
+      const minutes = Math.floor(olderReport.age / 60_000);
+      const seconds = (olderReport.age % 60_000) / 1000;
+      cases.push({ id: 'TP-13', status: 'PASS', detail: `Cálculo del día con ${minutes} min y ${seconds} s de antigüedad: Usar disponible y hora exacta en el tooltip` });
+    }
     const buy = await contrast('TP-01', 'Columna Si comprás', panel.locator('thead .ct-buy'));
     const sell = await contrast('TP-02', 'Columna Si vendés', panel.locator('thead .ct-sell'));
     if (buy.ratio === sell.ratio) throw Error('Compra y venta deben usar colores distintos');
