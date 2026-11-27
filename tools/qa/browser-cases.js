@@ -98,7 +98,7 @@ async (page, group) => {
     // This suite explicitly exercises opt-in autocomplete; new installations default to off.
     await page.evaluate(() => chrome.storage.local.set({ 'AutocompleteInstrument:AL30': true, 'AutocompleteInstrument:GD30': true }));
     await open(); await b('Cantidades rápidas').click(); await b('RAW').click();
-    const raw = 'AL30 100 200/20 300/R10\nGD30 400';
+    const raw = 'AL30 100 200/20 300/R10 +50\nGD30 400';
     await label('Presets RAW').fill(raw); await b('Guardar cambios').click();
     await page.getByText('Cambios guardados', { exact: false }).waitFor();
     await page.reload(); await open(); await b('Cantidades rápidas').click(); await b('RAW').click();
@@ -107,15 +107,82 @@ async (page, group) => {
     assert(await page.getByRole('alert').count() > 0, 'Invalid RAW rejected');
     await page.reload(); await open(); await b('Cantidades rápidas').click(); await b('RAW').click();
     equal((await label('Presets RAW').inputValue()).trim(), raw, 'Invalid edit did not replace saved book');
+    await b('Visual').click();
+    await b('Editar preset 4 de AL30').click();
+    const mode = page.getByRole('group', { name: 'Modo del preset 4 de AL30' });
+    const add = mode.getByRole('button', { name: 'Sumar', exact: true });
+    equal(await add.getAttribute('aria-pressed'), 'true', 'RAW additive mode opens in the visual editor');
+    await mode.getByRole('button', { name: 'Mostrar todo', exact: true }).click();
+    await add.click();
+    equal(await add.getAttribute('aria-pressed'), 'true', 'Visual editor selects Sumar');
+    const editingLayout = () => mode.evaluate(group => {
+      const row = group.closest('.preset-row');
+      const quantity = row.querySelector('[data-field="cantidad"]').getBoundingClientRect();
+      const actions = row.querySelector('.preset-row-actions').getBoundingClientRect();
+      const value = row.querySelector('[data-field="mostrar"]')?.getBoundingClientRect();
+      const selection = group.getBoundingClientRect();
+      const edge = row.getBoundingClientRect().right;
+      const center = rect => rect.top + rect.height / 2;
+      const buttons = [...group.querySelectorAll('button')];
+      return {
+        oneRow: buttons.every(button => Math.abs(button.getBoundingClientRect().top - buttons[0].getBoundingClientRect().top) <= 1),
+        aligned: Math.abs(center(selection) - center(quantity)) <= 2 && Math.abs(center(actions) - center(quantity)) <= 2,
+        inside: [actions, selection, ...(value ? [value] : [])].every(rect => rect.right <= edge + 1) &&
+          buttons.every(button => button.scrollWidth <= button.clientWidth + 1),
+        valueAligned: !value || Math.abs(center(value) - center(quantity)) <= 2,
+      };
+    });
+    const wide = await editingLayout();
+    assert(wide.oneRow && wide.aligned && wide.inside, 'The four modes align with the quantity and actions');
+    await mode.getByRole('button', { name: 'Fija', exact: true }).click();
+    const fixed = await editingLayout();
+    assert(fixed.oneRow && fixed.aligned && fixed.inside && fixed.valueAligned, 'Fixed value fits on the same row');
+    const desktop = page.viewportSize();
+    await page.setViewportSize({ width: 390, height: 900 });
+    const narrow = await editingLayout();
+    assert(narrow.oneRow && narrow.inside, 'The narrow editor keeps the modes and value inside the row');
+    await page.setViewportSize(desktop);
+    await add.click();
+    pass('RG-01-editor-layout', 'Mode selector is horizontal on wide and narrow editors and aligned with the fields on desktop');
+    await b('Guardar cambios').click();
+    await page.getByText('Cambios guardados', { exact: false }).waitFor();
     await b('Volver a Matriz').click();
     const ticket = page.locator('#MiniOrderForm');
-    await ticket.getByRole('button', { name: '200/20', exact: true }).click();
+    const preset = name => ticket.getByRole('button', { name, exact: true });
+    const toggle = ticket.getByRole('button', { name: 'Expandir o contraer mini formulario' });
+    const displayed = label('Cantidad a mostrar');
+    await page.evaluate(() => window.ctAddPresetExpansion());
+    await toggle.click();
+    await preset('100').click();
+    equal(await label('Cantidad').inputValue(), '100', 'Whole preset fills quantity');
+    equal(await displayed.count(), 0, 'Whole preset keeps collapsed panel closed');
+    await preset('200/20').click();
     equal(await label('Cantidad').inputValue(), '200', 'Fixed preset quantity');
-    equal(await label('Cantidad a mostrar').inputValue(), '20', 'Fixed display quantity');
-    await ticket.getByRole('button', { name: '300/R10', exact: true }).click();
-    const shown = Number(await label('Cantidad a mostrar').inputValue());
+    equal(await displayed.inputValue(), '20', 'Fixed preset opens panel and fills displayed quantity');
+    await preset('100').click();
+    equal(await displayed.inputValue(), '', 'Whole preset clears a visible partial and keeps panel open');
+    await preset('300/R10').click();
+    const shown = Number(await displayed.inputValue());
     assert(shown === 30, 'Random displayed quantity inside documented range');
-    await ticket.getByRole('button', { name: '200/20', exact: true }).click();
+    await toggle.click();
+    await preset('100').click();
+    equal(await displayed.count(), 0, 'Removing a hidden partial keeps panel closed');
+    equal(await page.evaluate(() => JSON.stringify({ displayQty: window.mainStore.uiStore.newOrderMiniPanel.displayQty })), '{}', 'Draft omits displayed quantity');
+    pass('RG-01-expansion', 'Only partial presets expand; switching to Mostrar todo clears the visible or hidden partial');
+    await preset('+50').click();
+    equal(await label('Cantidad').inputValue(), '150', 'A plus preset adds to total');
+    equal(await displayed.count(), 0, 'A plus preset keeps the panel closed');
+    await preset('200/20').click();
+    equal(await label('Cantidad').inputValue(), '200', 'A fixed partial preset still replaces the total');
+    await preset('+50').click();
+    equal(await label('Cantidad').inputValue(), '250', 'A plus preset adds above a partial');
+    equal(await displayed.inputValue(), '20', 'A plus preset preserves the existing partial');
+    await label('Cantidad').fill('78,14');
+    await preset('+50').click();
+    equal(await label('Cantidad').inputValue(), '128,14', 'A plus preset preserves the decimal quantity accepted by Matriz');
+    equal(await displayed.inputValue(), '20', 'Adding to decimals preserves the existing partial');
+    await preset('200/20').click();
+    pass('RG-01-additive', 'The same ticket supports additive and replacement presets. Additive clicks preserve the existing partial');
     await label('Instrumento').fill('GD30 (CI)'); await label('Cantidad').fill(''); await label('Precio').focus();
     await page.waitForFunction(() => document.querySelector('#cantidad').value === '400');
     await label('Instrumento').fill('AL30 (CI)'); await label('Cantidad').fill(''); await label('Precio').focus();
@@ -181,6 +248,7 @@ async (page, group) => {
     await ticket.getByRole('button', { name: 'Configurar cantidades rápidas de TICKER-NUEVO' }).click();
     await instrument('Cantidades predeterminadas para TICKER-NUEVO').waitFor();
     equal(await label('Nuevo instrumento').inputValue(), 'TICKER-NUEVO', 'Prefills new ticker even without a price');
+    equal(await page.locator('.preset-preview .preset-chip').allTextContents(), ['10k/2.5k', '5k/2.5k', '1k/250', '100/25', '+100', '+500'], 'Fallback previews partial and additive presets');
     equal((await page.evaluate(() => chrome.storage.local.get('InstrumentPresets'))).InstrumentPresets['TICKER-NUEVO'], undefined, 'Opening never saves a new ticker');
     await b('Descartar cambios').click();
     await b('Volver a Matriz').click();

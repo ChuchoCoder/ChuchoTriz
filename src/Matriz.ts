@@ -10,7 +10,7 @@ const precioSelector = numberInput("MiniOrderFormQuantity-price-input");
 const cantidadSelector = numberInput("MiniOrderFormQuantity-amount-input");
 const ticketInputSelector = [instrumentoSelector, precioSelector, cantidadSelector].join(", ");
 const cantidadAMostrarSelector = numberInput("amount-show__div");
-const expandButtonSelector = "span.ExpandButton";
+const expandButtonSelector = "span:is(.ExpandButton, .MiniOrderForm_ButtonExpandedMiniPanel)";
 const buttonsSelector = "div.MiniOrderForm_buttonsBlock";
 // Hijo directo: los botones de Presets usan la misma clase ButtonLimpiar para tomar su estilo.
 const limpiarButtonSelector = `#MiniOrderForm > ${buttonsSelector} > button.ButtonLimpiar`;
@@ -51,6 +51,30 @@ function setInputValue(input: HTMLInputElement, value: string, eventType = "chan
         "value"
     )!.set!.call(input, value);
     input.dispatchEvent(new Event(eventType, { bubbles: true }));
+}
+
+function normalizedQuantity(input: HTMLInputElement): string | undefined {
+    const raw = input.value.trim();
+    if (!raw) return "0";
+    const ungrouped = raw.replaceAll(".", "");
+    // Matriz uses decimal comma. The native numeric value disambiguates a lone grouping dot.
+    const grouped = /^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(raw) &&
+        (raw.includes(",") || input.getAttribute("aria-valuenow") === ungrouped);
+    const parsed = /^(\d+)(?:[.,](\d+))?$/.exec(grouped ? ungrouped : raw);
+    if (!parsed) return;
+    const integer = parsed[1].replace(/^0+(?=\d)/, "");
+    const decimals = parsed[2]?.replace(/0+$/, "");
+    return decimals ? `${integer}.${decimals}` : integer;
+}
+
+function addPresetQuantity(input: HTMLInputElement, cantidad: number): string | undefined {
+    const current = normalizedQuantity(input);
+    if (current === undefined) return;
+    // Only the integer part changes. Keep the exact decimals already typed in Matriz.
+    const [whole, decimals] = current.split(".");
+    const total = Number(whole) + cantidad;
+    if (!Number.isSafeInteger(total) || total <= 0 || (decimals && total === Number.MAX_SAFE_INTEGER)) return;
+    return decimals ? `${total}.${decimals}` : String(total);
 }
 
 export async function preloadOptionTicket(symbol: string, price: number, quantity: number, signal: AbortSignal) {
@@ -224,8 +248,7 @@ export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(
     let disposed = false;
     let fillRevision = 0;
     let stopExpansion: (() => void) | undefined;
-    let cancelPendingShownQuantity: (() => void) | undefined;
-    let cancelWholeQuantity: (() => void) | undefined;
+    let pendingShownQuantity: { stop(): void; continueWithQuantity(quantity: string): void } | undefined;
 
     const isCurrent = () => !disposed && currentMiniOrderForm() === form;
     // Matriz puede reemplazar un input dentro del mismo formulario.
@@ -266,63 +289,6 @@ export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(
         if (!isCurrent() || find(cantidadAMostrarSelector)) stop();
     }
 
-    // Mostrar todo sigue al total mientras el trader edita el ticket.
-    function followWholeQuantity(instrumento: string, precio: string, revision: number) {
-        let writing = false;
-        let applied = false;
-        let lastQuantity = valueOf(cantidadSelector);
-        const current = () => isCurrent() && fillRevision === revision &&
-            valueOf(instrumentoSelector) === instrumento && (applied || valueOf(precioSelector) === precio);
-        const sync = () => {
-            if (!current()) { stop(); return; }
-            const quantity = valueOf(cantidadSelector);
-            const input = find<HTMLInputElement>(cantidadAMostrarSelector);
-            if (!input) {
-                // Preserve a deliberate collapse until the total actually changes.
-                if (quantity !== lastQuantity) expand();
-            } else {
-                if (input.value !== quantity) {
-                    writing = true;
-                    try { setInputValue(input, quantity); }
-                    finally { writing = false; }
-                }
-                applied = true;
-                clearTimeout(timeout);
-            }
-            lastQuantity = quantity;
-        };
-        const edited = (event: Event) => {
-            if (writing) return;
-            const target = inForm(event.target) ? event.target : null;
-            const stepping = ["click", "pointerdown"].includes(event.type) && !!target?.closest(".ant-input-number-handler-wrap") ||
-                event instanceof KeyboardEvent && ["ArrowUp", "ArrowDown"].includes(event.key);
-            const displayEdited = target?.closest(".amount-show__div") &&
-                (["input", "change"].includes(event.type) || stepping);
-            if (!current() || target?.matches(instrumentoSelector) && ["input", "change"].includes(event.type) || displayEdited) {
-                stop();
-            } else if (event.eventPhase !== Event.CAPTURING_PHASE && target?.closest(".MiniOrderFormQuantity-amount-input")) sync();
-        };
-        const observer = new MutationObserver(sync);
-        const stop = () => {
-            observer.disconnect();
-            clearTimeout(timeout);
-            unsubscribeLimpiar();
-            for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.removeEventListener(type, edited, true);
-            for (const type of ["input", "change", "click", "keyup"]) document.removeEventListener(type, edited);
-            if (cancelWholeQuantity === stop) cancelWholeQuantity = undefined;
-        };
-        const unsubscribeLimpiar = onLimpiar(stop);
-        const timeout = setTimeout(() => { if (!applied) stop(); }, 2000);
-        cancelWholeQuantity = stop;
-        // Relinquish manual display edits before Matriz handles/stops the event.
-        for (const type of ["input", "change", "click", "keyup", "pointerdown", "keydown"]) document.addEventListener(type, edited, true);
-        // Let Matriz consume the new total before writing the related field.
-        for (const type of ["input", "change", "click", "keyup"]) document.addEventListener(type, edited);
-        observer.observe(form, { childList: true, subtree: true, attributes: true, attributeFilter: ["value"] });
-        expand();
-        sync();
-    }
-
     function read(): Ticket {
         const instrumento = valueOf(instrumentoSelector);
         return {
@@ -335,27 +301,46 @@ export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(
 
     return {
         read,
-        fill: ({ cantidad, mostrar }) => {
-            const revision = ++fillRevision;
-            cancelPendingShownQuantity?.();
-            cancelWholeQuantity?.();
-            const input = find<HTMLInputElement>(cantidadSelector);
+        fill: ({ cantidad, mostrar }, sumar = false) => {
+            let input = find<HTMLInputElement>(cantidadSelector);
             const instrumento = valueOf(instrumentoSelector);
             const precio = valueOf(precioSelector);
-            if (!input || instrumento === "" || precio === "") return;
+            if (!input || instrumento === "" || precio === "") return false;
 
-            const quantity = cantidad.toString();
+            if (sumar) {
+                const quantity = addPresetQuantity(input, cantidad);
+                if (quantity === undefined) return false;
+                if (quantity.includes(".")) {
+                    const change = new CustomEvent("ct-set-fractional-draft-quantity", { detail: quantity, cancelable: true });
+                    return !form.dispatchEvent(change) && isCurrent() &&
+                        valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio;
+                }
+                pendingShownQuantity?.continueWithQuantity(quantity);
+                setInputValue(input, quantity);
+                return isCurrent() && valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio;
+            }
+
+            let revision = fillRevision;
+            let quantity = cantidad.toString();
             const sameTicket = () => isCurrent() && fillRevision === revision &&
                 valueOf(instrumentoSelector) === instrumento && valueOf(precioSelector) === precio;
-            setInputValue(input, quantity);
-            if (!sameTicket()) return;
             const showPartial = Number.isInteger(mostrar) && mostrar > 0;
             if (!showPartial) {
-                followWholeQuantity(instrumento, precio, revision);
-                return;
+                // Require acknowledgment before changing the total with a potentially hidden partial.
+                const clear = new Event("ct-clear-draft-display-quantity", { cancelable: true });
+                if (form.dispatchEvent(clear) || !sameTicket()) return false;
+                input = find<HTMLInputElement>(cantidadSelector);
+                if (!input) return false;
             }
-            const current = () => sameTicket() && valueOf(cantidadSelector) === quantity;
-            if (!current()) return;
+            revision = ++fillRevision;
+            pendingShownQuantity?.stop();
+            setInputValue(input, quantity);
+            if (!showPartial) return sameTicket();
+            const current = () => {
+                const amount = find<HTMLInputElement>(cantidadSelector);
+                return amount !== null && sameTicket() && normalizedQuantity(amount) === quantity;
+            };
+            if (!current()) return false;
             expand();
 
             const apply = () => {
@@ -365,7 +350,7 @@ export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(
                 setInputValue(shown, mostrar.toString());
                 return true;
             };
-            if (apply()) return;
+            if (apply()) return current();
 
             const observer = new MutationObserver(() => { if (apply()) stop(); });
             const edited = (event: Event) => {
@@ -380,14 +365,21 @@ export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(
                 unsubscribeLimpiar();
                 for (const type of ["input", "change", "focusin"]) document.removeEventListener(type, edited);
                 document.removeEventListener("click", collapsed);
-                if (cancelPendingShownQuantity === stop) cancelPendingShownQuantity = undefined;
+                if (pendingShownQuantity?.stop === stop) pendingShownQuantity = undefined;
             };
             const timeout = setTimeout(stop, 2000);
             const unsubscribeLimpiar = onLimpiar(stop);
-            cancelPendingShownQuantity = stop;
+            pendingShownQuantity = {
+                stop,
+                continueWithQuantity: next => {
+                    if (current()) quantity = next;
+                    else stop();
+                },
+            };
             for (const type of ["input", "change", "focusin"]) document.addEventListener(type, edited);
             document.addEventListener("click", collapsed);
             observer.observe(form, { childList: true, subtree: true });
+            return true;
         },
         editCantidad: () => selectCantidad(find<HTMLInputElement>(cantidadSelector)),
         onTicketFocus: (listener) => {
@@ -399,8 +391,7 @@ export function bindMiniOrderForm(form: HTMLElement): MiniOrderForm & { dispose(
         onLimpiar,
         dispose: () => {
             disposed = true;
-            cancelPendingShownQuantity?.();
-            cancelWholeQuantity?.();
+            pendingShownQuantity?.stop();
             stopExpansion?.();
         },
     };

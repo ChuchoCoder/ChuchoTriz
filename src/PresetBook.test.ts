@@ -52,6 +52,15 @@ describe("random display quantities", () => {
 });
 
 describe("parse y format", () => {
+  it("round trips additive and replacement presets of the same quantity", () => {
+    const raw = "AL30 1000 +1000 10000/R5 2000/20\n";
+    const { book, errors } = parse(raw);
+    expect(errors).toEqual([]);
+    expect(book.AL30[1]).toEqual({ cantidad: 1000, mostrar: 0, sumar: true });
+    expect(book.AL30.map(label)).toEqual(["1k", "+1k", "10k/R5", "2k/20"]);
+    expect(format(book)).toBe(raw);
+  });
+
   it("parse(format(book)) devuelve el mismo Preset book", () => {
     const { book, errors } = parse(format(defaultBook));
 
@@ -100,6 +109,8 @@ describe("parse con errores", () => {
     ["número con letras", "AL30 10k", 1, '"10k" no es un Preset'],
     ["decimal", "AL30 1.5", 1, '"1.5" no es un Preset'],
     ["negativo", "AL30 -5", 1, '"-5" no es un Preset'],
+    ["suma con parcial", "AL30 +100/20", 1, '"+100/20" no es un Preset'],
+    ["suma cero", "AL30 +0", 1, "la Cantidad debe ser mayor a cero"],
     ["Cantidad a mostrar vacía", "AL30 100/", 1, '"100/" no es un Preset'],
     ["Cantidad a mostrar no numérica", "AL30 100/abc", 1, '"100/abc" no es un Preset'],
     ["Cantidad vacía", "AL30 /100", 1, '"/100" no es un Preset'],
@@ -135,6 +146,11 @@ describe("parse con errores", () => {
 });
 
 describe("presetsFor", () => {
+  it("includes +100 and +500 after the four partial presets when no ticker matches", () => {
+    expect(presetsFor({ AL: [{ cantidad: 1000, mostrar: 0 }] }, "BONO-NUEVO").map(label))
+      .toEqual(["10k/2.5k", "5k/2.5k", "1k/250", "100/25", "+100", "+500"]);
+  });
+
   const al = [{ cantidad: 1, mostrar: 0 }];
   const al30 = [{ cantidad: 2, mostrar: 0 }];
   const al30d = [{ cantidad: 3, mostrar: 0 }];

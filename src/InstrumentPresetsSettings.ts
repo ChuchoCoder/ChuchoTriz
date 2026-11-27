@@ -6,8 +6,12 @@ export type DraftPresets = Record<string, DraftPreset[]>;
 
 export function toDraft(presets: IInstrumentPresets): DraftPresets {
   return Object.fromEntries(Object.entries(presets).map(([ticker, values]) => [ticker,
-    values.map(({ cantidad, mostrar }) => ({ cantidad: String(cantidad), mostrar: String(mostrar) })),
+    values.map(({ cantidad, mostrar, sumar }) => ({ cantidad: String(cantidad), mostrar: sumar ? "+" : String(mostrar) })),
   ]));
+}
+
+export function draftPresetText(preset: DraftPreset): string {
+  return preset.mostrar === "+" ? `+${preset.cantidad}` : `${preset.cantidad}/${preset.mostrar}`;
 }
 
 export class PresetValidationError extends Error {
@@ -21,14 +25,14 @@ export function serializePresets(draft: DraftPresets): IInstrumentPresets {
   const tickers = Object.keys(draft);
   for (const ticker of tickers) {
     for (const preset of draft[ticker]) {
-      if (!/^\d+$/.test(preset.cantidad) || !/^(?:\d+|R\d+)$/i.test(preset.mostrar)) {
+      if (!/^\d+$/.test(preset.cantidad) || !/^(?:\+|\d+|R\d+)$/i.test(preset.mostrar)) {
         throw new PresetValidationError(ticker,
           "Cantidad debe ser un entero positivo. A mostrar debe ser un entero o R seguido de un divisor entero desde 2.");
       }
     }
   }
   const text = tickers.map(ticker => ticker + " " + draft[ticker]
-    .map(preset => `${preset.cantidad}/${preset.mostrar}`).join(" ")).join("\n");
+    .map(draftPresetText).join(" ")).join("\n");
   const result = parse(text);
   if (result.errors.length > 0) {
     const error = result.errors[0];

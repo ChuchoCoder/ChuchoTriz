@@ -2,10 +2,10 @@ export interface IInstrumentPresets {
     [index: string]: IInstrumentPreset[]
 }
 
-export interface IInstrumentPreset {
-    cantidad: number;
-    mostrar: number | `R${number}`;
-}
+export type IInstrumentPreset = { cantidad: number } & (
+    { mostrar: number | `R${number}`; sumar?: never } |
+    { mostrar: 0; sumar: true }
+);
 
 // El formulario siempre recibe cantidades concretas, nunca expresiones.
 export interface ResolvedInstrumentPreset {
@@ -21,7 +21,7 @@ export function randomDisplayRange(cantidad: number, divisor: number): { minimum
 }
 
 export function resolvePreset(preset: IInstrumentPreset): ResolvedInstrumentPreset {
-    if (typeof preset.mostrar === "number") return { ...preset, mostrar: preset.mostrar };
+    if (typeof preset.mostrar === "number") return { cantidad: preset.cantidad, mostrar: preset.mostrar };
     const divisor = Number(preset.mostrar.slice(1));
     if (!/^R\d+$/.test(preset.mostrar) || !Number.isSafeInteger(divisor) || divisor < 2) {
         throw new Error("Usá R seguido de un divisor entero desde 2, por ejemplo R5.");

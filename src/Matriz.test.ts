@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bindMiniOrderForm, focusCantidadAfterQuoteClick } from "./Matriz";
 import { createPresetSession, PresetSession } from "./PresetSession";
@@ -7,6 +8,7 @@ let session: PresetSession | undefined;
 let stopQuoteFocus: (() => void) | undefined;
 let miniOrderForm: ReturnType<typeof bindMiniOrderForm>;
 const bindings: ReturnType<typeof bindMiniOrderForm>[] = [];
+new Function(readFileSync("public/mini-order-draft.js", "utf8"))();
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,6 +18,7 @@ afterEach(() => {
   stopQuoteFocus = undefined;
   bindings.splice(0).forEach(binding => binding.dispose());
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
 
@@ -36,10 +39,11 @@ const cantidadAMostrarRow = `
 // Mini Order Form de Matriz, con la misma estructura que esperan los selectores.
 // Como en Matriz, Cantidad a mostrar solo existe con el formulario expandido.
 function renderMiniOrderForm(
-  { instrumento = "AL30 (CI)", precio = "70000", cantidad = "", expanded = true, deferExpansion = false } = {}) {
+  { instrumento = "AL30 (CI)", precio = "70000", cantidad = "", expanded = true, deferExpansion = false,
+    expandButtonClass = "ExpandButton" } = {}) {
   document.body.innerHTML = `
     <div id="MiniOrderForm">
-      <span class="ExpandButton"></span>
+      <span class="${expandButtonClass}"></span>
       <form>
         <div class="MiniOrderForm_FormMiniOrdenPanel_row-top__div"><span>
           <input id="rc_select_2" value="${instrumento}">
@@ -58,6 +62,29 @@ function renderMiniOrderForm(
     </div>`;
 
   const form = document.getElementById("MiniOrderForm")!;
+  const draft = {
+    isQuantity: true,
+    security: { refData: { sizePrecision: 2 } },
+    quantity: Number(cantidad.replaceAll(".", "").replace(",", ".")),
+    displayQty: undefined as number | null | undefined,
+    setQuantity(value: number) {
+      const factor = 10 ** this.security.refData.sizePrecision;
+      this.quantity = Math.floor(value * factor) / factor;
+      form.querySelector<HTMLInputElement>("#cantidad")!.value = String(this.quantity).replace(".", ",");
+    },
+    setDisplayQuantity(value: number | null | undefined) {
+      this.displayQty = value;
+      const shown = form.querySelector<HTMLInputElement>("#cantidadMostrar");
+      if (shown) shown.value = value == null ? "" : String(value);
+    },
+  };
+  vi.stubGlobal("mainStore", { uiStore: { newOrderMiniPanel: draft } });
+  const onDisplayEdit = (event: Event) => {
+    if (!(event.target instanceof HTMLInputElement) || event.target.id !== "cantidadMostrar") return;
+    draft.setDisplayQuantity(event.target.value === "" ? null : Number(event.target.value));
+  };
+  form.addEventListener("change", onDisplayEdit);
+  form.addEventListener("input", onDisplayEdit);
   miniOrderForm = bindMiniOrderForm(form);
   bindings.push(miniOrderForm);
   const showCantidadAMostrar = (show: boolean) => {
@@ -65,10 +92,11 @@ function renderMiniOrderForm(
     form.classList.toggle("ExpandedForm", show);
     if (show) {
       form.querySelector("form")!.insertAdjacentHTML("beforeend", cantidadAMostrarRow);
+      draft.setDisplayQuantity(draft.displayQty);
     }
   };
   showCantidadAMostrar(expanded);
-  const expandButton = form.querySelector(".ExpandButton")!;
+  const expandButton = form.querySelector(`.${expandButtonClass}`)!;
   expandButton.addEventListener("click", () => {
     const expand = () => showCantidadAMostrar(!form.classList.contains("ExpandedForm"));
     if (deferExpansion) queueMicrotask(expand);
@@ -77,6 +105,7 @@ function renderMiniOrderForm(
 
   return {
     form,
+    draft,
     input: (id: string) => form.querySelector<HTMLInputElement>(`#${id}`)!,
     limpiarButton: form.querySelector(".MiniOrderForm_buttonsBlock > button") as HTMLButtonElement,
     presetButton: form.querySelector(".ButtonPreset") as HTMLButtonElement,
@@ -182,32 +211,37 @@ describe("Matriz Mini Order Form", () => {
     });
   });
 
-  it("autocompletes Mostrar todo and switches through fixed/random/full presets, then resets with Limpiar", async () => {
+  it("clears the R6 partial when switching to Mostrar todo and resets with Limpiar", async () => {
     const page = renderMiniOrderForm({ expanded: false });
     const whole = { cantidad: 100, mostrar: 0 };
     const fixed = { cantidad: 100, mostrar: 20 };
-    const random = { cantidad: 100, mostrar: "R5" } as const;
+    const random = { cantidad: 600, mostrar: "R6" } as const;
     vi.spyOn(Math, "random").mockReturnValue(0);
     session = createPresetSession(miniOrderForm, {
       presetsFor: async () => [whole, fixed, random], autocompletar: async () => true,
     });
     page.input("precio").focus();
-    await vi.waitFor(() => expect(page.input("cantidadMostrar")?.value).toBe("100"));
+    await vi.waitFor(() => expect(page.input("cantidad").value).toBe("100"));
+    expect(page.isExpanded()).toBe(false);
     session.choose(fixed);
     expect(page.input("cantidadMostrar").value).toBe("20");
     session.choose(whole);
-    expect(page.input("cantidadMostrar").value).toBe("100");
+    expect(page.input("cantidadMostrar").value).toBe("");
     session.choose(random);
-    expect(page.input("cantidadMostrar").value).toBe("20");
+    expect(page.input("cantidadMostrar").value).toBe("100");
     session.choose(whole);
+    expect(page.input("cantidad").value).toBe("100");
+    expect(page.draft.displayQty).toBeUndefined();
+    expect(page.isExpanded()).toBe(true);
     page.input("cantidad").value = "200";
     page.input("cantidad").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(page.input("cantidadMostrar").value).toBe("200");
+    expect(page.input("cantidadMostrar").value).toBe("");
     page.limpiarButton.click();
     page.input("cantidad").value = "";
     page.input("cantidadMostrar").value = "";
     page.input("precio").focus();
-    await vi.waitFor(() => expect(page.input("cantidadMostrar").value).toBe("100"));
+    await vi.waitFor(() => expect(page.input("cantidad").value).toBe("100"));
+    expect(page.input("cantidadMostrar").value).toBe("");
   });
 
   it("applies random rules as numeric DOM values and preserves them after manual quantity changes", async () => {
@@ -260,6 +294,49 @@ describe("Matriz Mini Order Form", () => {
   });
 
   describe("fill", () => {
+    it("adds to the current localized quantity and preserves a hidden partial", () => {
+      const page = renderMiniOrderForm({ cantidad: "1.234,56", expanded: false });
+      page.draft.setDisplayQuantity(100);
+
+      expect(miniOrderForm.fill({ cantidad: 1000, mostrar: 0 }, true)).toBe(true);
+      expect(page.input("cantidad").value).toBe("2234,56");
+      expect(page.isExpanded()).toBe(false);
+      expect(page.draft.displayQty).toBe(100);
+    });
+
+    it("keeps the intended fraction when Matriz truncates the binary quantity", () => {
+      const page = renderMiniOrderForm({ cantidad: "28,14", expanded: false });
+      expect(miniOrderForm.fill({ cantidad: 100, mostrar: 0 }, true)).toBe(true);
+      expect(page.draft.quantity).toBe(128.14);
+      expect(page.input("cantidad").value).toBe("128,14");
+      expect(page.isExpanded()).toBe(false);
+    });
+
+    it("continues applying a partial when an additive click lands before expansion renders", async () => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      expect(miniOrderForm.fill({ cantidad: 10000, mostrar: 100 }, false)).toBe(true);
+      expect(miniOrderForm.fill({ cantidad: 1000, mostrar: 0 }, true)).toBe(true);
+      expect(page.input("cantidad").value).toBe("11000");
+      await vi.waitFor(() => expect(page.input("cantidadMostrar")?.value).toBe("100"));
+    });
+
+    it("keeps the pending partial when Mostrar todo cannot be applied", async () => {
+      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
+      expect(miniOrderForm.fill({ cantidad: 10000, mostrar: 100 })).toBe(true);
+      vi.stubGlobal("mainStore", undefined);
+      expect(miniOrderForm.fill({ cantidad: 1000, mostrar: 0 })).toBe(false);
+      expect(page.input("cantidad").value).toBe("10000");
+      await vi.waitFor(() => expect(page.input("cantidadMostrar")?.value).toBe("100"));
+    });
+
+    it.each(["cantidad inválida", "9007199254740991"])("rejects an invalid sum without changing the draft (%s)", cantidad => {
+      const page = renderMiniOrderForm({ cantidad });
+      page.draft.setDisplayQuantity(20);
+      expect(miniOrderForm.fill({ cantidad: 1, mostrar: 0 }, true)).toBe(false);
+      expect(page.input("cantidad").value).toBe(cantidad);
+      expect(page.draft.displayQty).toBe(20);
+    });
+
     it("writes Cantidad and Cantidad a mostrar and lets Matriz see the change", () => {
       const page = renderMiniOrderForm();
       const changes: string[] = [];
@@ -272,105 +349,60 @@ describe("Matriz Mini Order Form", () => {
       expect(changes).toEqual(["cantidad", "cantidadMostrar"]);
     });
 
-    it("replaces a partial with the numeric total for Mostrar todo, never displayQty null", () => {
+    it("removes the previous partial from the draft when switching to Mostrar todo", () => {
       const page = renderMiniOrderForm();
-      page.input("cantidadMostrar").value = "20";
-      // Native Matriz 4.23.16: clearing this control produces null. A total of
-      // 100 with displayQty 100 was accepted and normalized to no iceberg.
-      let displayQty: number | null = 20;
-      page.input("cantidadMostrar").addEventListener("change", () => {
-        const value = page.input("cantidadMostrar").value;
-        displayQty = value === "" ? null : Number(value);
-      });
+      miniOrderForm.fill({ cantidad: 200, mostrar: 20 });
+      expect(page.draft.displayQty).toBe(20);
 
       miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
 
-      expect(JSON.parse(JSON.stringify({ quantity: Number(page.input("cantidad").value), displayQty })))
-        .toEqual({ quantity: 100, displayQty: 100 });
-      expect(page.input("cantidadMostrar").value).toBe("100");
+      const draft = { quantity: Number(page.input("cantidad").value), displayQty: page.draft.displayQty };
+      expect(JSON.stringify(draft)).toBe('{"quantity":100}');
+      expect(page.input("cantidadMostrar").value).toBe("");
       expect(page.isExpanded()).toBe(true);
     });
 
-    it("keeps Mostrar todo fully disclosed when the total is edited, until the display field is edited", async () => {
+    it("leaves the display quantity unset as the total changes and accepts later manual edits", async () => {
       const page = renderMiniOrderForm();
       miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
       page.input("cantidad").value = "200";
       page.input("cantidad").dispatchEvent(new Event("input", { bubbles: true }));
-      expect(page.input("cantidadMostrar").value).toBe("200");
+      expect(page.draft.displayQty).toBeUndefined();
 
       page.input("cantidadMostrar").value = "20";
       page.input("cantidadMostrar").dispatchEvent(new Event("input", { bubbles: true }));
       page.input("cantidad").value = "300";
       page.input("cantidad").dispatchEvent(new Event("change", { bubbles: true }));
       await Promise.resolve();
-      expect(page.input("cantidadMostrar").value).toBe("20");
+      expect(page.draft.displayQty).toBe(20);
     });
 
-    it("resynchronizes a hidden full quantity before another total is used", async () => {
-      const page = renderMiniOrderForm({ deferExpansion: true });
-      miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
+    it("removes a hidden partial and keeps the panel closed even when the new total changes", async () => {
+      const page = renderMiniOrderForm();
+      miniOrderForm.fill({ cantidad: 200, mostrar: 20 });
       document.querySelector<HTMLElement>(".ExpandButton")!.click();
-      await vi.waitFor(() => expect(page.isExpanded()).toBe(false));
-      page.input("cantidad").value = "200";
+      expect(page.isExpanded()).toBe(false);
+      expect(page.draft.displayQty).toBe(20);
+
+      miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
+      expect(page.input("cantidad").value).toBe("100");
+      page.input("cantidad").value = "110";
       page.input("cantidad").dispatchEvent(new Event("input", { bubbles: true }));
-      await vi.waitFor(() => expect(page.input("cantidadMostrar")?.value).toBe("200"));
-    });
-
-    it("keeps the latest whole quantity when typing during expansion", async () => {
-      const page = renderMiniOrderForm({ expanded: false, deferExpansion: true });
-      miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
-      page.input("cantidad").value = "200";
-      page.input("cantidad").dispatchEvent(new Event("input", { bubbles: true }));
-      await vi.waitFor(() => expect(page.input("cantidadMostrar")?.value).toBe("200"));
-    });
-
-    it("follows a native quantity stepper that changes its controlled value without a DOM input event", () => {
-      const page = renderMiniOrderForm();
-      miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
-      const stepper = document.createElement("button");
-      stepper.type = "button";
-      stepper.className = "ant-input-number-handler-up";
-      page.input("cantidad").closest(".ant-form-item")!.append(stepper);
-      stepper.addEventListener("click", () => { page.input("cantidad").value = "101"; });
-      stepper.click();
-      expect(page.input("cantidadMostrar").value).toBe("101");
-    });
-
-    it("follows a controlled quantity rendered after its keyboard event", async () => {
-      const page = renderMiniOrderForm();
-      miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
-      page.input("cantidad").dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowUp", bubbles: true }));
-      page.input("cantidad").value = "101";
-      page.input("cantidad").setAttribute("value", "101");
       await Promise.resolve();
-      expect(page.input("cantidadMostrar").value).toBe("101");
+      expect(page.isExpanded()).toBe(false);
+      expect(page.draft.displayQty).toBeUndefined();
+      document.querySelector<HTMLElement>(".ExpandButton")!.click();
+      expect(page.input("cantidadMostrar").value).toBe("");
     });
 
-    it("respects manual display edits even when the native control stops event bubbling", async () => {
-      const page = renderMiniOrderForm();
+    it("leaves the previous quantity intact if Matriz cannot safely clear the draft", () => {
+      const page = renderMiniOrderForm({ expanded: false, cantidad: "200" });
+      page.draft.displayQty = 20;
+      vi.stubGlobal("mainStore", undefined);
       miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
-      page.input("cantidadMostrar").addEventListener("input", event => event.stopPropagation());
-      page.input("cantidadMostrar").value = "20";
-      page.input("cantidadMostrar").dispatchEvent(new Event("input", { bubbles: true }));
-      page.input("cantidad").value = "200";
-      page.input("cantidad").dispatchEvent(new Event("change", { bubbles: true }));
-      await Promise.resolve();
-      expect(page.input("cantidadMostrar").value).toBe("20");
-    });
-
-    it("abandons an unavailable full-quantity field after the initial timeout", async () => {
-      vi.useFakeTimers();
-      try {
-        const page = renderMiniOrderForm({ expanded: false });
-        const button = document.querySelector(".ExpandButton")!;
-        button.replaceWith(button.cloneNode(true));
-        miniOrderForm.fill({ cantidad: 100, mostrar: 0 });
-        await vi.advanceTimersByTimeAsync(3000);
-        document.querySelector("#MiniOrderForm form")!.insertAdjacentHTML("beforeend", cantidadAMostrarRow);
-        await Promise.resolve();
-        expect(page.input("cantidadMostrar").value).toBe("");
-        expect(vi.getTimerCount()).toBe(0);
-      } finally { vi.useRealTimers(); }
+      expect(page.input("cantidad").value).toBe("200");
+      expect(page.draft.displayQty).toBe(20);
+      expect(page.isExpanded()).toBe(false);
     });
 
     it.each([20, 100])("does not turn a fixed display quantity %s into Mostrar todo", async mostrar => {
@@ -406,8 +438,8 @@ describe("Matriz Mini Order Form", () => {
       expect(page.input("cantidad").value).toBe("");
     });
 
-    it("expands the Mini Order Form to reach Cantidad a mostrar", () => {
-      const page = renderMiniOrderForm({ expanded: false });
+    it.each(["ExpandButton", "MiniOrderForm_ButtonExpandedMiniPanel"])("expands to reach Cantidad a mostrar with %s", expandButtonClass => {
+      const page = renderMiniOrderForm({ expanded: false, expandButtonClass });
 
       miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
 
@@ -415,14 +447,15 @@ describe("Matriz Mini Order Form", () => {
       expect(page.input("cantidadMostrar").value).toBe("20000");
     });
 
-    it("expands a collapsed form to replace any hidden partial with the whole quantity", () => {
+    it("keeps a collapsed form collapsed when a preset shows the whole quantity", async () => {
       const page = renderMiniOrderForm({ expanded: false });
 
       miniOrderForm.fill({ cantidad: 100000, mostrar: 0 });
+      await Promise.resolve();
 
       expect(page.input("cantidad").value).toBe("100000");
-      expect(page.isExpanded()).toBe(true);
-      expect(page.input("cantidadMostrar").value).toBe("100000");
+      expect(page.isExpanded()).toBe(false);
+      expect(page.input("cantidadMostrar")).toBeNull();
     });
 
     it("fills Cantidad a mostrar when Matriz renders the expanded fields later", async () => {
@@ -455,7 +488,8 @@ describe("Matriz Mini Order Form", () => {
 
       await vi.waitFor(() => expect(page.isExpanded()).toBe(true));
       expect(page.input("cantidad").value).toBe("100000");
-      expect(page.input("cantidadMostrar").value).toBe(mostrar ? mostrar.toString() : "100000");
+      expect(page.input("cantidadMostrar").value).toBe(mostrar ? mostrar.toString() : "");
+      expect(page.draft.displayQty).toBe(mostrar || undefined);
     });
 
     it.each(["input", "limpiar"])("does not toggle twice when %s cancels a write before another partial preset", async cancel => {
@@ -492,9 +526,9 @@ describe("Matriz Mini Order Form", () => {
       expect(replacement.input("cantidadMostrar").value).toBe("10000");
     });
 
-    it.each([0, 20000])("invalidates a pending write (%s) by form identity before disposing the binding", async mostrar => {
+    it("invalidates a pending write by form identity before disposing the binding", async () => {
       const previous = renderMiniOrderForm({ expanded: false, deferExpansion: true });
-      miniOrderForm.fill({ cantidad: 200000, mostrar });
+      miniOrderForm.fill({ cantidad: 200000, mostrar: 20000 });
       const replacement = renderMiniOrderForm({ cantidad: "200000" });
 
       await vi.waitFor(() => expect(previous.isExpanded()).toBe(true));

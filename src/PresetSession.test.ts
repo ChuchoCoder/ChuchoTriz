@@ -32,11 +32,11 @@ function fakeMiniOrderForm(ticket: Partial<Ticket> = {}) {
   };
   const form: MiniOrderForm = {
     read: () => ({ ...state.ticket }),
-    fill: (preset) => {
-      if (state.ticket.instrumento !== "" && state.ticket.precio !== "") {
-        state.ticket.cantidad = preset.cantidad.toString();
-        state.cantidadAMostrar = preset.mostrar > 0 ? preset.mostrar.toString() : "";
-      }
+    fill: (preset, sumar) => {
+      if (state.ticket.instrumento === "" || state.ticket.precio === "") return false;
+      state.ticket.cantidad = (preset.cantidad + (sumar ? Number(state.ticket.cantidad) : 0)).toString();
+      if (!sumar) state.cantidadAMostrar = preset.mostrar > 0 ? preset.mostrar.toString() : "";
+      return true;
     },
     editCantidad: () => {
       state.edits++;
@@ -335,6 +335,28 @@ describe("Preset session", () => {
     expect(page.state.ticket.cantidad).toBe("100000");
   });
 
+  it("skips additive presets on focus and preserves the last replacement after a manual add", async () => {
+    const page = fakeMiniOrderForm(al30);
+    const add = { cantidad: 1000, mostrar: 0, sumar: true } as const;
+    const presets = [add, big, medium];
+    const session = createPresetSession(page.form, fakeSettings({ AL30: presets, GD30: [add] }).settings);
+
+    await page.focus();
+    expect(page.state.ticket.cantidad).toBe("200000");
+    session.choose(medium);
+    session.choose(add);
+    expect(page.state.ticket.cantidad).toBe("101000");
+    expect(page.state.cantidadAMostrar).toBe("10000");
+
+    page.type({ instrumento: "GD30 (CI)", ticker: "GD30", cantidad: "" });
+    await page.focus("instrumento");
+    expect(page.state.ticket.cantidad).toBe("");
+    expect(session.presets()).toEqual([add]);
+    page.type({ ...al30, cantidad: "" });
+    await page.focus("precio");
+    expect(page.state.ticket.cantidad).toBe("100000");
+  });
+
   it("remembers the Last-used Preset per Instrumento, not per Ticker", async () => {
     const page = fakeMiniOrderForm(al30);
     const session = createPresetSession(page.form, fakeSettings({ AL30: [big, medium] }).settings);
@@ -370,6 +392,20 @@ describe("Preset session", () => {
     expect(page.state.ticket.cantidad).toBe("50000");
     expect(page.state.cantidadAMostrar).toBe("");
     expect(page.state.edits).toBe(1);
+  });
+
+  it("keeps the last applied preset when the draft rejects a later selection", async () => {
+    const page = fakeMiniOrderForm({ ...al30, cantidad: "1" });
+    const lastUsed = new Map([[al30.instrumento, big]]);
+    const session = createPresetSession(page.form, fakeSettings({ AL30: [big, small] }).settings, lastUsed);
+    await page.focus();
+    vi.spyOn(page.form, "fill").mockReturnValueOnce(false);
+
+    session.choose(small);
+
+    expect(page.state.ticket.cantidad).toBe("1");
+    expect(lastUsed.get(al30.instrumento)).toBe(big);
+    expect(page.state.edits).toBe(0);
   });
 
   it("does not look up Presets again while the ticket is unchanged", async () => {

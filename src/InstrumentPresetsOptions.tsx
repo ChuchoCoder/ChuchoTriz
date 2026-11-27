@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { IInstrumentPresets, randomDisplayRange } from "./InstrumentPresets";
 import repository, { StoredSettings } from "./InstrumentPresetsRepository";
 import { defaultBook, fallbackPresets, format, label, parse, presetTickerFor } from "./PresetBook";
-import { DraftPreset, DraftPresets, PresetValidationError, serializePresets, toDraft } from "./InstrumentPresetsSettings";
+import { DraftPreset, DraftPresets, PresetValidationError, draftPresetText, serializePresets, toDraft } from "./InstrumentPresetsSettings";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./Options.css";
 function sortTickers(presets: DraftPresets): string[] {
@@ -16,15 +16,20 @@ function rawTextFor(presets: DraftPresets): string {
   try { return format(serializePresets(presets)); }
   // Keep incomplete visual edits available for repair in the text editor.
   catch { return Object.entries(presets).map(([ticker, values]) => ticker + " " + values
-    .map(preset => `${preset.cantidad}/${preset.mostrar}`).join(" ")).join("\n"); }
+    .map(draftPresetText).join(" ")).join("\n"); }
 }
-type DisplayMode = "all" | "fixed" | "random";
+type DisplayMode = "all" | "fixed" | "random" | "add";
 type EditingPreset = { ticker: string; index: number; mode: DisplayMode; fixed: string; divisor: string };
-const displayMode = (preset: DraftPreset): DisplayMode => /^r/i.test(preset.mostrar) ? "random" : /^0+$/.test(preset.mostrar) ? "all" : "fixed";
+const displayMode = (preset: DraftPreset): DisplayMode => {
+  if (preset.mostrar === "+") return "add";
+  if (/^r/i.test(preset.mostrar)) return "random";
+  return /^0+$/.test(preset.mostrar) ? "all" : "fixed";
+};
 const quantityLabel = (value: string) => /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value).toLocaleString("es-AR") : value || "—";
 function displaySummary(preset: DraftPreset): { title: string; detail: string } {
   try {
     const parsed = serializePresets({ PREVIEW: [preset] }).PREVIEW[0];
+    if (parsed.sumar) return { title: "Sumar", detail: "" };
     if (typeof parsed.mostrar === "number") return { title: parsed.mostrar === 0 ? "Mostrar todo" : `Fija: ${quantityLabel(String(parsed.mostrar))}`, detail: "" };
     const divisor = Number(parsed.mostrar.slice(1));
     const { minimum, maximum } = randomDisplayRange(parsed.cantidad, divisor);
@@ -79,6 +84,7 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
   const query = tickerQuery.trim().toUpperCase();
   const filteredTickers = tickers.filter(ticker => ticker.toUpperCase().includes(query));
   const values = presets[selected] ?? [];
+  const firstForAutocomplete = values.findIndex(preset => displayMode(preset) !== "add");
   const shortcutTicker = shortcut?.ticker ?? "";
   const sourceTicker = shortcut?.sourceTicker ?? null;
   const showingShortcut = Boolean(shortcutTicker) && selected === (sourceTicker ?? shortcutTicker);
@@ -127,6 +133,7 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
     void load();
     return stop;
   }, []);
+
   useEffect(() => {
     const target = moveFocus.current;
     if (!target) return;
@@ -213,7 +220,8 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
   function changeDisplayMode(mode: DisplayMode) {
     if (!editing) return;
     setEditing({ ...editing, mode });
-    updatePreset(editing.index, "mostrar", mode === "all" ? "0" : mode === "fixed" ? editing.fixed : `R${editing.divisor}`);
+    const values = { all: "0", fixed: editing.fixed, random: `R${editing.divisor}`, add: "+" };
+    updatePreset(editing.index, "mostrar", values[mode]);
   }
   function updateDisplayValue(value: string) {
     if (!editing) return;
@@ -371,8 +379,8 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
               spellCheck={false} autoCapitalize="off" autoComplete="off" wrap="off" aria-invalid={rawErrors.length > 0}
               aria-describedby="raw-presets-syntax raw-presets-errors"
               onChange={event => { setRawText(event.target.value); markChanged(); }} />
-            <p id="raw-presets-syntax">Ejemplo: <code>AL30 100000/R5 50000/5000 100</code><br />
-              Cantidades enteras sin separadores. Cantidad sola o /0: mostrar todo; /n: fija; /Rn: aleatoria, con divisor entero desde 2.</p>
+            <p id="raw-presets-syntax">Ejemplo: <code>AL30 100000/R5 50000/5000 100 +1000</code><br />
+              Usá enteros sin separadores. El prefijo + suma al ticket. El sufijo /0 muestra todo, /n fija un parcial y /Rn lo sortea con un divisor entero desde 2.</p>
             <ul id="raw-presets-errors" className="raw-errors" hidden={rawErrors.length === 0}>
               {rawErrors.map((error, index) => <li key={index}>Línea {error.line}: {error.message}</li>)}
             </ul>
@@ -420,8 +428,8 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
                 {showingShortcut && !sourceTicker && <p className="preset-hint">
                   {shortcutTicker} usa las cantidades predeterminadas hasta que guardes su configuración.
                 </p>}
-                <p className="preset-hint">Hacé clic en cualquier celda para editar. Reordená con ↑/↓. El primero se usa para autocompletar si no hay uno elegido anteriormente.</p>
-                {values.length > 0 && <div className="preset-columns" aria-hidden="true"><span /><span>Cantidad</span><span>A mostrar</span><span /></div>}
+                <p className="preset-hint">Hacé clic en cualquier celda para editar. Reordená con ↑/↓. El primer preset que reemplaza la cantidad es el predeterminado para Autocompletar.</p>
+                {values.length > 0 && <div className="preset-columns" aria-hidden="true"><span /><span>Cantidad</span><span>Modo</span><span /></div>}
                 <div className="preset-rows" ref={presetRows}>
                   {values.map((preset, index) => {
                     const active = editing?.ticker === selected && editing.index === index ? editing : null;
@@ -433,21 +441,21 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
                           event.preventDefault(); finishEditing(index);
                         }
                       }}>
-                    <button type="button" className={`preset-number${index === 0 ? " preset-first" : ""}`}
+                    <button type="button" className={`preset-number${index === firstForAutocomplete ? " preset-first" : ""}`}
                       aria-label={`Editar preset ${index + 1} de ${selected} desde el número`}
-                      title={index === 0 ? "Primero para autocompletar si no hay un preset elegido anteriormente" : undefined}
+                      title={index === firstForAutocomplete ? "Predeterminado para Autocompletar" : undefined}
                       onClick={() => beginEditing(index)}>{index + 1}</button>
                     {active ? <>
                       <input type="number" min="1" step="1" value={preset.cantidad} inputMode="numeric" data-field="cantidad"
                         aria-label={`Cantidad del preset ${index + 1} de ${selected}`}
                         onChange={event => updatePreset(index, "cantidad", event.target.value)} />
-                      <div className="preset-display-modes" role="group" aria-label={`A mostrar del preset ${index + 1} de ${selected}`}>
-                        {([['all', 'Mostrar todo'], ['fixed', 'Fija'], ['random', 'Aleatoria']] as const).map(([mode, text]) =>
-                          <button type="button" key={mode} data-display-mode={mode} aria-pressed={active.mode === mode}
-                            onClick={() => changeDisplayMode(mode)}>{text}</button>)}
-                      </div>
-                      <div className="preset-display-value">
-                        {active.mode !== "all" && <label><span>{active.mode === "random" ? "Divisor" : "Valor"}</span>
+                      <div className="preset-controls">
+                        <div className="preset-display-modes" role="group" aria-label={`Modo del preset ${index + 1} de ${selected}`}>
+                          {([['all', 'Mostrar todo'], ['fixed', 'Fija'], ['random', 'Aleatoria'], ['add', 'Sumar']] as const).map(([mode, text]) =>
+                            <button type="button" key={mode} data-display-mode={mode} aria-pressed={active.mode === mode}
+                              onClick={() => changeDisplayMode(mode)}>{text}</button>)}
+                        </div>
+                        {(active.mode === "fixed" || active.mode === "random") && <label className="preset-display-value"><span>{active.mode === "random" ? "Divisor" : "Valor"}</span>
                           <input type="number" min={active.mode === "random" ? 2 : 1} step="1" inputMode="numeric" data-field="mostrar"
                             value={active.mode === "random" ? active.divisor : active.fixed}
                             aria-label={`${active.mode === "random" ? "Divisor" : "Cantidad a mostrar"} del preset ${index + 1} de ${selected}`}
@@ -459,7 +467,9 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
                         aria-label={`Editar cantidad del preset ${index + 1} de ${selected}`}
                         onClick={() => beginEditing(index)}>{quantityLabel(preset.cantidad)}</button>
                       <button type="button" className="preset-cell preset-display-cell"
-                        aria-label={`Editar cantidad a mostrar del preset ${index + 1} de ${selected}`}
+                        aria-label={preset.mostrar === "+"
+                          ? `Editar modo Sumar del preset ${index + 1} de ${selected}`
+                          : `Editar cantidad a mostrar del preset ${index + 1} de ${selected}`}
                         onClick={() => beginEditing(index, "mostrar")}>
                         <span>{summary.title}</span>{summary.detail && <small>{summary.detail}</small>}
                       </button>
@@ -495,9 +505,8 @@ function InstrumentPresetsOptions({ embedded = false, active = true, presetReque
                       {previewLabel(preset)}
                     </span>)}
                     {values.length === 0 && <p>Este instrumento no tiene presets. Agregá uno para mostrarlo aquí.</p>}
-                  </div><p>Elegí Mostrar todo, Fija o Aleatoria al editar el preset. Aleatoria divide la cantidad
-                    y suma entre 0% y 3% en cada aplicación, incluido el autocompletado. El resultado queda fijo al editar el ticket.
-                    {" "}El ✓ termina la edición; Guardar cambios guarda la configuración.</p>
+                  </div><p>Sumar agrega la cantidad al ticket. Aleatoria divide la cantidad y suma entre 0% y 3% en cada aplicación.
+                    El ✓ termina la edición. Guardar cambios aplica la configuración.</p>
                 </div>
               </> : effectivePresets ? <div className="preset-preview">
                 <h2 id="selected-instrument">{sourceTicker ?? `Cantidades predeterminadas para ${selected}`}</h2>

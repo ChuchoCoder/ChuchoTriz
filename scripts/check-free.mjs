@@ -7,7 +7,7 @@ import { assertVendoredPicomatch } from './security/vendored-picomatch.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const hosts = ['https://*.xoms.com.ar/*', 'https://remarkets.matriz.com.ar/*'];
-const matrizResources = ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js', 'ticket-position.js'];
+const matrizResources = ['options-market-reader.js', 'options-position-reader.js', 'options-executions-reader.js', 'ratios-reader.js', 'ratio-operations-reader.js', 'ratio-chart-reader.js', 'ticket-position.js', 'mini-order-draft.js'];
 const builtToolScripts = /^assets\/(?:src-main\.tsx|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|rolldown-runtime|OptionsOperations|OptionsSimulator|RatioOperations|toolStyles|positionStorage)-[\w-]+\.js$/;
 const builtSharedToolsStyles = /^assets\/ChuchoTrizTools-[\w-]+\.css$/;
 const builtEntryAssets = /^assets\/(?:main\.tsx-loader|src-main(?:\.tsx)?|InstrumentPresetsRepository|InstrumentPresetsOptions|ChuchoTrizTools|index(?:\.html)?|manifest)-[\w-]+\.(?:js|css|json)$/;
@@ -51,9 +51,9 @@ export function assertManifest(manifest, built = false) {
   if (!built) {
     assert(same(script.js, ['src/main.tsx']), 'Unexpected content-script entry');
     if (manifest.web_accessible_resources !== undefined) {
-      assert([1, 2, 3, 5, 6, 7].map(count => matrizResources.slice(0, count)).some(resources =>
+      assert([1, 2, 3, 5, 6, 7, 8].map(count => matrizResources.slice(0, count)).some(resources =>
         same(manifest.web_accessible_resources, [{ resources, matches: hosts }])),
-        'Only the reviewed Matriz readers may be exposed by the source manifest');
+        'Only the reviewed Matriz resources may be exposed by the source manifest');
     }
   } else {
     assert(/^assets\/main\.tsx-loader-[\w-]+\.js$/.test(script.js[0]), 'Unexpected content loader');

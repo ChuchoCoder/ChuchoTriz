@@ -65,9 +65,13 @@ it("lets the embedded RAW editor use the available panel width", () => {
 const observers: MutationObserver[] = [];
 const NativeObserver = globalThis.MutationObserver;
 let stopQuoteFocus: (() => void) | undefined;
+new Function(readFileSync("public/mini-order-draft.js", "utf8"))();
 
 beforeEach(() => {
   vi.resetModules();
+  vi.stubGlobal("mainStore", { uiStore: { newOrderMiniPanel: {
+    isQuantity: true, displayQty: undefined, setDisplayQuantity() {},
+  } } });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("MutationObserver", class extends NativeObserver {
     constructor(callback: MutationCallback) { super(callback); observers.push(this); }
@@ -342,6 +346,25 @@ it("starts with autocomplete off and still allows manual preset buttons", async 
   expect(current.amount.value).toBe("");
   await act(async () => { presetButton(current.form, "200k").click(); });
   expect(current.amount.value).toBe("200000");
+});
+
+it("uses each preset's mode even when the old global preference is stored", async () => {
+  autocompleteStorage({ AccumulateInstrumentPresets: true, InstrumentPresets: {
+    AL30: [{ cantidad: 10000, mostrar: 0 }, { cantidad: 1000, mostrar: 0, sumar: true }, { cantidad: 1000, mostrar: 0 }],
+  } });
+  const ticket = createForm();
+  document.body.append(ticket.form);
+  await boot();
+  const click = (label: string) => act(async () => { presetButton(ticket.form, label).click(); });
+
+  await click("10k");
+  await click("+1k");
+  expect(ticket.amount.value).toBe("11000");
+  await click("+1k");
+  expect(ticket.amount.value).toBe("12000");
+
+  await click("1k");
+  expect(ticket.amount.value).toBe("1000");
 });
 
 it("saves the checkbox per ticker, applies on future focus and keeps the choice across remounts", async () => {

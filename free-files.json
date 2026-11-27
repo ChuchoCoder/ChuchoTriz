@@ -47,6 +47,7 @@
   "public/options-market-reader.js",
   "public/options-position-reader.js",
   "public/ticket-position.js",
+  "public/mini-order-draft.js",
   "public/robots.txt",
   "README.md",
   "scripts/check-free.mjs",

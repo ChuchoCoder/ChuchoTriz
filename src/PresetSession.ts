@@ -85,13 +85,16 @@ export function createPresetSession(
       if (!current()) return;
       if (!form.read().cantidad && enabled) {
         const lastUsed = lastUsedPresets.get(ticket.instrumento);
-        const remembered = lastUsed && presets.find(candidate =>
+        const remembered = lastUsed && presets.find(candidate => !candidate.sumar &&
           candidate.cantidad === lastUsed.cantidad && candidate.mostrar === lastUsed.mostrar);
-        const preset = remembered ?? presets[0];
-        if (preset) form.fill(resolvePreset(preset));
-        // Record the write before focusing: focusin can re-enter this handler.
-        lastTicketKey = keyOf(form.read());
-        form.editCantidad();
+        const preset = remembered ?? presets.find(candidate => !candidate.sumar);
+        if (preset && form.fill(resolvePreset(preset))) {
+          // Record the write before focusing: focusin can re-enter this handler.
+          lastTicketKey = keyOf(form.read());
+          form.editCantidad();
+        } else {
+          lastTicketKey = "";
+        }
       }
 
       if (current()) show(presets, instrument);
@@ -133,8 +136,8 @@ export function createPresetSession(
       if (disposed || !ticket.precio || instrumentOf(ticket) !== visibleInstrument || !visiblePresets.includes(preset)) return;
       const resolved = resolvePreset(preset);
       pendingLookup = undefined;
-      lastUsedPresets.set(ticket.instrumento, preset);
-      form.fill(resolved);
+      if (!form.fill(resolved, preset.sumar)) return;
+      if (!preset.sumar) lastUsedPresets.set(ticket.instrumento, preset);
       lastTicketKey = keyOf(form.read());
       form.editCantidad();
     },
