@@ -30,29 +30,29 @@ function acquireReader() {
 
 type QuoteUpdate = { result: LiveResponse } | { error: unknown };
 type QuoteListener = (update: QuoteUpdate) => void;
-type QuoteGroup = (listener: QuoteListener) => () => void;
-const quoteGroups = new WeakMap<MarketReader, Map<string, QuoteGroup>>();
+type SubscribeToQuoteGroup = (listener: QuoteListener) => () => void;
+const quoteGroups = new WeakMap<MarketReader, Map<string, SubscribeToQuoteGroup>>();
 
-function createQuoteGroup(client: MarketReader, ids: string[], onIdle: () => void): QuoteGroup {
+function createQuoteGroup(client: MarketReader, ids: string[], onIdle: () => void): SubscribeToQuoteGroup {
   const listeners = new Set<QuoteListener>();
-  let timer: ReturnType<typeof setTimeout>, reading = false, generation = 0;
-  const closeIfIdle = () => {
-    if (!reading && !listeners.size) onIdle();
-  };
+  const controller = new AbortController();
+  const { signal } = controller;
+  const active = () => !signal.aborted && !document.hidden;
+  let timer: ReturnType<typeof setTimeout>;
   async function poll() {
-    if (reading || !listeners.size || document.hidden) return;
-    reading = true;
-    const round = generation;
-    const recipients = [...listeners];
-    const current = () => round === generation && listeners.size > 0 && !document.hidden;
-    const update = await client.call<LiveResponse>("ratioIntradayQuotes", { ids }, current)
+    if (!active()) return;
+    let recipients: QuoteListener[] | undefined;
+    const canDispatch = () => {
+      if (!active()) return false;
+      // All charts waiting for reader startup can share its very first response.
+      recipients = [...listeners];
+      return true;
+    };
+    const update = await client.call<LiveResponse>("ratioIntradayQuotes", { ids }, { signal, canDispatch })
       .then(result => ({ result }), error => ({ error }));
-    // A newly visible chart gets a round started while it was subscribed.
-    if (current()) for (const listener of recipients) if (listeners.has(listener)) listener(update);
-    reading = false;
-    if (!listeners.size) closeIfIdle();
-    else if (round !== generation) void poll();
-    else timer = setTimeout(() => void poll(), 2000);
+    if (!active()) return;
+    for (const listener of recipients ?? listeners) if (listeners.has(listener)) listener(update);
+    timer = setTimeout(() => void poll(), 2000);
   }
   return listener => {
     // Give each registration its own identity when a chart leaves and rejoins.
@@ -61,9 +61,9 @@ function createQuoteGroup(client: MarketReader, ids: string[], onIdle: () => voi
     if (listeners.size === 1) void poll();
     return () => {
       if (!listeners.delete(receive) || listeners.size) return;
-      generation++;
       clearTimeout(timer);
-      closeIfIdle();
+      controller.abort();
+      onIdle();
     };
   };
 }

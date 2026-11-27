@@ -14,7 +14,7 @@ export async function saveTradingBook(key: string, base: TradingBook, next: Trad
     await verify();
     const current = await readTradingBook(key);
     if (current.revision !== base.revision) throw Error("Otra pestaña actualizó este registro. Revisá los datos actualizados antes de repetir el cambio.");
-    const updated = validateBook({ ...next, schema: tradingBookSchema(next.watch), revision: crypto.randomUUID() });
+    const updated = validateBook({ ...next, schema: tradingBookSchema(next.watch, next.operations), revision: crypto.randomUUID() });
     await verify();
     await chrome.storage.local.set({ [key]: updated });
     const saved = await readTradingBook(key);

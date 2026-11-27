@@ -80,9 +80,17 @@ Se usa el último precio nativo del futuro, sin multiplicarlo por el tamaño del
 contrato. Por ejemplo, `MEP AL30 vs DLR/DIC26` compara el dólar MEP con ese
 futuro mediante `((A/B)/C − 1) × 100`. Si no tiene último precio, muestra la
 cotización como no disponible; no completa datos con el cierre anterior.
-Los futuros se identifican como **Futuro · sólo monitor**. La elección se guarda
-y el gráfico nativo muestra ese contrato en el panel de Referencia C, entre
-las velas de A y el indicador A/B.
+En el Monitor los futuros se eligen como referencia. El gráfico nativo muestra
+el contrato en el panel de Referencia C, entre las velas de A y el indicador
+A/B. Al abrir desde una fila con C futuro, **Registrar C como tercera pata**
+permite incluir la posición localmente. Ingresá el sentido, los contratos, el
+lote, el factor monetario y los DDMM. El factor multiplica el resultado en la
+moneda del contrato. En el cierre podés marcar **Ingresar cantidades por pata**
+para registrar las cantidades ejecutadas y cerrar C por separado si corresponde.
+Si A y B tenían saldo en la fecha elegida, se registran juntas para conservar
+el ratio de cierre. Después de cerrar los contratos de C, los accesos de
+25% y 50% siguen disponibles para A y B. La opción **Dividir Referencia C por 100** se aplica
+exclusivamente a la brecha.
 
 ## Referencias cotizadas por 100 nominales
 
@@ -137,13 +145,24 @@ referencias diarias nativas; una referencia ausente o fechas distintas oculta
 sólo esa variación. Los datos se actualizan con las cotizaciones de Matriz y la
 selección queda guardada al recargar.
 
-Las comparaciones con C son de sólo monitor. **Invertir A/B** queda desactivado
-en esas filas para no cambiar inadvertidamente la fórmula completa: editá el
-widget o quitá/agregá la fila del Monitor para elegir otra comparación.
+Desde **Configuración → Ratios → Monitor**, pulsá **Abrir operación** en la fila
+con C. La apertura conserva los instrumentos y el divisor seleccionados.
+Ingresá **Precio C al abrir** con la cotización de la fecha y hora de apertura.
+Para una operación del momento, podés copiar **Usar último C**. Al copiar una
+cotización en un minuto posterior, la apertura toma la hora nueva y pide
+volver a elegir los precios de mercado copiados antes. Al elegir una fecha
+de apertura o cierre, se cargan los precios manualmente. Escribí siempre
+el precio original de C. La brecha de entrada usa los precios A y B registrados
+y el precio de C ingresado. El objetivo de A/B y el de brecha son independientes.
+Para la brecha podés elegir **Menor o igual** o **Mayor o igual**.
 
-Los guardados usan esquema 1 para pares simples, esquema 2 para comparaciones
-con C y esquema 3 cuando alguna fila divide C por 100. Después de actualizar
-la extensión, recargá las pestañas de Matriz antes de usar estas comparaciones.
+En el Monitor, **Invertir A/B** queda desactivado en las filas con C. Para
+elegir otra comparación, editá el widget o quitá y agregá la fila del Monitor.
+Cada operación guarda su referencia aunque después quites la fila.
+
+Los guardados con una operación que incluye C usan el esquema 4. Los
+esquemas 1 a 3 siguen siendo compatibles para leer registros anteriores.
+Después de actualizar la extensión, recargá las pestañas de Matriz.
 
 ## Pares del monitor
 
@@ -225,19 +244,24 @@ movimiento reducido se usa una marca estática breve.
   instrumentos, sin modificar cantidades históricas al corregir otro campo.
 - Cada operación conserva entradas, cantidades, factores y tasas. Su neto incluye
   los gastos de apertura y el cierre estimado al último precio. En **Registrar
-  cierre**, ingresá los nominales de cualquiera de las patas: la otra se calcula
+  cierre**, ingresá la cantidad de cualquiera de las patas. Las demás se calculan
   con la proporción que queda abierta, al lote más cercano. Debajo de cada campo
   se ve la cantidad abierta y la que quedaría después. Los precios de cierre no
   modifican esas cantidades. Completar todo el remanente de una pata toma
-  exactamente el remanente de la otra.
-  **Registrar cierre** guarda ambas cantidades y sus precios reales, conserva
+  exactamente el remanente de las otras.
+  **Registrar cierre** guarda las cantidades y sus precios reales, conserva
   los cierres anteriores y congela el resultado realizado. También se mantienen
   los accesos **Cerrar 25%**, **Cerrar 50%** y **Cerrar todo**. Cantidades inválidas,
   mayores al remanente o que no alcanzan un lote impiden el cierre. Si la operación
   cambia mientras se completa el borrador, hay que volver a ingresar la cantidad.
-- En el detalle, **Historial de cierres** agrupa las dos patas de cada cierre.
-  **Editar cierre** permite corregir sus precios y cantidades, y **Cancelar**
-  descarta la edición. **Eliminar cierre** pide confirmación y devuelve al
+- Para registrar un cierre anterior, cargá la fecha, hora y precios efectivos.
+  Si la operación tiene referencia, ingresá también **Precio C al cerrar**. Si C
+  se cierra como pata, se usa su precio de cierre. Cada cierre guarda los precios
+  para mostrar el A/B de cierre y, cuando corresponde, la brecha. La vista de
+  una operación cerrada resume el último cierre que tiene precios de A y B.
+- En el detalle, **Historial de cierres** agrupa las patas de cada cierre.
+  **Editar cierre** permite corregir sus precios y cantidades y recalcula el
+  ratio y la brecha. **Cancelar** descarta la edición. **Eliminar cierre** pide confirmación y devuelve al
   saldo abierto las cantidades de ese cierre. Ambos cambios recalculan el P&L.
   Para corregir un cierre de una operación cerrada, elegí **Todas**.
   Si varios registros antiguos comparten la misma marca de tiempo y no se
@@ -338,6 +362,25 @@ conserva su elección al recargar el dashboard. Referencia C aparece sólo si ha
 algún par con esa referencia. Ocultar una columna no cambia la fórmula, las
 cotizaciones utilizadas ni la variación diaria. El menú se cierra con Escape,
 con otro clic en el engranaje o al pulsar fuera.
+
+### Histórico diario
+
+Seleccioná una fila o enfocá el nombre del par y pulsá Enter. El gráfico
+aparece a la derecha de la tabla. En un widget angosto aparece debajo.
+El selector **Rango** abre en **3 meses** y admite **1, 6, 12 meses** o
+un intervalo de fechas de hasta 12 meses. Al pasar a otra fila se mantienen
+el rango y el tipo de bandas mientras el panel está abierto.
+
+- **Estáticas** usa la media y el desvío estándar de los cierres coincidentes
+  del rango visible. **Móviles** usa los 20 cierres coincidentes anteriores a
+  cada punto. Si hace falta, busca cierres hasta un año antes del inicio del rango.
+- **±1σ** se dibuja en verde con línea discontinua y **±2σ** en amarillo
+  con línea punteada, con los colores del simulador de Opciones.
+- Cada día usa los cierres de la misma rueda para las especies exactas A/B
+  y C si corresponde. Se respetan el divisor de C y el formato de la fila.
+  La rueda en curso queda fuera de las estadísticas. Los días hábiles del rango
+  con algún cierre ausente se muestran como huecos.
+  La disponibilidad de las series depende del broker.
 
 ## Agregar y editar pares
 

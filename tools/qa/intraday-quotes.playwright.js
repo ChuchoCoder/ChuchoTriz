@@ -52,14 +52,45 @@ async page => {
   await page.waitForTimeout(400);
   assert(await readsDuring(4500) === 0, 'Hiding every chart stops the shared quote poll');
   await page.evaluate(() => {
-    window.ratiosFixture.price('AL30-2', 71000);
+    const send = window.postMessage;
+    let heldId, release;
+    window.quoteReply = { held: false, retired: false, delivered: false, restore() { window.postMessage = send; release?.(); } };
+    window.addEventListener('message', event => {
+      if (heldId && event.source === window && event.data?.id === heldId && event.data.kind === 'response') {
+        window.quoteReply.delivered = true;
+      }
+    });
+    window.postMessage = function (message, ...args) {
+      if (!heldId && message?.kind === 'request' && message.method === 'ratioIntradayQuotes') heldId = message.id;
+      if (heldId && message?.id === heldId && message.kind === 'response') {
+        release = () => send.call(window, message, ...args);
+        window.quoteReply.held = true;
+        return;
+      }
+      if (heldId && message?.id === heldId && message.kind === 'retire') window.quoteReply.retired = true;
+      return send.call(window, message, ...args);
+    };
     document.querySelector('.GridLayout').style.display = '';
   });
-  await page.waitForFunction(() => {
-    const values = [...document.querySelectorAll('.ct-intraday-widget .ct-intraday-legend strong')];
-    return values.length === 4 && values.every(value => value.textContent === '1.420,00');
-  });
-  checks.push('All four charts show the latest market price on returning to view');
+  try {
+    await page.waitForFunction(() => window.quoteReply.held);
+    await page.evaluate(() => { document.querySelector('.GridLayout').style.display = 'none'; });
+    await page.waitForFunction(() => window.quoteReply.retired);
+    await page.evaluate(() => {
+      window.ratiosFixture.price('AL30-2', 71000);
+      document.querySelector('.GridLayout').style.display = '';
+    });
+    await page.waitForFunction(() => {
+      const values = [...document.querySelectorAll('.ct-intraday-widget .ct-intraday-legend strong')];
+      return values.length === 4 && values.every(value => value.textContent === '1.420,00');
+    });
+    checks.push('Revealed charts refresh without waiting for a retired quote response');
+  } finally {
+    await page.evaluate(() => window.quoteReply.restore());
+  }
+  await page.waitForFunction(() => window.quoteReply.delivered);
+  const shown = await legend.allTextContents();
+  assert(shown.length === 4 && shown.every(value => value === '1.420,00'), 'All four charts keep the fresh price when the retired response returns');
 
   await lastWidget.getByRole('button', { name: 'Configurar instrumentos A y B', exact: true }).click();
   const editor = lastWidget.getByRole('form', { name: 'Instrumentos del dólar intradiario', exact: true });
@@ -111,8 +142,27 @@ async page => {
     release();
     await page.unroute(readerUrl, delayChartReader);
   }
-  await page.evaluate(() => { document.querySelector('.GridLayout').style.display = ''; });
-  await page.waitForFunction(() => document.querySelectorAll('.ct-intraday-widget svg[role="img"]').length === 4);
-  checks.push('The delayed reader resumes every chart when it returns to view');
+  await page.evaluate(() => {
+    const send = window.postMessage;
+    const groups = new Set();
+    window.restoreQuoteDispatch = () => { window.postMessage = send; };
+    // Only let the first quote through for each group. Every initially visible
+    // chart should have joined before that quote was dispatched.
+    window.postMessage = function (message, ...args) {
+      if (message?.kind === 'request' && message.method === 'ratioIntradayQuotes') {
+        const key = JSON.stringify(message.params.ids);
+        if (groups.has(key)) return;
+        groups.add(key);
+      }
+      return send.call(window, message, ...args);
+    };
+    document.querySelector('.GridLayout').style.display = '';
+  });
+  try {
+    await page.waitForFunction(() => document.querySelectorAll('.ct-intraday-widget svg[role="img"]').length === 4);
+    checks.push('The delayed reader updates all charts in each group from their first dispatched quote');
+  } finally {
+    await page.evaluate(() => window.restoreQuoteDispatch());
+  }
   return { checks };
 }
