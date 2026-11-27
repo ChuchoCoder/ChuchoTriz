@@ -252,8 +252,8 @@ npm test
 npm run package:free
 ```
 
-Esta rama genera la versión **0.0.35** y el paquete
-`releases/chuchotriz-free-0.0.35.zip`. Podés cargar `dist` directamente desde
+Esta rama genera la versión **0.0.36** y el paquete
+`releases/chuchotriz-free-0.0.36.zip`. Podés cargar `dist` directamente desde
 Chrome para probar la extensión.
 
 | Comando | Qué hace |
