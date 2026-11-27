@@ -839,7 +839,10 @@ async page => {
       two: c.top >= Math.max(a.bottom, b.bottom) && c.right <= d.left && sameRow(c, d),
       stack: c.top >= Math.max(a.bottom, b.bottom) && d.top >= c.bottom,
       inlineControls: !!data.querySelector('[type="submit"]') &&
-        [...grid.querySelectorAll(':scope > .ro-leg')].every(leg => !!leg.querySelector('.ro-sizing-leg input')),
+        [...grid.querySelectorAll(':scope > .ro-leg')].every(leg => {
+          const amount = leg.querySelector('.ro-sizing-leg strong');
+          return !!leg.querySelector('.ro-sizing-leg input') && amount && getComputedStyle(amount).display === 'block';
+        }),
     };
   });
   const desktop = await placement();
