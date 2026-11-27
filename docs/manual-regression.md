@@ -151,7 +151,7 @@ El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a C
 
 El grupo `widget-startup` mide cuándo aparecen los widgets guardados de Ratios y Dólar intradiario si el tablero tarda en iniciar o si su configuración llega después de su ID. También comprueba que el reintento rápido venza, que un espacio guardado recortado no mantenga la lectura activa y que las lecturas se detengan al ocultar los widgets o pasar a un tablero sin ellos.
 
-El grupo `intraday-quotes` cuenta las lecturas de cotización de cuatro gráficos idénticos. Comprueba que compartan una lectura por ronda, que mostrar un gráfico no adelante una ronda existente, que se detengan las consultas al ocultarlos incluso si el lector todavía se está cargando y que al volver muestren el precio actualizado. También confirma que cambiar un par conserva los datos de los demás.
+El grupo `intraday-quotes` cuenta las lecturas de cotización de cuatro gráficos idénticos. Comprueba que compartan una lectura por ronda y que mostrar un gráfico no adelante una ronda existente. Si se ocultan todos, el lector deja de consultar y la reapertura usa una cotización vigente aunque la respuesta anterior siga pendiente. También comprueba que todos los gráficos restaurados reciban la primera cotización de su grupo y que cambiar un par conserve los datos de los demás.
 
 ## Cobertura automática y comprobaciones humanas
 
