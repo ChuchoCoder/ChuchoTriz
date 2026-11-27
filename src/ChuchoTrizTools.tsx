@@ -46,26 +46,22 @@ function DeferredTool<Props extends object>({ active, keepMounted = false, load,
   return <ToolBoundary><Tool {...toolProps} /></ToolBoundary>;
 }
 
-export default function ChuchoTrizTools({ embedded = false, active = true, headerAction, presetRequest }: {
+export type ChuchoTrizTool = "ratios" | "simulator" | "executions" | "presets";
+
+export default function ChuchoTrizTools({ tab, onTabChange, embedded = false, active = true, headerAction, presetRequest }: {
+  tab: ChuchoTrizTool; onTabChange: (tab: ChuchoTrizTool) => void;
   embedded?: boolean; active?: boolean; headerAction?: ReactNode; presetRequest?: PresetEditorRequest;
 }) {
-  const [tab, setTab] = useState(embedded && !presetRequest ? "simulator" : "presets");
-  const [lastPresetRequest, setLastPresetRequest] = useState(presetRequest);
-  // Resolve the shortcut before rendering a pane, including the first visit from the ticket.
-  if (lastPresetRequest !== presetRequest) {
-    setLastPresetRequest(presetRequest);
-    if (presetRequest) setTab("presets");
-  }
   const id = useId();
   const navigation = <nav className="ct-tools-tabs" aria-label="Herramientas de ChuchoTriz">
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "ratios"} aria-controls={`${id}-ratios`}
-      onClick={() => setTab("ratios")}><ToolbarIcon name="quotes" />Ratios</button>
+      onClick={() => onTabChange("ratios")}><ToolbarIcon name="quotes" />Ratios</button>
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "simulator"} aria-controls={`${id}-simulator`}
-      onClick={() => setTab("simulator")}><ToolbarIcon name="simulator" />Simulador de opciones</button>
+      onClick={() => onTabChange("simulator")}><ToolbarIcon name="simulator" />Simulador de opciones</button>
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "executions"} aria-controls={`${id}-executions`}
-      onClick={() => setTab("executions")}><ToolbarIcon name="operations" />Operaciones de opciones</button>
+      onClick={() => onTabChange("executions")}><ToolbarIcon name="operations" />Operaciones de opciones</button>
     <button type="button" className="ct-tool-icon-button" aria-pressed={tab === "presets"} aria-controls={`${id}-presets`}
-      onClick={() => setTab("presets")}><ToolbarIcon name="presets" />Cantidades rápidas</button>
+      onClick={() => onTabChange("presets")}><ToolbarIcon name="presets" />Cantidades rápidas</button>
   </nav>;
   return <div className={`ct-tools${embedded ? " ct-tools-embedded" : ""}`}>
     {embedded ? <header className="ct-free-settings-header"><h1>ChuchoTriz</h1>{navigation}{headerAction}</header> : navigation}

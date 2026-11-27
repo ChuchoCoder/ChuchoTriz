@@ -48,7 +48,8 @@ async (page, group) => {
     const panel = page.locator(`#ct-free-settings-panel[data-color-scheme="${theme}"]`);
     await panel.waitFor({ state: 'visible' });
     await contrast('TH-03', 'Encabezado de Configuración', panel.locator('h1'));
-    await contrast('TH-04', 'Pestaña seleccionada del simulador', panel.locator('.ct-tools-tabs button[aria-pressed=true]'));
+    await contrast('TH-04', 'Pestaña Ratios seleccionada al abrir', panel.getByRole('button', { name: 'Ratios', exact: true, pressed: true }));
+    await panel.getByRole('button', { name: 'Simulador de opciones' }).click();
     await contrast('TH-05', 'Un encabezado de la cadena de opciones', panel.locator('.ct-sim th').first());
     await panel.getByRole('button', { name: 'Cantidades rápidas' }).click();
     await contrast('TH-06', 'Instrumento del editor de presets', panel.locator('#selected-instrument'));

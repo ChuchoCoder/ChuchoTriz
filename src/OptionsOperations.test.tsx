@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, StrictMode } from "react";
+import { act, StrictMode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import ChuchoTrizTools from "./ChuchoTrizTools";
+import ChuchoTrizTools, { type ChuchoTrizTool } from "./ChuchoTrizTools";
 import OptionsOperations from "./OptionsOperations";
 import type { OptionExecution } from "./optionExecutions";
 
@@ -216,7 +216,11 @@ it("handles removed and invalid independent preferences without changing the oth
 });
 
 it("loads grouped executions immediately on entering and refreshes them on re-entry", async () => {
-  await act(async () => root.render(<ChuchoTrizTools embedded />));
+  function Tools() {
+    const [tab, setTab] = useState<ChuchoTrizTool>("presets");
+    return <ChuchoTrizTools embedded tab={tab} onTabChange={setTab} />;
+  }
+  await act(async () => root.render(<Tools />));
   expect(executions).not.toHaveBeenCalled();
   await act(async () => button("Operaciones de opciones").click());
   expect(executions).toHaveBeenCalledTimes(1);

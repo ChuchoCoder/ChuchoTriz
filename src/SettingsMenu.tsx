@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import ChuchoTrizTools from "./ChuchoTrizTools";
+import ChuchoTrizTools, { type ChuchoTrizTool } from "./ChuchoTrizTools";
 import type { PresetEditorRequest } from "./InstrumentPresetsOptions";
 import { containsChangedElements, observePageStructure } from "./pageStructure";
 import chuchotrizIcon from "../public/logo48.png?inline";
 import "./SettingsMenu.css";
 
 const barSelector = ".DirectAccessBar";
+const menuHash = "#chuchotriz";
 const headerSelector = ".HeaderDMA";
 const toolsSelector = "#ToolPanel";
 const drawerSelector = "#ToolPanel .ToolContent";
@@ -30,21 +31,33 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [visited, setVisited] = useState(false);
+  const [tab, setTab] = useState<ChuchoTrizTool>("ratios");
   const [position, setPosition] = useState(bounds);
   const closeButton = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<PresetSettingsRequest["returnFocus"] | null>(null);
   const panel = useRef<HTMLElement>(null);
   const [colorScheme, setColorScheme] = useState("dark");
 
-  function openPanel(resolveTrigger: PresetSettingsRequest["returnFocus"]) {
-    returnFocus.current = resolveTrigger;
+  function openPanel(tool: ChuchoTrizTool, resolveTrigger?: PresetSettingsRequest["returnFocus"]) {
+    returnFocus.current = resolveTrigger ?? null;
     setPosition(bounds());
+    setTab(tool);
     setVisited(true);
     setOpen(true);
   }
 
   useEffect(() => {
-    if (presetRequest) openPanel(presetRequest.returnFocus);
+    const openFromUrl = (event?: HashChangeEvent) => {
+      if (location.hash === menuHash) openPanel("ratios");
+      else if (event && new URL(event.oldURL).hash === menuHash) setOpen(false);
+    };
+    openFromUrl();
+    window.addEventListener("hashchange", openFromUrl);
+    return () => window.removeEventListener("hashchange", openFromUrl);
+  }, []);
+
+  useEffect(() => {
+    if (presetRequest) openPanel("presets", presetRequest.returnFocus);
   }, [presetRequest]);
 
   useEffect(() => {
@@ -122,7 +135,7 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
     const navigate = (event: MouseEvent) => {
       if (event.target instanceof Element) {
         const item = event.target.closest(`${barSelector} a.Item, ${headerSelector} a.NavItem`);
-        if (item && !item.closest(".ct-free-settings-slot")) setOpen(false);
+        if (item && !item.closest(".ct-free-settings-slot")) hidePanel();
       }
     };
     document.addEventListener("click", navigate, true);
@@ -134,21 +147,31 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
     };
   }, [open]);
 
-  function close() {
+  function hidePanel() {
     setOpen(false);
+    if (location.hash === menuHash) {
+      const url = new URL(location.href);
+      url.hash = "";
+      history.replaceState(history.state, "", url);
+    }
+  }
+
+  function close() {
+    hidePanel();
     const trigger = returnFocus.current?.();
     (trigger?.isConnected ? trigger : slot?.querySelector<HTMLAnchorElement>("a"))?.focus();
   }
 
   return <>
     {slot && createPortal(
-      <a className={`Item ct-free-settings-item${open ? " selected" : ""}`} href="#"
+      <a className={`Item ct-free-settings-item${open ? " selected" : ""}`} href={menuHash}
         aria-label="Configuración (ChuchoTriz)" title="Configuración · ChuchoTriz"
         aria-controls="ct-free-settings-panel" aria-expanded={open} aria-current={open ? "page" : undefined}
         onClick={event => {
+          if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
           event.preventDefault();
           const trigger = event.currentTarget;
-          openPanel(() => trigger);
+          openPanel("ratios", () => trigger);
         }}>
         <img src={chuchotrizIcon} width="20" height="20" alt="" />
       </a>, slot)}
@@ -167,7 +190,7 @@ export function SettingsMenu({ presetRequest }: { presetRequest?: PresetSettings
         if (event.target instanceof HTMLInputElement && event.target.getAttribute("role") === "searchbox" && event.target.value) return;
         event.preventDefault(); event.stopPropagation(); close();
       }}>
-      <ChuchoTrizTools embedded active={open} presetRequest={presetRequest} headerAction={
+      <ChuchoTrizTools tab={tab} onTabChange={setTab} embedded active={open} presetRequest={presetRequest} headerAction={
         <button ref={closeButton} type="button" aria-label="Volver a Matriz" onClick={close}>×</button>
       } />
     </section>}
