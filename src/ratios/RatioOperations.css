@@ -184,3 +184,7 @@
 @container ratio-detail (min-width:660px){
   .ro-detail-summary{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px}
 }
+
+.ro-detail-ratio{display:grid;gap:3px}
+.ro-close-form>.ro-close-fields{margin:8px 0}
+.ro-close-fields>button{align-self:end;white-space:normal}

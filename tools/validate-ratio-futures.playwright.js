@@ -21,7 +21,7 @@ async page => {
   await select('A · Numerador', 'AL30'); await select('B · Denominador', 'AL30D');
   await page.getByRole('checkbox', { name: 'Comparar A/B con una referencia', exact: true }).check();
   await select('Referencia C · ej. Dólar oficial', 'DLR/NOV26');
-  assert((await page.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial', exact: true }).locator('..').innerText()).includes('Futuro · sólo monitor'), 'Future is identified as a monitor-only A3 contract in the picker');
+  assert((await page.getByRole('combobox', { name: 'Referencia C · ej. Dólar oficial', exact: true }).locator('..').innerText()).includes('Futuro · referencia'), 'Future is identified as an A3 reference contract in the picker');
   await button('Agregar').click();
   const widgetRow = page.locator('.ct-ratios tbody tr').filter({ hasText: 'MEP AL30 vs DLR/NOV26' });
   await widgetRow.waitFor();
@@ -42,7 +42,7 @@ async page => {
   const monitorRow = page.locator('.ro-monitor-table tbody tr').filter({ hasText: 'MEP AL30 vs DLR/DIC26' });
   await monitorRow.waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.ro-monitor-table tbody tr')].some(r => r.textContent.includes(' vs DLR/DIC26') && r.textContent.includes('-15,15% (250,00)')));
-  assert(await monitorRow.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Monitor saves December independently and excludes reference rows from operations');
+  assert(await monitorRow.getByRole('button', { name: 'Abrir operación', exact: true }).isEnabled(), 'Monitor saves December independently and opens the referenced A/B pair');
   const chartLink = monitorRow.locator('.ct-ratio-chart-link');
   const target = new URL(await chartLink.getAttribute('href'), page.url());
   assert(target.origin === new URL(page.url()).origin && target.pathname.startsWith('/security/'), 'Chart link stays on the loopback security fixture');

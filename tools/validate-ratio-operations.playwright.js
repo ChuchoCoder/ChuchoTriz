@@ -13,7 +13,7 @@ async page => {
   });
   const click = async locator => { await finishAnimations(); await locator.click({ force: true }); };
   const wait = async (fn, arg = null) => page.waitForFunction(fn, arg, { polling: 100, timeout: 10000 });
-  const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => [1, 2].includes(v?.schema) && Array.isArray(v.operations)));
+  const book = () => page.evaluate(async () => Object.values(await chrome.storage.local.get(null)).find(v => [1, 2, 3, 4].includes(v?.schema) && Array.isArray(v.operations)));
   async function choose(name, value) {
     const control = label(name); await control.fill(value); await control.blur();
     await control.locator('..').locator('small[title]').waitFor({ state: 'visible', timeout: 10000 });
@@ -29,6 +29,7 @@ async page => {
         ...['ALUA', 'TXAR', 'TGSU2', 'TGNO4'].map(id => make(id, 'ESXXXX', 'ARS', 100)),
         ...[1, 7].map(days => ({ ...make(`bm_MERV_PESOS_${days}D`, 'RPXXXX', 'ARS', days === 1 ? 18.8 : 20.5), symbolStr: `PESOS - ${days}D`, settlementType: null }))];
       instruments.push({ ...make('rx_DDF_DLR_SPOT', 'MRIXXX', 'ARS', 1572.5), marketId: 'rx', settlementType: null });
+      instruments.push({ ...make('rx_DDF_DLR_DIC26', 'FXXXXX', 'ARS', 160000), symbolStr: 'DLR/DIC26', marketId: 'rx', settlementType: null });
       next.securityStore.securities = instruments;
       const original = next.securityStore.getSecurity;
       next.securityStore.getSecurity = async id => instruments.find(i => i.id === id) || original(id);
@@ -36,7 +37,7 @@ async page => {
   });
   await page.evaluate(() => localStorage.removeItem('ct-demo-regression'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
+  await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));
   await page.waitForFunction(() => { const e = document.querySelector('.ro-monitor-controls input'); return e && !e.disabled; }, null, { polling: 100 });
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 10);
   assert(JSON.stringify(await page.locator('.ro-table-wrap tbody tr td:first-child strong').allTextContents()) === JSON.stringify(['MEP AL30', 'CCL AL30', 'CANJE AL30', 'GD30/AL30', 'BMA/GGAL', 'ALUA/TXAR', 'TGSU2/TGNO4', 'PESOS - 7D/PESOS - 1D', 'MEP AL30 vs DLR/SPOT', 'CCL AL30 vs DLR/SPOT']), 'Default order');
@@ -133,7 +134,7 @@ async page => {
   checks.push('Missing or mismatched daily references show a dash while retaining the current ratio');
   await click(button('Quitar par MEP AL30'));
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
-  await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
+  await page.reload({ waitUntil: 'domcontentloaded' }); await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 9);
   assert((await book()).watchDefaults === 1, 'Initialization retained');
   await click(button('Agregar pares predeterminados'));
@@ -291,7 +292,7 @@ async page => {
   checks.push('Open, partial close and edit same operation with retained history');
   await click(button('Eliminar')); await button('Deshacer eliminación').waitFor(); assert((await book()).operations.length === 0, 'Delete'); await click(button('Deshacer eliminación')); await button('Editar').waitFor(); assert((await book()).operations[0].id === id, 'Undo');
   const original = JSON.stringify((await book()).operations);
-  await page.reload({ waitUntil: 'domcontentloaded' }); await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
+  await page.reload({ waitUntil: 'domcontentloaded' }); await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));
   await button('Abrir operación').first().waitFor(); assert(JSON.stringify((await book()).operations) === original, 'Reload preserves records');
   checks.push('Delete/undo and reload persistence');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'OTHER-DEMO'; });
@@ -299,7 +300,7 @@ async page => {
   assert(await page.locator('.ro-table-wrap tr').filter({ hasText: 'SPY/GGAL' }).count() === 0, 'Account isolation');
   await page.evaluate(() => { mainStore.profileStore.activeAccount = 'DEMO-NO-BROKER'; });
   await wait(() => document.querySelectorAll('.ro-table-wrap tbody tr').length === 11); checks.push('Account switch clears old account, seeds defaults separately and restores original local book');
-  const bond = page.locator('tr').filter({ hasText: 'MEP AL30' }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
+  const bond = page.locator('.ro-monitor-table tr').filter({ has: button('Invertir MEP AL30') }); await click(bond.getByRole('button', { name: 'Abrir operación' }));
   assert(await label('DDMM A %').inputValue() === '0.01', 'Bond DDMM');
   assert(await label('Conversión para cantidades').count() === 0, 'Mixed currencies require no FX input');
   await wait(() => document.querySelector('[aria-label="Cantidad B"]').value === '100');
@@ -319,7 +320,7 @@ async page => {
   const mixedId = saved.operations[1].id;
   await page.evaluate(async id => {
     const values = await chrome.storage.local.get(null);
-    for (const [key, value] of Object.entries(values)) if ([1, 2].includes(value?.schema) && value.operations.some(o => o.id === id)) {
+    for (const [key, value] of Object.entries(values)) if ([1, 2, 3, 4].includes(value?.schema) && value.operations.some(o => o.id === id)) {
       const old = value.operations.find(o => o.id === id); old.legs[1].quantity = 80; old.fx = 1600; value.revision = crypto.randomUUID(); await chrome.storage.local.set({ [key]: value });
     }
   }, mixedId);
@@ -381,13 +382,13 @@ async page => {
   await comparison.waitFor();
   await wait(() => [...document.querySelectorAll('.ro-ratio')].some(e => e.textContent === '+1,75% (27,50)'));
   assert((await comparison.innerText()).includes('1.572,50'), 'The comparison shows native official spot alongside MEP bond prices');
-  assert(await comparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'Three-price comparisons cannot become two-leg operations');
+  assert(await comparison.getByRole('button', { name: 'Abrir operación', exact: true }).isEnabled(), 'Valid A/B can open with a spot reference');
   assert((await book()).schema === 2, 'Three-price monitor books reject legacy readers');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); s.md.lst = 1600; s.md.seq++; });
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('MEP AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '0,00% (0,00)'));
   const cclComparison = page.locator('.ro-monitor-table tr').filter({ hasText: 'CCL AL30 vs DLR/SPOT' });
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('CCL AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '+4,17% (66,67)'));
-  assert(await cclComparison.getByRole('button', { name: 'Sólo monitor', exact: true }).isDisabled(), 'The default CCL comparison also remains monitor-only');
+  assert(await cclComparison.getByRole('button', { name: 'Abrir operación', exact: true }).isEnabled(), 'CCL can also open with a spot reference');
   checks.push('MEP and CCL spreads refresh independently from the same official spot');
   await page.evaluate(() => mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT').md.refp = undefined);
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].filter(e => e.querySelector('strong')?.textContent.includes(' vs DLR/SPOT')).every(e => e.querySelector('.ro-daily').textContent === '—'));
@@ -404,7 +405,7 @@ async page => {
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('CCL AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '+4,17% (66,67)'));
   assert(await comparison.locator('.ro-ratio').innerText() === '0,00% (0,00)', 'MEP comparison restored after official reconnect');
   checks.push('Disconnect/reconnect preserves both saved comparisons and accepts a reset official quote sequence');
-  checks.push('MEP/official spread, native spot updates, monitor-only restrictions and schema compatibility');
+  checks.push('MEP/official spread, native spot updates, opening availability and schema compatibility');
   await page.evaluate(() => { const s = mainStore.securityStore.securities.find(s => s.id === 'AL30'); s.md.lst = 70000; s.md.seq++; });
   await wait(() => [...document.querySelectorAll('.ro-monitor-table tr')].some(e => e.textContent.includes('MEP AL30 vs DLR/SPOT') && e.querySelector('.ro-ratio').textContent === '-12,50% (200,00)'));
   assert(await comparison.locator('.ro-ratio').innerText() === '-12,50% (200,00)', 'Negative spread keeps its sign only in the percentage');
@@ -453,7 +454,7 @@ async page => {
   keyboardOrder=(await book()).watch.map(p=>p.id);
   assert(keyboardOrder[2]===keyboardId,'A second keyboard move works without refocusing');
   assert(await financialSnapshot() === originalFinancial, 'Monitor reordering leaves operation prices, fees and history intact');
-  await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'})); await click(button('Ratios'));
+  await page.reload({waitUntil:'domcontentloaded'}); await page.getByRole('link',{name:'Configuración'}).click(); await click(button('Ratios'));
   await wait(() => !!document.querySelector('.ro-row-handle') && document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false');
   assert(JSON.stringify(await rowIds('.ro-monitor-table')) === JSON.stringify(keyboardOrder), 'Manual monitor order survives reload');
   checks.push('Real drag from sorted view and keyboard ordering persist by account without changing operation data');
@@ -482,7 +483,7 @@ async page => {
   await page.locator(`.ct-free-settings-panel[data-color-scheme="${theme}"]`).waitFor();
   const styles = await page.evaluate(()=>{const table=document.querySelector('.ro-operations-table'),header=getComputedStyle(table.querySelector('th')),even=getComputedStyle(table.querySelector('tbody tr:nth-child(2)')),selected=getComputedStyle(table.querySelector('tr.ro-selected'));return{head:header.backgroundColor,weight:header.fontWeight,sticky:header.position,even:even.backgroundColor,selected:selected.backgroundColor};});
   assert(styles.head !== 'rgba(0, 0, 0, 0)' && styles.weight === '700' && styles.sticky === 'sticky' && styles.even !== styles.head && styles.selected !== styles.head, 'Styled headers, stripes and selected row remain distinct in '+theme);
-  await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'})); await click(button('Ratios'));
+  await page.reload({waitUntil:'domcontentloaded'}); await page.getByRole('link',{name:'Configuración'}).click(); await click(button('Ratios'));
   await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled') === 'false');
   await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/})); await click(button('Todas'));
   assert(JSON.stringify(await rowIds('.ro-operations-table')) === JSON.stringify((await book()).operations.map(o=>o.id)), 'Manual operation order survives reload');
@@ -530,7 +531,7 @@ async page => {
   await operationPicker.getByLabel('Realizado',{exact:true}).uncheck();
   await wait(()=>!document.querySelector('.ro-operations-table [aria-label="Ordenar por Realizado"]'));
   await click(operationPicker.locator('summary'));
-  await page.reload({waitUntil:'domcontentloaded'}); await click(page.getByRole('link',{name:'Configuración'}));await click(button('Ratios'));
+  await page.reload({waitUntil:'domcontentloaded'}); await page.getByRole('link',{name:'Configuración'}).click();await click(button('Ratios'));
   await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled')==='false');
   await wait(()=>!document.querySelector('.ro-monitor-table [aria-label="Ordenar por Último A"]'));
   assert(await button('Ordenar por Realizado').count()===0,'Only the active grid is rendered');
@@ -594,7 +595,7 @@ async page => {
   manualRecord=await manual();
   assert(JSON.stringify(manualRecord.legs.map(l=>l.exits.map(e=>e.quantity)))==='[[25,15],[50,30]]','Repeated A/B closes keep both exit histories');
   const manualSnapshot=JSON.stringify(manualRecord);
-  await page.reload({waitUntil:'domcontentloaded'});await click(page.getByRole('link',{name:'Configuración'}));await click(button('Ratios'));
+  await page.reload({waitUntil:'domcontentloaded'});await page.getByRole('link',{name:'Configuración'}).click();await click(button('Ratios'));
   await wait(()=>!!document.querySelector('.ro-row-handle')&&document.querySelector('.ro-row-handle').getAttribute('aria-disabled')==='false');
   await click(page.getByRole('button',{name:/^3 · Operaciones abiertas/}));await click(button('Todas'));
   await click(page.locator('.ro-operations-table tr[data-row-id="'+manualId+'"]').getByRole('button',{name:'Detalle',exact:true}));
@@ -801,11 +802,86 @@ async page => {
   await page.getByText('Cierre eliminado del registro local.', { exact: true }).waitFor();
   assert((await correctionRow.innerText()).includes('80,00 / 160,00'), 'Deleting the latest close restores exactly its quantities');
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await click(page.getByRole('link', { name: 'Configuración' })); await click(button('Ratios'));
+  await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));
   await click(page.getByRole('button', { name: /^3 · Operaciones abiertas/ }));
   await click(correctionRow.getByRole('button', { name: 'Detalle', exact: true }));
   assert(await closeRows.count() === 1 && (await closeRows.first().innerText()).includes('112,00'), 'Edited prices and deleted closes persist after reload');
   checks.push('Recorded closes group both legs and support cancellation, validated edits and confirmed deletion with persisted balances and P&L');
+
+  assert((await closeRows.first().innerText()).includes('Ratio de cierre'), 'Common ratios show the ratio calculated from the historical closing prices');
+
+  await click(button('1 · Monitor'));
+  await click(comparison.getByRole('button', { name: 'Abrir operación', exact: true }));
+  const lastC = page.getByRole('button', { name: /^Usar último C/ });
+  await lastC.click();
+  await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T10:00');
+  assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
+    'Changing the opening date clears current market prefills');
+  await click(button('Long AL30 / Short AL30D'));
+  assert(await label('Precio de entrada A').inputValue() === '' && await label('Precio de entrada B').inputValue() === '',
+    'Selecting direction on a historical date leaves prices blank');
+  await label('Precio de entrada A').fill('80000'); await label('Precio de entrada B').fill('50');
+  const entryC = label('Precio C al abrir');
+  assert(await entryC.inputValue() === '' && await label('Registrar C como tercera pata').count() === 0, 'Spot C requires an explicit quote and is a benchmark');
+  await click(button('Abrir operación'));
+  assert(await entryC.isVisible(), 'Entry with a missing C is blocked');
+  await entryC.fill('1572.5'); await label('Ratio objetivo').fill('1800');
+  await label('Objetivo de brecha (%)').fill('1');
+  assert(await page.locator('#ro-reference-title ~ .ro-close-legs output').first().innerText() === '1,75%', 'Entry spread uses the manual C');
+  await click(button('Abrir operación')); await button('Registrar cierre').waitFor();
+  const spotOp = (await book()).operations.at(-1);
+  assert(spotOp.legs.length === 2 && spotOp.reference.entry === 1572.5 && spotOp.reference.goal.comparison === 'below' &&
+    spotOp.openedAt === '2026-01-02T13:00:00.000Z' && (await book()).schema === 4, 'Manual historical spot, date and independent goals persist in a two-leg operation');
+  await page.getByText('Objetivo de brecha ≤ 1,00% · pendiente', { exact: true }).last().waitFor();
+  const pnlBeforeReferenceMove = await page.locator('.ro-detail .ro-pnl-lines').innerText();
+  await page.evaluate(() => { const spot = mainStore.securityStore.securities.find(s => s.id === 'rx_DDF_DLR_SPOT'); spot.md.lst = 1600; spot.md.seq++; });
+  await page.getByText('Objetivo de brecha ≤ 1,00% · alcanzado', { exact: true }).last().waitFor();
+  assert(await page.locator('.ro-detail .ro-pnl-lines').innerText() === pnlBeforeReferenceMove, 'A change in spot alone can reach the spread goal while leaving P&L identical');
+  await label('Fecha/hora del cierre · Argentina').fill('2026-01-05T10:00');
+  await label('Precio cierre A').fill('79000'); await label('Precio cierre B').fill('50');
+  assert(await button('Cerrar todo').isDisabled(), 'Missing closing C blocks saving a close');
+  await label('Precio C al cerrar').fill('1580');
+  await click(button('Cerrar todo')); await history.waitFor();
+  assert((await history.innerText()).includes('Brecha de cierre · 0,00%'), 'Historical close shows the gap using its own C');
+  await click(history.getByRole('button', { name: 'Editar cierre', exact: true }));
+  await closeEditor.getByLabel('Precio referencia C', { exact: true }).fill('1600');
+  await click(closeEditor.getByRole('button', { name: 'Guardar cierre', exact: true }));
+  await history.getByText('Brecha de cierre · -1,25%', { exact: true }).waitFor();
+  checks.push('Historical official benchmark can be entered and corrected, and its live objective is independent from A/B P&L');
+
+  await click(button('1 · Monitor'));
+  await choose('Instrumento A', 'AL30'); await choose('Instrumento B', 'AL30D');
+  await label('Agregar referencia C').check();
+  await choose('Referencia C · ej. DLR/SPOT', 'DLR/DIC26');
+  await label('Dividir Referencia C por 100').check();
+  await click(button('Agregar par'));
+  const futureComparison = page.locator('.ro-monitor-table tr').filter({ hasText: 'MEP AL30 vs (DLR/DIC26 ÷ 100)' });
+  await click(futureComparison.getByRole('button', { name: 'Abrir operación', exact: true }));
+  await label('Fecha/hora de apertura · Argentina').fill('2026-01-02T11:00');
+  await label('Precio de entrada A').fill('80000'); await label('Precio de entrada B').fill('50');
+  await label('Precio C al abrir').fill('160000');
+  await label('Registrar C como tercera pata').check();
+  await label('Sentido C').selectOption('-1'); await label('Contratos C').fill('2');
+  await label('Factor monetario C').fill('10'); await label('DDMM C (%)').fill('0');
+  await click(button('Abrir operación')); await button('Registrar cierre').waitFor();
+  const future = (await book()).operations.at(-1);
+  assert(future.legs.length === 3 && future.legs[2].side === -1 && future.legs[2].entry === 160000 && future.reference.divisor === 100 &&
+    (await page.locator('.ro-detail-ratio').innerText()).includes('0,00%'), 'Third leg retains its raw entry price and the divisor applies to the spread only');
+  await label('Fecha/hora del cierre · Argentina').fill('2026-01-05T11:00');
+  await label('Precio cierre A').fill('80000'); await label('Precio cierre B').fill('50'); await label('Precio cierre C').fill('158000');
+  await label('Cantidad cierre C').fill('1');
+  assert(await label('Cantidad cierre A').inputValue() === '50' && await label('Cantidad cierre B').inputValue() === '50', 'A/B close in proportion to the manually selected number of contracts');
+  await click(button('Registrar cierre')); await history.getByText('Brecha de cierre · 1,27%', { exact: true }).waitFor();
+  assert((await book()).operations.at(-1).legs[2].exits[0].quantity === 1, 'Partial closing quantities include C');
+  await click(button('1 · Monitor')); await click(button('Quitar par MEP AL30 vs (DLR/DIC26 ÷ 100)'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('link', { name: 'Configuración' }).click(); await click(button('Ratios'));
+  await click(page.getByRole('button', { name: /^3 · Operaciones abiertas/ }));
+  const futureRow = page.locator('.ro-operations-table tr').filter({ hasText: 'DLR/DIC26' });
+  await click(futureRow.getByRole('button', { name: 'Detalle', exact: true }));
+  await history.getByText('Brecha de cierre · 1,27%', { exact: true }).waitFor();
+  assert((await book()).operations.at(-1).reference.instrument.id === future.reference.instrument.id, 'Operations retain their contract and spread after monitor removal and refresh');
+  checks.push('Historical future can open as a third leg, preserve C/100, close proportionally and retain all three legs independently of the monitor');
 
   return { checks, count: checks.length, productionBundle: true, syntheticOnly: true };
 }
