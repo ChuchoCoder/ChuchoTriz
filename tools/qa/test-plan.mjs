@@ -26,6 +26,7 @@ export function testPlan(mode, selected) {
   const common = [
     ...[...builtIn, ...extra].map(suite => ({ ...suite, groupArgument: suite.group })),
     { group: 'tool-loading', file: 'qa/tool-loading.playwright.js', fixture: 'preview' },
+    { group: 'widget-startup', file: 'qa/widget-startup.playwright.js', fixture: 'ratios' },
   ];
   const suites = mode === 'smoke' ? common : [baseline, ...common, ...dedicated];
   if (selected && !suites.some(suite => suite.group === selected)) throw Error(`Unknown group: ${selected}`);

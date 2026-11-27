@@ -18,6 +18,8 @@ const widgetSelector = "[data-ct-ratios-slot]";
 const savedWidgetSelector = '[class*="DashboardGridItem-ChuchoTrizRatiosWidget"], [class*="DashboardGridItem-ChuchoTrizIntradayDollarWidget"]';
 const nativeStructure = [dashboardSelector, ".GridLayout", ".DashboardGridItem", menuSelector, "#ToolPanel", ".ToolContent", drawerHeaderSelector].join(", ");
 const discoveryDelays = [250, 750, 2000];
+const savedWidgetRetryInterval = 250;
+const savedWidgetRetryWindow = 8000;
 
 type WidgetSize = { width: number; height: number };
 type ResizeSpace = { right: number; neighbors: { left: number; top: number; right: number; bottom: number }[] };
@@ -437,6 +439,7 @@ export default function RatiosDashboard() {
     let closed = false, inScope = false, running = false, queued = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let retry = 0, retryDelay: number | undefined;
+    let savedWidgetRetryUntil: number | undefined;
 
     const isVisible = (id: string) => {
       const host = slots.get(id)?.parentElement;
@@ -449,6 +452,7 @@ export default function RatiosDashboard() {
       clearTimeout(timer);
       if (closed || pending.current) return;
       if (!inScope) {
+        savedWidgetRetryUntil = undefined;
         reader.current?.dispose(); reader.current = null;
         if (current.current !== emptyState) publish(emptyState);
         return;
@@ -460,10 +464,24 @@ export default function RatiosDashboard() {
     const requestRefresh = () => { queued = true; retry = 0; retryDelay = undefined; schedule(); };
     const retryDiscovery = () => {
       retryDelay = discoveryDelays.at(retry++);
+      // Matriz can mount saved slots before its stores are ready without another DOM mutation.
+      const savedWidgets = [...document.querySelectorAll(savedWidgetSelector)];
+      const awaitingVisibleWidget = savedWidgets.some(widget => {
+        const { width, height, top, right, bottom, left } = widget.getBoundingClientRect();
+        return width > 0 && height > 0 && bottom > 0 && right > 0 && top < innerHeight && left < innerWidth;
+      });
+      if (awaitingVisibleWidget) {
+        const now = performance.now();
+        savedWidgetRetryUntil ??= now + savedWidgetRetryWindow;
+        if (now < savedWidgetRetryUntil) {
+          retryDelay = savedWidgetRetryInterval;
+          return;
+        }
+      }
       if (retryDelay !== undefined) return;
       // Slow startup can outlast the initial burst. Keep looking while a menu or a saved widget needs its first state.
       const hasVisibleMenu = [...menus.keys()].some(parent => menuVisibility.get(parent) ?? parent.getClientRects().length > 0);
-      if (hasVisibleMenu || document.querySelector(savedWidgetSelector)) retryDelay = 5000;
+      if (hasVisibleMenu || savedWidgets.length) retryDelay = 5000;
     };
     const refresh = async () => {
       if (closed || !inScope || document.hidden || running || pending.current) return;
@@ -480,7 +498,10 @@ export default function RatiosDashboard() {
           publish(next);
           // The native shell may mount before its dashboard store has hydrated.
           if (!next.dashboardId && document.querySelector(dashboardSelector)) retryDiscovery();
-          else retry = 0;
+          else {
+            retry = 0;
+            savedWidgetRetryUntil = undefined;
+          }
         }
       } catch (error) {
         if (isCurrent()) {

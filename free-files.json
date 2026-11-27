@@ -158,6 +158,7 @@
   "tools/qa/measure-ratios-idle.playwright.js",
   "tools/qa/measure-tools-startup.playwright.js",
   "tools/qa/tool-loading.playwright.js",
+  "tools/qa/widget-startup.playwright.js",
   "docs/qa/automation-2026-11-09.md",
   "docs/qa/0.0.24-2026-11-13.md",
   "docs/qa/0.0.25-2026-11-16.md",

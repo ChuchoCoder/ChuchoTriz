@@ -145,6 +145,8 @@ Para medir la carga inicial de las herramientas, usá el mismo envoltorio con `t
 
 El grupo `tool-loading` comprueba en los dos temas que el ticket y su acceso a Cantidades rápidas quedan disponibles antes de pedir las herramientas. También cubre la primera visita, la reapertura del simulador, el contraste y el foco durante la carga y el uso del ticket después de un fallo de descarga.
 
+El grupo `widget-startup` retrasa la disponibilidad del tablero hasta después de la primera secuencia de lecturas. Mide desde ese momento hasta que aparecen los widgets guardados de Ratios y Dólar intradiario. También comprueba que las lecturas se detengan al ocultar los widgets o pasar a un tablero sin ellos.
+
 ## Cobertura automática y comprobaciones humanas
 
 | Casos de la guía | Grupo de navegador | Cobertura reproducible |
